@@ -45,6 +45,12 @@ jobs:
               dist/*.dmg
               dist/*.dmg.blockmap
               dist/*.zip
+          - os: ubuntu-latest
+            label: linux
+            build_script: build:linux
+            artifact_glob: |
+              dist/*.AppImage
+              dist/*.deb
 
     runs-on: ${{ matrix.os }}
 
@@ -125,6 +131,12 @@ jobs:
           name: horizon-mac
           path: release-assets/mac
 
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: horizon-linux
+          path: release-assets/linux
+
       - name: Create / update release with assets
         uses: softprops/action-gh-release@v2
         with:
@@ -136,6 +148,7 @@ jobs:
           files: |
             release-assets/windows/*
             release-assets/mac/*
+            release-assets/linux/*
           body: |
             ## Horizon Genesis ${{ github.ref_name }}
 
@@ -145,6 +158,7 @@ jobs:
 
             - **Windows:** `Horizon AI Setup *.exe` (x64, NSIS)
             - **macOS:** `Horizon AI-*.dmg` (Intel + Apple Silicon, **unsigned** — right-click → Open to bypass Gatekeeper)
+            - **Linux:** `Horizon AI-*.AppImage` (x64, portable) or `horizon-ai_*.deb` (Debian/Ubuntu)
 
             Auto-generated release notes below.
         env:

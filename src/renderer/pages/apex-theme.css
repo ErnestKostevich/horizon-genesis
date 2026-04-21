@@ -1,0 +1,259 @@
+/**
+ * Horizon "Apex" theme overrides.
+ *
+ * Applied AFTER the page's inline styles so it wins the cascade. Retints
+ * the app to the amber × cyan × glass language used in progate.html and
+ * setup.html. Keeps all existing layout and component behavior intact.
+ *
+ * Load via:
+ *   <link rel="stylesheet" href="apex-theme.css">
+ */
+
+/* Fonts — match progate/setup so the whole app reads as one surface. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap");
+
+/* -------------------------------------------------------------------------
+ * Palette tokens — override the inline :root from chat.html. Later = wins.
+ * ------------------------------------------------------------------------- */
+:root {
+  --apex-amber-0: #ffb566;
+  --apex-amber-1: #e8a050;
+  --apex-cyan-0:  #7ee6ff;
+  --apex-cyan-1:  #5bd5f5;
+
+  /* Re-map the chat.html variables to the apex palette. */
+  --bg:   #07080b;
+  --bg2:  #0a0c10;
+  --bg3:  #10131a;
+
+  --b1:   rgba(255, 255, 255, 0.05);
+  --b2:   rgba(255, 255, 255, 0.09);
+  --b3:   rgba(255, 255, 255, 0.14);
+
+  --tx:   rgba(255, 255, 255, 0.92);
+  --t2:   rgba(255, 255, 255, 0.62);
+  --t3:   rgba(255, 255, 255, 0.38);
+
+  --acc:  var(--apex-amber-0);
+  --acc2: var(--apex-amber-1);
+  --acc3: rgba(255, 181, 102, 0.12);
+
+  --green:  #7cf0b4;
+  --red:    #ff8c8c;
+  --blue:   var(--apex-cyan-0);
+  --purple: #c7a6ff;
+  --amber:  var(--apex-amber-0);
+
+  --usr-bg: linear-gradient(135deg, rgba(126, 230, 255, 0.10), rgba(91, 213, 245, 0.06));
+  --usr-b:  rgba(126, 230, 255, 0.28);
+
+  --glow:  0 0 24px rgba(255, 181, 102, 0.18);
+
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", monospace;
+}
+
+/* -------------------------------------------------------------------------
+ * Body — slightly translucent so the fractal canvas shows through.
+ * ------------------------------------------------------------------------- */
+html, body {
+  background: transparent !important;
+}
+body {
+  background: radial-gradient(ellipse at 20% 0%, rgba(255, 181, 102, 0.05), transparent 55%),
+              radial-gradient(ellipse at 80% 100%, rgba(126, 230, 255, 0.04), transparent 60%),
+              rgba(7, 8, 11, 0.72) !important;
+  font-family: var(--font);
+}
+
+/* The fractal canvas itself. fractal-bg.js also sets these inline, but
+   having them in CSS too gives a clean initial paint. */
+#fractalBg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.78;
+}
+
+/* -------------------------------------------------------------------------
+ * Titlebar — frosted glass.
+ * ------------------------------------------------------------------------- */
+.tb {
+  background: rgba(10, 12, 16, 0.55) !important;
+  backdrop-filter: blur(32px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(140%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+.logo {
+  background: linear-gradient(135deg, var(--apex-amber-0), var(--apex-cyan-0)) !important;
+  color: #0a0c10 !important;
+  box-shadow: 0 0 20px rgba(255, 181, 102, 0.28),
+              0 0 40px rgba(126, 230, 255, 0.18) !important;
+}
+.tb-name { letter-spacing: 0.2px !important; font-weight: 600 !important; }
+.ic-btn {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+.ic-btn:hover {
+  background: rgba(255, 181, 102, 0.08) !important;
+  border-color: rgba(255, 181, 102, 0.24) !important;
+  color: var(--apex-amber-0) !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Chips / pills / buttons — amber accent for active, glass for base.
+ * ------------------------------------------------------------------------- */
+.chip, .mt {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+  font-family: var(--font) !important;
+  letter-spacing: 0.2px !important;
+}
+.chip:hover, .mt:hover {
+  border-color: rgba(255, 181, 102, 0.35) !important;
+  color: var(--apex-amber-0) !important;
+}
+.chip.on, .mt.active {
+  border-color: rgba(255, 181, 102, 0.6) !important;
+  background: rgba(255, 181, 102, 0.12) !important;
+  color: var(--apex-amber-0) !important;
+  box-shadow: 0 0 16px rgba(255, 181, 102, 0.16) !important;
+}
+.chip.special {
+  border-color: rgba(126, 230, 255, 0.22) !important;
+  color: rgba(126, 230, 255, 0.7) !important;
+}
+.chip.special.on {
+  border-color: var(--apex-cyan-0) !important;
+  background: rgba(126, 230, 255, 0.12) !important;
+  color: var(--apex-cyan-0) !important;
+  box-shadow: 0 0 16px rgba(126, 230, 255, 0.2) !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Input area — glass frame with soft amber focus glow.
+ * ------------------------------------------------------------------------- */
+.input-area, .composer, .chat-input-wrap {
+  background: rgba(10, 12, 16, 0.55) !important;
+  backdrop-filter: blur(24px) saturate(140%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+textarea, input[type="text"], input[type="email"], input[type="password"] {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  color: var(--tx) !important;
+  font-family: var(--font) !important;
+  transition: border-color 180ms, box-shadow 180ms !important;
+}
+textarea:focus, input:focus {
+  outline: none !important;
+  border-color: rgba(255, 181, 102, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(255, 181, 102, 0.12),
+              0 0 24px rgba(255, 181, 102, 0.08) !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Messages — user bubble cyan, assistant transparent glass.
+ * ------------------------------------------------------------------------- */
+.user-msg, .msg.user, .bubble.user {
+  background: linear-gradient(135deg, rgba(126, 230, 255, 0.10), rgba(91, 213, 245, 0.06)) !important;
+  border: 1px solid rgba(126, 230, 255, 0.25) !important;
+  color: var(--tx) !important;
+}
+.assistant-msg, .msg.assistant, .bubble.assistant {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Primary CTAs — amber gradient with glow.
+ * ------------------------------------------------------------------------- */
+button.primary, .btn-primary, .send-btn, .btn.primary {
+  background: linear-gradient(135deg, var(--apex-amber-0), var(--apex-amber-1)) !important;
+  color: #0a0c10 !important;
+  border: none !important;
+  font-weight: 600 !important;
+  box-shadow: 0 0 24px rgba(255, 181, 102, 0.22) !important;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms !important;
+}
+button.primary:hover, .btn-primary:hover, .send-btn:hover, .btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 32px rgba(255, 181, 102, 0.35) !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Scrollbar — thin, subtle.
+ * ------------------------------------------------------------------------- */
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 181, 102, 0.25) !important;
+}
+
+/* -------------------------------------------------------------------------
+ * Code / mono — JetBrains, tinted.
+ * ------------------------------------------------------------------------- */
+code, pre, .mono {
+  font-family: var(--mono) !important;
+  color: rgba(126, 230, 255, 0.95) !important;
+}
+pre {
+  background: rgba(126, 230, 255, 0.04) !important;
+  border: 1px solid rgba(126, 230, 255, 0.14) !important;
+  border-radius: 10px;
+}
+
+/* -------------------------------------------------------------------------
+ * Modal / overlay panels — glass cards.
+ * ------------------------------------------------------------------------- */
+.modal, .dialog, .panel, .card {
+  background: rgba(10, 12, 16, 0.72) !important;
+  backdrop-filter: blur(28px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(140%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 18px !important;
+}
+
+/* -------------------------------------------------------------------------
+ * License / trial banner (if chat.html listens to license-state and renders).
+ * Provides the same look as progate for the persistent state pill.
+ * ------------------------------------------------------------------------- */
+.license-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  font-family: var(--font);
+  border: 1px solid rgba(255, 181, 102, 0.25);
+  background: rgba(255, 181, 102, 0.06);
+  color: var(--apex-amber-0);
+}
+.license-pill.trial {
+  border-color: rgba(126, 230, 255, 0.25);
+  background: rgba(126, 230, 255, 0.06);
+  color: var(--apex-cyan-0);
+}
+.license-pill.expired {
+  border-color: rgba(255, 140, 140, 0.3);
+  background: rgba(255, 140, 140, 0.08);
+  color: var(--red);
+}
+
+/* -------------------------------------------------------------------------
+ * Animation easing — single source of truth.
+ * ------------------------------------------------------------------------- */
+* { transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }

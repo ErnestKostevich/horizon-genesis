@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Horizon AI — Upgrade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg-0:#07060a;   --bg-1:#0b0a10;   --bg-2:#131118;
+  --tx-0:#f2eee6;   --tx-1:#b4a998;   --tx-2:#6d6354;   --tx-3:#3a3528;
+  --line-1:rgba(255,232,200,.06);
+  --line-2:rgba(255,232,200,.10);
+  --line-3:rgba(255,232,200,.18);
+  --amber-0:#ffb566;  --amber-1:#e8a050;  --amber-2:#b86818;
+  --cyan-0:#7ee6ff;   --cyan-1:#5bd5f5;
+  --glass-0: rgba(22,18,26,.55);
+  --glass-1: rgba(30,24,34,.7);
+  --glow-amber:0 0 40px rgba(232,160,80,.25), 0 0 120px rgba(232,160,80,.08);
+  --glow-soft: 0 18px 50px rgba(0,0,0,.6), 0 0 0 1px rgba(255,232,200,.04) inset;
+  --font:'Inter',-apple-system,'Segoe UI',system-ui,sans-serif;
+  --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+}
+html,body{height:100%;overflow:hidden;user-select:none;-webkit-user-select:none}
+body{
+  background:var(--bg-0);color:var(--tx-0);
+  font-family:var(--font);font-feature-settings:"ss01","cv11";
+  display:flex;align-items:center;justify-content:center;
+  padding:30px;position:relative;
+  -webkit-app-region:drag;
+}
+
+/* ─── Fractal shader canvas (deep background) ─── */
+#fractal{
+  position:fixed;inset:0;width:100%;height:100%;
+  z-index:0;opacity:.65;pointer-events:none;
+}
+
+/* ─── Gradient wash layer above shader ─── */
+.wash{
+  position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(ellipse 60% 50% at 25% 20%, rgba(232,160,80,.12), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 80% 85%, rgba(91,213,245,.06), transparent 55%),
+    linear-gradient(180deg, rgba(7,6,10,0) 0%, rgba(7,6,10,.5) 70%, rgba(7,6,10,.9) 100%);
+}
+
+/* ─── Grain overlay for that Linear/Apple feel ─── */
+.grain{
+  position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.035;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='1'/></svg>");
+}
+
+/* ─── Main card ─── */
+.card{
+  -webkit-app-region:no-drag;
+  position:relative;z-index:10;
+  width:100%;max-width:560px;
+  background:var(--glass-0);
+  backdrop-filter:blur(32px) saturate(140%);
+  -webkit-backdrop-filter:blur(32px) saturate(140%);
+  border:1px solid var(--line-2);
+  border-radius:22px;
+  padding:40px 36px 30px;
+  box-shadow:var(--glow-soft);
+}
+.card::before{
+  content:'';position:absolute;inset:0;border-radius:22px;pointer-events:none;
+  background:linear-gradient(135deg, rgba(255,232,200,.06), transparent 35%);
+  mix-blend-mode:screen;
+}
+
+/* ─── Header ─── */
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.logo{
+  width:40px;height:40px;border-radius:12px;
+  background:linear-gradient(135deg, var(--amber-0), var(--amber-2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:700;color:#1a0f03;
+  box-shadow:var(--glow-amber);
+  position:relative;
+}
+.logo::after{
+  content:'';position:absolute;inset:-6px;border-radius:18px;
+  background:radial-gradient(circle, rgba(232,160,80,.35), transparent 60%);
+  z-index:-1;filter:blur(6px);
+}
+.brand{display:flex;flex-direction:column;gap:1px}
+.brand .nm{font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--tx-0)}
+.brand .sub{font-size:10.5px;color:var(--tx-2);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+
+/* ─── Status pill (top-right) ─── */
+.status-pill{
+  margin-left:auto;
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 11px;border-radius:100px;
+  background:rgba(255,82,82,.08);border:1px solid rgba(255,82,82,.22);
+  color:#ff8c8c;font-size:10.5px;font-weight:600;
+  letter-spacing:.04em;
+}
+.status-pill.trial{background:rgba(232,160,80,.08);border-color:rgba(232,160,80,.3);color:var(--amber-0)}
+.status-pill.pro  {background:rgba(91,213,245,.08);border-color:rgba(91,213,245,.3);color:var(--cyan-0)}
+.status-pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+
+/* ─── Headline ─── */
+h1{
+  font-size:26px;font-weight:800;letter-spacing:-.02em;
+  color:var(--tx-0);margin-bottom:8px;line-height:1.2;
+}
+h1 .acc{
+  background:linear-gradient(135deg, var(--amber-0), var(--cyan-0));
+  -webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+.lede{
+  font-size:13.5px;color:var(--tx-1);line-height:1.6;margin-bottom:26px;
+  max-width:460px;
+}
+
+/* ─── Plan cards ─── */
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px}
+.plan{
+  background:rgba(14,11,18,.5);
+  border:1px solid var(--line-2);
+  border-radius:14px;padding:16px 14px;
+  cursor:pointer;transition:all .25s cubic-bezier(.2,.9,.3,1);
+  position:relative;overflow:hidden;
+}
+.plan:hover{border-color:var(--line-3);transform:translateY(-1px);background:rgba(14,11,18,.7)}
+.plan.selected{
+  border-color:var(--amber-1);
+  background:rgba(232,160,80,.06);
+  box-shadow:0 0 0 1px rgba(232,160,80,.25), 0 10px 30px rgba(232,160,80,.08);
+}
+.plan.selected::before{
+  content:'';position:absolute;top:0;right:0;width:14px;height:14px;
+  background:var(--amber-1);border-radius:0 14px 0 14px;
+}
+.plan .tier{font-size:10.5px;font-weight:700;color:var(--tx-2);letter-spacing:.08em;text-transform:uppercase}
+.plan.selected .tier{color:var(--amber-0)}
+.plan .price{font-size:22px;font-weight:800;color:var(--tx-0);letter-spacing:-.02em;margin:6px 0 2px;font-family:var(--font)}
+.plan .price .cur{font-size:14px;font-weight:600;vertical-align:top;margin-right:1px;color:var(--tx-1)}
+.plan .period{font-size:11px;color:var(--tx-2)}
+.plan .saver{
+  display:inline-block;margin-top:8px;
+  padding:2px 7px;border-radius:4px;
+  background:rgba(91,213,245,.1);border:1px solid rgba(91,213,245,.25);
+  font-size:9.5px;color:var(--cyan-0);font-weight:700;letter-spacing:.04em;
+}
+
+/* ─── Primary CTA ─── */
+.cta-primary{
+  width:100%;padding:14px;border-radius:14px;border:none;cursor:pointer;
+  background:linear-gradient(135deg, var(--amber-0), var(--amber-1));
+  color:#1a0f03;font-size:14px;font-weight:700;letter-spacing:-.005em;
+  font-family:var(--font);
+  box-shadow:0 10px 28px rgba(232,160,80,.3), 0 0 0 1px rgba(255,232,200,.12) inset;
+  transition:all .2s ease;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.cta-primary:hover{transform:translateY(-1px);box-shadow:0 14px 34px rgba(232,160,80,.42), 0 0 0 1px rgba(255,232,200,.2) inset}
+.cta-primary:active{transform:translateY(0)}
+.cta-primary .sym{font-size:16px;font-weight:500}
+
+/* ─── Secondary row ─── */
+.sec-row{display:flex;gap:8px;margin-top:10px}
+.cta-sec{
+  flex:1;padding:11px;border-radius:11px;cursor:pointer;
+  background:rgba(255,232,200,.03);border:1px solid var(--line-2);
+  color:var(--tx-1);font-size:11.5px;font-weight:600;
+  font-family:var(--font);transition:all .2s ease;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.cta-sec:hover{border-color:var(--line-3);color:var(--tx-0);background:rgba(255,232,200,.05)}
+
+/* ─── Divider ─── */
+.sep{
+  display:flex;align-items:center;gap:12px;margin:22px 0 16px;
+  color:var(--tx-3);font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+}
+.sep::before, .sep::after{content:'';flex:1;height:1px;background:var(--line-1)}
+
+/* ─── Contact box ─── */
+.contact{
+  background:rgba(14,11,18,.4);
+  border:1px solid var(--line-1);
+  border-radius:13px;padding:14px 16px;
+}
+.contact .lbl{font-size:11px;color:var(--tx-2);margin-bottom:10px;font-weight:600;letter-spacing:.01em}
+.contact .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.contact .link{
+  font-size:11.5px;color:var(--amber-1);text-decoration:none;
+  padding:7px 10px;border-radius:8px;
+  background:rgba(232,160,80,.05);border:1px solid rgba(232,160,80,.14);
+  display:flex;align-items:center;gap:6px;
+  transition:all .15s ease;cursor:pointer;
+  font-family:var(--mono);letter-spacing:-.01em;
+}
+.contact .link:hover{background:rgba(232,160,80,.12);border-color:rgba(232,160,80,.3);color:var(--amber-0)}
+.contact .link .ic{width:12px;height:12px;flex-shrink:0;opacity:.85}
+
+/* ─── Footer meta ─── */
+.foot{
+  margin-top:20px;padding-top:16px;
+  border-top:1px dashed var(--line-1);
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:10px;color:var(--tx-3);
+}
+.foot a{color:var(--tx-2);text-decoration:none;font-weight:500}
+.foot a:hover{color:var(--amber-1)}
+.foot .kbd{
+  font-family:var(--mono);font-size:9.5px;
+  padding:2px 6px;border-radius:4px;
+  background:rgba(255,232,200,.04);border:1px solid var(--line-1);
+  color:var(--tx-2);
+}
+
+/* ─── Toast for "checking payment..." etc ─── */
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);
+  z-index:100;padding:10px 18px;border-radius:12px;
+  background:rgba(20,16,24,.9);backdrop-filter:blur(20px);
+  border:1px solid var(--line-3);
+  color:var(--tx-0);font-size:12.5px;font-weight:500;
+  box-shadow:0 10px 40px rgba(0,0,0,.5);
+  transition:transform .3s cubic-bezier(.2,.9,.3,1);
+  display:flex;align-items:center;gap:10px;
+  pointer-events:none;
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.ok{border-color:rgba(91,213,245,.35);color:var(--cyan-0)}
+.toast.err{border-color:rgba(255,120,120,.35);color:#ff9c9c}
+.spinner{width:12px;height:12px;border:1.5px solid var(--tx-3);border-top-color:var(--amber-1);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─── Window controls (Mac-style) ─── */
+.wctrl{
+  -webkit-app-region:no-drag;
+  position:fixed;top:16px;right:16px;z-index:20;
+  display:flex;gap:8px;
+}
+.wbtn{
+  width:11px;height:11px;border-radius:50%;border:none;cursor:pointer;opacity:.6;
+  transition:opacity .15s;
+}
+.wbtn:hover{opacity:1}
+.wbtn.min{background:#fbbc2e}
+.wbtn.cls{background:#ff5f57}
+
+/* Mobile / narrow window safety */
+@media (max-width:520px){
+  .card{padding:30px 22px 22px}
+  h1{font-size:22px}
+  .plans{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<canvas id="fractal"></canvas>
+<div class="wash"></div>
+<div class="grain"></div>
+
+<div class="wctrl">
+  <button class="wbtn min" id="win-min" title="Minimize"></button>
+  <button class="wbtn cls" id="win-cls" title="Close"></button>
+</div>
+
+<div class="card">
+  <div class="hd">
+    <div class="logo">◈</div>
+    <div class="brand">
+      <div class="nm">Horizon AI</div>
+      <div class="sub">Genesis</div>
+    </div>
+    <div class="status-pill" id="status-pill">
+      <span class="dot"></span>
+      <span id="status-text">Checking…</span>
+    </div>
+  </div>
+
+  <h1 id="headline">Your trial has <span class="acc">ended</span></h1>
+  <p class="lede" id="lede">
+    Continue using Horizon AI with a Pro subscription.
+    Pay with crypto — no card, no subscription management service, no middlemen.
+    Direct support from the developer.
+  </p>
+
+  <div class="plans" id="plans">
+    <div class="plan selected" data-plan="monthly">
+      <div class="tier">Monthly</div>
+      <div class="price"><span class="cur">$</span>9.99</div>
+      <div class="period">per month</div>
+    </div>
+    <div class="plan" data-plan="yearly">
+      <div class="tier">Yearly</div>
+      <div class="price"><span class="cur">$</span>99</div>
+      <div class="period">per year</div>
+      <span class="saver">SAVE 17%</span>
+    </div>
+  </div>
+
+  <button class="cta-primary" id="cta-pay">
+    <span class="sym">₿</span>
+    <span>Pay with crypto</span>
+  </button>
+
+  <div class="sec-row">
+    <button class="cta-sec" id="cta-recheck" title="If you've already paid and it's not recognised">
+      <span>↻</span> I've paid — recheck
+    </button>
+    <button class="cta-sec" id="cta-login" title="Sign in if you have a Horizon account">
+      <span>→</span> Sign in
+    </button>
+  </div>
+
+  <div class="sep">Need help or manual key</div>
+
+  <div class="contact">
+    <div class="lbl">Message Ernest directly for manual key dispatch or questions:</div>
+    <div class="grid">
+      <a class="link" data-ch="telegram_primary">✈ t.me/Ernest_Kostevich</a>
+      <a class="link" data-ch="telegram_secondary">✈ t.me/ernest0kostevich</a>
+      <a class="link" data-ch="email_primary">✉ ernest2011kostevich@…</a>
+      <a class="link" data-ch="email_secondary">✉ ernestkostevich@…</a>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>MIT source · <a href="https://github.com/ErnestKostevich/horizon-genesis" target="_blank" rel="noopener">github</a> · <a href="https://horizonaai.dev" target="_blank" rel="noopener">horizonaai.dev</a></span>
+    <span class="kbd">Esc to quit</span>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <div class="spinner"></div>
+  <span id="toast-text">…</span>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════════════
+   Fractal shader — slow-breathing Julia set, warm amber/orange glow.
+   Drawn at low opacity behind the frosted glass card. Subtle, never
+   distracting. Pauses when the window loses focus to save CPU.
+   ════════════════════════════════════════════════════════════════════════════ */
+(function fractal() {
+  const canvas = document.getElementById('fractal');
+  const gl = canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false });
+  if (!gl) { canvas.style.display = 'none'; return; }
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  resize();
+  addEventListener('resize', resize);
+
+  const vsrc = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
+  const fsrc = `
+    precision highp float;
+    uniform vec2 uRes;
+    uniform float uTime;
+    void main(){
+      vec2 uv = (gl_FragCoord.xy / uRes) * 2.0 - 1.0;
+      uv.x *= uRes.x / uRes.y;
+      uv *= 1.3;
+      // Slowly morphing Julia constant — breathes like an idle AI
+      float t = uTime * 0.05;
+      vec2 c = vec2(0.355 + 0.08 * sin(t*0.7),  0.355 + 0.08 * cos(t*0.9));
+      vec2 z = uv;
+      float m = 0.0;
+      const int MAX = 60;
+      for (int i = 0; i < MAX; i++) {
+        z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+        if (dot(z,z) > 4.0) { m = float(i) / float(MAX); break; }
+      }
+      // Amber glow gradient, deep in the orbit, bright at the edges
+      vec3 warm = mix(vec3(0.04, 0.02, 0.01), vec3(1.0, 0.65, 0.28), pow(m, 0.6));
+      vec3 cool = mix(vec3(0.02, 0.05, 0.08), vec3(0.35, 0.83, 1.0),  pow(m, 0.9));
+      vec3 col  = mix(warm, cool, 0.18 + 0.10 * sin(t*0.5 + uv.x*1.2));
+      col *= 0.65 + 0.15 * sin(uTime*0.2); // slow breathing
+      gl_FragColor = vec4(col, 1.0);
+    }`;
+  function compile(src, type) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(vsrc, gl.VERTEX_SHADER));
+  gl.attachShader(prog, compile(fsrc, gl.FRAGMENT_SHADER));
+  gl.linkProgram(prog); gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+  const uRes  = gl.getUniformLocation(prog, 'uRes');
+  const uTime = gl.getUniformLocation(prog, 'uTime');
+
+  let active = true;
+  addEventListener('blur',  () => active = false);
+  addEventListener('focus', () => active = true);
+
+  let start = performance.now();
+  (function loop() {
+    if (active) {
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.uniform1f(uTime, (performance.now() - start) / 1000.0);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    requestAnimationFrame(loop);
+  })();
+})();
+
+/* ════════════════════════════════════════════════════════════════════════════
+   App logic: license state → plan selection → payment → polling.
+   ════════════════════════════════════════════════════════════════════════════ */
+const H = window.H;
+let selectedPlan = 'monthly';
+let pollTimer = null;
+
+// Select plan
+document.querySelectorAll('.plan').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.plan').forEach(p => p.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedPlan = el.dataset.plan;
+  });
+});
+
+// Render current state
+async function renderState() {
+  const s = await H.licenseState();
+  const pill = document.getElementById('status-pill');
+  const pillT = document.getElementById('status-text');
+  const head = document.getElementById('headline');
+  const lede = document.getElementById('lede');
+
+  pill.classList.remove('trial','pro');
+
+  if (s.allowed && s.reason === 'trial') {
+    pill.classList.add('trial');
+    pillT.textContent = `Trial · ${s.trialDaysLeft}d left`;
+    head.innerHTML = `Upgrade to <span class="acc">Pro</span>`;
+    lede.textContent = "You're on the free trial. Upgrade now to lock in continued access and support future development.";
+  } else if (s.allowed && s.reason === 'pro') {
+    pill.classList.add('pro');
+    pillT.textContent = `Pro · ${s.plan || 'active'}`;
+    head.innerHTML = `You're on <span class="acc">Pro</span>`;
+    lede.textContent = `Your subscription is active until ${s.expiresAt ? new Date(s.expiresAt).toLocaleDateString() : 'next renewal'}. Manage from this window any time.`;
+  } else if (s.reason === 'expired') {
+    pillT.textContent = 'Subscription lapsed';
+    head.innerHTML = `Subscription <span class="acc">lapsed</span>`;
+    lede.textContent = 'Your Pro subscription has ended. Renew to continue using Horizon AI. Previous conversations and settings remain intact.';
+  } else {
+    pillT.textContent = 'Trial expired';
+    head.innerHTML = `Your trial has <span class="acc">ended</span>`;
+  }
+}
+
+// Pay with crypto → NOWPayments invoice → open pay_url in browser → poll
+document.getElementById('cta-pay').addEventListener('click', async () => {
+  toast('Creating invoice…', 'loading');
+  const r = await H.licenseCreateCrypto(selectedPlan);
+  if (!r.ok) {
+    if (r.error === 'not-logged-in') {
+      toast('Sign in first — button to the right', 'err');
+      return;
+    }
+    toast(`Error: ${r.error}`, 'err');
+    return;
+  }
+  H.openUrl(r.invoice.pay_url);
+  toast('Browser opened. Complete the payment — we\'ll detect it automatically.', 'ok');
+  startPollingInvoice(r.invoice.invoice_id);
+});
+
+// Recheck (if user paid externally and server hasn't pushed yet)
+document.getElementById('cta-recheck').addEventListener('click', async () => {
+  toast('Checking server…', 'loading');
+  const s = await H.licenseRefresh();
+  if (s.allowed && s.reason === 'pro') {
+    toast('Pro active! Reloading…', 'ok');
+    setTimeout(() => location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`, 900);
+  } else {
+    toast('No active subscription yet. Try again in a minute.', 'err');
+  }
+  renderState();
+});
+
+// Sign in: open the upgrade/login page on the website; the user gets a
+// magic-link style token which the desktop will pick up via the horizon://
+// protocol (handled in main.js).
+document.getElementById('cta-login').addEventListener('click', () => {
+  H.licenseOpenUpgradePage();
+});
+
+// Contact links (Telegram / email)
+document.querySelectorAll('.contact .link').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    H.licenseOpenContact(a.dataset.ch);
+  });
+});
+
+// Window controls
+document.getElementById('win-min').addEventListener('click', () => H.minimize());
+document.getElementById('win-cls').addEventListener('click', () => H.quit());
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') H.quit(); });
+
+// Poll invoice status every 8s until paid (or user leaves)
+function startPollingInvoice(id) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const r = await H.licensePollInvoice(id);
+    if (!r.ok) return;
+    if (r.status === 'confirmed' || r.status === 'finished') {
+      clearInterval(pollTimer); pollTimer = null;
+      toast('Payment confirmed! Unlocking…', 'ok');
+      await H.licenseRefresh();
+      setTimeout(async () => location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`, 1200);
+    } else if (r.status === 'failed' || r.status === 'expired') {
+      clearInterval(pollTimer); pollTimer = null;
+      toast(`Payment ${r.status}. Try again or message Ernest.`, 'err');
+    }
+  }, 8000);
+}
+
+// React to server-pushed license updates in the background
+H.onLicenseChange?.(async (state) => {
+  if (state.allowed && (state.reason === 'trial' || state.reason === 'pro')) {
+    // Nothing to do — the main process already navigated the window.
+    renderState();
+  } else {
+    renderState();
+  }
+});
+
+// Toast helper
+let toastHideTimer = null;
+function toast(msg, kind /* 'loading'|'ok'|'err' */) {
+  const t = document.getElementById('toast');
+  const txt = document.getElementById('toast-text');
+  const sp = t.querySelector('.spinner');
+  t.classList.remove('ok','err');
+  if (kind === 'ok')  t.classList.add('ok');
+  if (kind === 'err') t.classList.add('err');
+  sp.style.display = (kind === 'loading') ? '' : 'none';
+  txt.textContent = msg;
+  t.classList.add('show');
+  if (toastHideTimer) clearTimeout(toastHideTimer);
+  toastHideTimer = setTimeout(() => t.classList.remove('show'), kind === 'loading' ? 15000 : 5000);
+}
+
+// Initial render
+renderState();
+</script>
+
+</body>
+</html>
