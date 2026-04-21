@@ -1,0 +1,39 @@
+{
+  "id": "spotify-control",
+  "name": "Spotify Control",
+  "version": "1.0.0",
+  "author": "Ernest Kostevich",
+  "description": "Control your Spotify account from Horizon. Real OAuth (Authorization Code + PKCE). No fake tokens.",
+  "category": "media",
+  "tier": "demo",
+  "icon": "Music",
+  "permissions": [
+    "network:api.spotify.com",
+    "network:accounts.spotify.com",
+    "loopback:127.0.0.1",
+    "storage:tokens"
+  ],
+  "settings": [
+    {
+      "key": "client_id",
+      "type": "string",
+      "required": true,
+      "label": "Spotify Client ID",
+      "hint": "Create an app at https://developer.spotify.com/dashboard and add http://127.0.0.1:8765/callback as a redirect URI."
+    }
+  ],
+  "tools": [
+    { "name": "connect",           "description": "Authorize the plugin with your Spotify account.",            "params": {} },
+    { "name": "disconnect",        "description": "Wipe stored tokens and revoke local access.",                "params": {} },
+    { "name": "status",            "description": "Show whether the plugin is connected and to whom.",          "params": {} },
+    { "name": "play",              "description": "Resume playback on the active device.",                      "params": {} },
+    { "name": "pause",             "description": "Pause playback.",                                            "params": {} },
+    { "name": "next",              "description": "Skip to next track.",                                        "params": {} },
+    { "name": "previous",          "description": "Go to previous track.",                                      "params": {} },
+    { "name": "set_volume",        "description": "Set playback volume (0–100).",                               "params": { "percent": "number" } },
+    { "name": "list_devices",      "description": "List Spotify Connect devices.",                              "params": {} },
+    { "name": "transfer_playback", "description": "Move playback to a specific device.",                        "params": { "device_id": "string" } },
+    { "name": "current_track",     "description": "Get the currently playing track.",                           "params": {} },
+    { "name": "search",            "description": "Search tracks in the Spotify catalog.",                      "params": { "query": "string" } }
+  ]
+}
