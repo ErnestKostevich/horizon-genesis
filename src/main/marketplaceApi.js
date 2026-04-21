@@ -82,6 +82,34 @@ class MarketplaceClient {
       this.settingsStore.delete('marketplaceUser');
     }
   }
+
+  // ── License / Subscription ─────────────────────────────────────────────────
+  // Server returns: { active: bool, plan: 'monthly'|'yearly'|null, expires_at: ISO|null,
+  //                   payment_pending: bool, last_payment_at: ISO|null }
+  licenseStatus() {
+    return this._fetch('/api/license/status');
+  }
+
+  /**
+   * Create a NOWPayments crypto invoice for the given plan.
+   * Returns: { invoice_id, pay_url, amount, currency, plan, expires_at }
+   * The desktop app opens pay_url in the user's default browser.
+   */
+  createCryptoPayment(plan /* 'monthly' | 'yearly' */) {
+    return this._fetch('/api/license/checkout/crypto', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    });
+  }
+
+  /**
+   * Poll an invoice until paid. Used by the upgrade window to detect completion
+   * without forcing the user back to the desktop app manually.
+   * Returns: { status: 'waiting'|'confirming'|'confirmed'|'finished'|'failed'|'expired' }
+   */
+  pollInvoice(invoiceId) {
+    return this._fetch(`/api/license/invoice/${encodeURIComponent(invoiceId)}`);
+  }
 }
 
 module.exports = { MarketplaceClient };

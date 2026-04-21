@@ -180,4 +180,13 @@ contextBridge.exposeInMainWorld('H', {
   getDetailedSysInfo: () => ipcRenderer.invoke('getDetailedSysInfo'),
   getRunningApps:     () => ipcRenderer.invoke('getRunningApps'),
   showWindow:         () => ipcRenderer.invoke('showWindow'),
+
+  // ── LICENSE / PRO ─────────────────────────────────────────────────────────────
+  licenseState:            ()              => ipcRenderer.invoke('licenseState'),
+  licenseRefresh:          ()              => ipcRenderer.invoke('licenseRefresh'),
+  licenseCreateCrypto:     (plan)          => ipcRenderer.invoke('licenseCreateCryptoPayment', plan),
+  licensePollInvoice:      (id)            => ipcRenderer.invoke('licensePollInvoice', id),
+  licenseOpenUpgradePage:  ()              => ipcRenderer.invoke('licenseOpenUpgradePage'),
+  licenseOpenContact:      (channel)       => ipcRenderer.invoke('licenseOpenContactLink', channel),
+  onLicenseChange:         (cb)            => ipcRenderer.on('license-state', (_, s) => cb(s)),
 });

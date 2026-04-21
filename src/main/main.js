@@ -15,6 +15,70 @@ const Store  = require('electron-store');
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 
+// ── Pro feature guard ────────────────────────────────────────────────────────
+// Wraps ipcMain.handle for any channel that touches a Pro-only feature. When
+// the license manager says the user is not allowed (trial ended, subscription
+// lapsed) the call throws PRO_REQUIRED instead of running. Cannot be bypassed
+// from the renderer — even if the devtools user calls window.H.agentRun() the
+// check still fires here in the main process.
+//
+// The list is intentionally broad: anything that costs money (AI calls, TTS,
+// STT), controls the OS (computer use, shell, file writes), or is the core
+// differentiator (agent, workflows, recorder) goes in.
+const PRO_HANDLERS = new Set([
+  // AI / costly
+  'ai', 'agentRun', 'agentTool', 'analyzeScreen', 'analyzeImage',
+  'ttsElevenLabs', 'ttsOpenAI', 'transcribeAudio',
+  'search', 'mcpWebSearch',
+  'captureScreen', 'pcScreenshot',
+  'executeCode',
+  // Computer use / OS control
+  'pcShell', 'pcKillProc', 'pcOpen',
+  'pcType', 'pcKeyPress', 'pcVolume',
+  'pcReadFile', 'pcWriteFile', 'pcListDir',
+  'pcMouseMove', 'pcMouseClick', 'pcMouseDoubleClick',
+  'pcMouseScroll', 'pcMouseDrag',
+  'smartClick', 'findUIElements',
+  // Browser automation
+  'browserOpenUrl', 'browserSearch', 'browserOpenSite',
+  // MCP write actions
+  'mcpGmailSend', 'mcpCalendarCreate', 'mcpCalendarQuickAdd',
+  // Workflows / recorder
+  'workflowRun',
+  'recorderStart', 'recorderStop', 'recorderSave', 'recorderNarrate',
+]);
+
+let _licenseManagerRef = null;  // populated once licenseManager is constructed.
+let _proGuardWindowRef = null;  // populated once the main window exists.
+const _origIpcHandle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = function proGuardedHandle(channel, fn) {
+  if (!PRO_HANDLERS.has(channel)) return _origIpcHandle(channel, fn);
+  return _origIpcHandle(channel, async (...args) => {
+    const lm = _licenseManagerRef;
+    if (lm) {
+      const state = lm.evaluate();
+      if (!state.allowed) {
+        // Redirect the window to progate — users get a clear UX instead of
+        // a mysterious red toast when they click a Pro feature after expiry.
+        try {
+          const w = _proGuardWindowRef;
+          if (w && !w.isDestroyed()) {
+            const cur = w.webContents.getURL();
+            if (!cur.includes('/progate.html')) {
+              w.loadURL(`http://127.0.0.1:${port}/progate.html`);
+            }
+          }
+        } catch (_) {}
+        const err = new Error('PRO_REQUIRED');
+        err.code = 'PRO_REQUIRED';
+        err.licenseState = state;
+        throw err;
+      }
+    }
+    return fn(...args);
+  });
+};
+
 // ── Storage ───────────────────────────────────────────────────────────────────
 const machineId = crypto.createHash('sha256')
   .update(os.hostname() + os.platform() + (os.cpus()[0]?.model || ''))
@@ -89,9 +153,18 @@ function createWindow(page = 'chat') {
   const url = `http://127.0.0.1:${port}/${page}.html`;
   if (win) { win.loadURL(url); win.show(); return; }
 
+  // Open at ~75% of the primary display, clamped to a sensible max.
+  // User can still resize freely; this just avoids the old 420×820 postage-stamp.
+  const { screen } = require('electron');
+  const primary = screen.getPrimaryDisplay();
+  const work = primary.workAreaSize;
+  const initW = Math.min(1280, Math.max(1000, Math.round(work.width  * 0.75)));
+  const initH = Math.min(860,  Math.max(720,  Math.round(work.height * 0.82)));
+
   win = new BrowserWindow({
-    width: 420, height: 820,
-    minWidth: 380, minHeight: 600,
+    width: initW, height: initH,
+    minWidth: 900, minHeight: 640,
+    center: true,
     frame: false, transparent: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -105,6 +178,9 @@ function createWindow(page = 'chat') {
   win.webContents.session.setPermissionRequestHandler((wc, perm, cb) => cb(true));
   win.webContents.session.setPermissionCheckHandler(() => true);
   win.webContents.session.setDevicePermissionHandler(() => true);
+
+  // Let the Pro guard redirect here if a user hits a Pro handler after expiry.
+  _proGuardWindowRef = win;
 
   win.loadURL(url);
 
@@ -1690,6 +1766,81 @@ ipcMain.handle('googleGetToken', async () => {
 const { MarketplaceClient } = require('./marketplaceApi');
 const marketClient = new MarketplaceClient(settingsStore);
 
+// ── LICENSE (trial + Pro) — gates app access behind subscription ─────────────
+const { LicenseManager } = require('./licenseManager');
+const licenseManager = new LicenseManager({
+  settingsStore,
+  marketplaceClient: marketClient,
+  logger: (...a) => console.log(...a),
+});
+// Activate the Pro guard defined at the top of this file. Until this line the
+// guard is a no-op (handlers registered during startup run unchecked); after
+// it, every call to a Pro channel re-evaluates the license.
+_licenseManagerRef = licenseManager;
+// The guard also needs the window reference so it can redirect to progate when
+// a user clicks a Pro feature after expiry. Kept in sync via the setter below.
+Object.defineProperty(global, '_horizonProGuardWindow', {
+  configurable: true,
+  get() { return _proGuardWindowRef; },
+  set(v) { _proGuardWindowRef = v; },
+});
+
+// Broadcast license state changes to the renderer so the UI can update banners.
+licenseManager.onChange((state) => {
+  if (win && !win.isDestroyed()) {
+    try { win.webContents.send('license-state', state); } catch (_) {}
+  }
+  // If access revoked while app is running (expiry, server says inactive),
+  // redirect to the Pro gate instead of letting the user keep working.
+  if (!state.allowed && win && !win.isDestroyed()) {
+    try {
+      const cur = win.webContents.getURL();
+      if (!cur.includes('/progate.html')) {
+        win.loadURL(`http://127.0.0.1:${port}/progate.html`);
+      }
+    } catch (_) {}
+  }
+});
+
+ipcMain.handle('licenseState',   () => licenseManager.evaluate());
+ipcMain.handle('licenseRefresh', () => licenseManager.refresh());
+ipcMain.handle('licenseCreateCryptoPayment', async (_, plan) => {
+  try {
+    if (!marketClient.token) return { ok: false, error: 'not-logged-in' };
+    const invoice = await marketClient.createCryptoPayment(plan);
+    return { ok: true, invoice };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('licensePollInvoice', async (_, invoiceId) => {
+  try {
+    const r = await marketClient.pollInvoice(invoiceId);
+    return { ok: true, ...r };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('licenseOpenUpgradePage', () => {
+  const url = `${marketClient.webBase}/upgrade?src=desktop`;
+  shell.openExternal(url);
+  return { ok: true, url };
+});
+ipcMain.handle('licenseOpenContactLink', (_, channel) => {
+  const links = {
+    telegram_primary:   'https://t.me/Ernest_Kostevich',
+    telegram_secondary: 'https://t.me/ernest0kostevich',
+    email_primary:      'mailto:ernest2011kostevich@gmail.com',
+    email_secondary:    'mailto:ernestkostevich@gmail.com',
+  };
+  const url = links[channel];
+  if (url) shell.openExternal(url);
+  return { ok: !!url, url };
+});
+// Wipe the license cache when the user logs out of the marketplace account,
+// so the next login forces a fresh server check.
+const _origLogout = marketClient.logout.bind(marketClient);
+marketClient.logout = function patchedLogout() {
+  _origLogout();
+  licenseManager.clearCache();
+};
+
 ipcMain.handle('marketRemoteList', async (_, filters = {}) => {
   try { return { ok: true, items: await marketClient.list(filters) }; }
   catch (e) { return { ok: false, error: e.message, items: [] }; }
@@ -1782,8 +1933,21 @@ app.whenReady().then(async () => {
   const launchUrl = process.argv.find((a) => a && a.startsWith('horizon://'));
   if (launchUrl) setTimeout(() => handleHorizonUrl(launchUrl), 1500);
 
+  // License gate: decide the initial page based on trial/subscription state.
+  // - Trial active OR Pro active → onboarded? chat : setup
+  // - Trial expired and no Pro    → progate.html (upgrade / enter key / contact)
+  // We do a non-blocking server refresh too, so if the cache is stale it
+  // gets corrected within a few seconds after the window is already shown.
   const onboarded = settingsStore.get('onboarded');
-  createWindow(onboarded ? 'chat' : 'setup');
+  const state = licenseManager.evaluate();
+  const initialPage = state.allowed
+    ? (onboarded ? 'chat' : 'setup')
+    : 'progate';
+  createWindow(initialPage);
+
+  // Kick off background license polling (server-side truth) — safe to fire
+  // and forget, listeners will handle state transitions.
+  licenseManager.startPolling();
 });
 
 app.on('before-quit', () => { isQuitting = true; });

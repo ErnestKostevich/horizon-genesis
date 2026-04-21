@@ -451,8 +451,10 @@ textarea::placeholder{color:var(--t3)}
 .focus-timer.show{display:flex}
 .focus-timer-btn{background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:2px}
 </style>
+<link rel="stylesheet" href="apex-theme.css"/>
 </head>
 <body>
+<canvas id="fractalBg" aria-hidden="true"></canvas>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
 <div class="panel" id="panel">
@@ -3859,5 +3861,6 @@ async function uninstallPlugin(id) {
   refreshAccount();
 })();
 </script>
+<script src="fractal-bg.js"></script>
 </body>
 </html>
