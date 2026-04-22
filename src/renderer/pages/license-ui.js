@@ -1,18 +1,15 @@
 /**
- * License pill — subscribes to the main-process license-state IPC
- * event and renders a visible pill in the titlebar so the user always
- * knows their state (trial / pro / expired). Clicking the pill opens
- * the pricing page in the default browser (or progate.html for an
- * expired license).
+ * License pill — listens to the main-process `license-state` IPC and
+ * renders a titlebar pill: TRIAL · 12d / PRO · monthly / EXPIRED.
+ * Clicking opens the hosted upgrade page via the existing IPC (the
+ * main process decides whether that is progate.html or the web
+ * pricing page, and handles deep links correctly).
  *
- * Injected host: `#license-pill-host` (created below if absent, sits
- * next to the window buttons in `.tb`).
+ * All API names match what preload.js already exposes, no renderer
+ * contract changes required.
  */
 (function () {
-  if (!window.H || typeof window.H.onLicenseState !== 'function') {
-    // Preload hasn't exposed the IPC — bail quietly.
-    return;
-  }
+  if (!window.H || typeof window.H.licenseState !== 'function') return;
 
   const PRICING_URL = 'https://horizonaai.dev/pricing';
 
@@ -23,24 +20,32 @@
     if (!tb) return null;
     host = document.createElement('div');
     host.id = 'license-pill-host';
-    // Insert after the logo block so it reads: [logo] HORIZON · trial
-    const logoBlock = tb.querySelector('.logo')?.parentElement || tb.firstElementChild;
-    if (logoBlock && logoBlock.parentElement === tb) {
-      logoBlock.insertAdjacentElement('afterend', host);
+    const logo = tb.querySelector('.logo');
+    const afterLogo = logo?.parentElement === tb ? logo : logo?.parentElement;
+    if (afterLogo && afterLogo.parentElement === tb) {
+      afterLogo.insertAdjacentElement('afterend', host);
     } else {
       tb.appendChild(host);
     }
     return host;
   }
 
+  function openUpgrade() {
+    if (typeof window.H.licenseOpenUpgradePage === 'function') {
+      window.H.licenseOpenUpgradePage();
+      return;
+    }
+    if (typeof window.H.openUrl === 'function') window.H.openUrl(PRICING_URL);
+  }
+
   function render(state) {
     const host = ensureHost();
-    if (!host) return;
+    if (!host || !state) return;
 
     const pill = document.createElement('span');
     pill.className = 'license-pill';
     let label = '';
-    let extraCls = '';
+    let cls = '';
     let title = '';
 
     if (state.reason === 'pro') {
@@ -50,15 +55,14 @@
         : 'Pro subscription active';
     } else if (state.reason === 'trial') {
       label = `TRIAL · ${state.trialDaysLeft}d`;
-      extraCls = 'trial';
+      cls = 'trial';
       title = `${state.trialDaysLeft} days left in your free trial. Click to upgrade.`;
     } else {
       label = 'EXPIRED';
-      extraCls = 'expired';
+      cls = 'expired';
       title = 'Trial or subscription ended. Click to upgrade.';
     }
-
-    pill.classList.add(extraCls);
+    if (cls) pill.classList.add(cls);
     pill.title = title;
     pill.textContent = label;
 
@@ -66,23 +70,16 @@
     cta.type = 'button';
     cta.className = 'lp-cta';
     cta.textContent = state.reason === 'pro' ? 'MANAGE' : 'UPGRADE';
-    cta.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (window.H.openExternal) window.H.openExternal(PRICING_URL);
-    });
+    cta.addEventListener('click', (e) => { e.stopPropagation(); openUpgrade(); });
     pill.appendChild(cta);
-    pill.addEventListener('click', () => {
-      if (window.H.openExternal) window.H.openExternal(PRICING_URL);
-    });
+    pill.addEventListener('click', openUpgrade);
 
-    host.innerHTML = '';
-    host.appendChild(pill);
+    host.replaceChildren(pill);
   }
 
-  // Initial fetch.
-  if (typeof window.H.licenseState === 'function') {
-    window.H.licenseState().then(render).catch(() => {});
+  window.H.licenseState().then(render).catch(() => {});
+  if (typeof window.H.onLicenseChange === 'function') window.H.onLicenseChange(render);
+  if (typeof window.H.licenseRefresh === 'function') {
+    setTimeout(() => { window.H.licenseRefresh().then(render).catch(() => {}); }, 1500);
   }
-  // Live updates.
-  window.H.onLicenseState(render);
 })();
