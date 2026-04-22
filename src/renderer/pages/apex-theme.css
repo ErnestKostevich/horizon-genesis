@@ -1,232 +1,1053 @@
 /**
- * Horizon "Apex" theme overrides.
+ * Horizon "Apex" theme — real redesign (not paint-over).
  *
- * Applied AFTER the page's inline styles so it wins the cascade. Retints
- * the app to the amber × cyan × glass language used in progate.html and
- * setup.html. Keeps all existing layout and component behavior intact.
+ * Targets the actual class names inside chat.html so every element gets
+ * deliberate treatment. Balances Apple Vision transparency with Linear's
+ * precision and adds subtle "alive" motion so the UI never feels dead.
  *
- * Load via:
- *   <link rel="stylesheet" href="apex-theme.css">
+ * Design rules:
+ *   - Glass is 78-85% opaque (never less), so text stays readable even
+ *     when the fractal canvas is busy.
+ *   - Amber (#ffb566) = primary / action / AI
+ *     Cyan  (#7ee6ff) = user / info / accent-B
+ *     Red   (#ff8c8c) = destructive
+ *     Green (#7cf0b4) = success
+ *   - Type scale: 11 / 12 / 13 / 14 / 16 / 20 / 24 (no arbitrary sizes).
+ *   - Radius scale: 6 / 10 / 14 / 18 / 999 (pill).
+ *   - Motion: 180ms for micro-interactions, 300ms for layout.
+ *   - One easing everywhere: cubic-bezier(0.22, 1, 0.36, 1).
+ *
+ * Load AFTER chat.html's inline styles so it wins the cascade.
  */
 
-/* Fonts — match progate/setup so the whole app reads as one surface. */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
-/* -------------------------------------------------------------------------
- * Palette tokens — override the inline :root from chat.html. Later = wins.
- * ------------------------------------------------------------------------- */
+/* =========================================================================
+   DESIGN TOKENS — one source of truth. Re-mapped onto chat.html's variables
+   so the rest of the stylesheet keeps working.
+   ========================================================================= */
 :root {
+  /* Accents */
   --apex-amber-0: #ffb566;
   --apex-amber-1: #e8a050;
+  --apex-amber-2: #c78038;
   --apex-cyan-0:  #7ee6ff;
   --apex-cyan-1:  #5bd5f5;
+  --apex-cyan-2:  #3bb8d8;
 
-  /* Re-map the chat.html variables to the apex palette. */
-  --bg:   #07080b;
-  --bg2:  #0a0c10;
-  --bg3:  #10131a;
+  /* Background layers */
+  --apex-bg-0: #060709;  /* deepest */
+  --apex-bg-1: #0b0d12;
+  --apex-bg-2: #11141b;
+  --apex-bg-3: #161a23;
 
-  --b1:   rgba(255, 255, 255, 0.05);
-  --b2:   rgba(255, 255, 255, 0.09);
-  --b3:   rgba(255, 255, 255, 0.14);
+  /* Glass (used with backdrop-filter). Higher alpha = more readable. */
+  --glass-1: rgba(11, 13, 18, 0.82);
+  --glass-2: rgba(15, 18, 25, 0.78);
+  --glass-3: rgba(22, 26, 35, 0.72);
 
-  --tx:   rgba(255, 255, 255, 0.92);
-  --t2:   rgba(255, 255, 255, 0.62);
-  --t3:   rgba(255, 255, 255, 0.38);
+  /* Borders */
+  --bd-1: rgba(255, 255, 255, 0.055);
+  --bd-2: rgba(255, 255, 255, 0.09);
+  --bd-3: rgba(255, 255, 255, 0.15);
 
+  /* Text */
+  --tx-1: rgba(255, 255, 255, 0.96);
+  --tx-2: rgba(255, 255, 255, 0.72);
+  --tx-3: rgba(255, 255, 255, 0.48);
+  --tx-4: rgba(255, 255, 255, 0.28);
+
+  /* Semantic */
+  --c-ok:   #7cf0b4;
+  --c-warn: #ffcf6b;
+  --c-bad:  #ff8c8c;
+  --c-info: #7ee6ff;
+
+  /* Shadows */
+  --sh-1: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --sh-2: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --sh-3: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --glow-amber: 0 0 28px rgba(255, 181, 102, 0.28);
+  --glow-cyan:  0 0 28px rgba(126, 230, 255, 0.28);
+
+  /* Re-map chat.html's variables onto this palette. */
+  --bg:   var(--apex-bg-0);
+  --bg2:  var(--apex-bg-1);
+  --bg3:  var(--apex-bg-2);
+  --b1:   var(--bd-1);
+  --b2:   var(--bd-2);
+  --b3:   var(--bd-3);
+  --tx:   var(--tx-1);
+  --t2:   var(--tx-2);
+  --t3:   var(--tx-3);
+  --t4:   var(--tx-4);
   --acc:  var(--apex-amber-0);
   --acc2: var(--apex-amber-1);
-  --acc3: rgba(255, 181, 102, 0.12);
-
-  --green:  #7cf0b4;
-  --red:    #ff8c8c;
+  --acc3: rgba(255, 181, 102, 0.14);
+  --green:  var(--c-ok);
+  --red:    var(--c-bad);
   --blue:   var(--apex-cyan-0);
   --purple: #c7a6ff;
   --amber:  var(--apex-amber-0);
+  --usr-bg: linear-gradient(135deg, rgba(126, 230, 255, 0.14), rgba(91, 213, 245, 0.08));
+  --usr-b:  rgba(126, 230, 255, 0.32);
+  --glow:   var(--glow-amber);
 
-  --usr-bg: linear-gradient(135deg, rgba(126, 230, 255, 0.10), rgba(91, 213, 245, 0.06));
-  --usr-b:  rgba(126, 230, 255, 0.28);
-
-  --glow:  0 0 24px rgba(255, 181, 102, 0.18);
-
+  /* Typography */
   --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", "Cascadia Code", monospace;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 160ms;
+  --t-med:  240ms;
+  --t-slow: 420ms;
 }
 
-/* -------------------------------------------------------------------------
- * Body — slightly translucent so the fractal canvas shows through.
- * ------------------------------------------------------------------------- */
+/* =========================================================================
+   BODY — fractal canvas shows through a soft tinted veil.
+   ========================================================================= */
 html, body {
   background: transparent !important;
+  font-family: var(--font);
+  color: var(--tx-1);
+  letter-spacing: 0.01em;
+  font-feature-settings: "cv11", "ss01";
 }
 body {
-  background: radial-gradient(ellipse at 20% 0%, rgba(255, 181, 102, 0.05), transparent 55%),
-              radial-gradient(ellipse at 80% 100%, rgba(126, 230, 255, 0.04), transparent 60%),
-              rgba(7, 8, 11, 0.72) !important;
-  font-family: var(--font);
+  background:
+    radial-gradient(ellipse 70% 55% at 15% -5%, rgba(255, 181, 102, 0.07), transparent 60%),
+    radial-gradient(ellipse 80% 60% at 90% 110%, rgba(126, 230, 255, 0.06), transparent 65%),
+    linear-gradient(180deg, rgba(6, 7, 9, 0.68), rgba(6, 7, 9, 0.82)) !important;
 }
-
-/* The fractal canvas itself. fractal-bg.js also sets these inline, but
-   having them in CSS too gives a clean initial paint. */
 #fractalBg {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.78;
+  position: fixed; inset: 0;
+  width: 100vw; height: 100vh;
+  z-index: -1; pointer-events: none;
+  opacity: 0.72;
 }
 
-/* -------------------------------------------------------------------------
- * Titlebar — frosted glass.
- * ------------------------------------------------------------------------- */
+/* Global scrollbars. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 181, 102, 0.28);
+  background-clip: padding-box;
+}
+
+/* Selection. */
+::selection { background: rgba(255, 181, 102, 0.32); color: #fff; }
+
+/* =========================================================================
+   TITLEBAR — frosted glass, glowing logo, refined icon buttons.
+   ========================================================================= */
 .tb {
-  background: rgba(10, 12, 16, 0.55) !important;
-  backdrop-filter: blur(32px) saturate(140%) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(140%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--glass-1) !important;
+  backdrop-filter: blur(32px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(150%) !important;
+  border-bottom: 1px solid var(--bd-1) !important;
+  height: 42px !important;
+  padding: 0 10px !important;
 }
+
 .logo {
-  background: linear-gradient(135deg, var(--apex-amber-0), var(--apex-cyan-0)) !important;
+  background: linear-gradient(135deg, var(--apex-amber-0) 0%, var(--apex-cyan-0) 100%) !important;
   color: #0a0c10 !important;
-  box-shadow: 0 0 20px rgba(255, 181, 102, 0.28),
-              0 0 40px rgba(126, 230, 255, 0.18) !important;
+  font-weight: 800 !important;
+  width: 26px !important; height: 26px !important;
+  border-radius: 8px !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 0 22px rgba(255, 181, 102, 0.30),
+    0 0 44px rgba(126, 230, 255, 0.18) !important;
+  position: relative;
+  animation: logoBreathe 5.5s ease-in-out infinite;
 }
-.tb-name { letter-spacing: 0.2px !important; font-weight: 600 !important; }
+@keyframes logoBreathe {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 0 22px rgba(255,181,102,.30), 0 0 44px rgba(126,230,255,.18); }
+  50%      { box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 0 30px rgba(255,181,102,.42), 0 0 60px rgba(126,230,255,.26); }
+}
+
+.tb-name {
+  letter-spacing: 0.015em !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  color: var(--tx-1) !important;
+}
+.tb-sub {
+  font-size: 10px !important;
+  color: var(--apex-amber-0) !important;
+  font-family: var(--mono) !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
+  opacity: 0.85;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 181, 102, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 181, 102, 0.06);
+}
+
 .ic-btn {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-color: rgba(255, 255, 255, 0.06) !important;
-  transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 1px solid var(--bd-1) !important;
+  border-radius: 8px !important;
+  width: 30px !important; height: 30px !important;
+  color: var(--tx-2) !important;
+  transition: all var(--t-fast) var(--ease) !important;
+  font-size: 14px !important;
 }
 .ic-btn:hover {
-  background: rgba(255, 181, 102, 0.08) !important;
-  border-color: rgba(255, 181, 102, 0.24) !important;
+  background: rgba(255, 181, 102, 0.09) !important;
+  border-color: rgba(255, 181, 102, 0.28) !important;
   color: var(--apex-amber-0) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(255, 181, 102, 0.18);
+}
+.ic-btn:active { transform: translateY(0); }
+
+.wbtn { width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 1px solid rgba(255,255,255,.06) !important; }
+.wbtn.wy { background: #ffb566 !important; }
+.wbtn.wr { background: #ff8c8c !important; }
+.wbtn:hover { filter: brightness(1.15); box-shadow: 0 0 12px currentColor; }
+
+/* =========================================================================
+   STATUS / PROVIDER BAR — pills that breathe when active.
+   ========================================================================= */
+.sb {
+  background: var(--glass-2) !important;
+  backdrop-filter: blur(24px) saturate(140%) !important;
+  border-bottom: 1px solid var(--bd-1) !important;
+  padding: 7px 10px !important;
+  gap: 5px !important;
+}
+.pulse {
+  width: 7px !important; height: 7px !important;
+  border-radius: 50%;
+  background: var(--apex-amber-0) !important;
+  box-shadow: 0 0 10px var(--apex-amber-0);
+  animation: pulseBreathe 1.6s ease-in-out infinite;
+}
+@keyframes pulseBreathe {
+  0%, 100% { opacity: 1;  transform: scale(1);    }
+  50%      { opacity: .55; transform: scale(0.72); }
+}
+.stl {
+  font-size: 10.5px !important;
+  color: var(--tx-2) !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+.sp {
+  width: 1px !important;
+  background: var(--bd-1) !important;
+  margin: 0 3px !important;
 }
 
-/* -------------------------------------------------------------------------
- * Chips / pills / buttons — amber accent for active, glass for base.
- * ------------------------------------------------------------------------- */
-.chip, .mt {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-color: rgba(255, 255, 255, 0.07) !important;
-  transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+.chip {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid var(--bd-1) !important;
+  color: var(--tx-2) !important;
   font-family: var(--font) !important;
-  letter-spacing: 0.2px !important;
+  font-size: 10.5px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  transition: all var(--t-fast) var(--ease) !important;
+  cursor: pointer;
 }
-.chip:hover, .mt:hover {
+.chip:hover {
   border-color: rgba(255, 181, 102, 0.35) !important;
   color: var(--apex-amber-0) !important;
+  background: rgba(255, 181, 102, 0.05) !important;
 }
-.chip.on, .mt.active {
-  border-color: rgba(255, 181, 102, 0.6) !important;
-  background: rgba(255, 181, 102, 0.12) !important;
+.chip.on {
+  border-color: rgba(255, 181, 102, 0.55) !important;
+  background: rgba(255, 181, 102, 0.14) !important;
   color: var(--apex-amber-0) !important;
-  box-shadow: 0 0 16px rgba(255, 181, 102, 0.16) !important;
+  box-shadow: 0 0 16px rgba(255, 181, 102, 0.22), inset 0 0 0 1px rgba(255,181,102,0.15);
+  animation: chipBreathe 3.2s var(--ease) infinite;
+}
+@keyframes chipBreathe {
+  0%, 100% { box-shadow: 0 0 14px rgba(255,181,102,.18), inset 0 0 0 1px rgba(255,181,102,.12); }
+  50%      { box-shadow: 0 0 22px rgba(255,181,102,.30), inset 0 0 0 1px rgba(255,181,102,.20); }
 }
 .chip.special {
   border-color: rgba(126, 230, 255, 0.22) !important;
-  color: rgba(126, 230, 255, 0.7) !important;
+  color: rgba(126, 230, 255, 0.8) !important;
+}
+.chip.special:hover {
+  border-color: rgba(126, 230, 255, 0.45) !important;
+  color: var(--apex-cyan-0) !important;
+  background: rgba(126, 230, 255, 0.05) !important;
 }
 .chip.special.on {
-  border-color: var(--apex-cyan-0) !important;
-  background: rgba(126, 230, 255, 0.12) !important;
+  border-color: rgba(126, 230, 255, 0.6) !important;
+  background: rgba(126, 230, 255, 0.14) !important;
   color: var(--apex-cyan-0) !important;
-  box-shadow: 0 0 16px rgba(126, 230, 255, 0.2) !important;
+  box-shadow: 0 0 18px rgba(126, 230, 255, 0.28);
 }
 
-/* -------------------------------------------------------------------------
- * Input area — glass frame with soft amber focus glow.
- * ------------------------------------------------------------------------- */
-.input-area, .composer, .chat-input-wrap {
-  background: rgba(10, 12, 16, 0.55) !important;
-  backdrop-filter: blur(24px) saturate(140%) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+/* =========================================================================
+   MODE TABS — flat with an animated underline for active.
+   ========================================================================= */
+.modes {
+  background: var(--glass-2) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  border-bottom: 1px solid var(--bd-1) !important;
+  padding: 6px 10px !important;
+  gap: 4px !important;
 }
-textarea, input[type="text"], input[type="email"], input[type="password"] {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  color: var(--tx) !important;
+.mt {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--tx-3) !important;
   font-family: var(--font) !important;
-  transition: border-color 180ms, box-shadow 180ms !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.015em !important;
+  padding: 5px 11px !important;
+  border-radius: 10px !important;
+  transition: all var(--t-fast) var(--ease) !important;
+  position: relative;
 }
-textarea:focus, input:focus {
+.mt:hover {
+  color: var(--tx-1) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+.mt.on {
+  color: var(--apex-amber-0) !important;
+  background: rgba(255, 181, 102, 0.11) !important;
+  border-color: rgba(255, 181, 102, 0.32) !important;
+  box-shadow: 0 0 18px rgba(255, 181, 102, 0.16);
+}
+
+/* =========================================================================
+   MESSAGES — the most important surface.
+   User = cyan tint (info / self), Assistant = glass with amber left-mark.
+   ========================================================================= */
+.msgs {
+  padding: 22px 16px 10px !important;
+  gap: 14px !important;
+  scroll-behavior: smooth;
+}
+.msg {
+  max-width: min(720px, 88%) !important;
+  animation: msgIn 340ms var(--ease) !important;
+}
+@keyframes msgIn {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.985); }
+  100% { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.msg .bub {
+  padding: 11px 14px !important;
+  border-radius: 14px !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+  box-shadow: var(--sh-1);
+  position: relative;
+}
+
+.msg.usr .bub {
+  background: linear-gradient(135deg, rgba(126,230,255,0.14), rgba(91,213,245,0.08)) !important;
+  border: 1px solid rgba(126, 230, 255, 0.30) !important;
+  color: var(--tx-1) !important;
+  border-bottom-right-radius: 4px !important;
+  box-shadow: 0 4px 18px rgba(91, 213, 245, 0.10), var(--sh-1);
+}
+
+.msg.bot .bub {
+  background: rgba(16, 19, 26, 0.82) !important;
+  border: 1px solid var(--bd-1) !important;
+  color: var(--tx-1) !important;
+  backdrop-filter: blur(12px);
+  border-bottom-left-radius: 4px !important;
+  position: relative;
+}
+/* Amber accent stripe on assistant bubbles. */
+.msg.bot .bub::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 10%; bottom: 10%;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, var(--apex-amber-0), transparent);
+  border-radius: 999px;
+  opacity: 0.6;
+}
+
+.msg.bot .bub strong { color: #fff !important; font-weight: 600; }
+.msg.bot .bub em     { color: var(--apex-cyan-0); font-style: normal; }
+.msg.bot .bub code {
+  background: rgba(126, 230, 255, 0.08) !important;
+  border: 1px solid rgba(126, 230, 255, 0.18) !important;
+  color: var(--apex-cyan-0) !important;
+  font-family: var(--mono) !important;
+  font-size: 12.5px !important;
+  padding: 1.5px 6px !important;
+  border-radius: 6px !important;
+}
+.msg.bot .bub pre {
+  background: rgba(7, 9, 14, 0.85) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 12px !important;
+  padding: 14px !important;
+  margin: 10px 0 !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+}
+.msg.bot .bub pre code {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  color: #c3d2ea !important;
+  font-size: 12.5px !important;
+  line-height: 1.7 !important;
+}
+.msg.bot .bub h1 { color: #fff !important; font-size: 16px !important; margin: 12px 0 6px !important; border-bottom: 1px solid var(--bd-1) !important; padding-bottom: 6px !important; }
+.msg.bot .bub h2 { color: var(--tx-1) !important; font-size: 14px !important; margin: 10px 0 5px !important; font-weight: 600 !important; }
+.msg.bot .bub h3 { color: var(--apex-amber-0) !important; font-size: 13px !important; margin: 8px 0 4px !important; font-weight: 600 !important; letter-spacing: 0.02em; }
+.msg.bot .bub a  { color: var(--apex-cyan-0) !important; text-decoration: none !important; border-bottom: 1px dashed rgba(126,230,255,0.35); transition: all var(--t-fast); }
+.msg.bot .bub a:hover { color: #fff !important; border-bottom-color: var(--apex-cyan-0); background: rgba(126,230,255,0.08); }
+.msg.bot .bub blockquote {
+  border-left: 3px solid var(--apex-amber-0) !important;
+  background: rgba(255, 181, 102, 0.05);
+  padding: 6px 12px !important;
+  margin: 8px 0 !important;
+  color: var(--tx-2) !important;
+  font-style: italic !important;
+  border-radius: 0 8px 8px 0;
+}
+.msg.bot .bub table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 12.5px; }
+.msg.bot .bub th {
+  background: rgba(255, 181, 102, 0.10) !important;
+  color: var(--apex-amber-0) !important;
+  padding: 7px 11px !important;
+  border: 1px solid var(--bd-2) !important;
+  text-align: left;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.msg.bot .bub td {
+  padding: 6px 11px !important;
+  border: 1px solid var(--bd-1) !important;
+  color: var(--tx-2) !important;
+}
+
+/* Typing dots — amber sequential glow. */
+.msg.typing .bub { padding: 12px 16px !important; }
+.msg.typing .td {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--apex-amber-0);
+  animation: typingGlow 1.1s var(--ease) infinite;
+  box-shadow: 0 0 10px var(--apex-amber-0);
+}
+.msg.typing .td:nth-child(2) { animation-delay: 0.15s; }
+.msg.typing .td:nth-child(3) { animation-delay: 0.30s; }
+@keyframes typingGlow {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+  40%           { opacity: 1;   transform: scale(1.15); }
+}
+
+/* Tool-call card inside an assistant bubble. */
+.tcard-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--apex-cyan-0);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  opacity: 0.8;
+}
+.tcard {
+  background: rgba(126, 230, 255, 0.04);
+  border: 1px solid rgba(126, 230, 255, 0.14);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--tx-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tc-img {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 10px;
+  margin-top: 8px;
+  border: 1px solid var(--bd-2);
+  cursor: zoom-in;
+  transition: transform var(--t-med) var(--ease);
+}
+.tc-img:hover { transform: scale(1.01); }
+
+.meta {
+  color: var(--tx-4) !important;
+  font-size: 10px !important;
+  font-family: var(--mono) !important;
+  letter-spacing: 0.04em !important;
+  margin-top: 3px !important;
+  padding: 0 4px;
+}
+
+/* Greeting / empty state. */
+.g-mark {
+  font-size: 42px !important;
+  background: linear-gradient(135deg, var(--apex-amber-0), var(--apex-cyan-0));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
+  margin-bottom: 10px;
+  animation: markShimmer 3.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 18px rgba(255,181,102,0.2));
+}
+@keyframes markShimmer {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(255,181,102,0.16)); }
+  50%      { filter: drop-shadow(0 0 26px rgba(126,230,255,0.28)); }
+}
+.chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: center;
+  margin-top: 14px;
+}
+.chips .ch {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--bd-2);
+  color: var(--tx-2);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+}
+.chips .ch:hover {
+  border-color: rgba(255, 181, 102, 0.4);
+  background: rgba(255, 181, 102, 0.06);
+  color: var(--apex-amber-0);
+  transform: translateY(-1px);
+}
+
+/* =========================================================================
+   INPUT / COMPOSER — glass frame with amber focus ring.
+   ========================================================================= */
+.inp-wrap {
+  background: var(--glass-1) !important;
+  backdrop-filter: blur(28px) saturate(150%) !important;
+  border-top: 1px solid var(--bd-1) !important;
+  padding: 10px 12px 12px !important;
+}
+
+.irow {
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+/* The textarea (no explicit class — target by tag). */
+.irow textarea,
+textarea#ta,
+textarea[placeholder*="Type"], textarea[placeholder*="Ask"], textarea[placeholder*="Напиши"], textarea[placeholder*="Сообщение"] {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 14px !important;
+  color: var(--tx-1) !important;
+  font-family: var(--font) !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  padding: 10px 12px !important;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast) !important;
+  resize: none;
+}
+textarea:focus, input:focus, .cmd-input:focus {
   outline: none !important;
-  border-color: rgba(255, 181, 102, 0.45) !important;
-  box-shadow: 0 0 0 3px rgba(255, 181, 102, 0.12),
-              0 0 24px rgba(255, 181, 102, 0.08) !important;
+  border-color: rgba(255, 181, 102, 0.5) !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 181, 102, 0.12),
+    0 0 28px rgba(255, 181, 102, 0.10) !important;
 }
 
-/* -------------------------------------------------------------------------
- * Messages — user bubble cyan, assistant transparent glass.
- * ------------------------------------------------------------------------- */
-.user-msg, .msg.user, .bubble.user {
-  background: linear-gradient(135deg, rgba(126, 230, 255, 0.10), rgba(91, 213, 245, 0.06)) !important;
-  border: 1px solid rgba(126, 230, 255, 0.25) !important;
-  color: var(--tx) !important;
+.ibtn {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 12px !important;
+  color: var(--tx-2) !important;
+  width: 38px !important; height: 38px !important;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px !important;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease) !important;
+  position: relative;
 }
-.assistant-msg, .msg.assistant, .bubble.assistant {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  backdrop-filter: blur(8px) !important;
+.ibtn .mlbl {
+  position: absolute;
+  bottom: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  color: var(--tx-4);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.ibtn:hover {
+  border-color: rgba(255, 181, 102, 0.35) !important;
+  color: var(--apex-amber-0) !important;
+  background: rgba(255, 181, 102, 0.06) !important;
+  transform: translateY(-1px);
+}
+.ibtn.rec  { color: var(--c-bad) !important; border-color: rgba(255,140,140,.45) !important; background: rgba(255,140,140,.1) !important; animation: recPulse 1.2s ease-in-out infinite; }
+.ibtn.proc { color: var(--apex-cyan-0) !important; border-color: rgba(126,230,255,.4) !important; background: rgba(126,230,255,.08) !important; }
+@keyframes recPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,140,140,.5); }
+  50%      { box-shadow: 0 0 0 8px rgba(255,140,140,0); }
 }
 
-/* -------------------------------------------------------------------------
- * Primary CTAs — amber gradient with glow.
- * ------------------------------------------------------------------------- */
-button.primary, .btn-primary, .send-btn, .btn.primary {
+/* Primary send button — amber gradient with live shimmer. */
+.btn-send, #btn-send {
   background: linear-gradient(135deg, var(--apex-amber-0), var(--apex-amber-1)) !important;
   color: #0a0c10 !important;
   border: none !important;
-  font-weight: 600 !important;
-  box-shadow: 0 0 24px rgba(255, 181, 102, 0.22) !important;
-  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+  box-shadow: 0 6px 22px rgba(255, 181, 102, 0.32),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  position: relative;
+  overflow: hidden;
 }
-button.primary:hover, .btn-primary:hover, .send-btn:hover, .btn.primary:hover {
+.btn-send::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.30) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: shimmer 3s linear infinite;
+}
+.btn-send:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 32px rgba(255, 181, 102, 0.35) !important;
+  box-shadow: 0 10px 34px rgba(255, 181, 102, 0.5),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+}
+.btn-send:active { transform: translateY(0); }
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
 }
 
-/* -------------------------------------------------------------------------
- * Scrollbar — thin, subtle.
- * ------------------------------------------------------------------------- */
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 181, 102, 0.25) !important;
-}
-
-/* -------------------------------------------------------------------------
- * Code / mono — JetBrains, tinted.
- * ------------------------------------------------------------------------- */
-code, pre, .mono {
+.hint {
+  color: var(--tx-4) !important;
+  font-size: 10.5px !important;
   font-family: var(--mono) !important;
-  color: rgba(126, 230, 255, 0.95) !important;
-}
-pre {
-  background: rgba(126, 230, 255, 0.04) !important;
-  border: 1px solid rgba(126, 230, 255, 0.14) !important;
-  border-radius: 10px;
+  letter-spacing: 0.04em !important;
+  text-align: center;
+  padding: 6px 0 0 !important;
 }
 
-/* -------------------------------------------------------------------------
- * Modal / overlay panels — glass cards.
- * ------------------------------------------------------------------------- */
-.modal, .dialog, .panel, .card {
-  background: rgba(10, 12, 16, 0.72) !important;
-  backdrop-filter: blur(28px) saturate(140%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(140%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+/* Voice bar / wake indicator. */
+.vb {
+  background: rgba(126, 230, 255, 0.06) !important;
+  border: 1px solid rgba(126, 230, 255, 0.18) !important;
+  border-radius: 12px !important;
+  padding: 6px 10px !important;
+}
+.vdot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--apex-cyan-0);
+  box-shadow: 0 0 10px var(--apex-cyan-0);
+  animation: pulseBreathe 1.1s ease-in-out infinite;
+}
+
+.wake-bar {
+  background: var(--glass-2) !important;
+  border: 1px solid rgba(126, 230, 255, 0.22) !important;
+  border-radius: 14px !important;
+  padding: 7px 12px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 24px rgba(126,230,255,0.12);
+}
+.wb-dot {
+  background: var(--apex-cyan-0) !important;
+  box-shadow: 0 0 10px var(--apex-cyan-0) !important;
+}
+.wb-txt {
+  color: var(--apex-cyan-0) !important;
+  font-family: var(--mono);
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+/* =========================================================================
+   SETTINGS PANEL — premium side drawer.
+   ========================================================================= */
+.panel {
+  background: var(--glass-1) !important;
+  backdrop-filter: blur(36px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(36px) saturate(150%) !important;
+  border-left: 1px solid var(--bd-2) !important;
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.6);
+}
+.ph {
+  padding: 16px 18px !important;
+  border-bottom: 1px solid var(--bd-1) !important;
+  background: linear-gradient(180deg, rgba(255,181,102,0.04), transparent) !important;
+}
+.ph h2 {
+  color: var(--tx-1) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+}
+.ph h2::first-letter { color: var(--apex-amber-0); }
+.ph-x {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 10px !important;
+  width: 28px; height: 28px;
+  color: var(--tx-3) !important;
+  transition: all var(--t-fast) var(--ease);
+}
+.ph-x:hover { background: rgba(255,140,140,0.15) !important; border-color: rgba(255,140,140,0.4) !important; color: var(--c-bad) !important; }
+
+.pbody { padding: 14px 16px !important; }
+
+.ps {
+  background: rgba(255,255,255,0.02) !important;
+  border: 1px solid var(--bd-1) !important;
+  border-radius: 14px !important;
+  padding: 14px !important;
+  margin-bottom: 12px !important;
+}
+.psl {
+  font-size: 11px !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase;
+  color: var(--tx-3) !important;
+  margin-bottom: 10px !important;
+  font-weight: 600 !important;
+}
+
+.pf { margin-bottom: 10px !important; }
+.pf label {
+  display: block !important;
+  font-size: 12px !important;
+  color: var(--tx-2) !important;
+  margin-bottom: 5px !important;
+  font-weight: 500;
+}
+.pf label a {
+  color: var(--apex-cyan-0) !important;
+  font-size: 10.5px !important;
+  text-decoration: none !important;
+  margin-left: 6px;
+  opacity: 0.75;
+  cursor: pointer;
+  transition: opacity var(--t-fast);
+}
+.pf label a:hover { opacity: 1; text-decoration: underline !important; }
+
+.pr { display: flex; gap: 6px; }
+.pi {
+  flex: 1;
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 10px !important;
+  color: var(--tx-1) !important;
+  padding: 8px 10px !important;
+  font-family: var(--mono) !important;
+  font-size: 12px !important;
+  transition: all var(--t-fast) var(--ease) !important;
+}
+.psv {
+  background: rgba(255, 181, 102, 0.10) !important;
+  border: 1px solid rgba(255, 181, 102, 0.30) !important;
+  color: var(--apex-amber-0) !important;
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease) !important;
+}
+.psv:hover { background: rgba(255, 181, 102, 0.20) !important; box-shadow: 0 0 16px rgba(255,181,102,0.22); }
+
+.sel {
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 10px !important;
+  color: var(--tx-1) !important;
+  padding: 8px 10px !important;
+  font-family: var(--font) !important;
+  font-size: 12px !important;
+  width: 100%;
+}
+
+.d2 {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--tx-4);
+  margin-right: 6px;
+  vertical-align: middle;
+  transition: all var(--t-fast);
+}
+.d2.on { background: var(--c-ok); box-shadow: 0 0 8px var(--c-ok); }
+.d2.err { background: var(--c-bad); box-shadow: 0 0 8px var(--c-bad); }
+
+/* Toggle switches. */
+.trow {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0 !important;
+  border-bottom: 1px solid var(--bd-1) !important;
+}
+.trow:last-child { border-bottom: none !important; }
+.tinfo {
+  font-size: 13px !important;
+  color: var(--tx-1) !important;
+  font-weight: 500;
+}
+.tinfo small {
+  display: block;
+  font-size: 11px !important;
+  color: var(--tx-3) !important;
+  margin-top: 2px;
+  font-weight: 400;
+}
+.sw {
+  width: 38px !important; height: 22px !important;
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 999px !important;
+  position: relative;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease) !important;
+}
+.sw::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--tx-2);
+  transition: all var(--t-fast) var(--ease);
+}
+.sw.on {
+  background: rgba(255, 181, 102, 0.24) !important;
+  border-color: rgba(255, 181, 102, 0.55) !important;
+  box-shadow: 0 0 14px rgba(255, 181, 102, 0.25);
+}
+.sw.on::after {
+  left: 18px;
+  background: var(--apex-amber-0);
+  box-shadow: 0 0 8px rgba(255,181,102,0.6);
+}
+
+.mic-test-btn, .dbtn {
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid var(--bd-2) !important;
+  color: var(--tx-2) !important;
+  border-radius: 10px !important;
+  padding: 9px 14px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease) !important;
+  margin-top: 6px;
+}
+.mic-test-btn:hover { border-color: rgba(255,181,102,0.35) !important; color: var(--apex-amber-0) !important; background: rgba(255,181,102,0.06) !important; }
+.dbtn { display: block; width: 100%; margin-bottom: 8px; }
+.dbtn:hover { border-color: rgba(255,140,140,0.4) !important; color: var(--c-bad) !important; background: rgba(255,140,140,0.08) !important; }
+
+.info-box {
+  background: rgba(126, 230, 255, 0.05) !important;
+  border: 1px solid rgba(126, 230, 255, 0.18) !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  color: var(--tx-2) !important;
+  font-size: 11.5px !important;
+  line-height: 1.55 !important;
+}
+
+.os-footer {
+  padding: 14px 16px !important;
+  border-top: 1px solid var(--bd-1) !important;
+  background: rgba(255,255,255,0.015);
+  margin-top: 14px;
+}
+.os-badge {
+  display: inline-block;
+  background: rgba(124, 240, 180, 0.08);
+  border: 1px solid rgba(124, 240, 180, 0.25);
+  color: var(--c-ok);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.os-ver {
+  color: var(--tx-4) !important;
+  font-size: 10px !important;
+  font-family: var(--mono);
+  margin-top: 8px;
+  letter-spacing: 0.03em;
+}
+
+/* =========================================================================
+   FLOATING PANELS (Hub / Store / Account / Workflows / Recorder)
+   ========================================================================= */
+.fpanel {
+  background: var(--glass-1) !important;
+  backdrop-filter: blur(36px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(36px) saturate(150%) !important;
+  border: 1px solid var(--bd-2) !important;
   border-radius: 18px !important;
+  box-shadow: var(--sh-3), 0 0 0 1px rgba(255, 181, 102, 0.05);
+}
+.fph {
+  padding: 14px 18px !important;
+  border-bottom: 1px solid var(--bd-1) !important;
+  background: linear-gradient(180deg, rgba(255,181,102,0.03), transparent);
+}
+.fph h2, .fph h3 {
+  color: var(--tx-1) !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+.fph-x {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid var(--bd-2) !important;
+  border-radius: 10px !important;
+  width: 28px; height: 28px;
+  color: var(--tx-3) !important;
+  transition: all var(--t-fast) var(--ease);
+}
+.fph-x:hover { background: rgba(255,140,140,0.15) !important; color: var(--c-bad) !important; border-color: rgba(255,140,140,0.4) !important; }
+
+.ftabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px 0 !important;
+  border-bottom: 1px solid var(--bd-1) !important;
+}
+.ftab {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--tx-3) !important;
+  padding: 7px 13px !important;
+  border-radius: 10px 10px 0 0 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease) !important;
+  position: relative;
+}
+.ftab:hover { color: var(--tx-1) !important; background: rgba(255,255,255,0.03) !important; }
+.ftab.on {
+  color: var(--apex-amber-0) !important;
+  background: rgba(255, 181, 102, 0.10) !important;
+  border-color: var(--bd-2) !important;
+  border-bottom-color: transparent !important;
+}
+.ftab.on::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--apex-amber-0), transparent);
+}
+.fbody { padding: 16px 18px !important; }
+
+/* =========================================================================
+   COMMAND PALETTE (Ctrl+K) — Linear-style overlay.
+   ========================================================================= */
+.cmd-palette {
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(10px) !important;
+}
+.cmd-box {
+  background: var(--glass-1) !important;
+  backdrop-filter: blur(40px) saturate(160%) !important;
+  border: 1px solid var(--bd-3) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--sh-3), 0 0 0 1px rgba(255, 181, 102, 0.08);
+  max-width: 560px !important;
+}
+.cmd-input {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--bd-2) !important;
+  color: var(--tx-1) !important;
+  padding: 14px 18px !important;
+  font-size: 14px !important;
+  font-family: var(--font) !important;
+  border-radius: 18px 18px 0 0 !important;
+  letter-spacing: 0.005em;
+}
+.cmd-input:focus {
+  border-bottom-color: rgba(255, 181, 102, 0.5) !important;
+  box-shadow: 0 1px 0 0 var(--apex-amber-0) !important;
+  background: rgba(255, 181, 102, 0.03) !important;
+}
+.cmd-results {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+}
+.cmd-results > * {
+  padding: 9px 12px !important;
+  border-radius: 10px !important;
+  transition: background var(--t-fast) var(--ease);
+  cursor: pointer;
+  color: var(--tx-1);
+  font-size: 13px;
+}
+.cmd-results > *:hover,
+.cmd-results > .active {
+  background: rgba(255, 181, 102, 0.10) !important;
+  color: var(--apex-amber-0);
 }
 
-/* -------------------------------------------------------------------------
- * License / trial banner (if chat.html listens to license-state and renders).
- * Provides the same look as progate for the persistent state pill.
- * ------------------------------------------------------------------------- */
+/* =========================================================================
+   FOCUS TIMER (titlebar corner)
+   ========================================================================= */
+.focus-timer {
+  background: rgba(255, 181, 102, 0.09) !important;
+  border: 1px solid rgba(255, 181, 102, 0.26) !important;
+  border-radius: 999px !important;
+  padding: 3px 8px !important;
+  color: var(--apex-amber-0) !important;
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 0 14px rgba(255, 181, 102, 0.18);
+}
+.focus-timer-btn {
+  background: rgba(255, 181, 102, 0.15) !important;
+  border: 1px solid rgba(255, 181, 102, 0.3) !important;
+  color: var(--apex-amber-0) !important;
+  border-radius: 6px !important;
+  width: 18px !important; height: 18px !important;
+  font-size: 10px !important;
+  transition: all var(--t-fast) var(--ease);
+}
+.focus-timer-btn:hover { background: rgba(255, 181, 102, 0.28) !important; transform: scale(1.05); }
+
+/* =========================================================================
+   LICENSE / TRIAL PILL (injected by license-state observer)
+   ========================================================================= */
 .license-pill {
   display: inline-flex;
   align-items: center;
@@ -234,26 +1055,43 @@ pre {
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   font-family: var(--font);
-  border: 1px solid rgba(255, 181, 102, 0.25);
-  background: rgba(255, 181, 102, 0.06);
+  border: 1px solid rgba(255, 181, 102, 0.28);
+  background: rgba(255, 181, 102, 0.08);
   color: var(--apex-amber-0);
 }
 .license-pill.trial {
-  border-color: rgba(126, 230, 255, 0.25);
-  background: rgba(126, 230, 255, 0.06);
+  border-color: rgba(126, 230, 255, 0.28);
+  background: rgba(126, 230, 255, 0.08);
   color: var(--apex-cyan-0);
 }
 .license-pill.expired {
-  border-color: rgba(255, 140, 140, 0.3);
-  background: rgba(255, 140, 140, 0.08);
-  color: var(--red);
+  border-color: rgba(255, 140, 140, 0.32);
+  background: rgba(255, 140, 140, 0.10);
+  color: var(--c-bad);
+  animation: pillBlink 1.6s ease-in-out infinite;
+}
+@keyframes pillBlink {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 140, 140, 0.35); }
+  50%      { box-shadow: 0 0 0 6px rgba(255, 140, 140, 0); }
 }
 
-/* -------------------------------------------------------------------------
- * Animation easing — single source of truth.
- * ------------------------------------------------------------------------- */
-* { transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+/* =========================================================================
+   GLOBAL EASING — final guard so every transition uses the same curve.
+   ========================================================================= */
+* { transition-timing-function: var(--ease); }
+
+/* Reduced motion respect. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  #fractalBg { opacity: 0.4; }
+}
