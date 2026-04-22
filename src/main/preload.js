@@ -190,3 +190,34 @@ contextBridge.exposeInMainWorld('H', {
   licenseOpenContact:      (channel)       => ipcRenderer.invoke('licenseOpenContactLink', channel),
   onLicenseChange:         (cb)            => ipcRenderer.on('license-state', (_, s) => cb(s)),
 });
+
+// ── Auto-wire renderer add-ons ──────────────────────────────────────────────
+// When chat.html loads we inject `apex-alive.css` (icon-centering fix + the
+// AI-alive aura) and `license-ui.js` (titlebar license pill). This keeps
+// chat.html untouched — the main stylesheet/script list there stays minimal
+// while preload owns all the optional visual polish.
+try {
+  const isChatPage = () => {
+    const p = (location.pathname || '').toLowerCase();
+    return p.endsWith('/chat.html') || p.endsWith('chat.html');
+  };
+  const injectChatAddons = () => {
+    if (!isChatPage()) return;
+    if (document.getElementById('hz-apex-alive-css')) return;
+    const link = document.createElement('link');
+    link.id   = 'hz-apex-alive-css';
+    link.rel  = 'stylesheet';
+    link.href = 'apex-alive.css';
+    document.head.appendChild(link);
+    const s = document.createElement('script');
+    s.id    = 'hz-license-ui-js';
+    s.src   = 'license-ui.js';
+    s.defer = true;
+    document.head.appendChild(s);
+  };
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', injectChatAddons, { once: true });
+  } else {
+    injectChatAddons();
+  }
+} catch (_) { /* preload runs in an isolated context — ignore DOM timing */ }
