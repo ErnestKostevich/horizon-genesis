@@ -1,0 +1,156 @@
+/**
+ * Horizon "AI Alive" overlay + icon-centering fixes.
+ *
+ * Loaded AFTER apex-theme.css so it can correct cascade issues
+ * caused by body-level letter-spacing nudging single-glyph icons
+ * off-center. Also adds the slow living aura + chromatic hover
+ * treatment that makes the UI feel breathing without killing
+ * readability.
+ */
+
+/* =========================================================================
+   ICON CENTERING FIX — stops body letter-spacing from nudging single-glyph
+   emoji off-center on circular/square buttons.
+   ========================================================================= */
+.ic-btn, .ibtn, .wbtn, .chip, .mt, .ftab, .focus-timer-btn,
+.ph-x, .fph-x, .psv, .mic-test-btn, .dbtn, .license-pill, .ch,
+.pulse, .vdot, .wb-dot, .btn-send, #btn-send, .cmd-results > *,
+.trow .sw, .tb-sub {
+  letter-spacing: 0 !important;
+}
+
+.ic-btn, .ibtn, .ftab, .mt, .focus-timer-btn, .ph-x, .fph-x,
+.psv, .mic-test-btn, .dbtn, .btn-send, #btn-send {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  box-sizing: border-box !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  font-variant-emoji: emoji;
+  text-indent: 0 !important;
+}
+
+/* Any inline text inside icon buttons (e.g. emoji span) inherits 1:1. */
+.ic-btn > *, .ibtn > *, .ftab > *, .mt > *, .btn-send > *, #btn-send > * {
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Send button kept slightly padded so it doesn't clip the glyph. */
+.btn-send, #btn-send {
+  padding: 0 16px !important;
+  min-width: 56px;
+}
+
+/* Textareas need the global letter-spacing restored for prose. */
+textarea, input, .cmd-input {
+  letter-spacing: 0.005em;
+}
+
+/* =========================================================================
+   SWITCH FIX — thumb now centered via translateY so it doesn't sit a
+   pixel too high when the track height is not an exact multiple of 2.
+   ========================================================================= */
+.sw {
+  box-sizing: border-box !important;
+  display: inline-block !important;
+}
+.sw::after {
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+.sw.on::after {
+  transform: translateY(-50%) !important;
+}
+
+/* =========================================================================
+   AI ALIVE — layered aura, chromatic rim, parallax drift.
+   Respects prefers-reduced-motion via the main stylesheet.
+   ========================================================================= */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10%;
+  pointer-events: none;
+  z-index: -1;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 181, 102, 0.14), transparent 45%),
+    radial-gradient(circle at 82% 78%, rgba(126, 230, 255, 0.13), transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(199, 166, 255, 0.06), transparent 60%);
+  animation: auraDrift 22s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate;
+  filter: blur(52px);
+  opacity: 0.9;
+}
+@keyframes auraDrift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  40%  { transform: translate3d(-3%, 2%, 0) scale(1.05); }
+  70%  { transform: translate3d(4%, -1%, 0) scale(1.08); }
+  100% { transform: translate3d(2%, 3%, 0) scale(1.02); }
+}
+
+/* Chromatic rim on assistant bubbles when the user hovers them. */
+.msg.bot .bub {
+  transition: box-shadow 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.msg.bot .bub:hover {
+  box-shadow:
+    0 4px 22px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 181, 102, 0.18),
+    0 0 26px rgba(255, 181, 102, 0.09),
+    0 0 44px rgba(126, 230, 255, 0.05);
+}
+.msg.usr .bub:hover {
+  box-shadow:
+    0 4px 22px rgba(91, 213, 245, 0.14),
+    0 0 0 1px rgba(126, 230, 255, 0.30),
+    0 0 26px rgba(126, 230, 255, 0.14);
+}
+
+/* Logo responds to proximity: breathe faster on hover. */
+.logo:hover  { animation-duration: 2.6s; }
+.g-mark:hover { animation-duration: 1.8s; }
+
+/* Send button: amber → cyan sweep on hover (layered over shimmer). */
+.btn-send::after, #btn-send::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(126, 230, 255, 0.0), rgba(126, 230, 255, 0.25));
+  opacity: 0;
+  transition: opacity 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  border-radius: inherit;
+}
+.btn-send:hover::after, #btn-send:hover::after { opacity: 1; }
+
+/* License pill placement hook — titlebar injection. */
+#license-pill-host {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+}
+#license-pill-host:empty { display: none; }
+
+/* Upgrade cta button inside the trial pill. */
+.license-pill .lp-cta {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: inherit;
+  border: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.license-pill .lp-cta:hover { background: rgba(255, 255, 255, 0.26); }
