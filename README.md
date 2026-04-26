@@ -42,6 +42,7 @@ Grab the installer from [the latest release](https://github.com/ErnestKostevich/
 
 - **Windows:** `Horizon-AI-Setup-x.y.z.exe` (NSIS, x64)
 - **macOS:** `Horizon-AI-x.y.z.dmg` (Intel + Apple Silicon, unsigned — right-click → Open)
+- **Linux:** `Horizon-AI-x.y.z.AppImage` (portable, x64) or `horizon-ai_x.y.z_amd64.deb` (Debian / Ubuntu)
 
 Or install marketplace plugins via `horizon://` deep links from the site.
 
@@ -82,7 +83,7 @@ src/main/          Electron main process, IPC, plugin runtime, providers
 src/renderer/      Chat UI, setup, source-preview page (plain HTML)
 builtin-plugins/   Ships-with-the-app plugins (e.g. spotify-control)
 assets/            Icons for installers
-.github/workflows/ CI: release build for Windows + macOS
+.github/workflows/ CI: release build for Windows, macOS, Linux
 ```
 
 ## Contributing
