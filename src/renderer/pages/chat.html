@@ -534,6 +534,31 @@ textarea::placeholder{color:var(--t3)}
       <button class="mic-test-btn" onclick="testMic()">🎙 Test microphone</button>
       <div class="mic-st" id="mic-st"></div>
 
+      <!-- Wake Word Calibration -->
+      <div style="margin-top:14px;padding:10px;background:var(--bg3);border:1px solid var(--b1);border-radius:8px">
+        <div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:600">🎯 Wake Word Calibration</div>
+        <div class="trow" style="padding:6px 0">
+          <div class="tinfo">Strict mode<small>Only fire when "Horizon" is at the start. Blocks mid-sentence triggers (e.g. phone calls).</small></div>
+          <button class="sw" id="sw-wake-strict" onclick="toggleWakeStrict()"></button>
+        </div>
+        <div class="trow" style="padding:6px 0">
+          <div class="tinfo">Confirm beep<small>Short tone after wake fires.</small></div>
+          <button class="sw" id="sw-wake-beep" onclick="toggleWakeBeep()"></button>
+        </div>
+        <div style="margin-top:8px">
+          <label style="font-size:10px;color:var(--t2);display:flex;justify-content:space-between;margin-bottom:4px">
+            <span>Sensitivity</span>
+            <span id="wake-sens-val" style="color:var(--t1);font-weight:600">18</span>
+          </label>
+          <input type="range" id="wake-sens" min="5" max="50" step="1"
+                 style="width:100%;accent-color:var(--acc);cursor:pointer"
+                 oninput="setWakeSens(this.value)" />
+          <div style="font-size:9px;color:var(--t3);margin-top:3px;display:flex;justify-content:space-between">
+            <span>← more sensitive</span><span>quieter env / fewer FPs →</span>
+          </div>
+        </div>
+      </div>
+
       <div class="info-box" style="margin-top:10px">
         <strong>⚠️ Почему Web Speech API не используется:</strong><br>
         Google заблокировал его в Electron — бросает "network error". Это известный баг с 2020 года.<br><br>
@@ -870,6 +895,30 @@ const WAKE_EXACT = new Set([
   'hey horizon','эй горизонт','окей горизонт','окей хорайзон','слышь горизонт','hello horizon','ok horizon'
 ]);
 
+// Tunable wake-word knobs persisted in localStorage so users can calibrate
+// for their environment without editing code:
+//   • wake.strictMode (default ON) — only fire when the wake word is the
+//     entire utterance OR the first 1-2 words. Eliminates the common false
+//     positive where "Horizon" appears mid-sentence (e.g. talking on a phone
+//     nearby and saying "...did Horizon call?").
+//   • wake.volumeThreshold (default 18, range 5-50) — peak volume during the
+//     2.5s capture must exceed this to even attempt transcription. Higher =
+//     less sensitive (skips quiet background) but might miss soft "Horizon".
+//   • wake.confirmBeep (default OFF) — play a short tone after fire so the
+//     user knows it heard them.
+function wakeCfg(key, def) {
+  try {
+    const v = localStorage.getItem('wake.' + key);
+    if (v === null) return def;
+    if (typeof def === 'boolean') return v === 'true';
+    if (typeof def === 'number')  return Number.isFinite(+v) ? +v : def;
+    return v;
+  } catch { return def; }
+}
+function setWakeCfg(key, val) {
+  try { localStorage.setItem('wake.' + key, String(val)); } catch {}
+}
+
 // Hot window
 let hotWindowActive = false;
 let hotWindowTimeout = null;
@@ -905,16 +954,36 @@ function isWakeWord(text){
   const HALLUCINATIONS = /^(thanks|thank you|bye|okay|ok|oh|ah|um|uh|hmm|hm|yeah|yes|no|so|well|the|a|you|i|it|is|to|and|спасибо|пока|ну|да|нет|ой|ах|эм|угу|ага|хм|ладно|вот|это|та|не|то|субтитры|подпис\w*|редактор|перевод\w*|продолж\w*|subscribe|like|comment|music|playing|silence|noise|applause|laughter|ммм|ээ|аа)$/i;
   if(HALLUCINATIONS.test(lo)) return false;
 
-  // Whole-word match for wake words (handles both Latin \b boundaries and
-  // Cyrillic where \b misbehaves). Anywhere in the utterance counts —
-  // "Horizon open YouTube" and "Эй Горизонт привет" both trigger.
   const words = lo.split(' ').filter(Boolean);
-  for(const w of WAKE_EXACT) {
-    if(w.includes(' ')) {
-      // Multi-word phrase — substring check with space guards.
-      if(lo === w || lo.startsWith(w + ' ') || lo.endsWith(' ' + w) || lo.includes(' ' + w + ' ')) return true;
-    } else {
-      if(words.includes(w)) return true;
+  const strict = wakeCfg('strictMode', true);
+
+  // Strict mode (default): wake word must be the whole utterance OR the
+  // very first word, optionally preceded by a single attention word
+  // ("hey", "ok", "okay", "эй", "окей", "слышь"). This blocks the most
+  // common false positives — "Horizon" used mid-sentence by people on
+  // phone calls or other ambient speech.
+  if (strict) {
+    const ATTN = new Set(['hey','ok','okay','hello','эй','окей','окэй','слышь','эй,','слушай']);
+    for (const w of WAKE_EXACT) {
+      if (w.includes(' ')) {
+        // Phrase wake words like "hey horizon" only match at the very start.
+        if (lo === w || lo.startsWith(w + ' ')) return true;
+      } else {
+        // Single-word: allowed only as utterance, the first word, or
+        // second word after a single recognised attention prefix.
+        if (lo === w) return true;
+        if (words[0] === w) return true;
+        if (words.length >= 2 && ATTN.has(words[0]) && words[1] === w) return true;
+      }
+    }
+  } else {
+    // Lenient mode — original behaviour. Whole-word match anywhere.
+    for(const w of WAKE_EXACT) {
+      if(w.includes(' ')) {
+        if(lo === w || lo.startsWith(w + ' ') || lo.endsWith(' ' + w) || lo.includes(' ' + w + ' ')) return true;
+      } else {
+        if(words.includes(w)) return true;
+      }
     }
   }
 
@@ -1040,9 +1109,11 @@ function runWakeChunk(){
     const blob = new Blob(wakeChunks, {type: wakeRec.mimeType||'audio/webm'});
 
     // Skip if blob too small OR peak volume too low (just background noise).
-    // Threshold lowered to 12 so quiet "Horizon" still gets transcribed —
-    // hallucination filtering in isWakeWord() handles the false-positive side.
-    if(blob.size < 3000 || wakePeakVolume < 12){
+    // Threshold default 18; user-tunable via Settings → Voice → Sensitivity
+    // (range 5-50). Lower = more sensitive (catches quiet "Horizon" but
+    // more false positives), higher = stricter.
+    const volThreshold = wakeCfg('volumeThreshold', 18);
+    if(blob.size < 3000 || wakePeakVolume < volThreshold){
       scheduleNextChunk();
       return;
     }
@@ -1105,6 +1176,24 @@ async function transcribeWakeChunk(blob){
 async function fireWake(){
   wakePhase='command';
   setWakeBar('heard');
+
+  // Optional confirm beep — short cue so user knows we heard them. Off by
+  // default; toggle via Settings → Voice → Confirm beep.
+  if (wakeCfg('confirmBeep', false)) {
+    try {
+      const ctx = wakeAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+      o.connect(g).connect(ctx.destination);
+      o.start();
+      o.stop(ctx.currentTime + 0.2);
+    } catch (_) { /* don't let beep failure break wake flow */ }
+  }
 
   let reply;
   try {
@@ -1727,6 +1816,8 @@ async function loadPanel(){
   document.getElementById('kokoro-section').style.display=(ttsProv==='kokoro')?'block':'none';
   if(elv){elevenLabsVoice=elv;document.getElementById('pi-elvid').value=elv;}
   if(oaitv){openaiTtsVoice=oaitv;document.getElementById('pi-oaitts').value=oaitv;}
+  // Wake-word calibration toggles + sensitivity slider.
+  initWakeCalibrationUI();
 }
 
 async function savePf(){const n=document.getElementById('pi-name').value.trim();if(!n)return;await H.set('userName',n);userName=n;document.getElementById('tb-sub').textContent=n.toUpperCase();showGreeting();}
@@ -1762,6 +1853,36 @@ function loadKokoro(){
 }
 async function psvk(svc,iid,bid,did){const v=document.getElementById(iid).value.trim();if(!v)return;await H.saveKey(svc,v);const btn=document.getElementById(bid);btn.textContent='✓';btn.classList.add('ok');document.getElementById(did)?.classList.add('on');document.getElementById(iid).value='';document.getElementById(iid).placeholder='••••••••••';setTimeout(()=>{btn.textContent='Save';btn.classList.remove('ok');},2000);}
 function togSw(key,id){const on=document.getElementById(id).classList.toggle('on');H.set(key,on);if(key==='tts')ttsOn=on;if(key==='screenWatcher'){eyeOn=on;document.getElementById('tc-eye').classList.toggle('on',on);}}
+
+// ═══ WAKE WORD CALIBRATION HANDLERS ═══
+function toggleWakeStrict(){
+  const cur = wakeCfg('strictMode', true);
+  setWakeCfg('strictMode', !cur);
+  document.getElementById('sw-wake-strict').classList.toggle('on', !cur);
+}
+function toggleWakeBeep(){
+  const cur = wakeCfg('confirmBeep', false);
+  setWakeCfg('confirmBeep', !cur);
+  document.getElementById('sw-wake-beep').classList.toggle('on', !cur);
+}
+function setWakeSens(v){
+  const n = Math.max(5, Math.min(50, +v || 18));
+  setWakeCfg('volumeThreshold', n);
+  const lbl = document.getElementById('wake-sens-val');
+  if (lbl) lbl.textContent = n;
+}
+function initWakeCalibrationUI(){
+  // Reflect persisted settings on the toggles + slider when the panel opens.
+  const strict = wakeCfg('strictMode', true);
+  const beep   = wakeCfg('confirmBeep', false);
+  const vol    = wakeCfg('volumeThreshold', 18);
+  document.getElementById('sw-wake-strict')?.classList.toggle('on', strict);
+  document.getElementById('sw-wake-beep')?.classList.toggle('on', beep);
+  const slider = document.getElementById('wake-sens');
+  const lbl    = document.getElementById('wake-sens-val');
+  if (slider) slider.value = vol;
+  if (lbl)    lbl.textContent = vol;
+}
 function clearHist(){if(!confirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
 async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily'])await H.deleteKey(s);await loadPanel();}
 
