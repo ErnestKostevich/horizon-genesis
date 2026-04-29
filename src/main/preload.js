@@ -83,6 +83,10 @@ contextBridge.exposeInMainWorld('H', {
   memGetRecent:(lim)           => ipcRenderer.invoke('memGetRecent', lim),
   memSaveConversation: (u, a)  => ipcRenderer.invoke('memSaveConversation', u, a),
   memSearchConversations: (q, l) => ipcRenderer.invoke('memSearchConversations', q, l),
+  githubAttachRepo: (repo)     => ipcRenderer.invoke('githubAttachRepo', repo),
+  githubListRepos:  ()         => ipcRenderer.invoke('githubListRepos'),
+  githubRemoveRepo: (repo)     => ipcRenderer.invoke('githubRemoveRepo', repo),
+  githubRepoContext:(repo)     => ipcRenderer.invoke('githubRepoContext', repo),
 
   // ── NUTRITION ─────────────────────────────────────────────────────────────────
   nutritionLog:     (d, cal, p, c, f) => ipcRenderer.invoke('nutritionLog', d, cal, p, c, f),
@@ -170,6 +174,8 @@ contextBridge.exposeInMainWorld('H', {
   marketSignup:         (email, pw, n) => ipcRenderer.invoke('marketSignup', email, pw, n),
   marketLogout:         ()            => ipcRenderer.invoke('marketLogout'),
   marketMe:             ()            => ipcRenderer.invoke('marketMe'),
+  marketOpenWebAuth:    (mode)        => ipcRenderer.invoke('marketOpenWebAuth', mode),
+  onMarketAuthenticated:(cb)          => ipcRenderer.on('market-authenticated', (_, user) => cb(user)),
 
   // ── GOOGLE OAUTH ──────────────────────────────────────────────────────────────
   googleAuth:       (cid, cs)         => ipcRenderer.invoke('googleAuth', cid, cs),
