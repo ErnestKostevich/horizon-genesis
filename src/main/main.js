@@ -318,12 +318,43 @@ ipcMain.handle('deleteKey', (_, s)    => { assertAllowedKey(s); keysStore.delete
 ipcMain.handle('set',       (_, k, v) => { assertAllowedSetting(k); settingsStore.set(k, v); return true; });
 ipcMain.handle('get',       (_, k)    => { assertAllowedSetting(k); return settingsStore.get(k, null); });
 ipcMain.handle('getPort',   ()        => port);
+ipcMain.handle('localProviderStatus', async (_, provider) => {
+  const ep = localOpenAIEndpoint(provider);
+  if (!ep) return { ok: false, error: 'Unknown local provider' };
+  const modelsUrl = ep.url.replace(/\/chat\/completions$/, '/models');
+  const installUrl = provider === 'ollama' ? 'https://ollama.com' : provider === 'lmstudio' ? 'https://lmstudio.ai' : '';
+  try {
+    const fetch = require('node-fetch');
+    const headers = {};
+    if (ep.key) headers.Authorization = `Bearer ${ep.key}`;
+    const r = await fetch(modelsUrl, { headers, timeout: 2500 });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, installed: true, status: r.status, error: data.error?.message || data.error || `HTTP ${r.status}`, installUrl };
+    const models = Array.isArray(data.data) ? data.data.map((m) => m.id || m.name).filter(Boolean) : [];
+    return { ok: true, installed: true, provider, url: modelsUrl, models };
+  } catch (e) {
+    return {
+      ok: false,
+      installed: false,
+      provider,
+      url: modelsUrl,
+      installUrl,
+      error: provider === 'ollama'
+        ? 'Ollama is not reachable. Install Ollama, run a model, then test again.'
+        : 'LM Studio server is not reachable. Install LM Studio, start the local server, then test again.',
+      detail: e.message,
+    };
+  }
+});
 
 // ── IPC: Misc ─────────────────────────────────────────────────────────────────
 ipcMain.handle('copy',         (_, t) => { clipboard.writeText(t); return true; });
 ipcMain.handle('paste',        ()     => clipboard.readText());
 ipcMain.handle('getClipboard', ()     => ({ text: clipboard.readText() }));
-ipcMain.handle('openUrl',      (_, u) => { shell.openExternal(u); return true; });
+ipcMain.handle('openUrl',      async (_, u) => {
+  await shell.openExternal(u);
+  return true;
+});
 ipcMain.handle('notify',       (_, t, b) => { new Notification({ title: `◈ ${t}`, body: b }).show(); return true; });
 
 ipcMain.handle('sysInfo', () => ({
@@ -1928,10 +1959,10 @@ ipcMain.handle('licensePollInvoice', async (_, invoiceId) => {
     return { ok: true, ...r };
   } catch (e) { return { ok: false, error: e.message }; }
 });
-ipcMain.handle('licenseOpenUpgradePage', () => {
+ipcMain.handle('licenseOpenUpgradePage', async () => {
   const base = String(marketClient?.webBase || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev').replace(/\/+$/, '');
   const url = `${base}/pricing?src=desktop`;
-  shell.openExternal(url);
+  await shell.openExternal(url);
   return { ok: true, url };
 });
 ipcMain.handle('licenseOpenContactLink', (_, channel) => {
