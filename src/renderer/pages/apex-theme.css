@@ -124,7 +124,7 @@ body {
   position: fixed; inset: 0;
   width: 100vw; height: 100vh;
   z-index: -1; pointer-events: none;
-  opacity: 0.72;
+  opacity: 0.24;
 }
 
 /* Global scrollbars. */
@@ -756,6 +756,15 @@ textarea:focus, input:focus, .cmd-input:focus {
 .pf label a:hover { opacity: 1; text-decoration: underline !important; }
 
 .pr { display: flex; gap: 6px; }
+.local-provider .pr { flex-wrap: wrap; }
+.local-status {
+  margin-top: 7px;
+  color: var(--tx-3);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.local-status.ok { color: var(--apex-cyan-0); }
+.local-status.bad { color: var(--apex-amber-0); }
 .pi {
   flex: 1;
   background: rgba(255,255,255,0.03) !important;
@@ -909,9 +918,9 @@ textarea:focus, input:focus, .cmd-input:focus {
    FLOATING PANELS (Hub / Store / Account / Workflows / Recorder)
    ========================================================================= */
 .fpanel {
-  background: var(--glass-1) !important;
-  backdrop-filter: blur(36px) saturate(150%) !important;
-  -webkit-backdrop-filter: blur(36px) saturate(150%) !important;
+  background: rgba(7, 9, 13, 0.97) !important;
+  backdrop-filter: blur(18px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(110%) !important;
   border: 1px solid var(--bd-2) !important;
   border-radius: 18px !important;
   box-shadow: var(--sh-3), 0 0 0 1px rgba(255, 181, 102, 0.05);
@@ -1093,5 +1102,5 @@ textarea:focus, input:focus, .cmd-input:focus {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  #fractalBg { opacity: 0.4; }
+  #fractalBg { opacity: 0.18; }
 }

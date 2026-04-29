@@ -472,8 +472,8 @@ textarea::placeholder{color:var(--t3)}
     <!-- AI Providers -->
     <div class="ps">
       <div class="psl">AI Providers: local + cloud</div>
-      <div class="pf"><label><span class="d2" id="pd-ollama"></span>Ollama — local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><input class="pi" type="text" id="pi-ollama-model" placeholder="llama3.1"/><button class="psv" onclick="saveLocalProvider('ollama')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-lmstudio"></span>LM Studio — local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><input class="pi" type="text" id="pi-lmstudio-model" placeholder="local-model"/><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button></div></div>
+      <div class="pf local-provider"><label><span class="d2" id="pd-ollama"></span>Ollama — local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><input class="pi" type="text" id="pi-ollama-model" placeholder="llama3.1"/><button class="psv" onclick="saveLocalProvider('ollama')">Save</button><button class="psv" onclick="testLocalProvider('ollama')">Test</button></div><div class="local-status" id="local-ollama-status">Install Ollama, run a model, then test the local server.</div></div>
+      <div class="pf local-provider"><label><span class="d2" id="pd-lmstudio"></span>LM Studio — local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><input class="pi" type="text" id="pi-lmstudio-model" placeholder="local-model"/><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button><button class="psv" onclick="testLocalProvider('lmstudio')">Test</button></div><div class="local-status" id="local-lmstudio-status">Install LM Studio, enable the local server, then test the endpoint.</div></div>
       <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini 2.5 Flash — FREE<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSy…"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-groq"></span>Groq — FREE + voice transcription<a onclick="H.openUrl('https://console.groq.com/keys')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-groq" placeholder="gsk_…"/><button class="psv" id="pb-groq" onclick="psvk('groq','pi-groq','pb-groq','pd-groq')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-deepseek"></span>DeepSeek V3 — cheap<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepseek" placeholder="sk-…"/><button class="psv" id="pb-deepseek" onclick="psvk('deepseek','pi-deepseek','pb-deepseek','pd-deepseek')">Save</button></div></div>
@@ -1852,6 +1852,38 @@ async function saveLocalProvider(kind){
     document.getElementById('pd-lmstudio')?.classList.add('on');
   }
   H.notify?.('Local models', 'Saved local provider settings.');
+}
+
+async function testLocalProvider(kind){
+  await saveLocalProvider(kind);
+  const id = kind === 'ollama' ? 'local-ollama-status' : 'local-lmstudio-status';
+  const el = document.getElementById(id);
+  if (el) {
+    el.textContent = 'Testing local server...';
+    el.className = 'local-status';
+  }
+  try {
+    const r = await H.localProviderStatus(kind);
+    if (r?.ok) {
+      const models = (r.models || []).slice(0, 4).join(', ');
+      if (el) {
+        el.textContent = models ? `Connected. Models: ${models}` : 'Connected. No model list returned yet.';
+        el.classList.add('ok');
+      }
+      H.notify?.('Local models', `${kind === 'ollama' ? 'Ollama' : 'LM Studio'} is reachable.`);
+      return;
+    }
+    if (el) {
+      el.textContent = r?.error || 'Local server is not reachable yet.';
+      el.classList.add('bad');
+    }
+    if (r?.installUrl) H.openUrl?.(r.installUrl);
+  } catch (e) {
+    if (el) {
+      el.textContent = e.message || 'Local server test failed.';
+      el.classList.add('bad');
+    }
+  }
 }
 
 async function saveTTSProv(){
