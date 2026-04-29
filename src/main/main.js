@@ -1709,14 +1709,14 @@ ipcMain.handle('recorderNarrate', async (_, b64, mime, ctx) => {
 ipcMain.handle('marketplaceList', () => []);
 ipcMain.handle('marketplaceSearch', () => []);
 
-ipcMain.handle('marketplacePublish', async (_, data) => {
-  // In production: POST to Horizon Marketplace API
-  // For now: generate a share URL from local plugin
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  const url = pluginManager.generateShareUrl(data.pluginId);
-  if (!url) return { ok: false, error: 'Plugin not found' };
-  return { ok: true, shareUrl: url, message: 'Plugin published! Share this URL with others.' };
+ipcMain.handle('marketplacePublish', async () => {
+  // Publishing is a server-side moderated flow and must happen on the marketplace web app.
+  // Returning a hard failure here prevents fake-success UX in desktop.
+  const webUrl = marketClient?.webBase || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev'
+  return {
+    ok: false,
+    error: `Publishing is only available on the Horizon Marketplace website. Open ${webUrl}/publish in your browser.`
+  }
 });
 
 // ── GOOGLE OAUTH ─────────────────────────────────────────────────────────────
