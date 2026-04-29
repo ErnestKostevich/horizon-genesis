@@ -1,7 +1,7 @@
 {
   "name": "horizon-ai",
   "version": "1.0.1",
-  "description": "Horizon Genesis — desktop AI agent with personas, plugins, workflows, and computer use. Local-first, bring-your-own-keys.",
+  "description": "Horizon Genesis - desktop AI agent with personas, plugins, workflows, and computer use. Local-first, bring-your-own-keys.",
   "author": {
     "name": "Ernest Kostevich",
     "email": "ernest2011kostevich@gmail.com"
@@ -83,8 +83,8 @@
       "icon": "assets/icon.png",
       "category": "Utility",
       "maintainer": "Ernest Kostevich <ernest2011kostevich@gmail.com>",
-      "synopsis": "Desktop AI agent — local-first, bring-your-own-keys",
-      "description": "Horizon Genesis — cross-platform AI assistant with personas, plugins, workflows, and computer use.",
+      "synopsis": "Desktop AI agent - local-first, bring-your-own-keys",
+      "description": "Horizon Genesis - cross-platform AI assistant with personas, plugins, workflows, and computer use.",
       "executableName": "horizon-ai",
       "target": [
         {

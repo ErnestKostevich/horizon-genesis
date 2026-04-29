@@ -24,11 +24,11 @@ html,body{height:100%;overflow:hidden;-webkit-app-region:drag;user-select:none;-
 body{background:var(--bg-0);color:var(--tx-0);font-family:var(--font);font-feature-settings:"ss01","cv11";display:flex;flex-direction:column;position:relative}
 
 /* Fractal + wash + grain (same as progate for consistency) */
-#fractal{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.55;pointer-events:none}
+#fractal{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.30;pointer-events:none}
 .wash{position:fixed;inset:0;z-index:1;pointer-events:none;
   background:
-    radial-gradient(ellipse 60% 50% at 20% 0%, rgba(232,160,80,.10), transparent 55%),
-    radial-gradient(ellipse 40% 35% at 85% 90%, rgba(91,213,245,.05), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 20% 0%, rgba(232,160,80,.07), transparent 55%),
+    radial-gradient(ellipse 40% 35% at 85% 90%, rgba(91,213,245,.035), transparent 55%),
     linear-gradient(180deg, rgba(7,6,10,0) 0%, rgba(7,6,10,.5) 70%, rgba(7,6,10,.92) 100%);
 }
 .grain{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.035;
@@ -318,7 +318,7 @@ select.sel option{background:#14121a;color:var(--tx-0)}
   </div>
 
   <div class="os-bar">
-    <span class="os-tag">MIT · Open Source</span>
+    <span class="os-tag">BSL 1.1 source-visible</span>
     <span class="os-link" onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis')">GitHub ↗</span>
     <span class="os-link" onclick="H.openUrl('https://horizonaai.dev')">horizonaai.dev ↗</span>
   </div>
