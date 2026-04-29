@@ -3418,15 +3418,13 @@ async function installStorePlugin(id, price = 0) {
 }
 
 async function publishPlugin() {
-  const sel = document.getElementById('pub-plugin-select');
-  if (!sel || !sel.value) { H.notify('Marketplace', 'Select a plugin first'); return; }
   try {
-    const r = await H.marketplacePublish({ pluginId: sel.value });
-    if (r.ok) {
-      await H.copy(r.shareUrl);
-      addMsg('bot', `🚀 **Plugin published!**\n\nShare URL copied to clipboard:\n\`${r.shareUrl.slice(0,80)}...\`\n\n${r.message}`);
-    } else { H.notify('Marketplace', r.error); }
-  } catch(e) { H.notify('Marketplace', e.message); }
+    const url = await H.marketGetWebUrl();
+    H.openUrl(url + '/publish');
+    H.notify('Marketplace', 'Publishing opens in your browser dashboard.');
+  } catch(e) {
+    H.notify('Marketplace', e.message || 'Could not open publisher');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
