@@ -30,6 +30,13 @@ class MarketplaceClient {
   get token() {
     return this.settingsStore && this.settingsStore.get('marketplaceToken');
   }
+  _persistAuth(data) {
+    if (this.settingsStore && data?.token) {
+      this.settingsStore.set('marketplaceToken', data.token);
+      this.settingsStore.set('marketplaceUser', data.user);
+    }
+    return data;
+  }
   async _fetch(path, opts = {}) {
     const fetch = (await import('node-fetch').then(m => m.default).catch(() => require('node-fetch')));
     const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
@@ -64,26 +71,20 @@ class MarketplaceClient {
   me() { return this._fetch('/api/auth/me'); }
   login(email, password) {
     return this._fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-      .then(d => {
-        if (this.settingsStore) {
-          this.settingsStore.set('marketplaceToken', d.token);
-          this.settingsStore.set('marketplaceUser', d.user);
-        }
-        return d;
-      });
+      .then(d => this._persistAuth(d));
   }
   signup(email, password, display_name) {
     return this._fetch('/api/auth/signup', {
       method: 'POST',
       body: JSON.stringify({ email, password, password_confirm: password, display_name })
     })
-      .then(d => {
-        if (this.settingsStore) {
-          this.settingsStore.set('marketplaceToken', d.token);
-          this.settingsStore.set('marketplaceUser', d.user);
-        }
-        return d;
-      });
+      .then(d => this._persistAuth(d));
+  }
+  exchangeDesktopToken(token) {
+    return this._fetch('/api/auth/desktop-exchange', {
+      method: 'POST',
+      body: JSON.stringify({ token })
+    }).then(d => this._persistAuth(d));
   }
   logout() {
     if (this.settingsStore) {

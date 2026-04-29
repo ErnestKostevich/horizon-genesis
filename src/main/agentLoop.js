@@ -19,6 +19,11 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null) {
   ).join('\n\n');
 
   const ru = lang === 'ru';
+  const memory = sysInfo?.memory || {};
+  const memoryFacts = Object.entries(memory.facts || {}).slice(0, 20).map(([k, v]) => `- ${k}: ${v}`).join('\n');
+  const memoryRelevant = (memory.relevant || []).slice(0, 8).map(m => `- ${m.content}`).join('\n');
+  const memoryBlock = [memoryFacts && `Known user facts:\n${memoryFacts}`, memoryRelevant && `Relevant memories:\n${memoryRelevant}`].filter(Boolean).join('\n');
+  const githubBlock = (sysInfo?.github_repos || []).slice(0, 10).map(r => `- ${r.fullName} (${r.defaultBranch || 'main'}): ${r.description || r.url}`).join('\n');
 
   return ru ? `
 Ты — Хорайзон (Horizon AI), настоящий AI-агент для ПК. Тебя создал Эрнест Костевич.
@@ -58,6 +63,8 @@ User: ${userName}. Time: ${sysInfo?.time || new Date().toLocaleString()}.
 System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total} (free: ${sysInfo?.ram_free})
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
+${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
+${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 
 You are a REAL agent with tools to control the PC, run code, manage files and browse the web.
 You are like JARVIS — smart, efficient, always say "Sir".

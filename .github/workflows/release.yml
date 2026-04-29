@@ -1,14 +1,7 @@
-# Builds Horizon Genesis for Windows and macOS on every v* tag push,
-# then uploads the installers as assets on the matching GitHub Release.
+# Builds Horizon Genesis for Windows, macOS, and Linux.
 #
-# To ship a release:
-#   1. Bump "version" in package.json
-#   2. git commit -am "v1.0.1" && git tag v1.0.1 && git push --follow-tags
-#   3. This workflow creates the release, builds both platforms, attaches installers.
-#
-# macOS builds are unsigned. Users will see Gatekeeper prompt — right-click → Open.
-# To code-sign/notarize later, set CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD,
-# APPLE_TEAM_ID as repo secrets and uncomment the env block below.
+# Tag pushes publish GitHub Releases. Manual runs build the selected ref
+# (default: main) so we do not accidentally rebuild an old v1.0.0 tag.
 
 name: Release
 
@@ -18,10 +11,22 @@ on:
       - 'v*.*.*'
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to build (e.g. v1.0.0)'
+      ref:
+        description: 'Branch, tag, or SHA to build'
         required: true
-        default: 'v0.0.0-dev'
+        default: 'main'
+      publish_release:
+        description: 'Publish artifacts to a GitHub Release'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      release_tag:
+        description: 'Release tag to publish when publish_release=true (e.g. v1.0.0)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -57,6 +62,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -67,20 +74,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
         env:
-          # Electron postinstall downloads prebuilt binaries; cache is OK in GH
           ELECTRON_SKIP_BINARY_DOWNLOAD: ''
 
-      # Stamp build-info.json so the packaged app recognises itself as an official build.
-      # Without this file, src/main/main.js shows the source-preview page and exits.
-      # This is the ONLY place the marker is created — source clones never have it.
       - name: Stamp build-info.json
         shell: bash
         run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BUILD_REF="${{ inputs.ref }}"
+          else
+            BUILD_REF="${{ github.ref_name }}"
+          fi
+          BUILD_SHA="$(git rev-parse HEAD)"
           cat > src/main/build-info.json <<EOF
           {
             "official": true,
-            "version": "${{ github.ref_name }}",
-            "sha": "${{ github.sha }}",
+            "version": "v${PKG_VERSION}",
+            "ref": "${BUILD_REF}",
+            "sha": "${BUILD_SHA}",
             "buildDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "runner": "${{ matrix.label }}",
             "workflow": "${{ github.workflow }}",
@@ -93,16 +104,9 @@ jobs:
       - name: Build ${{ matrix.label }}
         run: npm run ${{ matrix.build_script }}
         env:
-          # electron-builder picks these up for GitHub publish / auto-update later
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Uncomment to enable macOS code-sign + notarize (see header comment):
-          # CSC_LINK: ${{ secrets.CSC_LINK }}
-          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Upload build artifacts (retained for debugging)
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: horizon-${{ matrix.label }}
@@ -114,10 +118,14 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release == 'true' && inputs.release_tag != '')
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
@@ -140,24 +148,24 @@ jobs:
       - name: Create / update release with assets
         uses: softprops/action-gh-release@v2
         with:
-          name: Horizon Genesis ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: Horizon Genesis ${{ env.RELEASE_TAG }}
+          tag_name: ${{ env.RELEASE_TAG }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
           files: |
             release-assets/windows/*
             release-assets/mac/*
             release-assets/linux/*
           body: |
-            ## Horizon Genesis ${{ github.ref_name }}
+            ## Horizon Genesis ${{ env.RELEASE_TAG }}
 
-            Desktop AI agent — local-first, MIT, bring-your-own-keys.
+            Desktop AI agent - local-first, BSL 1.1 source-visible, bring-your-own-keys.
 
             ### Downloads
 
             - **Windows:** `Horizon AI Setup *.exe` (x64, NSIS)
-            - **macOS:** `Horizon AI-*.dmg` (Intel + Apple Silicon, **unsigned** — right-click → Open to bypass Gatekeeper)
+            - **macOS:** `Horizon AI-*.dmg` (Intel + Apple Silicon, unsigned; right-click Open if Gatekeeper warns)
             - **Linux:** `Horizon AI-*.AppImage` (x64, portable) or `horizon-ai_*.deb` (Debian/Ubuntu)
 
             Auto-generated release notes below.

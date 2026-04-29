@@ -90,6 +90,7 @@ const settingsStore = new Store({ name: 'horizon-settings' });
 const ALLOWED_KEY_IDS = new Set([
   'gemini', 'groq', 'groq_voice', 'deepseek', 'mistral', 'qwen', 'grok',
   'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
+  'github',
 ]);
 const ALLOWED_SETTING_KEYS = new Set([
   'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider',
@@ -1165,6 +1166,7 @@ let googleAuth = null;
 let personas = null;
 let workflowEngine = null;
 let screenRecorder = null;
+let githubConnector = null;
 
 function loadAgentModules() {
   if (!agentTools) {
@@ -1262,6 +1264,15 @@ function loadAgentModules() {
       console.error('Screen Recorder failed:', e.message);
     }
   }
+  if (!githubConnector) {
+    try {
+      const { GitHubConnector } = require('./githubConnector');
+      githubConnector = new GitHubConnector(path.join(app.getPath('userData'), 'github-repos.json'), keysStore);
+      console.log('GitHub connector loaded');
+    } catch(e) {
+      console.error('GitHub connector failed:', e.message);
+    }
+  }
 }
 
 // ── AGENT LOOP: autonomous multi-step task execution ─────────────────────────
@@ -1279,6 +1290,19 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   // Get system info for agent context
   let sysInfo = null;
   try { sysInfo = await agentTools.getDetailedSysInfo(); } catch(e) {}
+  sysInfo = sysInfo || {};
+  if (agentMemory) {
+    try {
+      sysInfo.memory = {
+        facts: agentMemory.getAllFacts(),
+        relevant: agentMemory.recall(userMessage, 8),
+        recentConversations: agentMemory.searchConversations(userMessage, 5),
+      };
+    } catch (_) {}
+  }
+  if (githubConnector) {
+    try { sysInfo.github_repos = githubConnector.listRepos(); } catch (_) {}
+  }
 
   // AI function wrapper
   const aiFn = async (messages, systemPrompt) => {
@@ -1464,6 +1488,27 @@ ipcMain.handle('memSearchConversations', (_, query, limit) => {
   loadAgentModules();
   if (!agentMemory) return [];
   return agentMemory.searchConversations(query, limit || 10);
+});
+
+ipcMain.handle('githubAttachRepo', async (_, repoUrl) => {
+  loadAgentModules();
+  if (!githubConnector) return { ok: false, error: 'GitHub connector not loaded' };
+  try { return { ok: true, repo: await githubConnector.attachRepo(repoUrl) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('githubListRepos', () => {
+  loadAgentModules();
+  return githubConnector ? githubConnector.listRepos() : [];
+});
+ipcMain.handle('githubRemoveRepo', (_, fullName) => {
+  loadAgentModules();
+  return githubConnector ? githubConnector.removeRepo(fullName) : false;
+});
+ipcMain.handle('githubRepoContext', async (_, fullName) => {
+  loadAgentModules();
+  if (!githubConnector) return { ok: false, error: 'GitHub connector not loaded' };
+  try { return { ok: true, ...(await githubConnector.repoContext(fullName)) }; }
+  catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ── CODE EXECUTION ────────────────────────────────────────────────────────────
@@ -2031,6 +2076,13 @@ ipcMain.handle('marketMe', async () => {
     return { ok: false, error: e.message };
   }
 });
+ipcMain.handle('marketOpenWebAuth', async (_, mode = 'login') => {
+  const base = String(marketClient.webBase || 'https://horizonaai.dev').replace(/\/+$/, '');
+  const pathName = mode === 'signup' ? '/signup' : '/login';
+  const url = `${base}${pathName}?desktop=1`;
+  await shell.openExternal(url);
+  return { ok: true, url };
+});
 
 // Register horizon:// protocol so the marketplace website can install
 // plugins with one click (horizon://plugin/install?data=<base64>).
@@ -2038,9 +2090,27 @@ if (!app.isDefaultProtocolClient('horizon')) {
   try { app.setAsDefaultProtocolClient('horizon'); } catch (_) {}
 }
 
-function handleHorizonUrl(url) {
+async function handleHorizonUrl(url) {
   try {
-    if (!url || !url.startsWith('horizon://plugin/install')) return;
+    if (!url || !url.startsWith('horizon://')) return;
+    if (url.startsWith('horizon://auth/desktop')) {
+      const parsed = new URL(url);
+      const token = parsed.searchParams.get('token');
+      const api = parsed.searchParams.get('api');
+      if (!token) throw new Error('Missing desktop auth token');
+      if (api) settingsStore.set('marketplaceUrl', api.replace(/\/+$/, ''));
+      const d = await marketClient.exchangeDesktopToken(token);
+      licenseManager.clearCache();
+      await licenseManager.refresh();
+      new Notification({ title: 'Horizon', body: `Signed in as ${d.user?.email || d.user?.display_name || 'your account'}` }).show();
+      if (win) {
+        win.show();
+        win.focus();
+        win.webContents.send('market-authenticated', d.user);
+      }
+      return;
+    }
+    if (!url.startsWith('horizon://plugin/install')) return;
     loadAgentModules();
     if (!pluginManager) return;
     const r = pluginManager.installFromShareUrl(url);

@@ -402,6 +402,10 @@ textarea::placeholder{color:var(--t3)}
 .auth-submit{width:100%;background:linear-gradient(135deg,var(--acc2),var(--acc));border:none;color:#fff;border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:8px;transition:all .2s;box-shadow:0 2px 10px rgba(108,140,255,.25)}
 .auth-submit:hover{box-shadow:0 4px 16px rgba(108,140,255,.4)}
 .auth-submit:disabled{opacity:.5;cursor:not-allowed}
+.auth-web-btn{width:100%;background:rgba(120,220,255,.08);border:1px solid rgba(120,220,255,.24);color:#c9f6ff;border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;margin:8px 0;display:flex;align-items:center;justify-content:center;gap:8px}
+.auth-web-btn:hover{border-color:rgba(120,220,255,.5);background:rgba(120,220,255,.13)}
+.auth-divider{display:flex;align-items:center;gap:10px;color:var(--t3);font-size:9px;text-transform:uppercase;letter-spacing:.7px;margin:14px 0}
+.auth-divider:before,.auth-divider:after{content:"";height:1px;flex:1;background:var(--b1)}
 .auth-err{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);color:var(--red);padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:12px}
 .auth-hint{font-size:10px;color:var(--t3);text-align:center;margin-top:14px;line-height:1.6}
 .auth-hint a{color:var(--acc);cursor:pointer;text-decoration:underline}
@@ -490,6 +494,15 @@ textarea::placeholder{color:var(--t3)}
     <div class="ps">
       <div class="psl">&#128269; Web Search</div>
       <div class="pf"><label><span class="d2" id="pd-tavily"></span>Tavily — 1,000 free/month<a onclick="H.openUrl('https://app.tavily.com/home')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-tavily" placeholder="tvly-…"/><button class="psv" id="pb-tavily" onclick="psvk('tavily','pi-tavily','pb-tavily','pd-tavily')">Save</button></div></div>
+    </div>
+
+    <!-- GitHub Connector -->
+    <div class="ps">
+      <div class="psl">GitHub context</div>
+      <div class="pf"><label><span class="d2" id="pd-github"></span>GitHub token <a onclick="H.openUrl('https://github.com/settings/tokens')">Create token</a></label><div class="pr"><input class="pi" type="password" id="pi-github" placeholder="github_pat_..."/><button class="psv" id="pb-github" onclick="psvk('github','pi-github','pb-github','pd-github')">Save</button></div></div>
+      <div class="pf"><label>Attach repository</label><div class="pr"><input class="pi" type="text" id="pi-github-repo" placeholder="ErnestKostevich/horizon-genesis"/><button class="psv" onclick="attachGithubRepo()">Attach</button></div></div>
+      <div class="local-status" id="github-status">Public repos work without a token. Private repos need a GitHub token.</div>
+      <div id="github-repos" class="local-status" style="margin-top:8px"></div>
     </div>
 
     <!-- Voice — THE CRITICAL SECTION -->
@@ -1008,6 +1021,18 @@ function isWakeWord(text){
 // This is the ONLY method that reliably works in Electron.
 // Web Speech API throws "network error" in Electron — confirmed bug.
 // ═══════════════════════════════════════════════════════════════
+function voiceAudioConstraints() {
+  return {
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1,
+    },
+    video: false,
+  };
+}
+
 async function startWakeMode(){
   if(wakeActive) return;
 
@@ -1023,7 +1048,7 @@ async function startWakeMode(){
   }
 
   try {
-    wakeStream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    wakeStream = await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
   } catch(e){
     addMsg('bot', lang==='ru'
       ? `⚠️ Нет доступа к микрофону: ${e.message}`
@@ -1221,6 +1246,8 @@ async function fireWake(){
 
 // Record the command (up to 8 seconds of silence detection)
 function listenForCommand(){
+  // Voice barge-in: wake command recording stops any ongoing TTS playback.
+  window.speechSynthesis?.cancel();
   const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
@@ -1332,7 +1359,7 @@ async function testMic(){
   const st=document.getElementById('mic-st');
   st.textContent='Тестирую…'; st.style.color='var(--t3)';
   try{
-    const s=await navigator.mediaDevices.getUserMedia({audio:true});
+    const s=await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
     s.getTracks().forEach(t=>t.stop());
     st.textContent='✅ Микрофон работает!'; st.style.color='var(--green)';
   }catch(e){
@@ -1354,13 +1381,15 @@ function stopLvl(){if(analyserAnim){cancelAnimationFrame(analyserAnim);analyserA
 async function toggleVoice(){ if(isProcessing)return; isRecording?stopRec():startRec(); }
 
 async function startRec(){
+  // Interrupt handling: if Horizon is speaking, manual voice immediately stops it.
+  window.speechSynthesis?.cancel();
   // Pause wake mode while manually recording to avoid conflicts
   if(wakeActive && wakePhase!=='off'){
     clearTimeout(wakeLoopTimer);
     try{wakeRec?.stop();}catch(_){}
   }
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const stream=await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
     audioStream=stream;
     const mt=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4';
     mediaRec=new MediaRecorder(stream,{mimeType:mt});
@@ -1429,7 +1458,7 @@ async function startDictate() {
   if (isDictating || isRecording || isProcessing) return;
   
   try {
-    dictateStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    dictateStream = await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
     const mt = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
       ? 'audio/webm;codecs=opus' 
       : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
@@ -1796,7 +1825,7 @@ function closePanel(){document.getElementById('panel').classList.remove('show');
 
 async function loadPanel(){
   // Parallel fetch — fast, no sequential bottleneck
-  const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily','elevenlabs','deepgram'];
+  const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily','elevenlabs','deepgram','github'];
   const [keyFlags, nm, lg, vp, tp, elv, oaitv] = await Promise.all([
     Promise.all(svcs.map(s=>H.hasKey(s))),
     H.get('userName'), H.get('lang'), H.get('voiceProvider'),
@@ -1909,6 +1938,30 @@ function loadKokoro(){
   document.head.appendChild(s);
 }
 async function psvk(svc,iid,bid,did){const v=document.getElementById(iid).value.trim();if(!v)return;await H.saveKey(svc,v);const btn=document.getElementById(bid);btn.textContent='✓';btn.classList.add('ok');document.getElementById(did)?.classList.add('on');document.getElementById(iid).value='';document.getElementById(iid).placeholder='••••••••••';setTimeout(()=>{btn.textContent='Save';btn.classList.remove('ok');},2000);}
+
+async function attachGithubRepo(){
+  const input=document.getElementById('pi-github-repo');
+  const status=document.getElementById('github-status');
+  const repo=(input?.value||'').trim();
+  if(!repo){status.textContent='Enter owner/repo or a GitHub URL.';return;}
+  status.textContent='Connecting to GitHub...';
+  const r=await H.githubAttachRepo(repo).catch(e=>({ok:false,error:e.message}));
+  if(!r.ok){status.textContent=r.error||'Could not attach repo.';return;}
+  input.value='';
+  status.textContent=`Attached ${r.repo.fullName}.`;
+  await loadGithubRepos();
+}
+async function loadGithubRepos(){
+  const box=document.getElementById('github-repos');
+  if(!box) return;
+  const repos=await H.githubListRepos().catch(()=>[]);
+  if(!repos.length){box.textContent='No repos attached yet.';return;}
+  box.innerHTML=repos.map(r=>`<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin:5px 0"><span><b>${esc(r.fullName)}</b><br><small>${esc(r.description||r.url||'')}</small></span><button class="psv" onclick="removeGithubRepo('${esc(r.fullName)}')">Remove</button></div>`).join('');
+}
+async function removeGithubRepo(fullName){
+  await H.githubRemoveRepo(fullName).catch(()=>false);
+  await loadGithubRepos();
+}
 function togSw(key,id){const on=document.getElementById(id).classList.toggle('on');H.set(key,on);if(key==='tts')ttsOn=on;if(key==='screenWatcher'){eyeOn=on;document.getElementById('tc-eye').classList.toggle('on',on);}}
 
 // ═══ WAKE WORD CALIBRATION HANDLERS ═══
@@ -3228,6 +3281,8 @@ function renderAcctBody() {
         <h3>Create your Horizon account</h3>
         <div class="auth-sub">One account for the website and the desktop app.</div>
         <div id="auth-err" style="display:none" class="auth-err"></div>
+        <button class="auth-web-btn" onclick="acctOpenWebAuth('signup')">Continue with Google / GitHub</button>
+        <div class="auth-divider">or email</div>
         <div class="auth-field"><label>Display name</label><input id="auth-name" placeholder="Ernest Kostevich" autocomplete="name"/></div>
         <div class="auth-field"><label>Email</label><input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email"/></div>
         <div class="auth-field"><label>Password</label><input id="auth-pw" type="password" placeholder="At least 8 characters" autocomplete="new-password"/></div>
@@ -3241,6 +3296,8 @@ function renderAcctBody() {
         <h3>Sign in to Horizon</h3>
         <div class="auth-sub">Use the same email and password as the marketplace website.</div>
         <div id="auth-err" style="display:none" class="auth-err"></div>
+        <button class="auth-web-btn" onclick="acctOpenWebAuth('login')">Continue with Google / GitHub</button>
+        <div class="auth-divider">or email</div>
         <div class="auth-field"><label>Email</label><input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email"/></div>
         <div class="auth-field"><label>Password</label><input id="auth-pw" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
         <button class="auth-submit" id="auth-submit" onclick="acctDoLogin()">Sign in</button>
@@ -3255,6 +3312,16 @@ function _authShowErr(msg) {
   if (!el) return;
   el.textContent = msg;
   el.style.display = 'block';
+}
+
+async function acctOpenWebAuth(mode) {
+  try {
+    const r = await H.marketOpenWebAuth(mode || 'login');
+    if (!r?.ok) return _authShowErr(r?.error || 'Could not open browser sign-in.');
+    H.notify?.('Horizon', 'Finish sign-in in the browser. The app will reconnect automatically.');
+  } catch (e) {
+    _authShowErr(e.message || 'Could not open browser sign-in.');
+  }
 }
 
 async function acctDoLogin() {
@@ -4011,6 +4078,13 @@ async function uninstallPlugin(id) {
   try { await H.pluginUninstall(id); loadPluginList(); } catch(_) {}
 }
 
+H.onMarketAuthenticated?.(async (user) => {
+  currentUser = user || null;
+  await refreshAccount();
+  if (document.getElementById('acct-panel')?.classList.contains('show')) acctTab('profile');
+  H.notify?.('Horizon', `Signed in as ${currentUser?.display_name || currentUser?.email || 'your account'}`);
+});
+
 // ═══════════════════════════════════════════════════════════════
 // INIT — load all saved state
 // ═══════════════════════════════════════════════════════════════
@@ -4034,6 +4108,7 @@ async function uninstallPlugin(id) {
   
   // Check Google auth
   checkGoogleAuth();
+  loadGithubRepos();
   loadPluginList();
   // Check Horizon Marketplace session (SSO with the website)
   refreshAccount();
