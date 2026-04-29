@@ -118,38 +118,54 @@ body::before {
 .logo, .g-mark {
   position: relative !important;
   overflow: hidden !important;
+  border-radius: 50% !important;
   color: transparent !important;
   text-shadow: none !important;
   background:
-    radial-gradient(circle at 50% 50%, rgba(142, 238, 255, 0.95) 0 7%, rgba(90, 138, 255, 0.70) 8% 18%, transparent 19%),
-    repeating-conic-gradient(from 22deg, rgba(125, 231, 255, 0.95) 0deg 10deg, rgba(93, 111, 255, 0.42) 11deg 23deg, rgba(0, 0, 0, 0.12) 24deg 34deg),
-    radial-gradient(circle at 50% 50%, rgba(8, 14, 24, 0.1), rgba(3, 8, 15, 0.92) 72%) !important;
+    radial-gradient(circle at 50% 50%, rgba(229, 252, 255, 1) 0 6%, rgba(118, 231, 255, 0.92) 7% 13%, transparent 14%),
+    repeating-conic-gradient(from 18deg, rgba(154, 244, 255, 0.98) 0deg 8deg, rgba(70, 132, 255, 0.68) 9deg 18deg, rgba(16, 23, 47, 0.30) 19deg 28deg),
+    radial-gradient(circle at 42% 36%, rgba(86, 220, 255, 0.24), transparent 34%),
+    radial-gradient(circle at 50% 50%, rgba(8, 14, 24, 0.12), rgba(3, 8, 15, 0.94) 72%) !important;
   box-shadow:
-    0 0 0 1px rgba(142, 238, 255, 0.22),
-    0 0 28px rgba(86, 185, 255, 0.28),
-    inset 0 0 24px rgba(7, 10, 18, 0.9) !important;
+    0 0 0 1px rgba(165, 243, 255, 0.30),
+    0 0 26px rgba(86, 210, 255, 0.36),
+    inset 0 0 22px rgba(7, 10, 18, 0.92) !important;
+  animation: fractalLogoBreathe 7s ease-in-out infinite;
 }
 .logo::before, .g-mark::before {
   content: "";
   position: absolute;
-  inset: 17%;
-  border: 1px solid rgba(205, 250, 255, 0.62);
-  border-radius: 42% 58% 48% 52% / 58% 42% 55% 45%;
-  transform: rotate(18deg);
-  filter: drop-shadow(0 0 8px rgba(125, 231, 255, 0.6));
+  inset: 14%;
+  border: 1px solid rgba(215, 251, 255, 0.72);
+  border-radius: 48% 52% 44% 56% / 55% 45% 52% 48%;
+  transform: rotate(18deg) skew(-5deg);
+  box-shadow:
+    0 0 12px rgba(125, 231, 255, 0.42),
+    inset 0 0 12px rgba(125, 231, 255, 0.22);
+  animation: fractalLogoOrbit 11s linear infinite;
 }
 .logo::after, .g-mark::after {
   content: "";
   position: absolute;
-  inset: 38%;
+  inset: 39%;
   border-radius: 50%;
-  background: #dffaff;
-  box-shadow: 0 0 14px rgba(125, 231, 255, 0.95);
+  background: #effdff;
+  box-shadow:
+    0 0 14px rgba(125, 231, 255, 1),
+    0 0 32px rgba(86, 185, 255, 0.48);
 }
 
 /* Logo responds to proximity: breathe faster on hover. */
 .logo:hover  { animation-duration: 2.6s; }
 .g-mark:hover { animation-duration: 1.8s; }
+
+@keyframes fractalLogoBreathe {
+  0%, 100% { filter: saturate(1) brightness(1); }
+  50% { filter: saturate(1.22) brightness(1.14); }
+}
+@keyframes fractalLogoOrbit {
+  to { transform: rotate(378deg) skew(-5deg); }
+}
 
 /* Send button: amber → cyan sweep on hover (layered over shimmer). */
 .btn-send::after, #btn-send::after {

@@ -259,28 +259,59 @@ class PluginManager {
 
   /**
    * Install the bundled Spotify Control demo plugin from disk.
-   * Called on first launch if the plugin isn't already installed.
+   * Called on launch. It also repairs older installs that have a manifest but
+   * no handler.js, which caused "spotify-control has no handler" at runtime.
    */
   installBundledSpotify() {
-    if (this.plugins.has('spotify-control')) return { ok: true, skipped: true };
     try {
+      const pluginId = 'spotify-control';
       const bundle = path.join(__dirname, '..', '..', 'builtin-plugins', 'spotify-control');
       const manifest = JSON.parse(fs.readFileSync(path.join(bundle, 'manifest.json'), 'utf8'));
       const handler = fs.readFileSync(path.join(bundle, 'handler.js'), 'utf8');
-      return this.install({
-        id: manifest.id || 'spotify-control',
+      const pluginDir = path.join(this.pluginsDir, pluginId);
+      const manifestPath = path.join(pluginDir, 'manifest.json');
+      const handlerPath = path.join(pluginDir, 'handler.js');
+      fs.mkdirSync(pluginDir, { recursive: true });
+
+      let existing = {};
+      if (fs.existsSync(manifestPath)) {
+        try { existing = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch (_) { existing = {}; }
+      }
+
+      const repaired = !!existing.name || this.plugins.has(pluginId);
+      const installedManifest = {
+        ...existing,
+        id: pluginId,
         name: manifest.name,
         version: manifest.version,
         description: manifest.description,
-        author: manifest.author,
+        author: 'Ernest Kostevich',
         category: manifest.category,
         tier: 'demo',
         icon: manifest.icon,
         tools: manifest.tools,
         settings: manifest.settings || [],
         permissions: manifest.permissions,
-        handler,
-      });
+        price: existing.price || 0,
+        rating: existing.rating || 5,
+        downloads: existing.downloads || 0,
+        enabled: existing.enabled !== false,
+      };
+
+      const toSave = { ...installedManifest };
+      delete toSave._dir; delete toSave._id;
+      fs.writeFileSync(manifestPath, JSON.stringify(toSave, null, 2));
+      fs.writeFileSync(handlerPath, handler);
+
+      installedManifest._dir = pluginDir;
+      installedManifest._id = pluginId;
+      this.plugins.set(pluginId, installedManifest);
+      if (installedManifest.enabled !== false && this.isTrusted(installedManifest)) {
+        this.enabled.add(pluginId);
+      }
+      delete require.cache[require.resolve(handlerPath)];
+      this.handlers.set(pluginId, require(handlerPath));
+      return { ok: true, id: pluginId, repaired };
     } catch (e) {
       console.error('Bundled Spotify install failed:', e.message);
       return { ok: false, error: e.message };
