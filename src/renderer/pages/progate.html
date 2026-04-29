@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Horizon AI — Upgrade</title>
+<title>Horizon AI - Upgrade</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -270,21 +270,21 @@ h1 .acc{
 
 <div class="card">
   <div class="hd">
-    <div class="logo">◈</div>
+    <div class="logo">H</div>
     <div class="brand">
       <div class="nm">Horizon AI</div>
       <div class="sub">Genesis</div>
     </div>
     <div class="status-pill" id="status-pill">
       <span class="dot"></span>
-      <span id="status-text">Checking…</span>
+      <span id="status-text">Checking...</span>
     </div>
   </div>
 
   <h1 id="headline">Your trial has <span class="acc">ended</span></h1>
   <p class="lede" id="lede">
     Continue using Horizon AI with a Pro subscription.
-    Pay with crypto — no card, no subscription management service, no middlemen.
+    Pay with crypto - no card, no subscription management service, no middlemen.
     Direct support from the developer.
   </p>
 
@@ -303,16 +303,16 @@ h1 .acc{
   </div>
 
   <button class="cta-primary" id="cta-pay">
-    <span class="sym">₿</span>
+    <span class="sym">$</span>
     <span>Pay with crypto</span>
   </button>
 
   <div class="sec-row">
     <button class="cta-sec" id="cta-recheck" title="If you've already paid and it's not recognised">
-      <span>↻</span> I've paid — recheck
+      <span>OK</span> I've paid - recheck
     </button>
     <button class="cta-sec" id="cta-login" title="Sign in if you have a Horizon account">
-      <span>→</span> Sign in
+      <span>Go</span> Sign in
     </button>
   </div>
 
@@ -321,22 +321,22 @@ h1 .acc{
   <div class="contact">
     <div class="lbl">Message Ernest directly for manual key dispatch or questions:</div>
     <div class="grid">
-      <a class="link" data-ch="telegram_primary">✈ t.me/Ernest_Kostevich</a>
-      <a class="link" data-ch="telegram_secondary">✈ t.me/ernest0kostevich</a>
-      <a class="link" data-ch="email_primary">✉ ernest2011kostevich@…</a>
-      <a class="link" data-ch="email_secondary">✉ ernestkostevich@…</a>
+      <a class="link" data-ch="telegram_primary">Telegram: t.me/Ernest_Kostevich</a>
+      <a class="link" data-ch="telegram_secondary">Telegram: t.me/ernest0kostevich</a>
+      <a class="link" data-ch="email_primary">Email: ernest2011kostevich@gmail.com</a>
+      <a class="link" data-ch="email_secondary">Email: ernestkostevich@gmail.com</a>
     </div>
   </div>
 
   <div class="foot">
-    <span>MIT source · <a href="https://github.com/ErnestKostevich/horizon-genesis" target="_blank" rel="noopener">github</a> · <a href="https://horizonaai.dev" target="_blank" rel="noopener">horizonaai.dev</a></span>
+    <span>BSL 1.1 source-visible / <a href="https://github.com/ErnestKostevich/horizon-genesis" target="_blank" rel="noopener">github</a> / <a href="https://horizonaai.dev" target="_blank" rel="noopener">horizonaai.dev</a></span>
     <span class="kbd">Esc to quit</span>
   </div>
 </div>
 
 <div class="toast" id="toast">
   <div class="spinner"></div>
-  <span id="toast-text">…</span>
+  <span id="toast-text">...</span>
 </div>
 
 <script>
@@ -448,12 +448,12 @@ async function renderState() {
 
   if (s.allowed && s.reason === 'trial') {
     pill.classList.add('trial');
-    pillT.textContent = `Trial · ${s.trialDaysLeft}d left`;
+    pillT.textContent = `Trial / ${s.trialDaysLeft}d left`;
     head.innerHTML = `Upgrade to <span class="acc">Pro</span>`;
     lede.textContent = "You're on the free trial. Upgrade now to lock in continued access and support future development.";
   } else if (s.allowed && s.reason === 'pro') {
     pill.classList.add('pro');
-    pillT.textContent = `Pro · ${s.plan || 'active'}`;
+    pillT.textContent = `Pro / ${s.plan || 'active'}`;
     head.innerHTML = `You're on <span class="acc">Pro</span>`;
     lede.textContent = `Your subscription is active until ${s.expiresAt ? new Date(s.expiresAt).toLocaleDateString() : 'next renewal'}. Manage from this window any time.`;
   } else if (s.reason === 'expired') {
@@ -466,29 +466,29 @@ async function renderState() {
   }
 }
 
-// Pay with crypto → NOWPayments invoice → open pay_url in browser → poll
+// Pay with crypto -> NOWPayments invoice -> open pay_url in browser -> poll
 document.getElementById('cta-pay').addEventListener('click', async () => {
-  toast('Creating invoice…', 'loading');
+  toast('Creating invoice...', 'loading');
   const r = await H.licenseCreateCrypto(selectedPlan);
   if (!r.ok) {
     if (r.error === 'not-logged-in') {
-      toast('Sign in first — button to the right', 'err');
+      toast('Sign in first - button to the right', 'err');
       return;
     }
     toast(`Error: ${r.error}`, 'err');
     return;
   }
   H.openUrl(r.invoice.pay_url);
-  toast('Browser opened. Complete the payment — we\'ll detect it automatically.', 'ok');
+  toast('Browser opened. Complete the payment - we will detect it automatically.', 'ok');
   startPollingInvoice(r.invoice.invoice_id);
 });
 
 // Recheck (if user paid externally and server hasn't pushed yet)
 document.getElementById('cta-recheck').addEventListener('click', async () => {
-  toast('Checking server…', 'loading');
+  toast('Checking server...', 'loading');
   const s = await H.licenseRefresh();
   if (s.allowed && s.reason === 'pro') {
-    toast('Pro active! Reloading…', 'ok');
+    toast('Pro active! Reloading...', 'ok');
     setTimeout(() => location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`, 900);
   } else {
     toast('No active subscription yet. Try again in a minute.', 'err');
@@ -499,8 +499,12 @@ document.getElementById('cta-recheck').addEventListener('click', async () => {
 // Sign in: open the upgrade/login page on the website; the user gets a
 // magic-link style token which the desktop will pick up via the horizon://
 // protocol (handled in main.js).
-document.getElementById('cta-login').addEventListener('click', () => {
-  H.licenseOpenUpgradePage();
+document.getElementById('cta-login').addEventListener('click', async () => {
+  try {
+    const result = await H.licenseOpenUpgradePage();
+    if (result?.ok) return;
+  } catch (_) {}
+  H.openUrl?.('https://horizonaai.dev/pricing?src=desktop');
 });
 
 // Contact links (Telegram / email)
@@ -524,7 +528,7 @@ function startPollingInvoice(id) {
     if (!r.ok) return;
     if (r.status === 'confirmed' || r.status === 'finished') {
       clearInterval(pollTimer); pollTimer = null;
-      toast('Payment confirmed! Unlocking…', 'ok');
+      toast('Payment confirmed! Unlocking...', 'ok');
       await H.licenseRefresh();
       setTimeout(async () => location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`, 1200);
     } else if (r.status === 'failed' || r.status === 'expired') {
@@ -537,7 +541,7 @@ function startPollingInvoice(id) {
 // React to server-pushed license updates in the background
 H.onLicenseChange?.(async (state) => {
   if (state.allowed && (state.reason === 'trial' || state.reason === 'pro')) {
-    // Nothing to do — the main process already navigated the window.
+    // Nothing to do - the main process already navigated the window.
     renderState();
   } else {
     renderState();
