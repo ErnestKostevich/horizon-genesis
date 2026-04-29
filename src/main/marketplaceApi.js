@@ -37,7 +37,13 @@ class MarketplaceClient {
     const r = await fetch(this.base + path, { ...opts, headers });
     const text = await r.text();
     let j; try { j = JSON.parse(text); } catch { j = { raw: text }; }
-    if (!r.ok) throw new Error(j.detail || j.raw || `${r.status} ${r.statusText}`);
+    if (!r.ok) {
+      if ((r.status === 401 || r.status === 403) && this.settingsStore) {
+        this.settingsStore.delete('marketplaceToken');
+        this.settingsStore.delete('marketplaceUser');
+      }
+      throw new Error(j.detail || j.raw || `${r.status} ${r.statusText}`);
+    }
     return j;
   }
   list({ q, category, tier, featured, sort = 'downloads', limit = 60 } = {}) {
@@ -67,7 +73,10 @@ class MarketplaceClient {
       });
   }
   signup(email, password, display_name) {
-    return this._fetch('/api/auth/signup', { method: 'POST', body: JSON.stringify({ email, password, display_name }) })
+    return this._fetch('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, password_confirm: password, display_name })
+    })
       .then(d => {
         if (this.settingsStore) {
           this.settingsStore.set('marketplaceToken', d.token);
