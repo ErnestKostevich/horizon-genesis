@@ -1920,7 +1920,8 @@ ipcMain.handle('licensePollInvoice', async (_, invoiceId) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle('licenseOpenUpgradePage', () => {
-  const url = `${marketClient.webBase}/upgrade?src=desktop`;
+  const base = String(marketClient?.webBase || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev').replace(/\/+$/, '');
+  const url = `${base}/pricing?src=desktop`;
   shell.openExternal(url);
   return { ok: true, url };
 });
