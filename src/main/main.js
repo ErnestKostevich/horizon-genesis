@@ -87,10 +87,66 @@ const machineId = crypto.createHash('sha256')
 const keysStore     = new Store({ name: 'horizon-keys',     encryptionKey: machineId });
 const settingsStore = new Store({ name: 'horizon-settings' });
 
+const ALLOWED_KEY_IDS = new Set([
+  'gemini', 'groq', 'groq_voice', 'deepseek', 'mistral', 'qwen', 'grok',
+  'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
+]);
+const ALLOWED_SETTING_KEYS = new Set([
+  'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider',
+  'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
+  'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
+  'workflows', 'persona', 'onboarded', 'marketplaceUrl', 'marketplaceWebUrl',
+  'ollamaUrl', 'ollamaModel', 'lmStudioUrl', 'lmStudioModel',
+  'localAiUrl', 'localAiModel',
+]);
+
+function assertAllowedKey(service) {
+  if (!ALLOWED_KEY_IDS.has(String(service || ''))) {
+    throw new Error(`Unsupported secret slot: ${service}`);
+  }
+}
+
+function assertAllowedSetting(key) {
+  if (!ALLOWED_SETTING_KEYS.has(String(key || ''))) {
+    throw new Error(`Unsupported setting: ${key}`);
+  }
+}
+
+function localOpenAIEndpoint(provider) {
+  if (provider === 'ollama') {
+    const base = settingsStore.get('ollamaUrl') || 'http://127.0.0.1:11434/v1';
+    return {
+      url: `${String(base).replace(/\/+$/, '')}/chat/completions`,
+      model: settingsStore.get('ollamaModel') || 'llama3.1',
+      key: '',
+      label: 'ollama/local',
+    };
+  }
+  if (provider === 'lmstudio') {
+    const base = settingsStore.get('lmStudioUrl') || 'http://127.0.0.1:1234/v1';
+    return {
+      url: `${String(base).replace(/\/+$/, '')}/chat/completions`,
+      model: settingsStore.get('lmStudioModel') || 'local-model',
+      key: '',
+      label: 'lm-studio/local',
+    };
+  }
+  if (provider === 'localai') {
+    const base = settingsStore.get('localAiUrl') || 'http://127.0.0.1:8080/v1';
+    return {
+      url: `${String(base).replace(/\/+$/, '')}/chat/completions`,
+      model: settingsStore.get('localAiModel') || 'local-model',
+      key: keysStore.get('k_localai') || '',
+      label: 'openai-compatible/local',
+    };
+  }
+  return null;
+}
+
 // ── Source-preview build check ────────────────────────────────────────────────
 // The CI release workflow (.github/workflows/release.yml) writes build-info.json
 // into this directory before packaging. When the app is run from a source clone
-// the file doesn't exist — we show a preview window and exit. Source is MIT and
+// the file doesn't exist — we show a preview window and exit. Source is BSL 1.1 and
 // readable for audit/contribution; runnable builds come from GitHub Releases.
 const BUILD_INFO_PATH = path.join(__dirname, 'build-info.json');
 let IS_OFFICIAL_BUILD = false;
@@ -170,14 +226,38 @@ function createWindow(page = 'chat') {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     }
   });
 
-  win.webContents.session.setPermissionRequestHandler((wc, perm, cb) => cb(true));
-  win.webContents.session.setPermissionCheckHandler(() => true);
-  win.webContents.session.setDevicePermissionHandler(() => true);
+  const isLocalRenderer = (wc) => {
+    try {
+      const u = new URL(wc.getURL() || '');
+      return u.hostname === '127.0.0.1' && String(u.port) === String(port);
+    } catch {
+      return false;
+    }
+  };
+  const isLocalOrigin = (origin) => {
+    try {
+      const u = new URL(origin || '');
+      return u.hostname === '127.0.0.1' && String(u.port) === String(port);
+    } catch {
+      return false;
+    }
+  };
+  const allowedPermissions = new Set(['media', 'display-capture', 'notifications']);
+  win.webContents.session.setPermissionRequestHandler((wc, perm, cb) => {
+    cb(isLocalRenderer(wc) && allowedPermissions.has(perm));
+  });
+  win.webContents.session.setPermissionCheckHandler((wc, perm) => {
+    return isLocalRenderer(wc) && allowedPermissions.has(perm);
+  });
+  win.webContents.session.setDevicePermissionHandler((details) => {
+    const local = details.webContents ? isLocalRenderer(details.webContents) : isLocalOrigin(details.origin);
+    return local && ['audioinput', 'videoinput'].includes(details.deviceType);
+  });
 
   // Let the Pro guard redirect here if a user hits a Pro handler after expiry.
   _proGuardWindowRef = win;
@@ -222,12 +302,12 @@ ipcMain.on('quit',     () => { isQuitting = true; app.quit(); });
 ipcMain.handle('go',   (_, p) => { createWindow(p); return true; });
 
 // ── IPC: Keys & Settings ──────────────────────────────────────────────────────
-ipcMain.handle('saveKey',   (_, s, k) => { keysStore.set(`k_${s}`, k);    return true; });
-ipcMain.handle('getKey',    (_, s)    => keysStore.get(`k_${s}`, null));
-ipcMain.handle('hasKey',    (_, s)    => !!keysStore.get(`k_${s}`));
-ipcMain.handle('deleteKey', (_, s)    => { keysStore.delete(`k_${s}`);     return true; });
-ipcMain.handle('set',       (_, k, v) => { settingsStore.set(k, v);        return true; });
-ipcMain.handle('get',       (_, k)    => settingsStore.get(k, null));
+ipcMain.handle('saveKey',   (_, s, k) => { assertAllowedKey(s); keysStore.set(`k_${s}`, k); return true; });
+ipcMain.handle('getKey',    (_, s)    => { assertAllowedKey(s); return keysStore.get(`k_${s}`, null); });
+ipcMain.handle('hasKey',    (_, s)    => { assertAllowedKey(s); return !!keysStore.get(`k_${s}`); });
+ipcMain.handle('deleteKey', (_, s)    => { assertAllowedKey(s); keysStore.delete(`k_${s}`); return true; });
+ipcMain.handle('set',       (_, k, v) => { assertAllowedSetting(k); settingsStore.set(k, v); return true; });
+ipcMain.handle('get',       (_, k)    => { assertAllowedSetting(k); return settingsStore.get(k, null); });
 ipcMain.handle('getPort',   ()        => port);
 
 // ── IPC: Misc ─────────────────────────────────────────────────────────────────
@@ -990,6 +1070,25 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         const d = await r.json(); if (d.error) return { error: d.error.message };
         return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'qwen-plus' };
       }
+      case 'ollama':
+      case 'lmstudio':
+      case 'localai': {
+        const ep = localOpenAIEndpoint(provider);
+        const headers = { 'Content-Type': 'application/json' };
+        if (ep.key) headers.Authorization = `Bearer ${ep.key}`;
+        const r = await fetch(ep.url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: opts?.model || ep.model,
+            max_tokens: 4096,
+            messages: [{ role: 'system', content: sysMsg }, ...messages],
+          }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || d.error) return { error: d.error?.message || d.error || `${provider} connection failed (${r.status})` };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: ep.label };
+      }
       default: return { error: `Unknown provider: ${provider}` };
     }
   } catch(e) { return { error: `Network error: ${e.message}` }; }
@@ -1144,7 +1243,8 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   // AI function wrapper
   const aiFn = async (messages, systemPrompt) => {
     const fetch = require('node-fetch');
-    const k = keysStore.get(`k_${provider}`);
+    const localEp = localOpenAIEndpoint(provider);
+    const k = localEp ? (localEp.key || '__local_no_key__') : keysStore.get(`k_${provider}`);
     if (!k) return { error: `${provider} key not set → Settings` };
 
     try {
@@ -1195,10 +1295,12 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         perplexity: { url:'https://api.perplexity.ai/chat/completions',                    model:'sonar-pro' },
         cohere:     { url:'https://api.cohere.com/v2/chat',                                model:'command-r-plus' },
       };
-      const ep = endpoints[provider] || endpoints.openai;
+      const ep = localEp || endpoints[provider] || endpoints.openai;
+      const headers = {'Content-Type':'application/json'};
+      if (!localEp || localEp.key) headers.Authorization = `Bearer ${k}`;
       const r = await fetch(ep.url, {
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
+        headers,
         body:JSON.stringify({ model:ep.model, max_tokens:4096, messages:[{role:'system',content:systemPrompt},...messages] })
       });
       const d = await r.json();
@@ -1710,13 +1812,13 @@ ipcMain.handle('marketplaceList', () => []);
 ipcMain.handle('marketplaceSearch', () => []);
 
 ipcMain.handle('marketplacePublish', async () => {
-  // Publishing is a server-side moderated flow and must happen on the marketplace web app.
-  // Returning a hard failure here prevents fake-success UX in desktop.
-  const webUrl = marketClient?.webBase || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev'
+  const base = marketClient?.webBase || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev';
+  const url = `${String(base).replace(/\/+$/, '')}/publish`;
   return {
     ok: false,
-    error: `Publishing is only available on the Horizon Marketplace website. Open ${webUrl}/publish in your browser.`
-  }
+    url,
+    error: 'Desktop publishing is disabled. Publish from the web dashboard so moderation, account ownership, and payouts are recorded correctly.',
+  };
 });
 
 // ── GOOGLE OAUTH ─────────────────────────────────────────────────────────────
@@ -1882,7 +1984,11 @@ ipcMain.handle('marketLogout', () => { marketClient.logout(); return true; });
 ipcMain.handle('marketMe', async () => {
   if (!marketClient.token) return { ok: false };
   try { const d = await marketClient.me(); return { ok: true, user: d }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  catch (e) {
+    marketClient.logout();
+    licenseManager.clearCache();
+    return { ok: false, error: e.message };
+  }
 });
 
 // Register horizon:// protocol so the marketplace website can install
