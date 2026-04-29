@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('H', {
   deleteKey:            (s)          => ipcRenderer.invoke('deleteKey', s),
   set:                  (k, v)       => ipcRenderer.invoke('set', k, v),
   get:                  (k)          => ipcRenderer.invoke('get', k),
+  localProviderStatus:  (provider)   => ipcRenderer.invoke('localProviderStatus', provider),
   getPort:              ()           => ipcRenderer.invoke('getPort'),
   go:                   (p)          => ipcRenderer.invoke('go', p),
   // ── Window ───────────────────────────────────────────────────────────────────
