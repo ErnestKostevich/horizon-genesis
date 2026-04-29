@@ -1,7 +1,7 @@
 # Horizon Genesis
 
 > Desktop AI agent with personas, plugins, workflows, and computer use.
-> Local-first. Bring-your-own-keys. MIT.
+> Local-first. Bring-your-own-keys. BUSL-1.1 (transitions to AGPL-3.0).
 
 Horizon Genesis is an Electron-based AI agent that runs on your machine. You choose the model, you choose the provider, you keep the keys. It drives your browser, your files, and any plugin you install — but only with the permissions you grant.
 
@@ -14,7 +14,7 @@ Horizon Genesis is an Electron-based AI agent that runs on your machine. You cho
 
 ## ⚠️ Read this first — source is for review only
 
-This repository is a **source preview**. The code here is MIT-licensed so you can audit it, learn from it, and contribute — but **cloning and running it won't launch a working app**. When started from a source clone, the app opens a notice window pointing you to the official installer.
+This repository is a **source preview**. The code here is source-available under BUSL-1.1 so you can audit it, learn from it, and contribute — but **cloning and running it won't launch a working app**. When started from a source clone, the app opens a notice window pointing you to the official installer.
 
 **The only runnable builds ship from [GitHub Releases](https://github.com/ErnestKostevich/horizon-genesis/releases/latest).** Those are produced by this repo's CI from this exact source — same code, just stamped with an official build marker during the CI workflow.
 
@@ -96,7 +96,7 @@ Found a vulnerability? Please don't open a public issue. See [SECURITY.md](SECUR
 
 ## License
 
-MIT — see [LICENSE](LICENSE). You can read, fork, and learn from the code. For runnable builds, use the [official releases](https://github.com/ErnestKostevich/horizon-genesis/releases/latest).
+Business Source License 1.1 — see [LICENSE](LICENSE). Non-commercial evaluation use is allowed; commercial use requires permission until the change date, then it converts to AGPL-3.0.
 
 ## Author
 
