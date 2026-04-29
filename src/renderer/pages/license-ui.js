@@ -1,17 +1,11 @@
 /**
- * License pill — listens to the main-process `license-state` IPC and
- * renders a titlebar pill: TRIAL · 12d / PRO · monthly / EXPIRED.
- * Clicking opens the hosted upgrade page via the existing IPC (the
- * main process decides whether that is progate.html or the web
- * pricing page, and handles deep links correctly).
- *
- * All API names match what preload.js already exposes, no renderer
- * contract changes required.
+ * License pill - listens to the main-process license-state IPC and renders a
+ * titlebar pill: TRIAL / 12d, PRO / monthly, or EXPIRED.
  */
 (function () {
   if (!window.H || typeof window.H.licenseState !== 'function') return;
 
-  const PRICING_URL = 'https://horizonaai.dev/pricing';
+  const PRICING_URL = 'https://horizonaai.dev/pricing?src=desktop';
 
   function ensureHost() {
     let host = document.getElementById('license-pill-host');
@@ -30,11 +24,13 @@
     return host;
   }
 
-  function openUpgrade() {
-    if (typeof window.H.licenseOpenUpgradePage === 'function') {
-      window.H.licenseOpenUpgradePage();
-      return;
-    }
+  async function openUpgrade() {
+    try {
+      if (typeof window.H.licenseOpenUpgradePage === 'function') {
+        const result = await window.H.licenseOpenUpgradePage();
+        if (result?.ok) return;
+      }
+    } catch (_) {}
     if (typeof window.H.openUrl === 'function') window.H.openUrl(PRICING_URL);
   }
 
@@ -49,12 +45,12 @@
     let title = '';
 
     if (state.reason === 'pro') {
-      label = `PRO · ${state.plan || 'active'}`;
+      label = `PRO / ${state.plan || 'active'}`;
       title = state.expiresAt
         ? `Renews ${new Date(state.expiresAt).toLocaleDateString()}`
         : 'Pro subscription active';
     } else if (state.reason === 'trial') {
-      label = `TRIAL · ${state.trialDaysLeft}d`;
+      label = `TRIAL / ${state.trialDaysLeft}d`;
       cls = 'trial';
       title = `${state.trialDaysLeft} days left in your free trial. Click to upgrade.`;
     } else {
