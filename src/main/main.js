@@ -191,7 +191,16 @@ function startServer() {
       fs.readFile(full, (err, data) => {
         if (err) { rsp.writeHead(404); rsp.end('Not found'); return; }
         const ext = path.extname(full);
-        const mime = {'.html':'text/html','.js':'application/javascript','.css':'text/css','.png':'image/png','.ico':'image/x-icon'}[ext]||'text/plain';
+        const mime = {
+          '.html': 'text/html; charset=utf-8',
+          '.js': 'application/javascript; charset=utf-8',
+          '.css': 'text/css; charset=utf-8',
+          '.txt': 'text/plain; charset=utf-8',
+          '.json': 'application/json; charset=utf-8',
+          '.svg': 'image/svg+xml; charset=utf-8',
+          '.png': 'image/png',
+          '.ico': 'image/x-icon',
+        }[ext] || 'text/plain; charset=utf-8';
         rsp.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
         rsp.end(data);
       });

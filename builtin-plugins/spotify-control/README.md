@@ -96,4 +96,4 @@ cp -r horizon-plugin-spotify ~/.horizon/plugins/spotify-control
 
 ## License
 
-MIT © Ernest Kostevich
+BSL 1.1 source-visible © Ernest Kostevich

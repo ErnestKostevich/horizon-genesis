@@ -54,10 +54,12 @@
       float smoothIter = iter - log2(max(1.0, log2(dot(z, z)))) * 0.5;
       t = clamp(smoothIter / MAX, 0.0, 1.0);
 
-      vec3 col = palette(t);
+      vec3 col = palette(t) * 0.72;
 
       // Soft vignette so content in the foreground reads.
       float r = length((gl_FragCoord.xy - 0.5 * uRes) / uRes);
+      float centerReadability = smoothstep(0.18, 0.48, length(uv));
+      col *= mix(0.16, 1.0, centerReadability);
       col *= 1.0 - smoothstep(0.45, 0.95, r) * 0.65;
 
       gl_FragColor = vec4(col, 1.0);
@@ -92,7 +94,7 @@
     canvas.style.height         = '100vh';
     canvas.style.zIndex         = '-1';
     canvas.style.pointerEvents  = 'none';
-    canvas.style.opacity        = '0.78';
+    canvas.style.opacity        = '0.38';
 
     const gl = canvas.getContext('webgl', { antialias: false, alpha: false })
           || canvas.getContext('experimental-webgl');
