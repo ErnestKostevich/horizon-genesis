@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const COMMUNITY_PLUGINS_ENABLED = process.env.HORIZON_ENABLE_COMMUNITY_PLUGINS === '1';
 
 class PluginManager {
   constructor(pluginsDir) {
@@ -58,9 +59,10 @@ class PluginManager {
           manifest._dir = pluginPath;
           manifest._id = dir;
           this.plugins.set(dir, manifest);
-          if (manifest.enabled !== false) this.enabled.add(dir);
+          const trusted = this.isTrusted(manifest);
+          if (manifest.enabled !== false && trusted) this.enabled.add(dir);
           const handlerPath = path.join(pluginPath, 'handler.js');
-          if (fs.existsSync(handlerPath)) {
+          if (fs.existsSync(handlerPath) && trusted) {
             try {
               delete require.cache[require.resolve(handlerPath)];
               this.handlers.set(dir, require(handlerPath));
@@ -71,6 +73,11 @@ class PluginManager {
       }
     } catch (e) { console.error('Plugin loadAll error:', e.message); }
     return loaded;
+  }
+
+  isTrusted(plugin) {
+    const tier = plugin?.tier || 'community';
+    return tier === 'built_in' || tier === 'demo' || COMMUNITY_PLUGINS_ENABLED;
   }
 
   install(pluginJson) {
@@ -84,6 +91,12 @@ class PluginManager {
         if (author.includes('horizon team') || author.includes('ernest kostevich')) {
           return { ok: false, error: 'Only official plugins can use the Horizon Team / Ernest Kostevich author name.' };
         }
+      }
+      if (!this.isTrusted(plugin)) {
+        return {
+          ok: false,
+          error: 'Community plugin execution is disabled until the sandbox and permission review ship. Use the web publish flow for moderation instead.',
+        };
       }
 
       const pluginDir = path.join(this.pluginsDir, plugin.id);
@@ -188,6 +201,9 @@ class PluginManager {
     const handler = this.handlers.get(pluginId);
     if (!handler) return { ok: false, error: `Plugin ${pluginId} has no handler` };
     const manifest = this.plugins.get(pluginId) || {};
+    if (!this.isTrusted(manifest)) {
+      return { ok: false, error: 'Community plugin execution is disabled until sandboxing ships.' };
+    }
     const ctx = { settings: manifest.config || {} };
     if (typeof handler.execute === 'function') {
       try { return await handler.execute(toolName, args, ctx); }

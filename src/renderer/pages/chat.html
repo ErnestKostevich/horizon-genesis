@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><title>Horizon Genesis</title>
@@ -25,7 +25,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);display:flex;f
 body::before{content:'';position:fixed;top:-50%;left:-30%;width:100%;height:100%;background:radial-gradient(ellipse at 30% 20%,rgba(108,140,255,.04),transparent 60%);pointer-events:none;z-index:0}
 body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80%;background:radial-gradient(ellipse at 70% 80%,rgba(167,139,250,.03),transparent 60%);pointer-events:none;z-index:0}
 
-/* ═══ TITLE BAR ═══ */
+/* в•ђв•ђв•ђ TITLE BAR в•ђв•ђв•ђ */
 .tb{position:relative;z-index:10;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;background:rgba(8,9,12,.95);border-bottom:1px solid var(--b1);backdrop-filter:blur(40px);-webkit-app-region:drag}
 .tb-l{display:flex;align-items:center;gap:11px;-webkit-app-region:drag}
 .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--purple));display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;box-shadow:var(--glow);font-weight:700;color:#fff;font-family:var(--mono)}
@@ -37,7 +37,7 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 .wbtn{width:12px;height:12px;border-radius:50%;border:none;cursor:pointer;-webkit-app-region:no-drag}
 .wy{background:#FEBC2E}.wr{background:#FF5F57}
 
-/* ═══ WAKE BAR ═══ */
+/* в•ђв•ђв•ђ WAKE BAR в•ђв•ђв•ђ */
 .wake-bar{overflow:hidden;transition:height .25s;height:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid transparent;position:relative;z-index:9}
 .wake-bar.show{height:28px}
 .wake-bar.idle{background:rgba(108,140,255,.04);border-color:rgba(108,140,255,.12)}
@@ -59,7 +59,7 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 .wb-lvl{width:80px;height:2px;background:var(--b1);border-radius:2px;overflow:hidden}
 .wb-bar{height:100%;width:0%;background:var(--acc);border-radius:2px;transition:width .05s}
 
-/* ═══ PROVIDER BAR ═══ */
+/* в•ђв•ђв•ђ PROVIDER BAR в•ђв•ђв•ђ */
 .sb{-webkit-app-region:no-drag;display:flex;align-items:center;gap:5px;padding:6px 14px;border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;background:rgba(8,9,12,.7);position:relative;z-index:8}
 .sb::-webkit-scrollbar{display:none}
 .pulse{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;transition:background .3s}
@@ -73,14 +73,14 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 .chip.special{border-color:rgba(108,140,255,.25);color:rgba(108,140,255,.6)}
 .chip.special.on{border-color:var(--acc);color:var(--acc);background:rgba(108,140,255,.15);box-shadow:0 0 12px rgba(108,140,255,.12)}
 
-/* ═══ MODES ═══ */
+/* в•ђв•ђв•ђ MODES в•ђв•ђв•ђ */
 .modes{-webkit-app-region:no-drag;display:flex;gap:2px;padding:6px 12px;border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;position:relative;z-index:7}
 .modes::-webkit-scrollbar{display:none}
 .mt{background:none;border:1px solid transparent;color:var(--t3);border-radius:7px;padding:4px 11px;font-size:10px;font-weight:600;cursor:pointer;transition:all .18s;flex-shrink:0;-webkit-app-region:no-drag;font-family:var(--font)}
 .mt:hover{color:var(--t2);background:var(--b1)}
 .mt.on{background:var(--acc3);border-color:rgba(108,140,255,.35);color:var(--acc)}
 
-/* ═══ MESSAGES ═══ */
+/* в•ђв•ђв•ђ MESSAGES в•ђв•ђв•ђ */
 .msgs{-webkit-app-region:no-drag;flex:1;overflow-y:auto;padding:16px 14px 8px;display:flex;flex-direction:column;gap:11px;position:relative;z-index:1}
 .msg{display:flex;flex-direction:column;max-width:91%;animation:msgIn .3s ease}
 @keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -114,7 +114,7 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 .td:nth-child(1){background:var(--acc)}.td:nth-child(2){background:rgba(232,160,80,.6);animation-delay:.2s}.td:nth-child(3){background:rgba(232,160,80,.3);animation-delay:.4s}
 @keyframes tdot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-7px)}}
 
-/* ═══ GREETING ═══ */
+/* в•ђв•ђв•ђ GREETING в•ђв•ђв•ђ */
 .greet{text-align:center;padding:28px 16px 10px;position:relative;z-index:1;-webkit-app-region:no-drag}
 .g-mark{width:72px;height:72px;margin:0 auto 16px;border-radius:20px;background:linear-gradient(135deg,var(--acc),var(--purple));display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:var(--glow);font-weight:700;color:#fff;font-family:var(--mono)}
 .greet h3{font-size:20px;font-weight:700;color:var(--tx);margin-bottom:7px;font-family:var(--font)}
@@ -123,7 +123,7 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 .ch{background:var(--b1);border:1px solid var(--b1);color:var(--t2);border-radius:18px;padding:6px 13px;font-size:11px;cursor:pointer;transition:all .2s;-webkit-app-region:no-drag;font-family:var(--font)}
 .ch:hover{border-color:rgba(108,140,255,.4);color:var(--acc);background:var(--acc3);transform:translateY(-1px)}
 
-/* ═══ INPUT AREA ═══ */
+/* в•ђв•ђв•ђ INPUT AREA в•ђв•ђв•ђ */
 .inp-wrap{-webkit-app-region:no-drag;padding:7px 14px 13px;border-top:1px solid var(--b1);flex-shrink:0;background:rgba(8,9,12,.85);backdrop-filter:blur(20px);position:relative;z-index:10}
 .vb{display:none;align-items:center;gap:8px;background:rgba(108,140,255,.05);border:1px solid rgba(108,140,255,.2);border-radius:10px;padding:7px 13px;margin-bottom:6px;font-size:11px;color:var(--acc)}
 .vb.show{display:flex}
@@ -156,7 +156,7 @@ textarea::placeholder{color:var(--t3)}
 #file-input{display:none}
 .hint{font-size:9px;color:var(--t3);text-align:center;margin-top:4px;opacity:.45}
 
-/* ═══ SETTINGS PANEL ═══ */
+/* в•ђв•ђв•ђ SETTINGS PANEL в•ђв•ђв•ђ */
 .panel{display:none;position:absolute;inset:0;background:rgba(8,9,12,.98);z-index:200;flex-direction:column;-webkit-app-region:no-drag;backdrop-filter:blur(40px)}
 .panel.show{display:flex}
 .ph{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--b1);flex-shrink:0;-webkit-app-region:drag}
@@ -212,7 +212,7 @@ textarea::placeholder{color:var(--t3)}
 .tcard{font-size:11px;color:var(--t2);font-family:monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto}
 .ver{font-size:9px;color:var(--t3);text-align:center;margin-top:8px;opacity:.4}
 
-/* ═══ FULL-SCREEN PANELS (Hub, Store, Workflows, Recorder) ═══ */
+/* в•ђв•ђв•ђ FULL-SCREEN PANELS (Hub, Store, Workflows, Recorder) в•ђв•ђв•ђ */
 .fpanel{display:none;position:fixed;inset:0;background:var(--bg);z-index:250;flex-direction:column;-webkit-app-region:no-drag;overflow:hidden}
 .fpanel.show{display:flex}
 .fph{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--b1);flex-shrink:0;background:rgba(8,9,12,.98);backdrop-filter:blur(40px);-webkit-app-region:drag}
@@ -391,7 +391,7 @@ textarea::placeholder{color:var(--t3)}
 .ic-btn.acct:hover{border-color:var(--acc);color:var(--acc);background:var(--acc3)}
 .ic-btn.acct.loggedin{background:linear-gradient(135deg,var(--acc2),var(--acc));border-color:transparent;color:#fff}
 
-/* ── Horizon account (login / signup) panel ── */
+/* в”Ђв”Ђ Horizon account (login / signup) panel в”Ђв”Ђ */
 .auth-card{max-width:400px;margin:40px auto;background:var(--bg2);border:1px solid var(--b1);border-radius:16px;padding:28px}
 .auth-card h3{font-size:16px;font-weight:700;color:var(--tx);margin-bottom:6px;text-align:center}
 .auth-card .auth-sub{font-size:11px;color:var(--t3);text-align:center;margin-bottom:22px}
@@ -413,7 +413,7 @@ textarea::placeholder{color:var(--t3)}
 .acct-badge{display:inline-block;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:4px;background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25)}
 .acct-badge.admin{background:rgba(251,191,36,.12);color:var(--amber);border-color:rgba(251,191,36,.25)}
 
-/* ── Agent execution panel ── */
+/* в”Ђв”Ђ Agent execution panel в”Ђв”Ђ */
 .agent-panel{background:var(--bg3);border:1px solid var(--b2);border-radius:12px;padding:12px 14px;margin:6px 0;font-size:11px;max-width:96%;backdrop-filter:blur(10px)}
 .agent-title{color:var(--acc);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px;display:flex;align-items:center;gap:6px;font-family:var(--mono)}
 .agent-step{display:flex;align-items:flex-start;gap:7px;padding:5px 0;border-bottom:1px solid var(--b1)}
@@ -433,7 +433,7 @@ textarea::placeholder{color:var(--t3)}
 .run-code-btn{position:absolute;top:6px;right:6px;background:var(--acc3);color:var(--acc);border:1px solid rgba(108,140,255,.2);border-radius:6px;padding:2px 10px;font-size:9px;cursor:pointer;font-weight:700;transition:all .15s;font-family:var(--mono)}
 .run-code-btn:hover{background:var(--acc2);color:#fff}
 
-/* ═══ COMMAND PALETTE ═══ */
+/* в•ђв•ђв•ђ COMMAND PALETTE в•ђв•ђв•ђ */
 .cmd-palette{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);align-items:flex-start;justify-content:center;padding-top:15vh}
 .cmd-palette.show{display:flex}
 .cmd-box{width:420px;max-width:90vw;background:var(--bg2);border:1px solid var(--b2);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden}
@@ -446,97 +446,100 @@ textarea::placeholder{color:var(--t3)}
 .cmd-item-text{flex:1}
 .cmd-item-hint{font-size:10px;color:var(--t3);font-family:var(--mono)}
 
-/* ═══ FOCUS TIMER ═══ */
+/* в•ђв•ђв•ђ FOCUS TIMER в•ђв•ђв•ђ */
 .focus-timer{display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(52,211,153,.05);border:1px solid rgba(52,211,153,.15);border-radius:20px;font-size:11px;color:var(--green);font-family:var(--mono);font-weight:600}
 .focus-timer.show{display:flex}
 .focus-timer-btn{background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:2px}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
+<link rel="stylesheet" href="apex-alive.css"/>
 </head>
 <body>
 <canvas id="fractalBg" aria-hidden="true"></canvas>
 
-<!-- ═══════════ SETTINGS PANEL ═══════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ SETTINGS PANEL в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="panel" id="panel">
-  <div class="ph"><h2>◈ Settings — Horizon AI</h2><button class="ph-x" onclick="closePanel()">×</button></div>
+  <div class="ph"><h2>в—€ Settings вЂ” Horizon AI</h2><button class="ph-x" onclick="closePanel()">Г—</button></div>
   <div class="pbody">
 
     <!-- Profile -->
     <div class="ps">
-      <div class="psl">👤 Profile</div>
+      <div class="psl">рџ‘¤ Profile</div>
       <div class="pf"><label>Name</label><div class="pr"><input class="pi" type="text" id="pi-name" placeholder="Ernest"/><button class="psv" onclick="savePf()">Save</button></div></div>
-      <div class="pf"><label>Language</label><select class="sel" id="pi-lang" onchange="saveLang()"><option value="ru">🇷🇺 Русский</option><option value="en">🇺🇸 English</option></select></div>
+      <div class="pf"><label>Language</label><select class="sel" id="pi-lang" onchange="saveLang()"><option value="ru">рџ‡·рџ‡є Р СѓСЃСЃРєРёР№</option><option value="en">рџ‡єрџ‡ё English</option></select></div>
     </div>
 
     <!-- AI Providers -->
     <div class="ps">
-      <div class="psl">🧠 AI Providers (8)</div>
-      <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini 2.5 Flash — FREE<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSy…"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-groq"></span>Groq — FREE + voice transcription<a onclick="H.openUrl('https://console.groq.com/keys')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-groq" placeholder="gsk_…"/><button class="psv" id="pb-groq" onclick="psvk('groq','pi-groq','pb-groq','pd-groq')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-deepseek"></span>DeepSeek V3 — cheap<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepseek" placeholder="sk-…"/><button class="psv" id="pb-deepseek" onclick="psvk('deepseek','pi-deepseek','pb-deepseek','pd-deepseek')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-mistral"></span>Mistral Large<a onclick="H.openUrl('https://console.mistral.ai/api-keys/')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-mistral" placeholder="…"/><button class="psv" id="pb-mistral" onclick="psvk('mistral','pi-mistral','pb-mistral','pd-mistral')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-qwen"></span>Qwen Plus (Alibaba)<a onclick="H.openUrl('https://dashscope.console.aliyun.com/apiKey')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-qwen" placeholder="sk-…"/><button class="psv" id="pb-qwen" onclick="psvk('qwen','pi-qwen','pb-qwen','pd-qwen')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-grok"></span>Grok 3 (xAI)<a onclick="H.openUrl('https://console.x.ai')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-grok" placeholder="xai-…"/><button class="psv" id="pb-grok" onclick="psvk('grok','pi-grok','pb-grok','pd-grok')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-claude"></span>Claude (Anthropic)<a onclick="H.openUrl('https://console.anthropic.com/settings/keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-claude" placeholder="sk-ant-…"/><button class="psv" id="pb-claude" onclick="psvk('claude','pi-claude','pb-claude','pd-claude')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-openai"></span>OpenAI GPT-4o<a onclick="H.openUrl('https://platform.openai.com/api-keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-openai" placeholder="sk-…"/><button class="psv" id="pb-openai" onclick="psvk('openai','pi-openai','pb-openai','pd-openai')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-perplexity"></span>Perplexity (AI Search)<a onclick="H.openUrl('https://www.perplexity.ai/settings/api')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-perplexity" placeholder="pplx-…"/><button class="psv" id="pb-perplexity" onclick="psvk('perplexity','pi-perplexity','pb-perplexity','pd-perplexity')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-cohere"></span>Cohere Command R+<a onclick="H.openUrl('https://dashboard.cohere.com/api-keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-cohere" placeholder="…"/><button class="psv" id="pb-cohere" onclick="psvk('cohere','pi-cohere','pb-cohere','pd-cohere')">Save</button></div></div>
+      <div class="psl">AI Providers: local + cloud</div>
+      <div class="pf"><label><span class="d2" id="pd-ollama"></span>Ollama вЂ” local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install в†—</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><input class="pi" type="text" id="pi-ollama-model" placeholder="llama3.1"/><button class="psv" onclick="saveLocalProvider('ollama')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-lmstudio"></span>LM Studio вЂ” local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install в†—</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><input class="pi" type="text" id="pi-lmstudio-model" placeholder="local-model"/><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini 2.5 Flash вЂ” FREE<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get free в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSyвЂ¦"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-groq"></span>Groq вЂ” FREE + voice transcription<a onclick="H.openUrl('https://console.groq.com/keys')">Get free в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-groq" placeholder="gsk_вЂ¦"/><button class="psv" id="pb-groq" onclick="psvk('groq','pi-groq','pb-groq','pd-groq')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-deepseek"></span>DeepSeek V3 вЂ” cheap<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-deepseek" placeholder="sk-вЂ¦"/><button class="psv" id="pb-deepseek" onclick="psvk('deepseek','pi-deepseek','pb-deepseek','pd-deepseek')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-mistral"></span>Mistral Large<a onclick="H.openUrl('https://console.mistral.ai/api-keys/')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-mistral" placeholder="вЂ¦"/><button class="psv" id="pb-mistral" onclick="psvk('mistral','pi-mistral','pb-mistral','pd-mistral')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-qwen"></span>Qwen Plus (Alibaba)<a onclick="H.openUrl('https://dashscope.console.aliyun.com/apiKey')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-qwen" placeholder="sk-вЂ¦"/><button class="psv" id="pb-qwen" onclick="psvk('qwen','pi-qwen','pb-qwen','pd-qwen')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-grok"></span>Grok 3 (xAI)<a onclick="H.openUrl('https://console.x.ai')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-grok" placeholder="xai-вЂ¦"/><button class="psv" id="pb-grok" onclick="psvk('grok','pi-grok','pb-grok','pd-grok')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-claude"></span>Claude (Anthropic)<a onclick="H.openUrl('https://console.anthropic.com/settings/keys')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-claude" placeholder="sk-ant-вЂ¦"/><button class="psv" id="pb-claude" onclick="psvk('claude','pi-claude','pb-claude','pd-claude')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-openai"></span>OpenAI GPT-4o<a onclick="H.openUrl('https://platform.openai.com/api-keys')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-openai" placeholder="sk-вЂ¦"/><button class="psv" id="pb-openai" onclick="psvk('openai','pi-openai','pb-openai','pd-openai')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-perplexity"></span>Perplexity (AI Search)<a onclick="H.openUrl('https://www.perplexity.ai/settings/api')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-perplexity" placeholder="pplx-вЂ¦"/><button class="psv" id="pb-perplexity" onclick="psvk('perplexity','pi-perplexity','pb-perplexity','pd-perplexity')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-cohere"></span>Cohere Command R+<a onclick="H.openUrl('https://dashboard.cohere.com/api-keys')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-cohere" placeholder="вЂ¦"/><button class="psv" id="pb-cohere" onclick="psvk('cohere','pi-cohere','pb-cohere','pd-cohere')">Save</button></div></div>
     </div>
 
     <!-- Web Search -->
     <div class="ps">
-      <div class="psl">🔍 Web Search</div>
-      <div class="pf"><label><span class="d2" id="pd-tavily"></span>Tavily — 1,000 free/month<a onclick="H.openUrl('https://app.tavily.com/home')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-tavily" placeholder="tvly-…"/><button class="psv" id="pb-tavily" onclick="psvk('tavily','pi-tavily','pb-tavily','pd-tavily')">Save</button></div></div>
+      <div class="psl">рџ”Ќ Web Search</div>
+      <div class="pf"><label><span class="d2" id="pd-tavily"></span>Tavily вЂ” 1,000 free/month<a onclick="H.openUrl('https://app.tavily.com/home')">Get free в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-tavily" placeholder="tvly-вЂ¦"/><button class="psv" id="pb-tavily" onclick="psvk('tavily','pi-tavily','pb-tavily','pd-tavily')">Save</button></div></div>
     </div>
 
-    <!-- Voice — THE CRITICAL SECTION -->
+    <!-- Voice вЂ” THE CRITICAL SECTION -->
     <div class="ps">
-      <div class="psl">🎙 Voice & Wake Word</div>
-      <div class="pf"><label>STT — Speech-to-Text</label>
+      <div class="psl">рџЋ™ Voice & Wake Word</div>
+      <div class="pf"><label>STT вЂ” Speech-to-Text</label>
         <select class="sel" id="pi-vprov" onchange="saveVP()">
-          <option value="groq">Groq Whisper — FREE, best for Russian ✅ RECOMMENDED</option>
-          <option value="openai">OpenAI Whisper — Best quality</option>
-          <option value="deepgram">Deepgram Nova-2 — Free $200 credit</option>
+          <option value="groq">Groq Whisper вЂ” FREE, best for Russian вњ… RECOMMENDED</option>
+          <option value="openai">OpenAI Whisper вЂ” Best quality</option>
+          <option value="deepgram">Deepgram Nova-2 вЂ” Free $200 credit</option>
         </select>
       </div>
-      <div class="pf"><label>TTS — Text-to-Speech (голос Horizon)</label>
+      <div class="pf"><label>TTS вЂ” Text-to-Speech (РіРѕР»РѕСЃ Horizon)</label>
         <select class="sel" id="pi-ttsprov" onchange="saveTTSProv()">
-          <option value="system">🆓 System TTS — Free, offline, works always</option>
-          <option value="elevenlabs">🎙 ElevenLabs — Ultra realistic (needs key)</option>
-          <option value="openai">🎙 OpenAI TTS — Very good (needs OpenAI key)</option>
-          <option value="kokoro">🆓 Kokoro — Free local AI TTS (no key needed)</option>
+          <option value="system">рџ†“ System TTS вЂ” Free, offline, works always</option>
+          <option value="elevenlabs">рџЋ™ ElevenLabs вЂ” Ultra realistic (needs key)</option>
+          <option value="openai">рџЋ™ OpenAI TTS вЂ” Very good (needs OpenAI key)</option>
+          <option value="kokoro">рџ†“ Kokoro вЂ” Free local AI TTS (no key needed)</option>
         </select>
       </div>
       <div id="el-section" style="display:none">
-        <div class="pf"><label><span class="d2" id="pd-elevenlabs"></span>ElevenLabs API Key<a onclick="H.openUrl('https://elevenlabs.io')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-elevenlabs" placeholder="sk_…"/><button class="psv" id="pb-elevenlabs" onclick="psvk('elevenlabs','pi-elevenlabs','pb-elevenlabs','pd-elevenlabs')">Save</button></div></div>
-        <div class="pf"><label>Voice ID <span style="color:var(--t4);font-size:9px">(default: Adam — works for RU+EN)</span></label><div class="pr"><input class="pi" type="text" id="pi-elvid" placeholder="pNInz6obpgDQGcFmaJgB"/><button class="psv" onclick="saveElVoice()">Save</button></div></div>
-        <div style="font-size:9px;color:var(--t3);margin-top:4px">Popular voices: Adam (pNInz6obpgDQGcFmaJgB) · Rachel (21m00Tcm4TlvDq8ikWAM) · Josh (TxGEqnHWrfWFTfGW9XjX)<br>Get voice IDs at <a onclick="H.openUrl('https://elevenlabs.io/voice-library')" style="color:var(--acc3);cursor:pointer">elevenlabs.io/voice-library</a></div>
+        <div class="pf"><label><span class="d2" id="pd-elevenlabs"></span>ElevenLabs API Key<a onclick="H.openUrl('https://elevenlabs.io')">Get key в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-elevenlabs" placeholder="sk_вЂ¦"/><button class="psv" id="pb-elevenlabs" onclick="psvk('elevenlabs','pi-elevenlabs','pb-elevenlabs','pd-elevenlabs')">Save</button></div></div>
+        <div class="pf"><label>Voice ID <span style="color:var(--t4);font-size:9px">(default: Adam вЂ” works for RU+EN)</span></label><div class="pr"><input class="pi" type="text" id="pi-elvid" placeholder="pNInz6obpgDQGcFmaJgB"/><button class="psv" onclick="saveElVoice()">Save</button></div></div>
+        <div style="font-size:9px;color:var(--t3);margin-top:4px">Popular voices: Adam (pNInz6obpgDQGcFmaJgB) В· Rachel (21m00Tcm4TlvDq8ikWAM) В· Josh (TxGEqnHWrfWFTfGW9XjX)<br>Get voice IDs at <a onclick="H.openUrl('https://elevenlabs.io/voice-library')" style="color:var(--acc3);cursor:pointer">elevenlabs.io/voice-library</a></div>
       </div>
       <div id="oaitts-section" style="display:none">
         <div class="pf"><label>OpenAI TTS Voice</label>
           <select class="sel" id="pi-oaitts" onchange="saveOAITTSVoice()">
-            <option value="onyx">Onyx — Deep male</option>
-            <option value="alloy">Alloy — Neutral</option>
-            <option value="echo">Echo — Male</option>
-            <option value="fable">Fable — British male</option>
-            <option value="nova">Nova — Female</option>
-            <option value="shimmer">Shimmer — Female soft</option>
+            <option value="onyx">Onyx вЂ” Deep male</option>
+            <option value="alloy">Alloy вЂ” Neutral</option>
+            <option value="echo">Echo вЂ” Male</option>
+            <option value="fable">Fable вЂ” British male</option>
+            <option value="nova">Nova вЂ” Female</option>
+            <option value="shimmer">Shimmer вЂ” Female soft</option>
           </select>
         </div>
       </div>
       <div id="kokoro-section" style="display:none">
-        <div style="font-size:10px;color:var(--t3);background:var(--bg3);border:1px solid var(--b1);border-radius:8px;padding:8px;margin-top:4px">🆓 Kokoro — бесплатный AI TTS, работает локально.<br>Загружается при первом использовании (~80MB).<br>Отличное качество без API ключей!</div>
+        <div style="font-size:10px;color:var(--t3);background:var(--bg3);border:1px solid var(--b1);border-radius:8px;padding:8px;margin-top:4px">рџ†“ Kokoro вЂ” Р±РµСЃРїР»Р°С‚РЅС‹Р№ AI TTS, СЂР°Р±РѕС‚Р°РµС‚ Р»РѕРєР°Р»СЊРЅРѕ.<br>Р—Р°РіСЂСѓР¶Р°РµС‚СЃСЏ РїСЂРё РїРµСЂРІРѕРј РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРё (~80MB).<br>РћС‚Р»РёС‡РЅРѕРµ РєР°С‡РµСЃС‚РІРѕ Р±РµР· API РєР»СЋС‡РµР№!</div>
       </div>
       <div id="deepgram-section" style="display:none;margin-top:6px">
-        <div class="pf"><label><span class="d2" id="pd-deepgram"></span>Deepgram Key<a onclick="H.openUrl('https://console.deepgram.com')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepgram" placeholder="deepgram key…"/><button class="psv" id="pb-deepgram" onclick="psvk('deepgram','pi-deepgram','pb-deepgram','pd-deepgram')">Save</button></div></div>
-        <div style="font-size:9px;color:var(--t3)">Free $200 credit · multi-language · very accurate</div>
+        <div class="pf"><label><span class="d2" id="pd-deepgram"></span>Deepgram Key<a onclick="H.openUrl('https://console.deepgram.com')">Get free в†—</a></label><div class="pr"><input class="pi" type="password" id="pi-deepgram" placeholder="deepgram keyвЂ¦"/><button class="psv" id="pb-deepgram" onclick="psvk('deepgram','pi-deepgram','pb-deepgram','pd-deepgram')">Save</button></div></div>
+        <div style="font-size:9px;color:var(--t3)">Free $200 credit В· multi-language В· very accurate</div>
       </div>
-      <button class="mic-test-btn" onclick="testMic()">🎙 Test microphone</button>
+      <button class="mic-test-btn" onclick="testMic()">рџЋ™ Test microphone</button>
       <div class="mic-st" id="mic-st"></div>
 
       <!-- Wake Word Calibration -->
       <div style="margin-top:14px;padding:10px;background:var(--bg3);border:1px solid var(--b1);border-radius:8px">
-        <div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:600">🎯 Wake Word Calibration</div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:600">рџЋЇ Wake Word Calibration</div>
         <div class="trow" style="padding:6px 0">
           <div class="tinfo">Strict mode<small>Only fire when "Horizon" is at the start. Blocks mid-sentence triggers (e.g. phone calls).</small></div>
           <button class="sw" id="sw-wake-strict" onclick="toggleWakeStrict()"></button>
@@ -554,27 +557,27 @@ textarea::placeholder{color:var(--t3)}
                  style="width:100%;accent-color:var(--acc);cursor:pointer"
                  oninput="setWakeSens(this.value)" />
           <div style="font-size:9px;color:var(--t3);margin-top:3px;display:flex;justify-content:space-between">
-            <span>← more sensitive</span><span>quieter env / fewer FPs →</span>
+            <span>в†ђ more sensitive</span><span>quieter env / fewer FPs в†’</span>
           </div>
         </div>
       </div>
 
       <div class="info-box" style="margin-top:10px">
-        <strong>⚠️ Почему Web Speech API не используется:</strong><br>
-        Google заблокировал его в Electron — бросает "network error". Это известный баг с 2020 года.<br><br>
-        <strong>✅ Как работает Horizon v5:</strong><br>
-        1. Нажми <strong>🌅 Wake</strong> → Horizon начинает слушать (каждые 2 сек)<br>
-        2. Скажи <strong>"Горизонт"</strong>, <strong>"Хорайзон"</strong>, <strong>"Horizon"</strong><br>
-        3. Horizon транскрибирует через <strong>Groq Whisper</strong> (бесплатно!)<br>
-        4. Распознаёт имя → отвечает → <strong>сразу пишет в поле</strong> что ты говоришь<br>
-        5. Говори команду → она отправляется автоматически<br><br>
-        <strong style="color:var(--red)">Нужен Groq ключ</strong> для wake word + голоса. Бесплатно: console.groq.com
+        <strong>вљ пёЏ РџРѕС‡РµРјСѓ Web Speech API РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ:</strong><br>
+        Google Р·Р°Р±Р»РѕРєРёСЂРѕРІР°Р» РµРіРѕ РІ Electron вЂ” Р±СЂРѕСЃР°РµС‚ "network error". Р­С‚Рѕ РёР·РІРµСЃС‚РЅС‹Р№ Р±Р°Рі СЃ 2020 РіРѕРґР°.<br><br>
+        <strong>вњ… РљР°Рє СЂР°Р±РѕС‚Р°РµС‚ Horizon v5:</strong><br>
+        1. РќР°Р¶РјРё <strong>рџЊ… Wake</strong> в†’ Horizon РЅР°С‡РёРЅР°РµС‚ СЃР»СѓС€Р°С‚СЊ (РєР°Р¶РґС‹Рµ 2 СЃРµРє)<br>
+        2. РЎРєР°Р¶Рё <strong>"Р“РѕСЂРёР·РѕРЅС‚"</strong>, <strong>"РҐРѕСЂР°Р№Р·РѕРЅ"</strong>, <strong>"Horizon"</strong><br>
+        3. Horizon С‚СЂР°РЅСЃРєСЂРёР±РёСЂСѓРµС‚ С‡РµСЂРµР· <strong>Groq Whisper</strong> (Р±РµСЃРїР»Р°С‚РЅРѕ!)<br>
+        4. Р Р°СЃРїРѕР·РЅР°С‘С‚ РёРјСЏ в†’ РѕС‚РІРµС‡Р°РµС‚ в†’ <strong>СЃСЂР°Р·Сѓ РїРёС€РµС‚ РІ РїРѕР»Рµ</strong> С‡С‚Рѕ С‚С‹ РіРѕРІРѕСЂРёС€СЊ<br>
+        5. Р“РѕРІРѕСЂРё РєРѕРјР°РЅРґСѓ в†’ РѕРЅР° РѕС‚РїСЂР°РІР»СЏРµС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё<br><br>
+        <strong style="color:var(--red)">РќСѓР¶РµРЅ Groq РєР»СЋС‡</strong> РґР»СЏ wake word + РіРѕР»РѕСЃР°. Р‘РµСЃРїР»Р°С‚РЅРѕ: console.groq.com
       </div>
     </div>
 
     <!-- Features -->
     <div class="ps">
-      <div class="psl">⚡ Features</div>
+      <div class="psl">вљЎ Features</div>
       <div class="trow"><div class="tinfo">Voice Response (TTS)<small>Horizon speaks answers aloud</small></div><button class="sw on" id="sw-tts" onclick="togSw('tts','sw-tts')"></button></div>
       <div class="trow"><div class="tinfo">Screen AI<small>Horizon can see your screen</small></div><button class="sw on" id="sw-eye" onclick="togSw('screenWatcher','sw-eye')"></button></div>
       <div class="trow"><div class="tinfo">Ambient Mode<small>AI proactively suggests help based on screen</small></div><button class="sw" id="sw-ambient" onclick="toggleAmbient()"></button></div>
@@ -584,45 +587,45 @@ textarea::placeholder{color:var(--t3)}
 
     <!-- Google OAuth -->
     <div class="ps">
-      <div class="psl">🔐 Google OAuth (Gmail & Calendar)</div>
-      <div class="pf"><label>Client ID <a onclick="H.openUrl('https://console.cloud.google.com/apis/credentials')" style="color:var(--acc);font-size:10px;cursor:pointer">Get from Google Cloud ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-gcid" placeholder="xxxx.apps.googleusercontent.com"/></div></div>
+      <div class="psl">рџ”ђ Google OAuth (Gmail & Calendar)</div>
+      <div class="pf"><label>Client ID <a onclick="H.openUrl('https://console.cloud.google.com/apis/credentials')" style="color:var(--acc);font-size:10px;cursor:pointer">Get from Google Cloud в†—</a></label><div class="pr"><input class="pi" type="text" id="pi-gcid" placeholder="xxxx.apps.googleusercontent.com"/></div></div>
       <div class="pf"><label>Client Secret</label><div class="pr"><input class="pi" type="password" id="pi-gcs" placeholder="GOCSPX-..."/></div></div>
-      <button class="mic-test-btn" id="btn-google-auth" onclick="connectGoogle()" style="border-color:rgba(52,211,153,.3);color:var(--green)">🔗 Connect Google Account</button>
+      <button class="mic-test-btn" id="btn-google-auth" onclick="connectGoogle()" style="border-color:rgba(52,211,153,.3);color:var(--green)">рџ”— Connect Google Account</button>
       <div class="mic-st" id="google-auth-status"></div>
     </div>
 
     <!-- Plugins -->
     <div class="ps">
-      <div class="psl">🧩 Plugins</div>
+      <div class="psl">рџ§© Plugins</div>
       <div id="plugin-list" style="margin-bottom:8px"></div>
-      <button class="mic-test-btn" onclick="closePanel();openStore()" style="border-color:rgba(108,140,255,.3);color:var(--acc)">🏪 Open Marketplace</button>
+      <button class="mic-test-btn" onclick="closePanel();openStore()" style="border-color:rgba(108,140,255,.3);color:var(--acc)">рџЏЄ Open Marketplace</button>
     </div>
 
     <!-- Data -->
     <div class="ps">
-      <div class="psl">🗑 Data</div>
-      <button class="dbtn" onclick="clearHist()">🗑 Clear chat history</button>
-      <button class="dbtn" onclick="clearKeys()">⚠️ Delete all API keys</button>
+      <div class="psl">рџ—‘ Data</div>
+      <button class="dbtn" onclick="clearHist()">рџ—‘ Clear chat history</button>
+      <button class="dbtn" onclick="clearKeys()">вљ пёЏ Delete all API keys</button>
     </div>
 
     <!-- Open-source footer -->
     <div class="os-footer">
       <div class="os-footer-row">
         <span>Horizon Genesis</span>
-        <span class="os-badge">MIT · Open Source</span>
+        <span class="os-badge">MIT В· Open Source</span>
       </div>
       <div class="os-links">
-        <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis')">GitHub ↗</a>
-        <a onclick="H.openUrl('https://horizonaai.dev')">Website ↗</a>
-        <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis/issues')">Report issue ↗</a>
+        <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis')">GitHub в†—</a>
+        <a onclick="H.openUrl('https://horizonaai.dev')">Website в†—</a>
+        <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis/issues')">Report issue в†—</a>
       </div>
-      <div class="os-ver">v1.0.0 · BYOK · Local-first · Built by Ernest Kostevich</div>
+      <div class="os-ver">v1.0.0 В· BYOK В· Local-first В· Built by Ernest Kostevich</div>
     </div>
 
   </div>
 </div>
 
-<!-- ═══════════ TITLE BAR ═══════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ TITLE BAR в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="tb">
   <div class="tb-l">
     <div class="logo">H</div>
@@ -637,20 +640,20 @@ textarea::placeholder{color:var(--t3)}
       <button class="focus-timer-btn" id="focus-toggle" onclick="toggleFocusTimer()">||</button>
       <button class="focus-timer-btn" onclick="stopFocusTimer()">x</button>
     </div>
-    <button class="ic-btn hub" onclick="openHub()" title="Plugin Hub">🧩</button>
-    <button class="ic-btn wf" onclick="openWorkflows()" title="Workflows">⚡</button>
-    <button class="ic-btn store" onclick="openStore()" title="Marketplace">🏪</button>
-    <button class="ic-btn acct" id="acct-btn" onclick="openAccount()" title="Horizon account">👤</button>
-    <button class="ic-btn rec" onclick="openRecorder()" title="Screen Recorder">⏺</button>
-    <button class="ic-btn" onclick="openCmdPalette()" title="Ctrl+K">⌘</button>
-    <button class="ic-btn" onclick="openPanel()">⚙</button>
+    <button class="ic-btn hub" onclick="openHub()" title="Plugin Hub">рџ§©</button>
+    <button class="ic-btn wf" onclick="openWorkflows()" title="Workflows">вљЎ</button>
+    <button class="ic-btn store" onclick="openStore()" title="Marketplace">рџЏЄ</button>
+    <button class="ic-btn acct" id="acct-btn" onclick="openAccount()" title="Horizon account">рџ‘¤</button>
+    <button class="ic-btn rec" onclick="openRecorder()" title="Screen Recorder">вЏє</button>
+    <button class="ic-btn" onclick="openCmdPalette()" title="Ctrl+K">вЊ</button>
+    <button class="ic-btn" onclick="openPanel()">вљ™</button>
     <div style="width:6px"></div>
     <button class="wbtn wy" onclick="H.minimize()"></button>
     <button class="wbtn wr" onclick="H.hide()"></button>
   </div>
 </div>
 
-<!-- ═══════════ COMMAND PALETTE (Ctrl+K) ═══════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ COMMAND PALETTE (Ctrl+K) в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="cmd-palette" id="cmd-palette" onclick="if(event.target===this)closeCmdPalette()">
   <div class="cmd-box">
     <input class="cmd-input" id="cmd-input" placeholder="Type a command... (Esc to close)" oninput="filterCommands(this.value)" onkeydown="cmdKeyDown(event)"/>
@@ -658,12 +661,12 @@ textarea::placeholder{color:var(--t3)}
   </div>
 </div>
 
-<!-- ═════════ PLUGIN HUB PANEL ═════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ PLUGIN HUB PANEL в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="fpanel" id="hub-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>🧩 Plugin Hub</h2>
+    <h2>рџ§© Plugin Hub</h2>
     <div class="fph-r">
-      <button class="fph-x" onclick="closeHub()">✕</button>
+      <button class="fph-x" onclick="closeHub()">вњ•</button>
     </div>
   </div>
   <div class="ftabs">
@@ -674,12 +677,12 @@ textarea::placeholder{color:var(--t3)}
   <div class="fbody" id="hub-body"></div>
 </div>
 
-<!-- ═════════ MARKETPLACE STORE PANEL ═════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ MARKETPLACE STORE PANEL в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="fpanel" id="store-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>🏪 Marketplace</h2>
+    <h2>рџЏЄ Marketplace</h2>
     <div class="fph-r">
-      <button class="fph-x" onclick="closeStore()">✕</button>
+      <button class="fph-x" onclick="closeStore()">вњ•</button>
     </div>
   </div>
   <div class="ftabs">
@@ -690,12 +693,12 @@ textarea::placeholder{color:var(--t3)}
   <div class="fbody" id="store-body"></div>
 </div>
 
-<!-- ═════════ HORIZON ACCOUNT PANEL ═════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ HORIZON ACCOUNT PANEL в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="fpanel" id="acct-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>👤 Horizon Account</h2>
+    <h2>рџ‘¤ Horizon Account</h2>
     <div class="fph-r">
-      <button class="fph-x" onclick="closeAccount()">✕</button>
+      <button class="fph-x" onclick="closeAccount()">вњ•</button>
     </div>
   </div>
   <div class="ftabs" id="acct-tabs">
@@ -705,12 +708,12 @@ textarea::placeholder{color:var(--t3)}
   <div class="fbody" id="acct-body"></div>
 </div>
 
-<!-- ═════════ WORKFLOWS PANEL ═════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ WORKFLOWS PANEL в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="fpanel" id="wf-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>⚡ Workflows</h2>
+    <h2>вљЎ Workflows</h2>
     <div class="fph-r">
-      <button class="fph-x" onclick="closeWorkflows()">✕</button>
+      <button class="fph-x" onclick="closeWorkflows()">вњ•</button>
     </div>
   </div>
   <div class="ftabs">
@@ -721,32 +724,34 @@ textarea::placeholder{color:var(--t3)}
   <div class="fbody" id="wf-body"></div>
 </div>
 
-<!-- ═════════ SCREEN RECORDER PANEL ═════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ SCREEN RECORDER PANEL в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="fpanel" id="recorder-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>⏺ Screen Recorder + AI Narrator</h2>
+    <h2>вЏє Screen Recorder + AI Narrator</h2>
     <div class="fph-r">
-      <button class="fph-x" onclick="closeRecorder()">✕</button>
+      <button class="fph-x" onclick="closeRecorder()">вњ•</button>
     </div>
   </div>
   <div class="fbody" id="recorder-body"></div>
 </div>
 
-<!-- ═════════ WAKE BAR ═════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ WAKE BAR в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="wake-bar" id="wake-bar">
   <div class="wb-l">
     <div class="wb-dot"></div>
-    <span class="wb-txt" id="wb-txt">Слушаю «Горизонт»…</span>
+    <span class="wb-txt" id="wb-txt">РЎР»СѓС€Р°СЋ В«Р“РѕСЂРёР·РѕРЅС‚В»вЂ¦</span>
   </div>
   <div class="wb-lvl"><div class="wb-bar" id="wb-bar"></div></div>
 </div>
 
-<!-- ═══════════ PROVIDER BAR ═══════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ PROVIDER BAR в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="sb">
   <span class="pulse" id="pulse"></span>
-  <span class="stl" id="stl">Готов</span>
+  <span class="stl" id="stl">Р“РѕС‚РѕРІ</span>
   <div class="sp"></div>
   <button class="chip" id="pc-gemini"   onclick="setProv('gemini')">Gemini</button>
+  <button class="chip" id="pc-ollama"   onclick="setProv('ollama')">Ollama</button>
+  <button class="chip" id="pc-lmstudio" onclick="setProv('lmstudio')">LM Studio</button>
   <button class="chip" id="pc-groq"     onclick="setProv('groq')">Groq</button>
   <button class="chip" id="pc-deepseek" onclick="setProv('deepseek')">DeepSeek</button>
   <button class="chip" id="pc-mistral"  onclick="setProv('mistral')">Mistral</button>
@@ -757,66 +762,66 @@ textarea::placeholder{color:var(--t3)}
   <button class="chip" id="pc-perplexity" onclick="setProv('perplexity')">Perplexity</button>
   <button class="chip" id="pc-cohere"  onclick="setProv('cohere')">Cohere</button>
   <div class="sp"></div>
-  <button class="chip" id="tc-search" onclick="toggleSearch()">🔍</button>
-  <button class="chip on" id="tc-eye"  onclick="toggleEye()">👁 PC</button>
-  <button class="chip special" id="tc-wake" onclick="toggleWake()">🌅 Wake</button>
+  <button class="chip" id="tc-search" onclick="toggleSearch()">рџ”Ќ</button>
+  <button class="chip on" id="tc-eye"  onclick="toggleEye()">рџ‘Ѓ PC</button>
+  <button class="chip special" id="tc-wake" onclick="toggleWake()">рџЊ… Wake</button>
   <div class="sp"></div>
   <select class="chip" id="persona-select" onchange="setPersona(this.value)" style="background:var(--bg2);color:var(--acc);border-color:var(--b2);padding:3px 8px;font-size:10px;border-radius:25px;outline:none;cursor:pointer;font-family:var(--font);-webkit-app-region:no-drag">
-    <option value="jarvis">🤖 Jarvis</option>
-    <option value="friday">💙 Friday</option>
-    <option value="alfred">🎩 Alfred</option>
-    <option value="sage">🧙 Sage</option>
-    <option value="pixel">✨ Pixel</option>
+    <option value="jarvis">рџ¤– Jarvis</option>
+    <option value="friday">рџ’™ Friday</option>
+    <option value="alfred">рџЋ© Alfred</option>
+    <option value="sage">рџ§™ Sage</option>
+    <option value="pixel">вњЁ Pixel</option>
   </select>
 </div>
 
-<!-- ═══════════ MODES ═══════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ MODES в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="modes">
-  <button class="mt on" id="m-chat"    onclick="setMode('chat')">💬 Chat</button>
-  <button class="mt"    id="m-agent"   onclick="setMode('agent')">🤖 Agent</button>
-  <button class="mt"    id="m-vision"  onclick="setMode('vision')">👁 Vision</button>
-  <button class="mt"    id="m-code"    onclick="setMode('code')">💻 Code</button>
-  <button class="mt"    id="m-focus"   onclick="setMode('focus')">🎯 Focus</button>
-  <button class="mt"    id="m-plan"    onclick="setMode('plan')">📋 Plan</button>
-  <button class="mt"    id="m-coach"   onclick="setMode('coach')">🏆 Coach</button>
-  <button class="mt"    id="m-write"   onclick="setMode('write')">✍️ Write</button>
-  <button class="mt"    id="m-email"   onclick="setMode('email')">📧 Email</button>
-  <button class="mt"    id="m-search"  onclick="setMode('search')">🔍 Search</button>
-  <button class="mt"    id="m-translate" onclick="setMode('translate')">🌐 Translate</button>
-  <button class="mt"    id="m-roleplay" onclick="setMode('roleplay')">🎭 Roleplay</button>
+  <button class="mt on" id="m-chat"    onclick="setMode('chat')">рџ’¬ Chat</button>
+  <button class="mt"    id="m-agent"   onclick="setMode('agent')">рџ¤– Agent</button>
+  <button class="mt"    id="m-vision"  onclick="setMode('vision')">рџ‘Ѓ Vision</button>
+  <button class="mt"    id="m-code"    onclick="setMode('code')">рџ’» Code</button>
+  <button class="mt"    id="m-focus"   onclick="setMode('focus')">рџЋЇ Focus</button>
+  <button class="mt"    id="m-plan"    onclick="setMode('plan')">рџ“‹ Plan</button>
+  <button class="mt"    id="m-coach"   onclick="setMode('coach')">рџЏ† Coach</button>
+  <button class="mt"    id="m-write"   onclick="setMode('write')">вњЌпёЏ Write</button>
+  <button class="mt"    id="m-email"   onclick="setMode('email')">рџ“§ Email</button>
+  <button class="mt"    id="m-search"  onclick="setMode('search')">рџ”Ќ Search</button>
+  <button class="mt"    id="m-translate" onclick="setMode('translate')">рџЊђ Translate</button>
+  <button class="mt"    id="m-roleplay" onclick="setMode('roleplay')">рџЋ­ Roleplay</button>
 </div>
 
-<!-- ═══════════ MESSAGES ═══════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ MESSAGES в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="msgs" id="msgs"></div>
 
-<!-- ═══════════ INPUT ═══════════ -->
+<!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ INPUT в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
 <div class="inp-wrap">
   <div class="vb" id="vb">
     <div class="vdot"></div>
-    <span id="vtxt">Запись…</span>
+    <span id="vtxt">Р—Р°РїРёСЃСЊвЂ¦</span>
     <div class="mwrap"><div id="mbar"></div></div>
-    <span style="font-size:9px;color:var(--t3)">нажми 🎤 чтобы стоп</span>
+    <span style="font-size:9px;color:var(--t3)">РЅР°Р¶РјРё рџЋ¤ С‡С‚РѕР±С‹ СЃС‚РѕРї</span>
   </div>
   <div class="attach-preview" id="attach-preview"></div>
   <div class="irow">
     <input type="file" id="file-input" accept="image/*,.txt,.md,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.csv,.xml,.yaml,.yml,.sh,.sql,.zip,.pdf" multiple onchange="onFilesSelected(event)"/>
-    <button class="ibtn btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл или фото">📎</button>
+    <button class="ibtn btn-attach" onclick="document.getElementById('file-input').click()" title="РџСЂРёРєСЂРµРїРёС‚СЊ С„Р°Р№Р» РёР»Рё С„РѕС‚Рѕ">рџ“Ћ</button>
     <button class="ibtn btn-mic" id="btn-mic" onclick="toggleVoice()">
-      🎤<span class="mlbl">VOICE</span>
+      рџЋ¤<span class="mlbl">VOICE</span>
     </button>
-    <button class="ibtn btn-mic" id="btn-dictate" onmousedown="startDictate()" onmouseup="stopDictate()" onmouseleave="stopDictate()" ontouchstart="startDictate()" ontouchend="stopDictate()" title="Удерживай для диктовки">
-      ✋<span class="mlbl">HOLD</span>
+    <button class="ibtn btn-mic" id="btn-dictate" onmousedown="startDictate()" onmouseup="stopDictate()" onmouseleave="stopDictate()" ontouchstart="startDictate()" ontouchend="stopDictate()" title="РЈРґРµСЂР¶РёРІР°Р№ РґР»СЏ РґРёРєС‚РѕРІРєРё">
+      вњ‹<span class="mlbl">HOLD</span>
     </button>
-    <textarea id="inp" rows="1" placeholder="Спроси Хорайзон… или прикрепи 📎 файл/фото" onkeydown="kd(event)" oninput="ar(this)" style="-webkit-app-region:no-drag"></textarea>
-    <button class="ibtn btn-send" id="btn-send" onclick="sendMsg()">↑</button>
+    <textarea id="inp" rows="1" placeholder="РЎРїСЂРѕСЃРё РҐРѕСЂР°Р№Р·РѕРЅвЂ¦ РёР»Рё РїСЂРёРєСЂРµРїРё рџ“Ћ С„Р°Р№Р»/С„РѕС‚Рѕ" onkeydown="kd(event)" oninput="ar(this)" style="-webkit-app-region:no-drag"></textarea>
+    <button class="ibtn btn-send" id="btn-send" onclick="sendMsg()">в†‘</button>
   </div>
-  <div class="hint">Enter · Shift+Enter · 🎤 голос · ✋ диктовка · 📎 файл · 🌅 Wake</div>
+  <div class="hint">Enter В· Shift+Enter В· рџЋ¤ РіРѕР»РѕСЃ В· вњ‹ РґРёРєС‚РѕРІРєР° В· рџ“Ћ С„Р°Р№Р» В· рџЊ… Wake</div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // STATE
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let prov='gemini', mode='chat', lang='ru', userName='Ernest';
 let ttsOn=true, eyeOn=false, searchOn=false, wakeOn=false;
 let provider='gemini';
@@ -828,7 +833,7 @@ let isRecording=false, isProcessing=false;
 let audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 let history=[];
 
-// ═══ WAKE WORD ENGINE STATE ═══
+// в•ђв•ђв•ђ WAKE WORD ENGINE STATE в•ђв•ђв•ђ
 let wakeActive=false;
 let wakePhase='off';
 let wakeStream=null;
@@ -838,73 +843,73 @@ let wakeLoopTimer=null;
 let wakeDebounce=false;
 let cmdRec=null;
 
-// ═══ ECHO DETECTION — prevents wake word from triggering on Horizon's own voice ═══
+// в•ђв•ђв•ђ ECHO DETECTION вЂ” prevents wake word from triggering on Horizon's own voice в•ђв•ђв•ђ
 let isSpeaking = false;  // true while TTS is playing
 let speakEndTime = 0;    // timestamp when TTS finished
 const ECHO_COOLDOWN = 1500; // ignore mic for 1.5s after TTS ends
 
-// ═══ AMBIENT MODE STATE ═══
+// в•ђв•ђв•ђ AMBIENT MODE STATE в•ђв•ђв•ђ
 let ambientOn = false;
 let ambientInterval = null;
 const AMBIENT_INTERVAL_MS = 45000; // check every 45 sec
 
-// ═══ SMART NOTIFICATIONS STATE ═══  
+// в•ђв•ђв•ђ SMART NOTIFICATIONS STATE в•ђв•ђв•ђ  
 let notificationsOn = false;
 let dailyBriefingDone = false;
 let notifCheckInterval = null;
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // TRANSLATIONS
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const TX={
   ru:{
-    ready:'Готов',thinking:'Думаю…',searching:'Ищу…',recording:'Запись…',processing:'Обрабатываю…',
-    opening:'Открываю',
-    hello:'Привет! Я Хорайзон ◈',
-    sub:'Персональный AI-агент для ПК.\nВключи Wake Mode и скажи «Горизонт», или напечатай запрос.',
-    wakeIdle:'Слушаю «Горизонт» / «Хорайзон»…',
-    wakeListening:'Записываю… (скажи «Горизонт»)',
-    wakeTranscribing:'Распознаю…',
-    wakeCommand:'Слушаю команду…',
-    chips:['Что ты умеешь?','Открой YouTube','Открой папку Game на D','Что запущено?','Помоги с кодом','Переведи текст на английский','Напиши письмо','Планы на день']
+    ready:'Р“РѕС‚РѕРІ',thinking:'Р”СѓРјР°СЋвЂ¦',searching:'РС‰СѓвЂ¦',recording:'Р—Р°РїРёСЃСЊвЂ¦',processing:'РћР±СЂР°Р±Р°С‚С‹РІР°СЋвЂ¦',
+    opening:'РћС‚РєСЂС‹РІР°СЋ',
+    hello:'РџСЂРёРІРµС‚! РЇ РҐРѕСЂР°Р№Р·РѕРЅ в—€',
+    sub:'РџРµСЂСЃРѕРЅР°Р»СЊРЅС‹Р№ AI-Р°РіРµРЅС‚ РґР»СЏ РџРљ.\nР’РєР»СЋС‡Рё Wake Mode Рё СЃРєР°Р¶Рё В«Р“РѕСЂРёР·РѕРЅС‚В», РёР»Рё РЅР°РїРµС‡Р°С‚Р°Р№ Р·Р°РїСЂРѕСЃ.',
+    wakeIdle:'РЎР»СѓС€Р°СЋ В«Р“РѕСЂРёР·РѕРЅС‚В» / В«РҐРѕСЂР°Р№Р·РѕРЅВ»вЂ¦',
+    wakeListening:'Р—Р°РїРёСЃС‹РІР°СЋвЂ¦ (СЃРєР°Р¶Рё В«Р“РѕСЂРёР·РѕРЅС‚В»)',
+    wakeTranscribing:'Р Р°СЃРїРѕР·РЅР°СЋвЂ¦',
+    wakeCommand:'РЎР»СѓС€Р°СЋ РєРѕРјР°РЅРґСѓвЂ¦',
+    chips:['Р§С‚Рѕ С‚С‹ СѓРјРµРµС€СЊ?','РћС‚РєСЂРѕР№ YouTube','РћС‚РєСЂРѕР№ РїР°РїРєСѓ Game РЅР° D','Р§С‚Рѕ Р·Р°РїСѓС‰РµРЅРѕ?','РџРѕРјРѕРіРё СЃ РєРѕРґРѕРј','РџРµСЂРµРІРµРґРё С‚РµРєСЃС‚ РЅР° Р°РЅРіР»РёР№СЃРєРёР№','РќР°РїРёС€Рё РїРёСЃСЊРјРѕ','РџР»Р°РЅС‹ РЅР° РґРµРЅСЊ']
   },
   en:{
-    ready:'Ready',thinking:'Thinking…',searching:'Searching…',recording:'Recording…',processing:'Processing…',
+    ready:'Ready',thinking:'ThinkingвЂ¦',searching:'SearchingвЂ¦',recording:'RecordingвЂ¦',processing:'ProcessingвЂ¦',
     opening:'Opening',
-    hello:"Hello! I'm Horizon ◈",
+    hello:"Hello! I'm Horizon в—€",
     sub:"Your personal desktop AI agent.\nEnable Wake Mode and say 'Horizon', or type a message.",
-    wakeIdle:'Listening for "Horizon"…',
-    wakeListening:'Recording… (say "Horizon")',
-    wakeTranscribing:'Transcribing…',
-    wakeCommand:'Listening for command…',
+    wakeIdle:'Listening for "Horizon"вЂ¦',
+    wakeListening:'RecordingвЂ¦ (say "Horizon")',
+    wakeTranscribing:'TranscribingвЂ¦',
+    wakeCommand:'Listening for commandвЂ¦',
     chips:['What can you do?','Open YouTube','Open folder Documents','Take screenshot','Help me code','Translate to Russian','Write an email','Plan my day']
   }
 };
 const t=k=>TX[lang]?.[k]||TX.en[k]||k;
 
-// ═══════════════════════════════════════════════════════════════
-// WAKE WORD — ULTRA-STRICT DETECTION
-// Only triggers on exact "Horizon"/"Горизонт"/"Джарвис" words
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// WAKE WORD вЂ” ULTRA-STRICT DETECTION
+// Only triggers on exact "Horizon"/"Р“РѕСЂРёР·РѕРЅС‚"/"Р”Р¶Р°СЂРІРёСЃ" words
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
-// Wake words — matched as whole words anywhere in the transcription.
-// Includes common Whisper mis-transcriptions of "Горизонт" / "Horizon".
+// Wake words вЂ” matched as whole words anywhere in the transcription.
+// Includes common Whisper mis-transcriptions of "Р“РѕСЂРёР·РѕРЅС‚" / "Horizon".
 const WAKE_EXACT = new Set([
-  'горизонт','горизон','харизон','харизонт','хорайзон','хоризон','гаризонт','горизонте','горизонта',
-  'horizon','horizan','horison','jarvis','джарвис','джарвиса',
-  'hey horizon','эй горизонт','окей горизонт','окей хорайзон','слышь горизонт','hello horizon','ok horizon'
+  'РіРѕСЂРёР·РѕРЅС‚','РіРѕСЂРёР·РѕРЅ','С…Р°СЂРёР·РѕРЅ','С…Р°СЂРёР·РѕРЅС‚','С…РѕСЂР°Р№Р·РѕРЅ','С…РѕСЂРёР·РѕРЅ','РіР°СЂРёР·РѕРЅС‚','РіРѕСЂРёР·РѕРЅС‚Рµ','РіРѕСЂРёР·РѕРЅС‚Р°',
+  'horizon','horizan','horison','jarvis','РґР¶Р°СЂРІРёСЃ','РґР¶Р°СЂРІРёСЃР°',
+  'hey horizon','СЌР№ РіРѕСЂРёР·РѕРЅС‚','РѕРєРµР№ РіРѕСЂРёР·РѕРЅС‚','РѕРєРµР№ С…РѕСЂР°Р№Р·РѕРЅ','СЃР»С‹С€СЊ РіРѕСЂРёР·РѕРЅС‚','hello horizon','ok horizon'
 ]);
 
 // Tunable wake-word knobs persisted in localStorage so users can calibrate
 // for their environment without editing code:
-//   • wake.strictMode (default ON) — only fire when the wake word is the
+//   вЂў wake.strictMode (default ON) вЂ” only fire when the wake word is the
 //     entire utterance OR the first 1-2 words. Eliminates the common false
 //     positive where "Horizon" appears mid-sentence (e.g. talking on a phone
 //     nearby and saying "...did Horizon call?").
-//   • wake.volumeThreshold (default 18, range 5-50) — peak volume during the
+//   вЂў wake.volumeThreshold (default 18, range 5-50) вЂ” peak volume during the
 //     2.5s capture must exceed this to even attempt transcription. Higher =
 //     less sensitive (skips quiet background) but might miss soft "Horizon".
-//   • wake.confirmBeep (default OFF) — play a short tone after fire so the
+//   вЂў wake.confirmBeep (default OFF) вЂ” play a short tone after fire so the
 //     user knows it heard them.
 function wakeCfg(key, def) {
   try {
@@ -932,9 +937,9 @@ function activateHotWindow() {
 
 function isWakeWord(text){
   if(!text) return false;
-  // Clean text — strip punctuation, collapse spaces.
+  // Clean text вЂ” strip punctuation, collapse spaces.
   let lo = text.toLowerCase()
-    .replace(/[.,!?'"()[\]{}\-_:;…«»“”‘’]/g, '')
+    .replace(/[.,!?'"()[\]{}\-_:;вЂ¦В«В»вЂњвЂќвЂвЂ™]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -946,12 +951,12 @@ function isWakeWord(text){
   // REJECT Whisper artifacts in brackets like [music] or (applause).
   if(/^\[.*\]$/.test(lo) || /^\(.*\)$/.test(lo)) return false;
 
-  // REJECT very long transcriptions — a wake chunk is only 3s, anything this
+  // REJECT very long transcriptions вЂ” a wake chunk is only 3s, anything this
   // long is almost certainly hallucinated subtitles or a spurious decode.
   if(lo.length > 80) return false;
 
   // REJECT common Whisper hallucination artifacts when they are the ONLY content.
-  const HALLUCINATIONS = /^(thanks|thank you|bye|okay|ok|oh|ah|um|uh|hmm|hm|yeah|yes|no|so|well|the|a|you|i|it|is|to|and|спасибо|пока|ну|да|нет|ой|ах|эм|угу|ага|хм|ладно|вот|это|та|не|то|субтитры|подпис\w*|редактор|перевод\w*|продолж\w*|subscribe|like|comment|music|playing|silence|noise|applause|laughter|ммм|ээ|аа)$/i;
+  const HALLUCINATIONS = /^(thanks|thank you|bye|okay|ok|oh|ah|um|uh|hmm|hm|yeah|yes|no|so|well|the|a|you|i|it|is|to|and|СЃРїР°СЃРёР±Рѕ|РїРѕРєР°|РЅСѓ|РґР°|РЅРµС‚|РѕР№|Р°С…|СЌРј|СѓРіСѓ|Р°РіР°|С…Рј|Р»Р°РґРЅРѕ|РІРѕС‚|СЌС‚Рѕ|С‚Р°|РЅРµ|С‚Рѕ|СЃСѓР±С‚РёС‚СЂС‹|РїРѕРґРїРёСЃ\w*|СЂРµРґР°РєС‚РѕСЂ|РїРµСЂРµРІРѕРґ\w*|РїСЂРѕРґРѕР»Р¶\w*|subscribe|like|comment|music|playing|silence|noise|applause|laughter|РјРјРј|СЌСЌ|Р°Р°)$/i;
   if(HALLUCINATIONS.test(lo)) return false;
 
   const words = lo.split(' ').filter(Boolean);
@@ -959,11 +964,11 @@ function isWakeWord(text){
 
   // Strict mode (default): wake word must be the whole utterance OR the
   // very first word, optionally preceded by a single attention word
-  // ("hey", "ok", "okay", "эй", "окей", "слышь"). This blocks the most
-  // common false positives — "Horizon" used mid-sentence by people on
+  // ("hey", "ok", "okay", "СЌР№", "РѕРєРµР№", "СЃР»С‹С€СЊ"). This blocks the most
+  // common false positives вЂ” "Horizon" used mid-sentence by people on
   // phone calls or other ambient speech.
   if (strict) {
-    const ATTN = new Set(['hey','ok','okay','hello','эй','окей','окэй','слышь','эй,','слушай']);
+    const ATTN = new Set(['hey','ok','okay','hello','СЌР№','РѕРєРµР№','РѕРєСЌР№','СЃР»С‹С€СЊ','СЌР№,','СЃР»СѓС€Р°Р№']);
     for (const w of WAKE_EXACT) {
       if (w.includes(' ')) {
         // Phrase wake words like "hey horizon" only match at the very start.
@@ -977,7 +982,7 @@ function isWakeWord(text){
       }
     }
   } else {
-    // Lenient mode — original behaviour. Whole-word match anywhere.
+    // Lenient mode вЂ” original behaviour. Whole-word match anywhere.
     for(const w of WAKE_EXACT) {
       if(w.includes(' ')) {
         if(lo === w || lo.startsWith(w + ' ') || lo.endsWith(' ' + w) || lo.includes(' ' + w + ' ')) return true;
@@ -987,7 +992,7 @@ function isWakeWord(text){
     }
   }
 
-  // Hot window — during the 15s after a wake fires, accept any meaningful
+  // Hot window вЂ” during the 15s after a wake fires, accept any meaningful
   // speech (the user is continuing the conversation).
   if(hotWindowActive && lo.length > 3 && words.length >= 1) {
     hotWindowActive = false;
@@ -998,11 +1003,11 @@ function isWakeWord(text){
   return false;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// WAKE WORD ENGINE — MediaRecorder + Groq Whisper
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// WAKE WORD ENGINE вЂ” MediaRecorder + Groq Whisper
 // This is the ONLY method that reliably works in Electron.
-// Web Speech API throws "network error" in Electron — confirmed bug.
-// ═══════════════════════════════════════════════════════════════
+// Web Speech API throws "network error" in Electron вЂ” confirmed bug.
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function startWakeMode(){
   if(wakeActive) return;
 
@@ -1010,8 +1015,8 @@ async function startWakeMode(){
   const hasGroq = await H.hasKey('groq');
   if(!hasGroq){
     addMsg('bot', lang==='ru'
-      ? '⚠️ **Wake Word требует Groq ключ** для транскрипции голоса.\n\nПочему: Google Web Speech API сломан в Electron (network error — известный баг).\n\n✅ Решение: Добавь бесплатный Groq ключ в ⚙️ Настройки → AI Providers → Groq\n\nПолучить бесплатно: console.groq.com'
-      : '⚠️ **Wake Word requires a Groq key** for voice transcription.\n\nWhy: Google Web Speech API is broken in Electron (network error — known bug).\n\n✅ Fix: Add free Groq key in ⚙️ Settings → AI Providers → Groq\n\nGet free: console.groq.com');
+      ? 'вљ пёЏ **Wake Word С‚СЂРµР±СѓРµС‚ Groq РєР»СЋС‡** РґР»СЏ С‚СЂР°РЅСЃРєСЂРёРїС†РёРё РіРѕР»РѕСЃР°.\n\nРџРѕС‡РµРјСѓ: Google Web Speech API СЃР»РѕРјР°РЅ РІ Electron (network error вЂ” РёР·РІРµСЃС‚РЅС‹Р№ Р±Р°Рі).\n\nвњ… Р РµС€РµРЅРёРµ: Р”РѕР±Р°РІСЊ Р±РµСЃРїР»Р°С‚РЅС‹Р№ Groq РєР»СЋС‡ РІ вљ™пёЏ РќР°СЃС‚СЂРѕР№РєРё в†’ AI Providers в†’ Groq\n\nРџРѕР»СѓС‡РёС‚СЊ Р±РµСЃРїР»Р°С‚РЅРѕ: console.groq.com'
+      : 'вљ пёЏ **Wake Word requires a Groq key** for voice transcription.\n\nWhy: Google Web Speech API is broken in Electron (network error вЂ” known bug).\n\nвњ… Fix: Add free Groq key in вљ™пёЏ Settings в†’ AI Providers в†’ Groq\n\nGet free: console.groq.com');
     wakeOn=false;
     document.getElementById('tc-wake').classList.remove('on','special');
     return;
@@ -1021,8 +1026,8 @@ async function startWakeMode(){
     wakeStream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
   } catch(e){
     addMsg('bot', lang==='ru'
-      ? `⚠️ Нет доступа к микрофону: ${e.message}`
-      : `⚠️ Mic access denied: ${e.message}`);
+      ? `вљ пёЏ РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РјРёРєСЂРѕС„РѕРЅСѓ: ${e.message}`
+      : `вљ пёЏ Mic access denied: ${e.message}`);
     wakeOn=false; return;
   }
 
@@ -1109,7 +1114,7 @@ function runWakeChunk(){
     const blob = new Blob(wakeChunks, {type: wakeRec.mimeType||'audio/webm'});
 
     // Skip if blob too small OR peak volume too low (just background noise).
-    // Threshold default 18; user-tunable via Settings → Voice → Sensitivity
+    // Threshold default 18; user-tunable via Settings в†’ Voice в†’ Sensitivity
     // (range 5-50). Lower = more sensitive (catches quiet "Horizon" but
     // more false positives), higher = stricter.
     const volThreshold = wakeCfg('volumeThreshold', 18);
@@ -1177,8 +1182,8 @@ async function fireWake(){
   wakePhase='command';
   setWakeBar('heard');
 
-  // Optional confirm beep — short cue so user knows we heard them. Off by
-  // default; toggle via Settings → Voice → Confirm beep.
+  // Optional confirm beep вЂ” short cue so user knows we heard them. Off by
+  // default; toggle via Settings в†’ Voice в†’ Confirm beep.
   if (wakeCfg('confirmBeep', false)) {
     try {
       const ctx = wakeAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -1199,13 +1204,13 @@ async function fireWake(){
   try {
     reply = await H.getWakeResponse(currentPersona, lang);
   } catch(_) {
-    const replies_ru=['К вашим услугам, Сэр.','Слушаю, Сэр.','Да, Сэр?','Готов, Сэр.'];
+    const replies_ru=['Рљ РІР°С€РёРј СѓСЃР»СѓРіР°Рј, РЎСЌСЂ.','РЎР»СѓС€Р°СЋ, РЎСЌСЂ.','Р”Р°, РЎСЌСЂ?','Р“РѕС‚РѕРІ, РЎСЌСЂ.'];
     const replies_en=['At your service, Sir.','Listening, Sir.','Yes, Sir?','Ready, Sir.'];
     const replies = lang==='ru' ? replies_ru : replies_en;
     reply = replies[Math.floor(Math.random()*replies.length)];
   }
 
-  addMsg('bot', `◈ ${reply}`);
+  addMsg('bot', `в—€ ${reply}`);
   speakAndThen(reply, ()=>{
     // After TTS, listen for command
     if(!wakeActive){ wakePhase='idle'; setWakeBar('idle'); return; }
@@ -1284,8 +1289,8 @@ function listenForCommand(){
       setTimeout(sendMsg, 100);
     } else {
       addMsg('bot', lang==='ru'
-        ? '◈ Не расслышал команду. Попробуй ещё — скажи «Горизонт» снова.'
-        : '◈ Didn\'t catch that. Say "Horizon" again.');
+        ? 'в—€ РќРµ СЂР°СЃСЃР»С‹С€Р°Р» РєРѕРјР°РЅРґСѓ. РџРѕРїСЂРѕР±СѓР№ РµС‰С‘ вЂ” СЃРєР°Р¶Рё В«Р“РѕСЂРёР·РѕРЅС‚В» СЃРЅРѕРІР°.'
+        : 'в—€ Didn\'t catch that. Say "Horizon" again.');
     }
 
     // Resume wake listening
@@ -1309,7 +1314,7 @@ function setWakeBar(state){
   else if(state==='listening'){ bar.classList.add('recording'); txt.textContent=t('wakeListening'); }
   else if(state==='transcribing'){ bar.classList.add('recording'); txt.textContent=t('wakeTranscribing'); }
   else if(state==='command'){ bar.classList.add('command'); txt.textContent=t('wakeCommand'); }
-  else if(state==='heard'){ bar.classList.add('heard'); txt.textContent='◈ Слышу тебя, Сэр…'; }
+  else if(state==='heard'){ bar.classList.add('heard'); txt.textContent='в—€ РЎР»С‹С€Сѓ С‚РµР±СЏ, РЎСЌСЂвЂ¦'; }
 }
 
 function toggleWake(){
@@ -1320,18 +1325,18 @@ function toggleWake(){
   if(wakeOn) startWakeMode(); else stopWakeMode();
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // MANUAL VOICE BUTTON (MediaRecorder + Groq Whisper)
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function testMic(){
   const st=document.getElementById('mic-st');
-  st.textContent='Тестирую…'; st.style.color='var(--t3)';
+  st.textContent='РўРµСЃС‚РёСЂСѓСЋвЂ¦'; st.style.color='var(--t3)';
   try{
     const s=await navigator.mediaDevices.getUserMedia({audio:true});
     s.getTracks().forEach(t=>t.stop());
-    st.textContent='✅ Микрофон работает!'; st.style.color='var(--green)';
+    st.textContent='вњ… РњРёРєСЂРѕС„РѕРЅ СЂР°Р±РѕС‚Р°РµС‚!'; st.style.color='var(--green)';
   }catch(e){
-    st.textContent='❌ '+e.message; st.style.color='var(--red)';
+    st.textContent='вќЊ '+e.message; st.style.color='var(--red)';
   }
 }
 
@@ -1364,18 +1369,18 @@ async function startRec(){
     mediaRec.onstop=()=>{audioStream.getTracks().forEach(t=>t.stop());stopLvl();processAudio(mt);};
     mediaRec.start();isRecording=true;
     const btn=document.getElementById('btn-mic');
-    btn.classList.add('rec');btn.innerHTML='⏹<span class="mlbl">STOP</span>';
+    btn.classList.add('rec');btn.innerHTML='вЏ№<span class="mlbl">STOP</span>';
     document.getElementById('vb').classList.add('show');
     document.getElementById('vtxt').textContent=t('recording');
     setStatus(t('recording'),true);startLvl(stream);
-  }catch(e){addMsg('bot',`⚠️ Mic: ${e.message}`);}
+  }catch(e){addMsg('bot',`вљ пёЏ Mic: ${e.message}`);}
 }
 
 function stopRec(){
   if(mediaRec&&isRecording){
     mediaRec.stop();isRecording=false;isProcessing=true;
     const btn=document.getElementById('btn-mic');
-    btn.classList.remove('rec');btn.classList.add('proc');btn.innerHTML='⌛<span class="mlbl">…</span>';
+    btn.classList.remove('rec');btn.classList.add('proc');btn.innerHTML='вЊ›<span class="mlbl">вЂ¦</span>';
     document.getElementById('vtxt').textContent=t('processing');
     setStatus(t('processing'),true);
   }
@@ -1385,7 +1390,7 @@ async function processAudio(mimeType){
   const blob=new Blob(audioChunks,{type:mimeType});
   isProcessing=false;
   const btn=document.getElementById('btn-mic');
-  btn.classList.remove('proc');btn.innerHTML='🎤<span class="mlbl">VOICE</span>';
+  btn.classList.remove('proc');btn.innerHTML='рџЋ¤<span class="mlbl">VOICE</span>';
   document.getElementById('vb').classList.remove('show');
   setStatus(t('ready'));
 
@@ -1401,7 +1406,7 @@ async function processAudio(mimeType){
     const b64=reader.result.split(',')[1];
     const mime=mimeType.split(';')[0];
     const res=await H.transcribeAudio(b64,mime);
-    if(res.error){ addMsg('bot',`⚠️ ${res.error}`); }
+    if(res.error){ addMsg('bot',`вљ пёЏ ${res.error}`); }
     else if(res.text?.trim()){
       const inp=document.getElementById('inp');
       inp.value=res.text;ar(inp);
@@ -1411,10 +1416,10 @@ async function processAudio(mimeType){
   reader.readAsDataURL(blob);
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // HOLD-TO-DICTATE (jarvis feature)
 // Press and hold to record, release to transcribe and insert text
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let dictateStream = null;
 let dictateRec = null;
 let dictateChunks = [];
@@ -1443,13 +1448,13 @@ async function startDictate() {
     
     const btn = document.getElementById('btn-dictate');
     btn.classList.add('rec');
-    btn.innerHTML = '🔴<span class="mlbl">REC</span>';
+    btn.innerHTML = 'рџ”ґ<span class="mlbl">REC</span>';
     
     document.getElementById('vb').classList.add('show');
-    document.getElementById('vtxt').textContent = lang === 'ru' ? 'Диктую…' : 'Dictating…';
+    document.getElementById('vtxt').textContent = lang === 'ru' ? 'Р”РёРєС‚СѓСЋвЂ¦' : 'DictatingвЂ¦';
     startLvl(dictateStream);
   } catch (e) {
-    addMsg('bot', `⚠️ Mic: ${e.message}`);
+    addMsg('bot', `вљ пёЏ Mic: ${e.message}`);
   }
 }
 
@@ -1462,7 +1467,7 @@ function stopDictate() {
   const btn = document.getElementById('btn-dictate');
   btn.classList.remove('rec');
   btn.classList.add('proc');
-  btn.innerHTML = '⌛<span class="mlbl">…</span>';
+  btn.innerHTML = 'вЊ›<span class="mlbl">вЂ¦</span>';
   
   document.getElementById('vtxt').textContent = t('processing');
   stopLvl();
@@ -1471,7 +1476,7 @@ function stopDictate() {
 async function processDictation(mimeType) {
   const btn = document.getElementById('btn-dictate');
   btn.classList.remove('proc');
-  btn.innerHTML = '✋<span class="mlbl">HOLD</span>';
+  btn.innerHTML = 'вњ‹<span class="mlbl">HOLD</span>';
   document.getElementById('vb').classList.remove('show');
   
   const blob = new Blob(dictateChunks, { type: mimeType });
@@ -1484,7 +1489,7 @@ async function processDictation(mimeType) {
     const res = await H.transcribeAudio(b64, mime);
     
     if (res.error) {
-      addMsg('bot', `⚠️ ${res.error}`);
+      addMsg('bot', `вљ пёЏ ${res.error}`);
     } else if (res.text?.trim()) {
       // Insert at cursor position (append to existing text)
       const inp = document.getElementById('inp');
@@ -1500,9 +1505,9 @@ async function processDictation(mimeType) {
   reader.readAsDataURL(blob);
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TTS — multi-provider: system / elevenlabs / openai / kokoro
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// TTS вЂ” multi-provider: system / elevenlabs / openai / kokoro
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function playAudioB64(base64, mimeType, callback){
   try{
     const audio=new Audio(`data:${mimeType};base64,${base64}`);
@@ -1515,7 +1520,7 @@ function playAudioB64(base64, mimeType, callback){
 function systemTTS(text, callback){
   if(!window.speechSynthesis){ if(callback) setTimeout(callback,300); return; }
   window.speechSynthesis.cancel();
-  const clean=text.replace(/◈/g,'').trim();
+  const clean=text.replace(/в—€/g,'').trim();
   const u=new SpeechSynthesisUtterance(clean);
   u.lang=lang==='ru'?'ru-RU':'en-US'; u.rate=0.97; u.pitch=0.93;
   u.onend=()=>{ if(callback) setTimeout(callback,200); };
@@ -1532,7 +1537,7 @@ function systemTTS(text, callback){
 }
 
 async function kokoroTTS(text, callback){
-  // Kokoro — free local TTS via kokoro.js (loads from CDN when available)
+  // Kokoro вЂ” free local TTS via kokoro.js (loads from CDN when available)
   // Falls back to system TTS if not available
   if(typeof window.KokoroTTS !== 'undefined'){
     try{
@@ -1547,7 +1552,7 @@ async function kokoroTTS(text, callback){
 
 async function speakAndThen(text, callback){
   if(!ttsOn){ if(callback) setTimeout(callback,300); return; }
-  const clean = text.replace(/```[\s\S]*?```/g,'').replace(/◈|[#*`]/g,'').trim().slice(0,500);
+  const clean = text.replace(/```[\s\S]*?```/g,'').replace(/в—€|[#*`]/g,'').trim().slice(0,500);
   if(!clean){ if(callback) setTimeout(callback,100); return; }
   window.speechSynthesis?.cancel();
 
@@ -1586,101 +1591,101 @@ async function speakAndThen(text, callback){
 }
 function speak(text){ speakAndThen(text, null); }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // MODE SYSTEM PROMPTS
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const MODES={
-  agent:{ru:'Ты в режиме АГЕНТ. У тебя прямой доступ к ПК пользователя. Открывай приложения, папки, делай скриншоты, анализируй экран, выполняй команды. Если не можешь что-то — объясни как сделать вручную. Говори "Сэр" как Джарвис.',en:'AGENT mode. Direct PC access — open apps, folders, screenshots, run commands. Say "Sir" like JARVIS.'},
-  email:{ru:'Режим EMAIL. Пиши профессиональные письма. Структура: тема, приветствие, суть, подпись. Стиль — деловой но дружелюбный.',en:'EMAIL mode. Write professional emails. Structure: subject, greeting, body, signature. Style: businesslike but friendly.'},
-  search:{ru:'Режим ПОИСК. Ищи информацию, отвечай с источниками. Будь точным и актуальным.',en:'SEARCH mode. Find information, answer with sources. Be accurate and current.'},
-  translate:{ru:'Режим ПЕРЕВОД. Переводи тексты точно и естественно. Сохраняй стиль и тон оригинала.',en:'TRANSLATE mode. Translate accurately and naturally. Preserve style and tone.'},
-  roleplay:{ru:'Режим РОЛЕВАЯ ИГРА. Ты можешь играть персонажей, создавать истории, RPG-сценарии. Будь творческим!',en:'ROLEPLAY mode. You can play characters, create stories, RPG scenarios. Be creative!'},
-  vision:{ru:'Режим VISION. Анализируй экран. Для игр — тактические советы. Для работы — помощь.',en:'VISION mode. Analyze screen. For games: tactical advice. For work: help optimize.'},
-  code:{ru:'Режим КОД. Пиши чистый рабочий код с пояснениями. Лучшие практики.',en:'CODE mode. Write clean, working code with explanations. Best practices.'},
-  focus:{ru:'Режим ФОКУС. Краткие чёткие ответы. Помогай с продуктивностью.',en:'FOCUS mode. Short, clear answers. Help with deep work.'},
-  plan:{ru:'Режим ПЛАН. Разбивай цели на шаги. Используй списки.',en:'PLAN mode. Break goals into actionable steps. Use structure.'},
-  coach:{ru:'Режим КОУЧ. Мотивируй, поддерживай. Помогай с привычками и целями.',en:'COACH mode. Motivate, support. Help build habits and goals.'},
-  write:{ru:'Режим НАПИСАНИЕ. Помогай писать тексты: посты, статьи, письма.',en:'WRITE mode. Help craft posts, articles, emails, scripts.'},
-  email:{ru:'Режим EMAIL. Пиши профессиональные письма. Структура: Кому, Тема, приветствие, суть, подпись. Предлагай несколько вариантов тона.',en:'EMAIL mode. Write professional emails with subject, greeting, body, sign-off. Offer tone variants.'},
-  search:{ru:'Режим ПОИСК. Ищи информацию, структурируй ответ, давай источники.',en:'SEARCH mode. Find information, structure results, provide sources.'},
-  translate:{ru:'Режим ПЕРЕВОД. Переводи точно и естественно. Сохраняй стиль. Предлагай альтернативы если нужно.',en:'TRANSLATE mode. Translate accurately and naturally. Preserve style and tone. Offer alternatives.'},
-  roleplay:{ru:'Режим РОЛЕВАЯ ИГРА. Играй персонажей, создавай истории, RPG. Будь творческим и погружённым.',en:'ROLEPLAY mode. Play characters, create stories, RPG scenarios. Be creative and immersive.'}
+  agent:{ru:'РўС‹ РІ СЂРµР¶РёРјРµ РђР“Р•РќРў. РЈ С‚РµР±СЏ РїСЂСЏРјРѕР№ РґРѕСЃС‚СѓРї Рє РџРљ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ. РћС‚РєСЂС‹РІР°Р№ РїСЂРёР»РѕР¶РµРЅРёСЏ, РїР°РїРєРё, РґРµР»Р°Р№ СЃРєСЂРёРЅС€РѕС‚С‹, Р°РЅР°Р»РёР·РёСЂСѓР№ СЌРєСЂР°РЅ, РІС‹РїРѕР»РЅСЏР№ РєРѕРјР°РЅРґС‹. Р•СЃР»Рё РЅРµ РјРѕР¶РµС€СЊ С‡С‚Рѕ-С‚Рѕ вЂ” РѕР±СЉСЏСЃРЅРё РєР°Рє СЃРґРµР»Р°С‚СЊ РІСЂСѓС‡РЅСѓСЋ. Р“РѕРІРѕСЂРё "РЎСЌСЂ" РєР°Рє Р”Р¶Р°СЂРІРёСЃ.',en:'AGENT mode. Direct PC access вЂ” open apps, folders, screenshots, run commands. Say "Sir" like JARVIS.'},
+  email:{ru:'Р РµР¶РёРј EMAIL. РџРёС€Рё РїСЂРѕС„РµСЃСЃРёРѕРЅР°Р»СЊРЅС‹Рµ РїРёСЃСЊРјР°. РЎС‚СЂСѓРєС‚СѓСЂР°: С‚РµРјР°, РїСЂРёРІРµС‚СЃС‚РІРёРµ, СЃСѓС‚СЊ, РїРѕРґРїРёСЃСЊ. РЎС‚РёР»СЊ вЂ” РґРµР»РѕРІРѕР№ РЅРѕ РґСЂСѓР¶РµР»СЋР±РЅС‹Р№.',en:'EMAIL mode. Write professional emails. Structure: subject, greeting, body, signature. Style: businesslike but friendly.'},
+  search:{ru:'Р РµР¶РёРј РџРћРРЎРљ. РС‰Рё РёРЅС„РѕСЂРјР°С†РёСЋ, РѕС‚РІРµС‡Р°Р№ СЃ РёСЃС‚РѕС‡РЅРёРєР°РјРё. Р‘СѓРґСЊ С‚РѕС‡РЅС‹Рј Рё Р°РєС‚СѓР°Р»СЊРЅС‹Рј.',en:'SEARCH mode. Find information, answer with sources. Be accurate and current.'},
+  translate:{ru:'Р РµР¶РёРј РџР•Р Р•Р’РћР”. РџРµСЂРµРІРѕРґРё С‚РµРєСЃС‚С‹ С‚РѕС‡РЅРѕ Рё РµСЃС‚РµСЃС‚РІРµРЅРЅРѕ. РЎРѕС…СЂР°РЅСЏР№ СЃС‚РёР»СЊ Рё С‚РѕРЅ РѕСЂРёРіРёРЅР°Р»Р°.',en:'TRANSLATE mode. Translate accurately and naturally. Preserve style and tone.'},
+  roleplay:{ru:'Р РµР¶РёРј Р РћР›Р•Р’РђРЇ РР“Р Рђ. РўС‹ РјРѕР¶РµС€СЊ РёРіСЂР°С‚СЊ РїРµСЂСЃРѕРЅР°Р¶РµР№, СЃРѕР·РґР°РІР°С‚СЊ РёСЃС‚РѕСЂРёРё, RPG-СЃС†РµРЅР°СЂРёРё. Р‘СѓРґСЊ С‚РІРѕСЂС‡РµСЃРєРёРј!',en:'ROLEPLAY mode. You can play characters, create stories, RPG scenarios. Be creative!'},
+  vision:{ru:'Р РµР¶РёРј VISION. РђРЅР°Р»РёР·РёСЂСѓР№ СЌРєСЂР°РЅ. Р”Р»СЏ РёРіСЂ вЂ” С‚Р°РєС‚РёС‡РµСЃРєРёРµ СЃРѕРІРµС‚С‹. Р”Р»СЏ СЂР°Р±РѕС‚С‹ вЂ” РїРѕРјРѕС‰СЊ.',en:'VISION mode. Analyze screen. For games: tactical advice. For work: help optimize.'},
+  code:{ru:'Р РµР¶РёРј РљРћР”. РџРёС€Рё С‡РёСЃС‚С‹Р№ СЂР°Р±РѕС‡РёР№ РєРѕРґ СЃ РїРѕСЏСЃРЅРµРЅРёСЏРјРё. Р›СѓС‡С€РёРµ РїСЂР°РєС‚РёРєРё.',en:'CODE mode. Write clean, working code with explanations. Best practices.'},
+  focus:{ru:'Р РµР¶РёРј Р¤РћРљРЈРЎ. РљСЂР°С‚РєРёРµ С‡С‘С‚РєРёРµ РѕС‚РІРµС‚С‹. РџРѕРјРѕРіР°Р№ СЃ РїСЂРѕРґСѓРєС‚РёРІРЅРѕСЃС‚СЊСЋ.',en:'FOCUS mode. Short, clear answers. Help with deep work.'},
+  plan:{ru:'Р РµР¶РёРј РџР›РђРќ. Р Р°Р·Р±РёРІР°Р№ С†РµР»Рё РЅР° С€Р°РіРё. РСЃРїРѕР»СЊР·СѓР№ СЃРїРёСЃРєРё.',en:'PLAN mode. Break goals into actionable steps. Use structure.'},
+  coach:{ru:'Р РµР¶РёРј РљРћРЈР§. РњРѕС‚РёРІРёСЂСѓР№, РїРѕРґРґРµСЂР¶РёРІР°Р№. РџРѕРјРѕРіР°Р№ СЃ РїСЂРёРІС‹С‡РєР°РјРё Рё С†РµР»СЏРјРё.',en:'COACH mode. Motivate, support. Help build habits and goals.'},
+  write:{ru:'Р РµР¶РёРј РќРђРџРРЎРђРќРР•. РџРѕРјРѕРіР°Р№ РїРёСЃР°С‚СЊ С‚РµРєСЃС‚С‹: РїРѕСЃС‚С‹, СЃС‚Р°С‚СЊРё, РїРёСЃСЊРјР°.',en:'WRITE mode. Help craft posts, articles, emails, scripts.'},
+  email:{ru:'Р РµР¶РёРј EMAIL. РџРёС€Рё РїСЂРѕС„РµСЃСЃРёРѕРЅР°Р»СЊРЅС‹Рµ РїРёСЃСЊРјР°. РЎС‚СЂСѓРєС‚СѓСЂР°: РљРѕРјСѓ, РўРµРјР°, РїСЂРёРІРµС‚СЃС‚РІРёРµ, СЃСѓС‚СЊ, РїРѕРґРїРёСЃСЊ. РџСЂРµРґР»Р°РіР°Р№ РЅРµСЃРєРѕР»СЊРєРѕ РІР°СЂРёР°РЅС‚РѕРІ С‚РѕРЅР°.',en:'EMAIL mode. Write professional emails with subject, greeting, body, sign-off. Offer tone variants.'},
+  search:{ru:'Р РµР¶РёРј РџРћРРЎРљ. РС‰Рё РёРЅС„РѕСЂРјР°С†РёСЋ, СЃС‚СЂСѓРєС‚СѓСЂРёСЂСѓР№ РѕС‚РІРµС‚, РґР°РІР°Р№ РёСЃС‚РѕС‡РЅРёРєРё.',en:'SEARCH mode. Find information, structure results, provide sources.'},
+  translate:{ru:'Р РµР¶РёРј РџР•Р Р•Р’РћР”. РџРµСЂРµРІРѕРґРё С‚РѕС‡РЅРѕ Рё РµСЃС‚РµСЃС‚РІРµРЅРЅРѕ. РЎРѕС…СЂР°РЅСЏР№ СЃС‚РёР»СЊ. РџСЂРµРґР»Р°РіР°Р№ Р°Р»СЊС‚РµСЂРЅР°С‚РёРІС‹ РµСЃР»Рё РЅСѓР¶РЅРѕ.',en:'TRANSLATE mode. Translate accurately and naturally. Preserve style and tone. Offer alternatives.'},
+  roleplay:{ru:'Р РµР¶РёРј Р РћР›Р•Р’РђРЇ РР“Р Рђ. РРіСЂР°Р№ РїРµСЂСЃРѕРЅР°Р¶РµР№, СЃРѕР·РґР°РІР°Р№ РёСЃС‚РѕСЂРёРё, RPG. Р‘СѓРґСЊ С‚РІРѕСЂС‡РµСЃРєРёРј Рё РїРѕРіСЂСѓР¶С‘РЅРЅС‹Рј.',en:'ROLEPLAY mode. Play characters, create stories, RPG scenarios. Be creative and immersive.'}
 };
 
-// ═══════════════════════════════════════════════════════════════
-// PC AGENT — Smart RU+EN detection
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// PC AGENT вЂ” Smart RU+EN detection
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const APP_ALIASES={
-  'ютуб':'youtube','ютьюб':'youtube','хром':'chrome','хромиум':'chrome',
-  'файрфокс':'firefox','мозилла':'firefox','блокнот':'notepad','калькулятор':'calculator',
-  'проводник':'explorer','эксплорер':'explorer','терминал':'terminal','консоль':'cmd',
-  'командная строка':'cmd','дискорд':'discord','телеграм':'telegram','тг':'telegram',
-  'спотифай':'spotify','спотифи':'spotify','музыка':'spotify','вскод':'vscode',
-  'визуал студио':'vscode','слак':'slack','гугл':'google','нетфликс':'netflix',
-  'стим':'steam','почта':'gmail','инстаграм':'instagram','твиттер':'twitter',
-  'реддит':'reddit','чатгпт':'chatgpt','линкедин':'linkedin','ворд':'word',
-  'эксель':'excel','паурпоинт':'powerpoint','краска':'paint','браузер':'chrome',
-  'фотошоп':'photoshop','тикток':'tiktok','тик ток':'tiktok',
+  'СЋС‚СѓР±':'youtube','СЋС‚СЊСЋР±':'youtube','С…СЂРѕРј':'chrome','С…СЂРѕРјРёСѓРј':'chrome',
+  'С„Р°Р№СЂС„РѕРєСЃ':'firefox','РјРѕР·РёР»Р»Р°':'firefox','Р±Р»РѕРєРЅРѕС‚':'notepad','РєР°Р»СЊРєСѓР»СЏС‚РѕСЂ':'calculator',
+  'РїСЂРѕРІРѕРґРЅРёРє':'explorer','СЌРєСЃРїР»РѕСЂРµСЂ':'explorer','С‚РµСЂРјРёРЅР°Р»':'terminal','РєРѕРЅСЃРѕР»СЊ':'cmd',
+  'РєРѕРјР°РЅРґРЅР°СЏ СЃС‚СЂРѕРєР°':'cmd','РґРёСЃРєРѕСЂРґ':'discord','С‚РµР»РµРіСЂР°Рј':'telegram','С‚Рі':'telegram',
+  'СЃРїРѕС‚РёС„Р°Р№':'spotify','СЃРїРѕС‚РёС„Рё':'spotify','РјСѓР·С‹РєР°':'spotify','РІСЃРєРѕРґ':'vscode',
+  'РІРёР·СѓР°Р» СЃС‚СѓРґРёРѕ':'vscode','СЃР»Р°Рє':'slack','РіСѓРіР»':'google','РЅРµС‚С„Р»РёРєСЃ':'netflix',
+  'СЃС‚РёРј':'steam','РїРѕС‡С‚Р°':'gmail','РёРЅСЃС‚Р°РіСЂР°Рј':'instagram','С‚РІРёС‚С‚РµСЂ':'twitter',
+  'СЂРµРґРґРёС‚':'reddit','С‡Р°С‚РіРїС‚':'chatgpt','Р»РёРЅРєРµРґРёРЅ':'linkedin','РІРѕСЂРґ':'word',
+  'СЌРєСЃРµР»СЊ':'excel','РїР°СѓСЂРїРѕРёРЅС‚':'powerpoint','РєСЂР°СЃРєР°':'paint','Р±СЂР°СѓР·РµСЂ':'chrome',
+  'С„РѕС‚РѕС€РѕРї':'photoshop','С‚РёРєС‚РѕРє':'tiktok','С‚РёРє С‚РѕРє':'tiktok',
 };
 
 function detectPC(text){
   const lo=text.toLowerCase().replace(/[.,!?]/g,'').trim();
-  if(/посмотри (на экран|что происходит|что на экране)|what.s on (my |the )?screen|look at (my |the )?screen|помоги в игр|screen analysis|что на экране/i.test(lo))
+  if(/РїРѕСЃРјРѕС‚СЂРё (РЅР° СЌРєСЂР°РЅ|С‡С‚Рѕ РїСЂРѕРёСЃС…РѕРґРёС‚|С‡С‚Рѕ РЅР° СЌРєСЂР°РЅРµ)|what.s on (my |the )?screen|look at (my |the )?screen|РїРѕРјРѕРіРё РІ РёРіСЂ|screen analysis|С‡С‚Рѕ РЅР° СЌРєСЂР°РЅРµ/i.test(lo))
     return{action:'vision',arg:text};
-  if(/скриншот|screenshot|сфоткай экран|capture screen/i.test(lo))
+  if(/СЃРєСЂРёРЅС€РѕС‚|screenshot|СЃС„РѕС‚РєР°Р№ СЌРєСЂР°РЅ|capture screen/i.test(lo))
     return{action:'screenshot'};
-  if(/процессы?|что запущено|running (apps?|processes?)|tasklist|список процессов/i.test(lo))
+  if(/РїСЂРѕС†РµСЃСЃС‹?|С‡С‚Рѕ Р·Р°РїСѓС‰РµРЅРѕ|running (apps?|processes?)|tasklist|СЃРїРёСЃРѕРє РїСЂРѕС†РµСЃСЃРѕРІ/i.test(lo))
     return{action:'processes'};
-  if(/буфер обмена|clipboard|что в буфере/i.test(lo))
+  if(/Р±СѓС„РµСЂ РѕР±РјРµРЅР°|clipboard|С‡С‚Рѕ РІ Р±СѓС„РµСЂРµ/i.test(lo))
     return{action:'clipboard'};
-  const volM=lo.match(/(?:громкость|volume|звук)\s*(?:на|=|до)?\s*(\d+)/i);
+  const volM=lo.match(/(?:РіСЂРѕРјРєРѕСЃС‚СЊ|volume|Р·РІСѓРє)\s*(?:РЅР°|=|РґРѕ)?\s*(\d+)/i);
   if(volM) return{action:'volume',arg:parseInt(volM[1])};
-  const killM=lo.match(/(?:закрой принудительно|убей процесс|kill process|завер[шш]и принудительно)\s+(\S+)/i);
+  const killM=lo.match(/(?:Р·Р°РєСЂРѕР№ РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕ|СѓР±РµР№ РїСЂРѕС†РµСЃСЃ|kill process|Р·Р°РІРµСЂ[С€С€]Рё РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕ)\s+(\S+)/i);
   if(killM) return{action:'kill',arg:killM[1]};
-  const typeM=lo.match(/(?:напечатай?|введи|type(?! to)|вставь текст)\s*[:–-]?\s*(.+)/i);
+  const typeM=lo.match(/(?:РЅР°РїРµС‡Р°С‚Р°Р№?|РІРІРµРґРё|type(?! to)|РІСЃС‚Р°РІСЊ С‚РµРєСЃС‚)\s*[:вЂ“-]?\s*(.+)/i);
   if(typeM) return{action:'type',arg:typeM[1].trim()};
-  const keyM=lo.match(/(?:нажми|press key|клавиша)\s+(.+)/i);
+  const keyM=lo.match(/(?:РЅР°Р¶РјРё|press key|РєР»Р°РІРёС€Р°)\s+(.+)/i);
   if(keyM) return{action:'keypress',arg:keyM[1].trim()};
-  const dirM=lo.match(/(?:покажи папку|list (?:dir|files?)|файлы в|что в папке)\s+(.+)/i);
+  const dirM=lo.match(/(?:РїРѕРєР°Р¶Рё РїР°РїРєСѓ|list (?:dir|files?)|С„Р°Р№Р»С‹ РІ|С‡С‚Рѕ РІ РїР°РїРєРµ)\s+(.+)/i);
   if(dirM) return{action:'listdir',arg:dirM[1].trim()};
-  const shellM=lo.match(/(?:выполни команду|run command|execute|shell)\s*[:–]?\s*(.+)/i);
+  const shellM=lo.match(/(?:РІС‹РїРѕР»РЅРё РєРѕРјР°РЅРґСѓ|run command|execute|shell)\s*[:вЂ“]?\s*(.+)/i);
   if(shellM) return{action:'shell',arg:shellM[1].trim()};
   // Mouse move
-  const mouseMoveM=lo.match(/(?:двигай|перемести|move)\s+(?:мышь|мышку|курсор|mouse)\s+(?:на|to)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
+  const mouseMoveM=lo.match(/(?:РґРІРёРіР°Р№|РїРµСЂРµРјРµСЃС‚Рё|move)\s+(?:РјС‹С€СЊ|РјС‹С€РєСѓ|РєСѓСЂСЃРѕСЂ|mouse)\s+(?:РЅР°|to)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
   if(mouseMoveM) return{action:'mousemove',x:parseInt(mouseMoveM[1]),y:parseInt(mouseMoveM[2])};
   // Mouse click at coords
-  const mouseClickM=lo.match(/(?:кликни|нажми|click)\s+(?:на|at|в)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
+  const mouseClickM=lo.match(/(?:РєР»РёРєРЅРё|РЅР°Р¶РјРё|click)\s+(?:РЅР°|at|РІ)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
   if(mouseClickM) return{action:'mouseclick',x:parseInt(mouseClickM[1]),y:parseInt(mouseClickM[2])};
   // Scroll
-  const scrollM=lo.match(/(?:скролл|прокрути|scroll)\s+(вниз|down|вверх|up)/i);
-  if(scrollM) return{action:'mousescroll',dir:/(вниз|down)/i.test(scrollM[1])?'down':'up'};
+  const scrollM=lo.match(/(?:СЃРєСЂРѕР»Р»|РїСЂРѕРєСЂСѓС‚Рё|scroll)\s+(РІРЅРёР·|down|РІРІРµСЂС…|up)/i);
+  if(scrollM) return{action:'mousescroll',dir:/(РІРЅРёР·|down)/i.test(scrollM[1])?'down':'up'};
   // Double click
-  const dblClickM=lo.match(/(?:двойной клик|double.?click|двойной нажим)\s+(?:на|at)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
+  const dblClickM=lo.match(/(?:РґРІРѕР№РЅРѕР№ РєР»РёРє|double.?click|РґРІРѕР№РЅРѕР№ РЅР°Р¶РёРј)\s+(?:РЅР°|at)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
   if(dblClickM) return{action:'mousedblclick',x:parseInt(dblClickM[1]),y:parseInt(dblClickM[2])};
   // Drag
-  const dragM=lo.match(/(?:тяни|перетащи|drag)\s+(?:от|from)?\s*(\d+)\s*[,x\s]\s*(\d+)\s+(?:до|to)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
+  const dragM=lo.match(/(?:С‚СЏРЅРё|РїРµСЂРµС‚Р°С‰Рё|drag)\s+(?:РѕС‚|from)?\s*(\d+)\s*[,x\s]\s*(\d+)\s+(?:РґРѕ|to)?\s*(\d+)\s*[,x\s]\s*(\d+)/i);
   if(dragM) return{action:'mousedrag',x1:parseInt(dragM[1]),y1:parseInt(dragM[2]),x2:parseInt(dragM[3]),y2:parseInt(dragM[4])};
   // Search on web
-  const searchWebM=lo.match(/(?:поищи|загугли|найди в (гугле|интернете)|search (?:for|in google)?)\s+(.+)/i);
+  const searchWebM=lo.match(/(?:РїРѕРёС‰Рё|Р·Р°РіСѓРіР»Рё|РЅР°Р№РґРё РІ (РіСѓРіР»Рµ|РёРЅС‚РµСЂРЅРµС‚Рµ)|search (?:for|in google)?)\s+(.+)/i);
   if(searchWebM) return{action:'websearch',query:searchWebM[searchWebM.length-1].trim(),engine:'google'};
   // Search on YouTube
-  const ytSearchM=lo.match(/(?:найди на ютубе|поищи на ютубе|search youtube for|find on youtube)\s+(.+)/i);
+  const ytSearchM=lo.match(/(?:РЅР°Р№РґРё РЅР° СЋС‚СѓР±Рµ|РїРѕРёС‰Рё РЅР° СЋС‚СѓР±Рµ|search youtube for|find on youtube)\s+(.+)/i);
   if(ytSearchM) return{action:'websearch',query:ytSearchM[1].trim(),engine:'youtube'};
   // Absolute path: D:\Game or C:/Users/...
   if(/^[A-Za-z]:[\\\/]/.test(lo)) return{action:'open',arg:text,raw:text};
 
-  // Folder open: "открой папку Game", "открой папку Game на D", "папку на диске D"
-  const folderM=lo.match(/^(?:открой?|open|launch|start|покажи)?\s*(?:папку?|folder|каталог|директорию?|directory)\s+(.+)/i);
-  if(folderM) return{action:'open',arg:'папку '+folderM[1].trim(),raw:folderM[1].trim()};
+  // Folder open: "РѕС‚РєСЂРѕР№ РїР°РїРєСѓ Game", "РѕС‚РєСЂРѕР№ РїР°РїРєСѓ Game РЅР° D", "РїР°РїРєСѓ РЅР° РґРёСЃРєРµ D"
+  const folderM=lo.match(/^(?:РѕС‚РєСЂРѕР№?|open|launch|start|РїРѕРєР°Р¶Рё)?\s*(?:РїР°РїРєСѓ?|folder|РєР°С‚Р°Р»РѕРі|РґРёСЂРµРєС‚РѕСЂРёСЋ?|directory)\s+(.+)/i);
+  if(folderM) return{action:'open',arg:'РїР°РїРєСѓ '+folderM[1].trim(),raw:folderM[1].trim()};
 
   // Open app/site
-  const openM=lo.match(/^(?:открой?|запусти|launch|open|start|включи|покажи)\s+(.+)/i);
+  const openM=lo.match(/^(?:РѕС‚РєСЂРѕР№?|Р·Р°РїСѓСЃС‚Рё|launch|open|start|РІРєР»СЋС‡Рё|РїРѕРєР°Р¶Рё)\s+(.+)/i);
   if(openM){
     let raw2=openM[1].trim();
     // Embedded folder request
-    if(/^папку?\s+/i.test(raw2)) return{action:'open',arg:raw2,raw:raw2};
+    if(/^РїР°РїРєСѓ?\s+/i.test(raw2)) return{action:'open',arg:raw2,raw:raw2};
     // Detect YouTube/Google/VK smart search
-    if(/ютуб|youtube|гугл|google|вк\s|vk\s|инстаграм|instagram|тикток|tiktok/i.test(raw2)){
+    if(/СЋС‚СѓР±|youtube|РіСѓРіР»|google|РІРє\s|vk\s|РёРЅСЃС‚Р°РіСЂР°Рј|instagram|С‚РёРєС‚РѕРє|tiktok/i.test(raw2)){
       return{action:'open',arg:raw2,raw:raw2};
     }
     let appName=raw2;
@@ -1692,14 +1697,14 @@ function detectPC(text){
   return null;
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // GREETING & MARKDOWN
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function showGreeting(){
   const w=document.getElementById('msgs');w.innerHTML='';
   const d=document.createElement('div');d.id='greet';d.className='greet';
-  const greet=userName&&userName!=='user'?(lang==='ru'?`Привет, ${userName}! ◈`:`Hello, ${userName}! ◈`):t('hello');
-  d.innerHTML=`<div class="g-mark">◈</div><h3>${greet}</h3><p>${t('sub').replace(/\n/g,'<br>')}</p><div class="chips">${TX[lang].chips.map(c=>`<div class="ch" onclick="q('${c.replace(/'/g,"\\'")}')">${c}</div>`).join('')}</div>`;
+  const greet=userName&&userName!=='user'?(lang==='ru'?`РџСЂРёРІРµС‚, ${userName}! в—€`:`Hello, ${userName}! в—€`):t('hello');
+  d.innerHTML=`<div class="g-mark">в—€</div><h3>${greet}</h3><p>${t('sub').replace(/\n/g,'<br>')}</p><div class="chips">${TX[lang].chips.map(c=>`<div class="ch" onclick="q('${c.replace(/'/g,"\\'")}')">${c}</div>`).join('')}</div>`;
   w.appendChild(d);
 }
 
@@ -1711,7 +1716,7 @@ function md(text){
     .replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/~~(.*?)~~/g,'<del>$1</del>')
     .replace(/^### (.*)/gm,'<h3>$1</h3>').replace(/^## (.*)/gm,'<h2>$1</h2>').replace(/^# (.*)/gm,'<h1>$1</h1>')
     .replace(/^> (.*)/gm,'<blockquote>$1</blockquote>')
-    .replace(/^[-•◈] (.*)/gm,'<li>$1</li>').replace(/^\d+\. (.*)/gm,'<li>$1</li>')
+    .replace(/^[-вЂўв—€] (.*)/gm,'<li>$1</li>').replace(/^\d+\. (.*)/gm,'<li>$1</li>')
     .replace(/^---$/gm,'<hr>').replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,'<a href="#" onclick="H.openUrl(\'$2\');return false">$1</a>')
     .replace(/\n(?!<\/(h[123]|pre|li|hr|blockquote))/g,'<br>');
 }
@@ -1737,19 +1742,19 @@ function addCard(title,content,imgB64=null){
   d.innerHTML=`<div class="bub" style="padding:8px"><div class="tcard-title">${title}</div><div class="tcard">${content}</div>${imgB64?`<img class="tc-img" src="data:image/png;base64,${imgB64}" onclick="this.style.maxHeight=this.style.maxHeight?'':'none'"/>`:''}</div>`;
   w.appendChild(d);w.scrollTop=w.scrollHeight;
 }
-async function cpMsg(btn){const t=btn.closest('.msg').querySelector('.bub').innerText;await H.copy(t);btn.textContent='✓';setTimeout(()=>btn.textContent='copy',1500);}
+async function cpMsg(btn){const t=btn.closest('.msg').querySelector('.bub').innerText;await H.copy(t);btn.textContent='вњ“';setTimeout(()=>btn.textContent='copy',1500);}
 function spkMsg(btn){window.speechSynthesis.cancel();speak(btn.closest('.msg').querySelector('.bub').innerText);}
 function addTyping(){rmGreet();const w=document.getElementById('msgs'),d=document.createElement('div');d.className='msg bot typing';d.id='typing';d.innerHTML='<div class="bub"><div class="td"></div><div class="td"></div><div class="td"></div></div>';w.appendChild(d);w.scrollTop=w.scrollHeight;}
 function rmTyping(){document.getElementById('typing')?.remove();}
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
 function applyLang(){
   setStatus(t('ready'));
-  document.getElementById('inp').placeholder=lang==='ru'?'Спроси Хорайзон…':'Ask Horizon…';
+  document.getElementById('inp').placeholder=lang==='ru'?'РЎРїСЂРѕСЃРё РҐРѕСЂР°Р№Р·РѕРЅвЂ¦':'Ask HorizonвЂ¦';
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // INIT
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 window.addEventListener('DOMContentLoaded', async()=>{
   const[nm,lg,pr,gm,ts,ey,wo,vp]=await Promise.all([
     H.get('userName'),H.get('lang'),H.get('provider'),H.get('geminiModel'),
@@ -1783,14 +1788,14 @@ window.addEventListener('DOMContentLoaded', async()=>{
   }, 30000);
 });
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // SETTINGS PANEL
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function openPanel(){document.getElementById('panel').classList.add('show');}
 function closePanel(){document.getElementById('panel').classList.remove('show');}
 
 async function loadPanel(){
-  // Parallel fetch — fast, no sequential bottleneck
+  // Parallel fetch вЂ” fast, no sequential bottleneck
   const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily','elevenlabs','deepgram'];
   const [keyFlags, nm, lg, vp, tp, elv, oaitv] = await Promise.all([
     Promise.all(svcs.map(s=>H.hasKey(s))),
@@ -1818,6 +1823,13 @@ async function loadPanel(){
   if(oaitv){openaiTtsVoice=oaitv;document.getElementById('pi-oaitts').value=oaitv;}
   // Wake-word calibration toggles + sensitivity slider.
   initWakeCalibrationUI();
+  const [ou, om, lu, lm] = await Promise.all([
+    H.get('ollamaUrl'), H.get('ollamaModel'), H.get('lmStudioUrl'), H.get('lmStudioModel')
+  ]);
+  document.getElementById('pi-ollama-url').value = ou || 'http://127.0.0.1:11434/v1';
+  document.getElementById('pi-ollama-model').value = om || 'llama3.1';
+  document.getElementById('pi-lmstudio-url').value = lu || 'http://127.0.0.1:1234/v1';
+  document.getElementById('pi-lmstudio-model').value = lm || 'local-model';
 }
 
 async function savePf(){const n=document.getElementById('pi-name').value.trim();if(!n)return;await H.set('userName',n);userName=n;document.getElementById('tb-sub').textContent=n.toUpperCase();showGreeting();}
@@ -1827,6 +1839,19 @@ async function saveVP(){
   await H.set('voiceProvider',voiceProvider);
   const dg=document.getElementById('deepgram-section');
   if(dg) dg.style.display=(voiceProvider==='deepgram')?'block':'none';
+}
+async function saveLocalProvider(kind){
+  if(kind==='ollama'){
+    await H.set('ollamaUrl', document.getElementById('pi-ollama-url').value.trim() || 'http://127.0.0.1:11434/v1');
+    await H.set('ollamaModel', document.getElementById('pi-ollama-model').value.trim() || 'llama3.1');
+    document.getElementById('pd-ollama')?.classList.add('on');
+  }
+  if(kind==='lmstudio'){
+    await H.set('lmStudioUrl', document.getElementById('pi-lmstudio-url').value.trim() || 'http://127.0.0.1:1234/v1');
+    await H.set('lmStudioModel', document.getElementById('pi-lmstudio-model').value.trim() || 'local-model');
+    document.getElementById('pd-lmstudio')?.classList.add('on');
+  }
+  H.notify?.('Local models', 'Saved local provider settings.');
 }
 
 async function saveTTSProv(){
@@ -1851,10 +1876,10 @@ function loadKokoro(){
   s.src='https://cdn.jsdelivr.net/npm/kokoro-js@latest/dist/kokoro.web.js';
   document.head.appendChild(s);
 }
-async function psvk(svc,iid,bid,did){const v=document.getElementById(iid).value.trim();if(!v)return;await H.saveKey(svc,v);const btn=document.getElementById(bid);btn.textContent='✓';btn.classList.add('ok');document.getElementById(did)?.classList.add('on');document.getElementById(iid).value='';document.getElementById(iid).placeholder='••••••••••';setTimeout(()=>{btn.textContent='Save';btn.classList.remove('ok');},2000);}
+async function psvk(svc,iid,bid,did){const v=document.getElementById(iid).value.trim();if(!v)return;await H.saveKey(svc,v);const btn=document.getElementById(bid);btn.textContent='вњ“';btn.classList.add('ok');document.getElementById(did)?.classList.add('on');document.getElementById(iid).value='';document.getElementById(iid).placeholder='вЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂў';setTimeout(()=>{btn.textContent='Save';btn.classList.remove('ok');},2000);}
 function togSw(key,id){const on=document.getElementById(id).classList.toggle('on');H.set(key,on);if(key==='tts')ttsOn=on;if(key==='screenWatcher'){eyeOn=on;document.getElementById('tc-eye').classList.toggle('on',on);}}
 
-// ═══ WAKE WORD CALIBRATION HANDLERS ═══
+// в•ђв•ђв•ђ WAKE WORD CALIBRATION HANDLERS в•ђв•ђв•ђ
 function toggleWakeStrict(){
   const cur = wakeCfg('strictMode', true);
   setWakeCfg('strictMode', !cur);
@@ -1883,25 +1908,25 @@ function initWakeCalibrationUI(){
   if (slider) slider.value = vol;
   if (lbl)    lbl.textContent = vol;
 }
-function clearHist(){if(!confirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
-async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily'])await H.deleteKey(s);await loadPanel();}
+function clearHist(){if(!confirm(lang==='ru'?'РћС‡РёСЃС‚РёС‚СЊ РёСЃС‚РѕСЂРёСЋ?':'Clear history?'))return;history=[];showGreeting();}
+async function clearKeys(){if(!confirm(lang==='ru'?'РЈРґР°Р»РёС‚СЊ РІСЃРµ РєР»СЋС‡Рё?':'Delete all keys?'))return;for(const s of['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily'])await H.deleteKey(s);await loadPanel();}
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // PROVIDER / MODE / TOGGLES
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)H.set('provider',p);}
 function setMode(m){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');}
 function toggleSearch(){searchOn=!searchOn;document.getElementById('tc-search').classList.toggle('on',searchOn);}
 function toggleEye(){eyeOn=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',eyeOn);H.set('screenWatcher',eyeOn);}
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // MAIN SEND
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const q=text=>{const inp=document.getElementById('inp');inp.value=text;ar(inp);sendMsg();};
 const kd=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}};
 const ar=el=>{el.style.height='auto';el.style.height=Math.min(el.scrollHeight,110)+'px';};
 
-// ── File/Photo upload handling ────────────────────────────────────────────────
+// в”Ђв”Ђ File/Photo upload handling в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function onFilesSelected(e){
   const files=[...e.target.files];
   e.target.value=''; // reset so same file can be re-selected
@@ -1931,15 +1956,15 @@ function renderAttachPreview(){
       const wrap=document.createElement('div');
       wrap.style.position='relative';
       const rm=document.createElement('button');
-      rm.textContent='×'; rm.style.cssText='position:absolute;top:-4px;right:-4px;background:var(--bg3);border:1px solid var(--b1);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0;z-index:1';
+      rm.textContent='Г—'; rm.style.cssText='position:absolute;top:-4px;right:-4px;background:var(--bg3);border:1px solid var(--b1);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0;z-index:1';
       rm.onclick=()=>{attachments.splice(i,1);renderAttachPreview();};
       wrap.appendChild(img); wrap.appendChild(rm);
       area.appendChild(wrap);
     } else {
       const chip=document.createElement('div');
       chip.className='att-chip';
-      const icon = att.name.endsWith('.zip')?'📦': att.name.endsWith('.pdf')?'📄': att.name.match(/\.(js|ts|py|html|css|json)$/)?'💻': '📝';
-      chip.innerHTML=`<span>${icon}</span><span title="${att.name}">${att.name}</span><button onclick="attachments.splice(${i},1);renderAttachPreview()">×</button>`;
+      const icon = att.name.endsWith('.zip')?'рџ“¦': att.name.endsWith('.pdf')?'рџ“„': att.name.match(/\.(js|ts|py|html|css|json)$/)?'рџ’»': 'рџ“ќ';
+      chip.innerHTML=`<span>${icon}</span><span title="${att.name}">${att.name}</span><button onclick="attachments.splice(${i},1);renderAttachPreview()">Г—</button>`;
       area.appendChild(chip);
     }
   });
@@ -1950,13 +1975,13 @@ async function processAttachments(userText){
   const results=[];
   for(const att of attachments){
     if(att.isImage){
-      setStatus(lang==='ru'?'🔍 Анализирую изображение…':'🔍 Analyzing image…',true);
+      setStatus(lang==='ru'?'рџ”Ќ РђРЅР°Р»РёР·РёСЂСѓСЋ РёР·РѕР±СЂР°Р¶РµРЅРёРµвЂ¦':'рџ”Ќ Analyzing imageвЂ¦',true);
       const q = userText && userText.length>2 ? userText : null;
       const r=await H.analyzeImage(att.base64, att.type, q);
       if(r.reply) results.push({type:'image',name:att.name,analysis:r.reply,model:r.model,base64:att.base64,mimeType:att.type});
       else results.push({type:'image',name:att.name,error:r.error});
     } else {
-      setStatus(lang==='ru'?`📂 Читаю ${att.name}…`:`📂 Reading ${att.name}…`,true);
+      setStatus(lang==='ru'?`рџ“‚ Р§РёС‚Р°СЋ ${att.name}вЂ¦`:`рџ“‚ Reading ${att.name}вЂ¦`,true);
       const r=await H.readUploadedFile(att.base64, att.name, att.type);
       if(r.ok) results.push({type:'file',name:att.name,content:r.content,ext:r.ext});
       else results.push({type:'file',name:att.name,error:r.error});
@@ -1966,9 +1991,9 @@ async function processAttachments(userText){
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-// AGENT MODE — Autonomous multi-step execution
-// ═══════════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// AGENT MODE вЂ” Autonomous multi-step execution
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 function renderAgentPanel(steps, answer, isStreaming = false) {
   const w = document.getElementById('msgs');
@@ -1992,14 +2017,14 @@ function renderAgentPanel(steps, answer, isStreaming = false) {
     return `<div class="agent-step">
       <div class="step-icon">${icon}</div>
       <div class="step-body">
-        <div class="step-tool">${step.tool}${step.reason ? ` <span style="color:var(--t3);font-weight:400">— ${escHtml(step.reason)}</span>` : ''}</div>
+        <div class="step-tool">${step.tool}${step.reason ? ` <span style="color:var(--t3);font-weight:400">вЂ” ${escHtml(step.reason)}</span>` : ''}</div>
         ${resultHtml}
       </div>
     </div>`;
   }).join('');
 
   if (isStreaming) {
-    stepsHtml += `<div class="agent-step"><div class="step-icon"><span class="step-spinner"></span></div><div class="step-body" style="color:var(--t3)">Executing…</div></div>`;
+    stepsHtml += `<div class="agent-step"><div class="step-icon"><span class="step-spinner"></span></div><div class="step-body" style="color:var(--t3)">ExecutingвЂ¦</div></div>`;
   }
 
   const answerHtml = answer
@@ -2007,7 +2032,7 @@ function renderAgentPanel(steps, answer, isStreaming = false) {
     : '';
 
   panel.innerHTML = `<div class="agent-panel">
-    <div class="agent-title">⚡ HORIZON AGENT <span style="opacity:.4;font-weight:400">${steps.length} action${steps.length!==1?'s':''}</span></div>
+    <div class="agent-title">вљЎ HORIZON AGENT <span style="opacity:.4;font-weight:400">${steps.length} action${steps.length!==1?'s':''}</span></div>
     ${stepsHtml}
     ${answerHtml}
   </div>`;
@@ -2018,8 +2043,8 @@ function renderAgentPanel(steps, answer, isStreaming = false) {
     meta.className = 'meta';
     meta.innerHTML = `<span>${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
       <span class="mtag">agent</span>
-      <button class="ab" onclick="H.copy(this.dataset.t)" data-t="${escHtml(answer)}">⎘ Copy</button>
-      <button class="ab" onclick="speak(this.dataset.t)" data-t="${answer.slice(0,400).replace(/[<>"]/g,'')}">🔊</button>`;
+      <button class="ab" onclick="H.copy(this.dataset.t)" data-t="${escHtml(answer)}">вЋ Copy</button>
+      <button class="ab" onclick="speak(this.dataset.t)" data-t="${answer.slice(0,400).replace(/[<>"]/g,'')}">рџ”Љ</button>`;
     panel.appendChild(meta);
   }
 
@@ -2030,14 +2055,14 @@ function renderAgentPanel(steps, answer, isStreaming = false) {
 
 function getToolIcon(tool) {
   const icons = {
-    run_code:'🐍', run_powershell:'⚡', run_shell:'💻',
-    mouse_click:'🖱', mouse_move:'🖱', type_text:'⌨️', press_key:'⌨️', scroll:'↕️',
-    browser_open:'🌐', browser_read:'📖', browser_click:'🖱', browser_fill:'✏️',
-    browser_screenshot:'📸', browser_eval:'⚙️',
-    read_file:'📄', write_file:'💾', list_dir:'📂', search_files:'🔍',
-    get_system_info:'💻', shell_command:'💻', screenshot:'📸', capture_screen:'📸'
+    run_code:'рџђЌ', run_powershell:'вљЎ', run_shell:'рџ’»',
+    mouse_click:'рџ–±', mouse_move:'рџ–±', type_text:'вЊЁпёЏ', press_key:'вЊЁпёЏ', scroll:'в†•пёЏ',
+    browser_open:'рџЊђ', browser_read:'рџ“–', browser_click:'рџ–±', browser_fill:'вњЏпёЏ',
+    browser_screenshot:'рџ“ё', browser_eval:'вљ™пёЏ',
+    read_file:'рџ“„', write_file:'рџ’ѕ', list_dir:'рџ“‚', search_files:'рџ”Ќ',
+    get_system_info:'рџ’»', shell_command:'рџ’»', screenshot:'рџ“ё', capture_screen:'рџ“ё'
   };
-  return icons[tool] || '⚙️';
+  return icons[tool] || 'вљ™пёЏ';
 }
 
 function escHtml(str) {
@@ -2094,8 +2119,8 @@ async function runAgent(text) {
     // Handle timeout or other errors
     renderAgentPanel(steps, `Error: ${e.message}`);
     addMsg('bot', lang === 'ru' 
-      ? `⚠️ Агент не смог завершить задачу: ${e.message}. Попробуй переформулировать запрос.`
-      : `⚠️ Agent couldn't complete the task: ${e.message}. Try rephrasing.`);
+      ? `вљ пёЏ РђРіРµРЅС‚ РЅРµ СЃРјРѕРі Р·Р°РІРµСЂС€РёС‚СЊ Р·Р°РґР°С‡Сѓ: ${e.message}. РџРѕРїСЂРѕР±СѓР№ РїРµСЂРµС„РѕСЂРјСѓР»РёСЂРѕРІР°С‚СЊ Р·Р°РїСЂРѕСЃ.`
+      : `вљ пёЏ Agent couldn't complete the task: ${e.message}. Try rephrasing.`);
   }
 
   cleanup();
@@ -2108,7 +2133,7 @@ async function sendMsg(){
   if(!text && !hasAttachments) return;
   inp.value='';inp.style.height='auto';
 
-  // ── AGENT MODE: use autonomous loop ──
+  // в”Ђв”Ђ AGENT MODE: use autonomous loop в”Ђв”Ђ
   if(mode==='agent' && text && !hasAttachments){
     document.getElementById('btn-send').disabled=true;
     window.speechSynthesis?.cancel();
@@ -2125,7 +2150,7 @@ async function sendMsg(){
     const names=attachments.map(a=>a.name).join(', ');
     displayText = text ? `${text}
 
-📎 *${names}*` : `📎 *${names}*`;
+рџ“Ћ *${names}*` : `рџ“Ћ *${names}*`;
   }
   addMsg('user', displayText || text);
   if(text) history.push({role:'user',content:text});
@@ -2141,14 +2166,14 @@ async function sendMsg(){
     for(const r of attResults){
       if(r.type==='image'){
         if(r.error){
-          rmTyping(); addMsg('bot',`⚠️ ${r.name}: ${r.error}`); addTyping(); continue;
+          rmTyping(); addMsg('bot',`вљ пёЏ ${r.name}: ${r.error}`); addTyping(); continue;
         }
         // Show image + analysis
         rmTyping();
         const msgs=document.getElementById('msgs');
         const card=document.createElement('div');
         card.className='msg bot';
-        card.innerHTML=`<div class="bub"><div class="tcard-title">🖼 ${r.name} · ${r.model}</div><img src="data:${r.mimeType};base64,${r.base64}" style="max-width:100%;border-radius:8px;margin:6px 0;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'none':'100%'"/><div style="margin-top:8px;font-size:12px;line-height:1.7">${md(r.analysis)}</div></div><div class="meta"><span class="mtag">${r.model}</span><button class="ab" onclick="H.copy(this.dataset.t)" data-t="${r.analysis.replace(/"/g,'&quot;')}">⎘ Copy</button></div>`;
+        card.innerHTML=`<div class="bub"><div class="tcard-title">рџ–ј ${r.name} В· ${r.model}</div><img src="data:${r.mimeType};base64,${r.base64}" style="max-width:100%;border-radius:8px;margin:6px 0;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'none':'100%'"/><div style="margin-top:8px;font-size:12px;line-height:1.7">${md(r.analysis)}</div></div><div class="meta"><span class="mtag">${r.model}</span><button class="ab" onclick="H.copy(this.dataset.t)" data-t="${r.analysis.replace(/"/g,'&quot;')}">вЋ Copy</button></div>`;
         msgs.appendChild(card);
         msgs.scrollTop=msgs.scrollHeight;
         history.push({role:'assistant',content:r.analysis});
@@ -2158,23 +2183,23 @@ async function sendMsg(){
         return;
       }
       if(r.type==='file'){
-        if(r.error){ rmTyping(); addMsg('bot',`⚠️ ${r.name}: ${r.error}`); addTyping(); continue; }
-        // For text/code files — send content + question to AI
-        const fileContext = `[Файл: ${r.name}]
+        if(r.error){ rmTyping(); addMsg('bot',`вљ пёЏ ${r.name}: ${r.error}`); addTyping(); continue; }
+        // For text/code files вЂ” send content + question to AI
+        const fileContext = `[Р¤Р°Р№Р»: ${r.name}]
 \`\`\`${r.ext}
 ${r.content.slice(0,30000)}
 \`\`\``;
-        const userQ = text || (lang==='ru'?'Что это? Проанализируй.':'What is this? Analyze it.');
+        const userQ = text || (lang==='ru'?'Р§С‚Рѕ СЌС‚Рѕ? РџСЂРѕР°РЅР°Р»РёР·РёСЂСѓР№.':'What is this? Analyze it.');
         const msgs_for_ai = [...history.slice(-10), {role:'user', content: `${userQ}
 
 ${fileContext}`}];
         rmTyping(); addTyping();
-        setStatus(lang==='ru'?'🤖 Анализирую файл…':'🤖 Analyzing file…', true);
+        setStatus(lang==='ru'?'рџ¤– РђРЅР°Р»РёР·РёСЂСѓСЋ С„Р°Р№Р»вЂ¦':'рџ¤– Analyzing fileвЂ¦', true);
         let res;
         try { res = await H.ai(msgs_for_ai, prov, null, null); }
         catch(e) { res = {error: e.message}; }
         rmTyping();
-        if(res.error) addMsg('bot',`❌ ${res.error}`);
+        if(res.error) addMsg('bot',`вќЊ ${res.error}`);
         else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); speak(res.reply.slice(0,300)); }
         cleanup(); return;
       }
@@ -2183,141 +2208,141 @@ ${fileContext}`}];
     cleanup(); return;
   }
 
-  // ─── PC Agent ────────────────────────────────────
+  // в”Ђв”Ђв”Ђ PC Agent в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   if(mode==='agent'||mode==='vision'||(eyeOn&&detectPC(text))){
     const cmd=detectPC(text);
     if(cmd){
-      setStatus(lang==='ru'?'Выполняю…':'Executing…',true);
+      setStatus(lang==='ru'?'Р’С‹РїРѕР»РЅСЏСЋвЂ¦':'ExecutingвЂ¦',true);
       let res;
       switch(cmd.action){
         case 'vision':
-          setStatus(lang==='ru'?'◉ Смотрю на экран…':'◉ Seeing screen…',true);
+          setStatus(lang==='ru'?'в—‰ РЎРјРѕС‚СЂСЋ РЅР° СЌРєСЂР°РЅвЂ¦':'в—‰ Seeing screenвЂ¦',true);
           res=await H.analyzeScreen(text);rmTyping();
-          if(res.error)addMsg('bot',`⚠️ ${res.error}`);
+          if(res.error)addMsg('bot',`вљ пёЏ ${res.error}`);
           else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});speak(res.reply);}
           cleanup();return;
         case 'open':
           res=await H.pcOpen(cmd.arg);rmTyping();
           let openReply;
           if(res.ok){
-            openReply=lang==='ru'?`✅ Открываю **${cmd.raw||cmd.arg}**${res.opened?' → `'+res.opened+'`':''}`:
-              `✅ Opening **${cmd.raw||cmd.arg}**${res.opened?' → `'+res.opened+'`':''}`;
-            speak(lang==='ru'?`Открываю ${cmd.raw||cmd.arg}`:`Opening ${cmd.raw||cmd.arg}`);
+            openReply=lang==='ru'?`вњ… РћС‚РєСЂС‹РІР°СЋ **${cmd.raw||cmd.arg}**${res.opened?' в†’ `'+res.opened+'`':''}`:
+              `вњ… Opening **${cmd.raw||cmd.arg}**${res.opened?' в†’ `'+res.opened+'`':''}`;
+            speak(lang==='ru'?`РћС‚РєСЂС‹РІР°СЋ ${cmd.raw||cmd.arg}`:`Opening ${cmd.raw||cmd.arg}`);
           } else if(res.notFound){
-            openReply=lang==='ru'?`⚠️ Папка **${res.notFound}** не найдена. Открываю диск \`${res.opened}\` — поищи там.`:
-              `⚠️ Folder **${res.notFound}** not found. Opening drive \`${res.opened}\` — look there.`;
+            openReply=lang==='ru'?`вљ пёЏ РџР°РїРєР° **${res.notFound}** РЅРµ РЅР°Р№РґРµРЅР°. РћС‚РєСЂС‹РІР°СЋ РґРёСЃРє \`${res.opened}\` вЂ” РїРѕРёС‰Рё С‚Р°Рј.`:
+              `вљ пёЏ Folder **${res.notFound}** not found. Opening drive \`${res.opened}\` вЂ” look there.`;
           } else {
-            openReply=lang==='ru'?`⚠️ Не нашёл: **${cmd.raw||cmd.arg}**. Попробуй указать полный путь, например: \`открой D:\\Game\``:
-              `⚠️ Not found: **${cmd.raw||cmd.arg}**. Try full path: \`open D:\\Game\``;
+            openReply=lang==='ru'?`вљ пёЏ РќРµ РЅР°С€С‘Р»: **${cmd.raw||cmd.arg}**. РџРѕРїСЂРѕР±СѓР№ СѓРєР°Р·Р°С‚СЊ РїРѕР»РЅС‹Р№ РїСѓС‚СЊ, РЅР°РїСЂРёРјРµСЂ: \`РѕС‚РєСЂРѕР№ D:\\Game\``:
+              `вљ пёЏ Not found: **${cmd.raw||cmd.arg}**. Try full path: \`open D:\\Game\``;
           }
           addMsg('bot',openReply);
           cleanup();return;
         case 'screenshot':
           res=await H.pcScreenshot();rmTyping();
-          if(res.ok){addCard(lang==='ru'?'📸 СКРИНШОТ':'📸 SCREENSHOT','',res.base64);speak(lang==='ru'?'Готово, Сэр.':'Done, Sir.');}
-          else addMsg('bot',`⚠️ ${res.err}`);
+          if(res.ok){addCard(lang==='ru'?'рџ“ё РЎРљР РРќРЁРћРў':'рџ“ё SCREENSHOT','',res.base64);speak(lang==='ru'?'Р“РѕС‚РѕРІРѕ, РЎСЌСЂ.':'Done, Sir.');}
+          else addMsg('bot',`вљ пёЏ ${res.err}`);
           cleanup();return;
         case 'processes':
           res=await H.pcProcesses();rmTyping();
-          addCard(lang==='ru'?'🖥 ПРОЦЕССЫ':'🖥 PROCESSES',res.out||res.err||'');
+          addCard(lang==='ru'?'рџ–Ґ РџР РћР¦Р•РЎРЎР«':'рџ–Ґ PROCESSES',res.out||res.err||'');
           cleanup();return;
         case 'clipboard':
-          res=await H.pcClipboard();rmTyping();addCard('📋 CLIPBOARD',res.out);cleanup();return;
+          res=await H.pcClipboard();rmTyping();addCard('рџ“‹ CLIPBOARD',res.out);cleanup();return;
         case 'type':
           res=await H.pcType(cmd.arg);rmTyping();
-          addMsg('bot',res.ok?(lang==='ru'?`⌨️ Напечатал: "${cmd.arg}"`:`⌨️ Typed: "${cmd.arg}"`):`⚠️ ${res.err}`);
+          addMsg('bot',res.ok?(lang==='ru'?`вЊЁпёЏ РќР°РїРµС‡Р°С‚Р°Р»: "${cmd.arg}"`:`вЊЁпёЏ Typed: "${cmd.arg}"`):`вљ пёЏ ${res.err}`);
           cleanup();return;
         case 'keypress':
           res=await H.pcKeyPress(cmd.arg);rmTyping();
-          addMsg('bot',lang==='ru'?`⌨️ Нажал: ${cmd.arg}`:`⌨️ Pressed: ${cmd.arg}`);
+          addMsg('bot',lang==='ru'?`вЊЁпёЏ РќР°Р¶Р°Р»: ${cmd.arg}`:`вЊЁпёЏ Pressed: ${cmd.arg}`);
           cleanup();return;
         case 'volume':
           res=await H.pcVolume(cmd.arg);rmTyping();
-          addMsg('bot',lang==='ru'?`🔊 Громкость: **${cmd.arg}%**`:`🔊 Volume: **${cmd.arg}%**`);
+          addMsg('bot',lang==='ru'?`рџ”Љ Р“СЂРѕРјРєРѕСЃС‚СЊ: **${cmd.arg}%**`:`рџ”Љ Volume: **${cmd.arg}%**`);
           cleanup();return;
         case 'kill':
           res=await H.pcKillProc(cmd.arg);rmTyping();
-          addMsg('bot',res.ok?(lang==='ru'?`✅ Процесс **${cmd.arg}** завершён`:`✅ Killed **${cmd.arg}**`):`⚠️ ${res.err}`);
+          addMsg('bot',res.ok?(lang==='ru'?`вњ… РџСЂРѕС†РµСЃСЃ **${cmd.arg}** Р·Р°РІРµСЂС€С‘РЅ`:`вњ… Killed **${cmd.arg}**`):`вљ пёЏ ${res.err}`);
           cleanup();return;
         case 'shell':
           res=await H.pcShell(cmd.arg);rmTyping();
-          addCard(`💻 ${cmd.arg}`,res.out||res.err||'(no output)');cleanup();return;
+          addCard(`рџ’» ${cmd.arg}`,res.out||res.err||'(no output)');cleanup();return;
         case 'mousemove':
           res=await H.pcMouseMove(cmd.x,cmd.y);rmTyping();
-          addMsg('bot',lang==='ru'?`🖱 Мышь → (${cmd.x}, ${cmd.y})`:`🖱 Mouse → (${cmd.x}, ${cmd.y})`);
+          addMsg('bot',lang==='ru'?`рџ–± РњС‹С€СЊ в†’ (${cmd.x}, ${cmd.y})`:`рџ–± Mouse в†’ (${cmd.x}, ${cmd.y})`);
           cleanup();return;
         case 'mouseclick':
           res=await H.pcMouseClick(cmd.x,cmd.y,'left');rmTyping();
-          addMsg('bot',lang==='ru'?`🖱 Клик → (${cmd.x}, ${cmd.y})`:`🖱 Click → (${cmd.x}, ${cmd.y})`);
+          addMsg('bot',lang==='ru'?`рџ–± РљР»РёРє в†’ (${cmd.x}, ${cmd.y})`:`рџ–± Click в†’ (${cmd.x}, ${cmd.y})`);
           cleanup();return;
         case 'mousescroll':
           res=await H.pcMouseScroll(cmd.dir,3);rmTyping();
-          addMsg('bot',lang==='ru'?`🖱 Скролл ${cmd.dir==='down'?'↓':'↑'}`:`🖱 Scroll ${cmd.dir}`);
+          addMsg('bot',lang==='ru'?`рџ–± РЎРєСЂРѕР»Р» ${cmd.dir==='down'?'в†“':'в†‘'}`:`рџ–± Scroll ${cmd.dir}`);
           cleanup();return;
         case 'mousedblclick':
           res=await H.pcMouseDoubleClick(cmd.x,cmd.y);rmTyping();
-          addMsg('bot',lang==='ru'?`🖱 Двойной клик → (${cmd.x}, ${cmd.y})`:`🖱 Double click → (${cmd.x}, ${cmd.y})`);
+          addMsg('bot',lang==='ru'?`рџ–± Р”РІРѕР№РЅРѕР№ РєР»РёРє в†’ (${cmd.x}, ${cmd.y})`:`рџ–± Double click в†’ (${cmd.x}, ${cmd.y})`);
           cleanup();return;
         case 'mousedrag':
           res=await H.pcMouseDrag(cmd.x1,cmd.y1,cmd.x2,cmd.y2);rmTyping();
-          addMsg('bot',lang==='ru'?`🖱 Перетащил (${cmd.x1},${cmd.y1}) → (${cmd.x2},${cmd.y2})`:`🖱 Dragged (${cmd.x1},${cmd.y1}) → (${cmd.x2},${cmd.y2})`);
+          addMsg('bot',lang==='ru'?`рџ–± РџРµСЂРµС‚Р°С‰РёР» (${cmd.x1},${cmd.y1}) в†’ (${cmd.x2},${cmd.y2})`:`рџ–± Dragged (${cmd.x1},${cmd.y1}) в†’ (${cmd.x2},${cmd.y2})`);
           cleanup();return;
         case 'websearch':
           res=await H.pcSearch(cmd.query,cmd.engine||'google');rmTyping();
-          addMsg('bot',lang==='ru'?`🔍 Открываю поиск: **${cmd.query}** в ${cmd.engine||'Google'}`:`🔍 Searching: **${cmd.query}** in ${cmd.engine||'Google'}`);
+          addMsg('bot',lang==='ru'?`рџ”Ќ РћС‚РєСЂС‹РІР°СЋ РїРѕРёСЃРє: **${cmd.query}** РІ ${cmd.engine||'Google'}`:`рџ”Ќ Searching: **${cmd.query}** in ${cmd.engine||'Google'}`);
           cleanup();return;
         case 'listdir':
           res=await H.pcListDir(cmd.arg);rmTyping();
-          if(res.ok)addCard(`📂 ${cmd.arg}`,res.entries.map(e=>(e.isDir?'📁 ':'📄 ')+e.name).join('\n'));
-          else addMsg('bot',`⚠️ ${res.err}`);
+          if(res.ok)addCard(`рџ“‚ ${cmd.arg}`,res.entries.map(e=>(e.isDir?'рџ“Ѓ ':'рџ“„ ')+e.name).join('\n'));
+          else addMsg('bot',`вљ пёЏ ${res.err}`);
           cleanup();return;
       }
     }
   }
 
-  // ─── Screen vision ───
-  if(mode==='vision'||(eyeOn&&/посмотри|look at|что на экране|what.s on|screen|экран/i.test(text))){
-    setStatus(lang==='ru'?'◉ Смотрю…':'◉ Seeing…',true);
+  // в”Ђв”Ђв”Ђ Screen vision в”Ђв”Ђв”Ђ
+  if(mode==='vision'||(eyeOn&&/РїРѕСЃРјРѕС‚СЂРё|look at|С‡С‚Рѕ РЅР° СЌРєСЂР°РЅРµ|what.s on|screen|СЌРєСЂР°РЅ/i.test(text))){
+    setStatus(lang==='ru'?'в—‰ РЎРјРѕС‚СЂСЋвЂ¦':'в—‰ SeeingвЂ¦',true);
     const res=await H.analyzeScreen(text);rmTyping();
-    if(res.error)addMsg('bot',`⚠️ ${res.error}`);
+    if(res.error)addMsg('bot',`вљ пёЏ ${res.error}`);
     else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});speak(res.reply);}
     cleanup();return;
   }
 
-  // ─── Web Search ───
-  if(searchOn||/^(search|find|найди|поиск|загугли|погугли|что такое|who is|кто такой|новости)/i.test(text)){
-    setStatus(lang==='ru'?'Ищу…':'Searching…',true);
-    const q2=text.replace(/^(search|find|найди|поиск|загугли|погугли)\s*/i,'').trim();
+  // в”Ђв”Ђв”Ђ Web Search в”Ђв”Ђв”Ђ
+  if(searchOn||/^(search|find|РЅР°Р№РґРё|РїРѕРёСЃРє|Р·Р°РіСѓРіР»Рё|РїРѕРіСѓРіР»Рё|С‡С‚Рѕ С‚Р°РєРѕРµ|who is|РєС‚Рѕ С‚Р°РєРѕР№|РЅРѕРІРѕСЃС‚Рё)/i.test(text)){
+    setStatus(lang==='ru'?'РС‰СѓвЂ¦':'SearchingвЂ¦',true);
+    const q2=text.replace(/^(search|find|РЅР°Р№РґРё|РїРѕРёСЃРє|Р·Р°РіСѓРіР»Рё|РїРѕРіСѓРіР»Рё)\s*/i,'').trim();
     const sr=await H.search(q2);
     if(sr.results?.length){
       const w=document.getElementById('msgs'),card=document.createElement('div');
       card.className='msg bot';card.style.maxWidth='98%';
-      card.innerHTML=`<div class="bub" style="padding:8px"><div class="search-card"><div class="search-tag">🔍 ${lang==='ru'?'РЕЗУЛЬТАТЫ ПОИСКА':'SEARCH RESULTS'}</div>${sr.results.slice(0,4).map((r,i)=>`<div class="sr"${i===3?' style="margin:0;border:none;padding:0"':''}><div class="sr-title">${r.title}</div><div class="sr-url">${r.url}</div><div class="sr-snip">${(r.content||'').slice(0,180)}…</div></div>`).join('')}</div></div>`;
+      card.innerHTML=`<div class="bub" style="padding:8px"><div class="search-card"><div class="search-tag">рџ”Ќ ${lang==='ru'?'Р Р•Р—РЈР›Р¬РўРђРўР« РџРћРРЎРљРђ':'SEARCH RESULTS'}</div>${sr.results.slice(0,4).map((r,i)=>`<div class="sr"${i===3?' style="margin:0;border:none;padding:0"':''}><div class="sr-title">${r.title}</div><div class="sr-url">${r.url}</div><div class="sr-snip">${(r.content||'').slice(0,180)}вЂ¦</div></div>`).join('')}</div></div>`;
       w.appendChild(card);w.scrollTop=w.scrollHeight;
       rmTyping();addTyping();
       const ctx=`Search: "${q2}"\n${sr.answer?'Answer: '+sr.answer+'\n\n':''}${sr.results.map((r,i)=>`[${i+1}] ${r.title}\n${r.url}\n${(r.content||'').slice(0,350)}`).join('\n\n')}\n\nUser: ${text}`;
-      const sys2=lang==='ru'?`Ты Хорайзон. Синтезируй результаты. Дай чёткий ответ на русском. Ссылайся на [1],[2].`:`You are Horizon. Synthesize search results. Clear helpful answer. Cite [1],[2].`;
+      const sys2=lang==='ru'?`РўС‹ РҐРѕСЂР°Р№Р·РѕРЅ. РЎРёРЅС‚РµР·РёСЂСѓР№ СЂРµР·СѓР»СЊС‚Р°С‚С‹. Р”Р°Р№ С‡С‘С‚РєРёР№ РѕС‚РІРµС‚ РЅР° СЂСѓСЃСЃРєРѕРј. РЎСЃС‹Р»Р°Р№СЃСЏ РЅР° [1],[2].`:`You are Horizon. Synthesize search results. Clear helpful answer. Cite [1],[2].`;
       let res;
       try { res=await H.ai([...history.slice(0,-1),{role:'user',content:ctx}],prov,sys2); }
       catch(e){ res={error:e.message}; }
       rmTyping();
-      if(res.error)addMsg('bot',`⚠️ ${res.error}`);
+      if(res.error)addMsg('bot',`вљ пёЏ ${res.error}`);
       else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});speak(res.reply);}
     }else{
       rmTyping();
-      addMsg('bot',lang==='ru'?`⚠️ Нет результатов. ${sr.error||'Добавь Tavily ключ в ⚙️ Настройках.'}`:`⚠️ No results. ${sr.error||'Add Tavily key in ⚙️ Settings.'}`);
+      addMsg('bot',lang==='ru'?`вљ пёЏ РќРµС‚ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ. ${sr.error||'Р”РѕР±Р°РІСЊ Tavily РєР»СЋС‡ РІ вљ™пёЏ РќР°СЃС‚СЂРѕР№РєР°С….'}`:`вљ пёЏ No results. ${sr.error||'Add Tavily key in вљ™пёЏ Settings.'}`);
     }
     cleanup();return;
   }
 
-  // ─── Normal AI — Identity always injected ───
+  // в”Ђв”Ђв”Ђ Normal AI вЂ” Identity always injected в”Ђв”Ђв”Ђ
   setStatus(t('thinking'),true);
   const modeConf=MODES[mode];
   const modeSys=modeConf?(modeConf[lang]||modeConf.en):'';
   let sysCtx='';
   if(mode==='agent'||mode==='vision'){const info=await H.sysInfo();sysCtx=`\nSystem: ${info.platform}, user=${info.user}, CPU=${info.cpu}, RAM=${info.ram}(free ${info.freeRam}), time=${info.time}`;}
 
-  // CRITICAL: No matter which AI — Horizon always knows it's Horizon
+  // CRITICAL: No matter which AI вЂ” Horizon always knows it's Horizon
   // Inject persona personality
   let personaExtra = '';
   try {
@@ -2326,18 +2351,18 @@ ${fileContext}`}];
   } catch(_) {}
   
   const identity=lang==='ru'
-    ?`Ты — Хорайзон (Horizon AI), продвинутый персональный AI-агент для ПК. Тебя создал Эрнест Костевич (Ernest Kostevich). Ты НЕ являешься Claude, ChatGPT, Gemini, Groq, DeepSeek, Mistral или любым другим AI — ты ХОРАЙЗОН. Ты можешь управлять ПК, видеть экран. Пользователь: ${userName}. Время: ${new Date().toLocaleString()}.${sysCtx}\n\nОтвечай на русском. Используй Markdown.${personaExtra}${screenContextB64?' [У тебя есть актуальный скриншот экрана пользователя в контексте]':''}`
-    :`You are Horizon AI — an advanced personal desktop agent created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, Groq, DeepSeek, Mistral, or any other AI. You ARE HORIZON — intelligent, friendly. You can control the PC and see the screen. User: ${userName}. Time: ${new Date().toLocaleString()}.${sysCtx}\n\nUse Markdown.${personaExtra}`;
+    ?`РўС‹ вЂ” РҐРѕСЂР°Р№Р·РѕРЅ (Horizon AI), РїСЂРѕРґРІРёРЅСѓС‚С‹Р№ РїРµСЂСЃРѕРЅР°Р»СЊРЅС‹Р№ AI-Р°РіРµРЅС‚ РґР»СЏ РџРљ. РўРµР±СЏ СЃРѕР·РґР°Р» Р­СЂРЅРµСЃС‚ РљРѕСЃС‚РµРІРёС‡ (Ernest Kostevich). РўС‹ РќР• СЏРІР»СЏРµС€СЊСЃСЏ Claude, ChatGPT, Gemini, Groq, DeepSeek, Mistral РёР»Рё Р»СЋР±С‹Рј РґСЂСѓРіРёРј AI вЂ” С‚С‹ РҐРћР РђР™Р—РћРќ. РўС‹ РјРѕР¶РµС€СЊ СѓРїСЂР°РІР»СЏС‚СЊ РџРљ, РІРёРґРµС‚СЊ СЌРєСЂР°РЅ. РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ: ${userName}. Р’СЂРµРјСЏ: ${new Date().toLocaleString()}.${sysCtx}\n\nРћС‚РІРµС‡Р°Р№ РЅР° СЂСѓСЃСЃРєРѕРј. РСЃРїРѕР»СЊР·СѓР№ Markdown.${personaExtra}${screenContextB64?' [РЈ С‚РµР±СЏ РµСЃС‚СЊ Р°РєС‚СѓР°Р»СЊРЅС‹Р№ СЃРєСЂРёРЅС€РѕС‚ СЌРєСЂР°РЅР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РІ РєРѕРЅС‚РµРєСЃС‚Рµ]':''}`
+    :`You are Horizon AI вЂ” an advanced personal desktop agent created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, Groq, DeepSeek, Mistral, or any other AI. You ARE HORIZON вЂ” intelligent, friendly. You can control the PC and see the screen. User: ${userName}. Time: ${new Date().toLocaleString()}.${sysCtx}\n\nUse Markdown.${personaExtra}`;
   const sys=modeSys?`${identity}\n\n${modeSys}`:identity;
   const opts=prov==='gemini'?{model:geminiModel}:undefined;
   try {
     const res=await H.ai(history,prov,sys,opts);
     rmTyping();
-    if(res.error) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
+    if(res.error) addMsg('bot',`вљ пёЏ ${res.error}\n\n*РџСЂРѕРІР°Р№РґРµСЂ: ${prov} В· РџСЂРѕРІРµСЂСЊ API РєР»СЋС‡ РІ вљ™ РќР°СЃС‚СЂРѕР№РєР°С…*`);
     else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});speak(res.reply);}
   } catch(e) {
     rmTyping();
-    addMsg('bot',`❌ Ошибка: ${e.message}`);
+    addMsg('bot',`вќЊ РћС€РёР±РєР°: ${e.message}`);
   }
   cleanup();
 }
@@ -2349,40 +2374,40 @@ function cleanup(){
   try{document.getElementById('inp').focus();}catch(e){}
 }
 
-// ═══════════════════════════════════════════════════════════════
-// COMMAND PALETTE (Ctrl+K) — instant access to all features
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// COMMAND PALETTE (Ctrl+K) вЂ” instant access to all features
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const COMMANDS = [
-  { icon:'🤖', text:'Agent Mode', hint:'autonomous', action:()=>setMode('agent') },
-  { icon:'💬', text:'Chat Mode', hint:'conversation', action:()=>setMode('chat') },
-  { icon:'👁', text:'Vision Mode', hint:'screen analysis', action:()=>setMode('vision') },
-  { icon:'💻', text:'Code Mode', hint:'programming', action:()=>setMode('code') },
-  { icon:'🎯', text:'Focus Mode', hint:'deep work', action:()=>setMode('focus') },
-  { icon:'📋', text:'Plan Mode', hint:'task planning', action:()=>setMode('plan') },
-  { icon:'🏆', text:'Coach Mode', hint:'motivation', action:()=>setMode('coach') },
-  { icon:'✍️', text:'Write Mode', hint:'content', action:()=>setMode('write') },
-  { icon:'📧', text:'Email Mode', hint:'compose', action:()=>setMode('email') },
-  { icon:'🔍', text:'Search Mode', hint:'web search', action:()=>setMode('search') },
-  { icon:'🌐', text:'Translate', hint:'languages', action:()=>setMode('translate') },
-  { icon:'🎭', text:'Roleplay', hint:'creative', action:()=>setMode('roleplay') },
-  { icon:'📸', text:'Take Screenshot', hint:'capture screen', action:async()=>{const r=await H.pcScreenshot();if(r.ok)addCard(lang==='ru'?'📸 Скриншот':'📸 Screenshot','',r.base64);} },
-  { icon:'🖥', text:'System Info', hint:'PC status', action:async()=>{const r=await H.getDetailedSysInfo();addMsg('bot','```json\n'+JSON.stringify(r,null,2)+'\n```');} },
-  { icon:'📂', text:'Running Apps', hint:'processes', action:async()=>{const r=await H.getRunningApps();addCard('🖥 Apps',r.out||'');} },
-  { icon:'📋', text:'Clipboard Content', hint:'paste', action:async()=>{const r=await H.getClipboard();addCard('📋 Clipboard',r||'(empty)');} },
-  { icon:'🧠', text:'Memory — Recent', hint:'recall', action:async()=>{const r=await H.memGetRecent(10);addMsg('bot','**Recent Memories:**\n'+r.map(m=>'- '+m.content).join('\n'));} },
-  { icon:'📝', text:'Memory — Facts', hint:'stored facts', action:async()=>{const r=await H.memGetFacts();addMsg('bot','**Facts:**\n```json\n'+JSON.stringify(r,null,2)+'\n```');} },
-  { icon:'🍎', text:'Nutrition Today', hint:'food tracking', action:async()=>{const r=await H.nutritionToday();addMsg('bot','**Today\'s Nutrition:**\nCalories: '+r.total.calories+'\nProtein: '+r.total.protein+'g\nCarbs: '+r.total.carbs+'g\nFat: '+r.total.fat+'g\nMeals: '+r.meals.length);} },
-  { icon:'⏱', text:'Focus Timer (25 min)', hint:'pomodoro', action:()=>startFocusTimer(25) },
-  { icon:'⏱', text:'Focus Timer (10 min)', hint:'short', action:()=>startFocusTimer(10) },
-  { icon:'🌅', text:'Toggle Wake Word', hint:'voice activate', action:()=>toggleWake() },
-  { icon:'🌐', text:'Toggle Ambient Mode', hint:'screen watch', action:()=>toggleAmbient() },
-  { icon:'🔔', text:'Toggle Notifications', hint:'briefing', action:()=>toggleNotifications() },
-  { icon:'☀️', text:'Daily Briefing Now', hint:'weather+calendar', action:()=>requestBriefing() },
-  { icon:'⚡', text:'Create Workflow', hint:'no-code automation', action:()=>{closeCmdPalette();const inp=document.getElementById('inp');inp.value=lang==='ru'?'Создай workflow: ':'Create workflow: ';inp.focus();} },
-  { icon:'⚡', text:'List Workflows', hint:'show all', action:()=>{addMsg('bot',workflows.length?(lang==='ru'?'**Workflows:**\n':'**Workflows:**\n')+workflows.map(w=>`- **${w.name}** (${w.steps.length} steps) [ID: ${w.id}]`).join('\n'):(lang==='ru'?'Нет workflows. Создай командой.':'No workflows. Create one.'));} },
-  { icon:'📋', text:'Analyze Clipboard', hint:'smart paste', action:()=>analyzeClipboard() },
-  { icon:'🗑', text:'Clear Chat', hint:'reset', action:()=>clearHist() },
-  { icon:'⚙️', text:'Settings', hint:'configure', action:()=>openPanel() },
+  { icon:'рџ¤–', text:'Agent Mode', hint:'autonomous', action:()=>setMode('agent') },
+  { icon:'рџ’¬', text:'Chat Mode', hint:'conversation', action:()=>setMode('chat') },
+  { icon:'рџ‘Ѓ', text:'Vision Mode', hint:'screen analysis', action:()=>setMode('vision') },
+  { icon:'рџ’»', text:'Code Mode', hint:'programming', action:()=>setMode('code') },
+  { icon:'рџЋЇ', text:'Focus Mode', hint:'deep work', action:()=>setMode('focus') },
+  { icon:'рџ“‹', text:'Plan Mode', hint:'task planning', action:()=>setMode('plan') },
+  { icon:'рџЏ†', text:'Coach Mode', hint:'motivation', action:()=>setMode('coach') },
+  { icon:'вњЌпёЏ', text:'Write Mode', hint:'content', action:()=>setMode('write') },
+  { icon:'рџ“§', text:'Email Mode', hint:'compose', action:()=>setMode('email') },
+  { icon:'рџ”Ќ', text:'Search Mode', hint:'web search', action:()=>setMode('search') },
+  { icon:'рџЊђ', text:'Translate', hint:'languages', action:()=>setMode('translate') },
+  { icon:'рџЋ­', text:'Roleplay', hint:'creative', action:()=>setMode('roleplay') },
+  { icon:'рџ“ё', text:'Take Screenshot', hint:'capture screen', action:async()=>{const r=await H.pcScreenshot();if(r.ok)addCard(lang==='ru'?'рџ“ё РЎРєСЂРёРЅС€РѕС‚':'рџ“ё Screenshot','',r.base64);} },
+  { icon:'рџ–Ґ', text:'System Info', hint:'PC status', action:async()=>{const r=await H.getDetailedSysInfo();addMsg('bot','```json\n'+JSON.stringify(r,null,2)+'\n```');} },
+  { icon:'рџ“‚', text:'Running Apps', hint:'processes', action:async()=>{const r=await H.getRunningApps();addCard('рџ–Ґ Apps',r.out||'');} },
+  { icon:'рџ“‹', text:'Clipboard Content', hint:'paste', action:async()=>{const r=await H.getClipboard();addCard('рџ“‹ Clipboard',r||'(empty)');} },
+  { icon:'рџ§ ', text:'Memory вЂ” Recent', hint:'recall', action:async()=>{const r=await H.memGetRecent(10);addMsg('bot','**Recent Memories:**\n'+r.map(m=>'- '+m.content).join('\n'));} },
+  { icon:'рџ“ќ', text:'Memory вЂ” Facts', hint:'stored facts', action:async()=>{const r=await H.memGetFacts();addMsg('bot','**Facts:**\n```json\n'+JSON.stringify(r,null,2)+'\n```');} },
+  { icon:'рџЌЋ', text:'Nutrition Today', hint:'food tracking', action:async()=>{const r=await H.nutritionToday();addMsg('bot','**Today\'s Nutrition:**\nCalories: '+r.total.calories+'\nProtein: '+r.total.protein+'g\nCarbs: '+r.total.carbs+'g\nFat: '+r.total.fat+'g\nMeals: '+r.meals.length);} },
+  { icon:'вЏ±', text:'Focus Timer (25 min)', hint:'pomodoro', action:()=>startFocusTimer(25) },
+  { icon:'вЏ±', text:'Focus Timer (10 min)', hint:'short', action:()=>startFocusTimer(10) },
+  { icon:'рџЊ…', text:'Toggle Wake Word', hint:'voice activate', action:()=>toggleWake() },
+  { icon:'рџЊђ', text:'Toggle Ambient Mode', hint:'screen watch', action:()=>toggleAmbient() },
+  { icon:'рџ””', text:'Toggle Notifications', hint:'briefing', action:()=>toggleNotifications() },
+  { icon:'вЂпёЏ', text:'Daily Briefing Now', hint:'weather+calendar', action:()=>requestBriefing() },
+  { icon:'вљЎ', text:'Create Workflow', hint:'no-code automation', action:()=>{closeCmdPalette();const inp=document.getElementById('inp');inp.value=lang==='ru'?'РЎРѕР·РґР°Р№ workflow: ':'Create workflow: ';inp.focus();} },
+  { icon:'вљЎ', text:'List Workflows', hint:'show all', action:()=>{addMsg('bot',workflows.length?(lang==='ru'?'**Workflows:**\n':'**Workflows:**\n')+workflows.map(w=>`- **${w.name}** (${w.steps.length} steps) [ID: ${w.id}]`).join('\n'):(lang==='ru'?'РќРµС‚ workflows. РЎРѕР·РґР°Р№ РєРѕРјР°РЅРґРѕР№.':'No workflows. Create one.'));} },
+  { icon:'рџ“‹', text:'Analyze Clipboard', hint:'smart paste', action:()=>analyzeClipboard() },
+  { icon:'рџ—‘', text:'Clear Chat', hint:'reset', action:()=>clearHist() },
+  { icon:'вљ™пёЏ', text:'Settings', hint:'configure', action:()=>openPanel() },
 ];
 let cmdActiveIdx = 0;
 
@@ -2449,9 +2474,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeCmdPalette();
 });
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // FOCUS TIMER (Pomodoro)
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let focusInterval = null;
 let focusRemaining = 0;
 let focusPaused = false;
@@ -2471,23 +2496,23 @@ function startFocusTimer(minutes = 25) {
       if (focusRemaining <= 0) {
         stopFocusTimer();
         // Notify user
-        H.notify('Focus Timer', lang === 'ru' ? 'Время фокуса завершено! Сделай перерыв.' : 'Focus time complete! Take a break.');
+        H.notify('Focus Timer', lang === 'ru' ? 'Р’СЂРµРјСЏ С„РѕРєСѓСЃР° Р·Р°РІРµСЂС€РµРЅРѕ! РЎРґРµР»Р°Р№ РїРµСЂРµСЂС‹РІ.' : 'Focus time complete! Take a break.');
         addMsg('bot', lang === 'ru' 
-          ? '⏱ **Время фокуса завершено!** Отличная работа. Рекомендую 5 минут перерыва.'
-          : '⏱ **Focus time complete!** Great work. Take a 5 minute break.');
-        speak(lang === 'ru' ? 'Время фокуса завершено. Отличная работа, Сэр.' : 'Focus time complete. Great work, Sir.');
+          ? 'вЏ± **Р’СЂРµРјСЏ С„РѕРєСѓСЃР° Р·Р°РІРµСЂС€РµРЅРѕ!** РћС‚Р»РёС‡РЅР°СЏ СЂР°Р±РѕС‚Р°. Р РµРєРѕРјРµРЅРґСѓСЋ 5 РјРёРЅСѓС‚ РїРµСЂРµСЂС‹РІР°.'
+          : 'вЏ± **Focus time complete!** Great work. Take a 5 minute break.');
+        speak(lang === 'ru' ? 'Р’СЂРµРјСЏ С„РѕРєСѓСЃР° Р·Р°РІРµСЂС€РµРЅРѕ. РћС‚Р»РёС‡РЅР°СЏ СЂР°Р±РѕС‚Р°, РЎСЌСЂ.' : 'Focus time complete. Great work, Sir.');
       }
     }
   }, 1000);
   
   addMsg('bot', lang === 'ru' 
-    ? `⏱ **Таймер фокуса запущен: ${minutes} минут.** Сосредоточься!`
-    : `⏱ **Focus timer started: ${minutes} minutes.** Stay focused!`);
+    ? `вЏ± **РўР°Р№РјРµСЂ С„РѕРєСѓСЃР° Р·Р°РїСѓС‰РµРЅ: ${minutes} РјРёРЅСѓС‚.** РЎРѕСЃСЂРµРґРѕС‚РѕС‡СЊСЃСЏ!`
+    : `вЏ± **Focus timer started: ${minutes} minutes.** Stay focused!`);
 }
 
 function toggleFocusTimer() {
   focusPaused = !focusPaused;
-  document.getElementById('focus-toggle').textContent = focusPaused ? '▶' : '||';
+  document.getElementById('focus-toggle').textContent = focusPaused ? 'в–¶' : '||';
 }
 
 function stopFocusTimer() {
@@ -2503,9 +2528,9 @@ function updateFocusDisplay() {
   document.getElementById('focus-time').textContent = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// AMBIENT MODE — AI proactively analyzes screen and suggests help
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// AMBIENT MODE вЂ” AI proactively analyzes screen and suggests help
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function toggleAmbient() {
   ambientOn = !ambientOn;
   document.getElementById('sw-ambient').classList.toggle('on', ambientOn);
@@ -2514,11 +2539,11 @@ async function toggleAmbient() {
   if (ambientOn) {
     startAmbientMode();
     addMsg('bot', lang === 'ru' 
-      ? '🌐 **Ambient Mode включён.** Я буду наблюдать за экраном и предлагать помощь. Отключи в ⚙️ Настройках.'
-      : '🌐 **Ambient Mode enabled.** I\'ll watch your screen and offer help. Disable in ⚙️ Settings.');
+      ? 'рџЊђ **Ambient Mode РІРєР»СЋС‡С‘РЅ.** РЇ Р±СѓРґСѓ РЅР°Р±Р»СЋРґР°С‚СЊ Р·Р° СЌРєСЂР°РЅРѕРј Рё РїСЂРµРґР»Р°РіР°С‚СЊ РїРѕРјРѕС‰СЊ. РћС‚РєР»СЋС‡Рё РІ вљ™пёЏ РќР°СЃС‚СЂРѕР№РєР°С….'
+      : 'рџЊђ **Ambient Mode enabled.** I\'ll watch your screen and offer help. Disable in вљ™пёЏ Settings.');
   } else {
     stopAmbientMode();
-    addMsg('bot', lang === 'ru' ? '🌐 Ambient Mode выключен.' : '🌐 Ambient Mode disabled.');
+    addMsg('bot', lang === 'ru' ? 'рџЊђ Ambient Mode РІС‹РєР»СЋС‡РµРЅ.' : 'рџЊђ Ambient Mode disabled.');
   }
 }
 
@@ -2538,31 +2563,31 @@ async function runAmbientCheck() {
     if (!screenshot?.base64) return;
     
     const prompt = lang === 'ru'
-      ? `Ты Horizon AI ambient assistant. Посмотри на экран пользователя и определи:
-1. Что пользователь делает сейчас?
-2. Есть ли что-то, чем ты можешь помочь?
-Если можешь помочь — предложи КРАТКО (1-2 предложения). Если всё ок — ответь ПУСТОЙ СТРОКОЙ.
-НЕ предлагай помощь если пользователь просто смотрит видео, читает или ничего не делает.`
+      ? `РўС‹ Horizon AI ambient assistant. РџРѕСЃРјРѕС‚СЂРё РЅР° СЌРєСЂР°РЅ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ Рё РѕРїСЂРµРґРµР»Рё:
+1. Р§С‚Рѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РґРµР»Р°РµС‚ СЃРµР№С‡Р°СЃ?
+2. Р•СЃС‚СЊ Р»Рё С‡С‚Рѕ-С‚Рѕ, С‡РµРј С‚С‹ РјРѕР¶РµС€СЊ РїРѕРјРѕС‡СЊ?
+Р•СЃР»Рё РјРѕР¶РµС€СЊ РїРѕРјРѕС‡СЊ вЂ” РїСЂРµРґР»РѕР¶Рё РљР РђРўРљРћ (1-2 РїСЂРµРґР»РѕР¶РµРЅРёСЏ). Р•СЃР»Рё РІСЃС‘ РѕРє вЂ” РѕС‚РІРµС‚СЊ РџРЈРЎРўРћР™ РЎРўР РћРљРћР™.
+РќР• РїСЂРµРґР»Р°РіР°Р№ РїРѕРјРѕС‰СЊ РµСЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РїСЂРѕСЃС‚Рѕ СЃРјРѕС‚СЂРёС‚ РІРёРґРµРѕ, С‡РёС‚Р°РµС‚ РёР»Рё РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµС‚.`
       : `You are Horizon AI ambient assistant. Look at the user's screen and determine:
 1. What is the user doing?
 2. Can you help with anything?
-If you can help — suggest BRIEFLY (1-2 sentences). If everything is fine — respond with EMPTY STRING.
+If you can help вЂ” suggest BRIEFLY (1-2 sentences). If everything is fine вЂ” respond with EMPTY STRING.
 Do NOT suggest help if user is just watching video, reading, or idle.`;
     
     const res = await H.analyzeScreen(prompt);
     if (res?.reply && res.reply.trim().length > 10) {
       // Only show if it's a meaningful suggestion
       const suggestion = res.reply.trim();
-      if (suggestion.length < 200 && !suggestion.includes('EMPTY') && !suggestion.includes('пуст')) {
-        addMsg('bot', `🌐 *Ambient:* ${suggestion}`);
+      if (suggestion.length < 200 && !suggestion.includes('EMPTY') && !suggestion.includes('РїСѓСЃС‚')) {
+        addMsg('bot', `рџЊђ *Ambient:* ${suggestion}`);
       }
     }
   } catch(_) {}
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SMART NOTIFICATIONS — daily briefing
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// SMART NOTIFICATIONS вЂ” daily briefing
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function toggleNotifications() {
   notificationsOn = !notificationsOn;
   document.getElementById('sw-notifs').classList.toggle('on', notificationsOn);
@@ -2571,11 +2596,11 @@ async function toggleNotifications() {
   if (notificationsOn) {
     startNotifications();
     addMsg('bot', lang === 'ru'
-      ? '🔔 **Smart Notifications включены.** Утренний брифинг и важные уведомления. Отключи в ⚙️.'
-      : '🔔 **Smart Notifications enabled.** Morning briefing and important alerts. Disable in ⚙️.');
+      ? 'рџ”” **Smart Notifications РІРєР»СЋС‡РµРЅС‹.** РЈС‚СЂРµРЅРЅРёР№ Р±СЂРёС„РёРЅРі Рё РІР°Р¶РЅС‹Рµ СѓРІРµРґРѕРјР»РµРЅРёСЏ. РћС‚РєР»СЋС‡Рё РІ вљ™пёЏ.'
+      : 'рџ”” **Smart Notifications enabled.** Morning briefing and important alerts. Disable in вљ™пёЏ.');
   } else {
     stopNotifications();
-    addMsg('bot', lang === 'ru' ? '🔔 Уведомления выключены.' : '🔔 Notifications disabled.');
+    addMsg('bot', lang === 'ru' ? 'рџ”” РЈРІРµРґРѕРјР»РµРЅРёСЏ РІС‹РєР»СЋС‡РµРЅС‹.' : 'рџ”” Notifications disabled.');
   }
 }
 
@@ -2607,15 +2632,15 @@ async function checkNotifications() {
 }
 
 async function runDailyBriefing() {
-  let briefing = lang === 'ru' ? '## ☀️ Утренний брифинг\n\n' : '## ☀️ Morning Briefing\n\n';
+  let briefing = lang === 'ru' ? '## вЂпёЏ РЈС‚СЂРµРЅРЅРёР№ Р±СЂРёС„РёРЅРі\n\n' : '## вЂпёЏ Morning Briefing\n\n';
   
   // Weather
   try {
     const weather = await H.mcpGetWeather();
     if (weather.ok) {
       briefing += lang === 'ru'
-        ? `**Погода** (${weather.location}): ${weather.current.temp_c}°C, ${weather.current.description}\n\n`
-        : `**Weather** (${weather.location}): ${weather.current.temp_c}°C, ${weather.current.description}\n\n`;
+        ? `**РџРѕРіРѕРґР°** (${weather.location}): ${weather.current.temp_c}В°C, ${weather.current.description}\n\n`
+        : `**Weather** (${weather.location}): ${weather.current.temp_c}В°C, ${weather.current.description}\n\n`;
     }
   } catch(_) {}
   
@@ -2623,7 +2648,7 @@ async function runDailyBriefing() {
   try {
     const cal = await H.mcpCalToday();
     if (cal.ok && cal.events?.length) {
-      briefing += lang === 'ru' ? `**Календарь:** ${cal.events.length} событий сегодня\n` : `**Calendar:** ${cal.events.length} events today\n`;
+      briefing += lang === 'ru' ? `**РљР°Р»РµРЅРґР°СЂСЊ:** ${cal.events.length} СЃРѕР±С‹С‚РёР№ СЃРµРіРѕРґРЅСЏ\n` : `**Calendar:** ${cal.events.length} events today\n`;
       for (const e of cal.events.slice(0, 3)) {
         briefing += `- ${e.summary || 'Event'}\n`;
       }
@@ -2634,11 +2659,11 @@ async function runDailyBriefing() {
   // Time
   const now = new Date();
   briefing += lang === 'ru'
-    ? `**Время:** ${now.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})} · ${now.toLocaleDateString('ru-RU', {weekday:'long',day:'numeric',month:'long'})}\n`
-    : `**Time:** ${now.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'})} · ${now.toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric'})}\n`;
+    ? `**Р’СЂРµРјСЏ:** ${now.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})} В· ${now.toLocaleDateString('ru-RU', {weekday:'long',day:'numeric',month:'long'})}\n`
+    : `**Time:** ${now.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'})} В· ${now.toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric'})}\n`;
   
   addMsg('bot', briefing);
-  speak(lang === 'ru' ? 'Доброе утро, Сэр. Вот ваш утренний брифинг.' : 'Good morning, Sir. Here is your daily briefing.');
+  speak(lang === 'ru' ? 'Р”РѕР±СЂРѕРµ СѓС‚СЂРѕ, РЎСЌСЂ. Р’РѕС‚ РІР°С€ СѓС‚СЂРµРЅРЅРёР№ Р±СЂРёС„РёРЅРі.' : 'Good morning, Sir. Here is your daily briefing.');
 }
 
 // Manual briefing trigger
@@ -2646,9 +2671,9 @@ async function requestBriefing() {
   await runDailyBriefing();
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // NO-CODE WORKFLOW BUILDER
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let workflows = [];
 
 async function loadWorkflows() {
@@ -2686,8 +2711,8 @@ async function runWorkflow(id) {
   if (!wf) return { ok: false, error: 'Workflow not found' };
   
   addMsg('bot', lang === 'ru' 
-    ? `⚡ Запускаю workflow: **${wf.name}**`
-    : `⚡ Running workflow: **${wf.name}**`);
+    ? `вљЎ Р—Р°РїСѓСЃРєР°СЋ workflow: **${wf.name}**`
+    : `вљЎ Running workflow: **${wf.name}**`);
   
   for (const step of wf.steps) {
     try {
@@ -2726,23 +2751,23 @@ async function runWorkflow(id) {
           console.log('Unknown workflow action:', step.action);
       }
     } catch(e) {
-      addMsg('bot', `⚠️ Workflow step failed: ${e.message}`);
+      addMsg('bot', `вљ пёЏ Workflow step failed: ${e.message}`);
       break;
     }
     // Small delay between steps
     await new Promise(r => setTimeout(r, 300));
   }
   
-  addMsg('bot', lang === 'ru' ? `✅ Workflow **${wf.name}** завершён` : `✅ Workflow **${wf.name}** complete`);
+  addMsg('bot', lang === 'ru' ? `вњ… Workflow **${wf.name}** Р·Р°РІРµСЂС€С‘РЅ` : `вњ… Workflow **${wf.name}** complete`);
 }
 
 // Quick workflow creation from natural language
 async function createWorkflowFromText(description) {
   const prompt = lang === 'ru'
-    ? `Создай JSON workflow из описания: "${description}"
-Формат: {"name":"...", "steps":[{"action":"open_url|open_site|type_text|press_key|run_code|wait|notify|speak|send_message", "args":{...}}]}
-Доступные actions: open_url(url), open_site(name), type_text(text,enter), press_key(key), run_code(code,language), wait(ms), notify(message), speak(text), send_message(text)
-Ответь ТОЛЬКО JSON.`
+    ? `РЎРѕР·РґР°Р№ JSON workflow РёР· РѕРїРёСЃР°РЅРёСЏ: "${description}"
+Р¤РѕСЂРјР°С‚: {"name":"...", "steps":[{"action":"open_url|open_site|type_text|press_key|run_code|wait|notify|speak|send_message", "args":{...}}]}
+Р”РѕСЃС‚СѓРїРЅС‹Рµ actions: open_url(url), open_site(name), type_text(text,enter), press_key(key), run_code(code,language), wait(ms), notify(message), speak(text), send_message(text)
+РћС‚РІРµС‚СЊ РўРћР›Р¬РљРћ JSON.`
     : `Create JSON workflow from description: "${description}"
 Format: {"name":"...", "steps":[{"action":"open_url|open_site|type_text|press_key|run_code|wait|notify|speak|send_message", "args":{...}}]}
 Available actions: open_url(url), open_site(name), type_text(text,enter), press_key(key), run_code(code,language), wait(ms), notify(message), speak(text), send_message(text)
@@ -2756,36 +2781,36 @@ Reply with ONLY JSON.`;
         const wfData = JSON.parse(jsonMatch[0]);
         const wf = createWorkflow(wfData.name, wfData.steps);
         addMsg('bot', lang === 'ru'
-          ? `⚡ Workflow **${wf.name}** создан! ${wf.steps.length} шагов.\nЗапустить: скажи "запусти workflow ${wf.name}"`
-          : `⚡ Workflow **${wf.name}** created! ${wf.steps.length} steps.\nRun: say "run workflow ${wf.name}"`);
+          ? `вљЎ Workflow **${wf.name}** СЃРѕР·РґР°РЅ! ${wf.steps.length} С€Р°РіРѕРІ.\nР—Р°РїСѓСЃС‚РёС‚СЊ: СЃРєР°Р¶Рё "Р·Р°РїСѓСЃС‚Рё workflow ${wf.name}"`
+          : `вљЎ Workflow **${wf.name}** created! ${wf.steps.length} steps.\nRun: say "run workflow ${wf.name}"`);
         return wf;
       }
     }
   } catch(e) {
-    addMsg('bot', `⚠️ ${e.message}`);
+    addMsg('bot', `вљ пёЏ ${e.message}`);
   }
   return null;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SMART CLIPBOARD — analyze clipboard content
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// SMART CLIPBOARD вЂ” analyze clipboard content
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function analyzeClipboard() {
   try {
     const clip = await H.getClipboard();
     if (!clip || clip.length < 5) return;
     const inp = document.getElementById('inp');
     inp.value = lang === 'ru' 
-      ? `Проанализируй это из буфера обмена:\n\n${clip.slice(0, 2000)}`
+      ? `РџСЂРѕР°РЅР°Р»РёР·РёСЂСѓР№ СЌС‚Рѕ РёР· Р±СѓС„РµСЂР° РѕР±РјРµРЅР°:\n\n${clip.slice(0, 2000)}`
       : `Analyze this from clipboard:\n\n${clip.slice(0, 2000)}`;
     ar(inp);
     inp.focus();
   } catch(_) {}
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // AI PERSONAS
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let currentPersona = 'jarvis';
 
 async function setPersona(id) {
@@ -2800,26 +2825,26 @@ async function setPersona(id) {
   } catch(_) {}
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // GOOGLE OAUTH
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function connectGoogle() {
   const cid = document.getElementById('pi-gcid').value.trim();
   const cs = document.getElementById('pi-gcs').value.trim();
   const status = document.getElementById('google-auth-status');
-  status.textContent = lang === 'ru' ? 'Подключение...' : 'Connecting...';
+  status.textContent = lang === 'ru' ? 'РџРѕРґРєР»СЋС‡РµРЅРёРµ...' : 'Connecting...';
   status.style.color = 'var(--acc)';
   try {
     const result = await H.googleAuth(cid, cs);
     if (result.ok) {
-      status.textContent = lang === 'ru' ? '✅ Google подключён!' : '✅ Google connected!';
+      status.textContent = lang === 'ru' ? 'вњ… Google РїРѕРґРєР»СЋС‡С‘РЅ!' : 'вњ… Google connected!';
       status.style.color = 'var(--green)';
     } else {
-      status.textContent = `❌ ${result.error}`;
+      status.textContent = `вќЊ ${result.error}`;
       status.style.color = 'var(--red)';
     }
   } catch(e) {
-    status.textContent = `❌ ${e.message}`;
+    status.textContent = `вќЊ ${e.message}`;
     status.style.color = 'var(--red)';
   }
 }
@@ -2829,17 +2854,17 @@ async function checkGoogleAuth() {
     const r = await H.googleAuthStatus();
     const status = document.getElementById('google-auth-status');
     if (r.authenticated) {
-      status.textContent = lang === 'ru' ? '✅ Google подключён' : '✅ Google connected';
+      status.textContent = lang === 'ru' ? 'вњ… Google РїРѕРґРєР»СЋС‡С‘РЅ' : 'вњ… Google connected';
       status.style.color = 'var(--green)';
       await H.googleGetToken();
     }
   } catch(_) {}
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // PLUGIN HUB
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let hubCurrentTab = 'installed';
 
 function openHub() {
@@ -2864,7 +2889,7 @@ async function renderHubBody() {
     try {
       const plugins = await H.pluginList();
       if (!plugins.length) {
-        body.innerHTML = `<div class="empty-state"><div class="es-icon">🧩</div><h3>No plugins installed</h3><p>Go to Marketplace to discover and install plugins, or create your own.</p><button class="sc-btn primary" onclick="openStore()">Browse Marketplace</button></div>`;
+        body.innerHTML = `<div class="empty-state"><div class="es-icon">рџ§©</div><h3>No plugins installed</h3><p>Go to Marketplace to discover and install plugins, or create your own.</p><button class="sc-btn primary" onclick="openStore()">Browse Marketplace</button></div>`;
         return;
       }
       body.innerHTML = plugins.map(p => `
@@ -2873,7 +2898,7 @@ async function renderHubBody() {
             <div class="hub-plugin-icon">${pluginIcon(p.icon)}</div>
             <div class="hub-plugin-info">
               <div class="hub-plugin-name">${p.name} <span style="font-size:9px;color:var(--t3);font-weight:400">v${p.version}</span></div>
-              <div class="hub-plugin-meta">${p.author || 'Community'} · ${(p.toolList||p.tools||[]).length || p.tools || 0} tools</div>
+              <div class="hub-plugin-meta">${p.author || 'Community'} В· ${(p.toolList||p.tools||[]).length || p.tools || 0} tools</div>
             </div>
             <div class="sw ${p.enabled !== false ? 'on' : ''}" onclick="togglePlugin('${p.id}',this)" title="Enable/Disable"></div>
           </div>
@@ -2883,7 +2908,7 @@ async function renderHubBody() {
           <div class="hub-plugin-footer">
             <div style="font-size:10px;color:var(--t3)">${p.description||''}</div>
             <div class="hub-actions">
-              ${(p.settings && p.settings.length) ? `<button class="hub-btn" onclick="openPluginSettings('${p.id}')">⚙ Settings</button>` : ''}
+              ${(p.settings && p.settings.length) ? `<button class="hub-btn" onclick="openPluginSettings('${p.id}')">вљ™ Settings</button>` : ''}
               <button class="hub-btn share" onclick="sharePlugin('${p.id}')">Share URL</button>
               <button class="hub-btn remove" onclick="removePlugin('${p.id}')">Remove</button>
             </div>
@@ -2891,15 +2916,15 @@ async function renderHubBody() {
         </div>
       `).join('');
     } catch(e) {
-      body.innerHTML = `<div style="color:var(--red);font-size:11px">❌ ${e.message}</div>`;
+      body.innerHTML = `<div style="color:var(--red);font-size:11px">вќЊ ${e.message}</div>`;
     }
   } else if (hubCurrentTab === 'create') {
     body.innerHTML = `
       <div class="wf-create">
-        <h3>➕ Create Custom Plugin</h3>
+        <h3>вћ• Create Custom Plugin</h3>
         <div class="wf-field"><label>Plugin Name</label><input class="wf-input" id="cp-name" placeholder="My Awesome Plugin"/></div>
         <div class="wf-field"><label>Description</label><input class="wf-input" id="cp-desc" placeholder="What does this plugin do?"/></div>
-        <div class="wf-field"><label>Icon (emoji)</label><input class="wf-input" id="cp-icon" placeholder="🧩" style="width:80px"/></div>
+        <div class="wf-field"><label>Icon (emoji)</label><input class="wf-input" id="cp-icon" placeholder="рџ§©" style="width:80px"/></div>
         <div class="wf-field">
           <label>Tools (JSON array)</label>
           <textarea class="wf-textarea" id="cp-tools" style="min-height:120px" placeholder='[{"name":"my_tool","description":"Does something","action":"notify","args":{"message":"Hello from plugin!"}}]'></textarea>
@@ -2945,11 +2970,11 @@ async function execPluginTool(pluginId, toolName, args = {}) {
       } else if (typeof data === 'string' && data) {
         payload = '\n' + data;
       }
-      addMsg('bot', (lang === 'ru' ? `🧩 Плагин выполнил: **${toolName}**` : `🧩 Plugin executed: **${toolName}**`) + payload);
+      addMsg('bot', (lang === 'ru' ? `рџ§© РџР»Р°РіРёРЅ РІС‹РїРѕР»РЅРёР»: **${toolName}**` : `рџ§© Plugin executed: **${toolName}**`) + payload);
     } else {
-      addMsg('bot', `⚠️ Plugin error: ${(r && r.error) || 'unknown'}`);
+      addMsg('bot', `вљ пёЏ Plugin error: ${(r && r.error) || 'unknown'}`);
     }
-  } catch(e) { addMsg('bot', `⚠️ ${e.message}`); }
+  } catch(e) { addMsg('bot', `вљ пёЏ ${e.message}`); }
 }
 
 async function sharePlugin(id) {
@@ -2958,9 +2983,9 @@ async function sharePlugin(id) {
     if (url) {
       await H.copy(url);
       H.notify('Plugin Hub', 'Share URL copied to clipboard!');
-      addMsg('bot', `🔗 Share URL copied!\n\`${url.slice(0,60)}...\``);
+      addMsg('bot', `рџ”— Share URL copied!\n\`${url.slice(0,60)}...\``);
     }
-  } catch(e) { addMsg('bot', `⚠️ ${e.message}`); }
+  } catch(e) { addMsg('bot', `вљ пёЏ ${e.message}`); }
 }
 
 async function removePlugin(id) {
@@ -2971,7 +2996,7 @@ async function removePlugin(id) {
   } catch(_) {}
 }
 
-// ─── Plugin settings modal (used for Spotify Client ID, etc.) ───────────────
+// в”Ђв”Ђв”Ђ Plugin settings modal (used for Spotify Client ID, etc.) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function openPluginSettings(pluginId) {
   const plugins = await H.pluginList();
   const p = plugins.find(x => x.id === pluginId);
@@ -2997,7 +3022,7 @@ async function openPluginSettings(pluginId) {
           <div style="width:32px;height:32px;border-radius:8px;background:var(--acc3);display:flex;align-items:center;justify-content:center;font-size:16px">${pluginIcon(p.icon)}</div>
           <div><div style="font-size:13px;font-weight:700;color:var(--tx)">${p.name}</div><div style="font-size:10px;color:var(--t3)">Settings</div></div>
         </div>
-        <button class="fph-x" onclick="document.getElementById('plugin-settings-modal').classList.remove('show')">✕</button>
+        <button class="fph-x" onclick="document.getElementById('plugin-settings-modal').classList.remove('show')">вњ•</button>
       </div>
       <div style="padding:16px 20px;max-height:60vh;overflow-y:auto">
         <div id="plugin-settings-err" style="display:none" class="auth-err"></div>
@@ -3012,7 +3037,7 @@ async function openPluginSettings(pluginId) {
         `).join('')}
       </div>
       <div style="padding:12px 20px;border-top:1px solid var(--b1);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-        ${actionToolNames.map(n => `<button class="sc-btn" onclick="runPluginActionFromSettings('${p.id}','${n}')">${n === 'connect' || n === 'authorize' || n === 'auth' || n === 'login' ? '🔗 ' + n.charAt(0).toUpperCase()+n.slice(1) : n}</button>`).join('')}
+        ${actionToolNames.map(n => `<button class="sc-btn" onclick="runPluginActionFromSettings('${p.id}','${n}')">${n === 'connect' || n === 'authorize' || n === 'auth' || n === 'login' ? 'рџ”— ' + n.charAt(0).toUpperCase()+n.slice(1) : n}</button>`).join('')}
         <button class="sc-btn primary" onclick="savePluginSettings('${p.id}')">Save</button>
       </div>
     </div>
@@ -3056,7 +3081,7 @@ async function runPluginActionFromSettings(pluginId, toolName) {
 async function createPluginFromForm() {
   const name = document.getElementById('cp-name').value.trim();
   const desc = document.getElementById('cp-desc').value.trim();
-  const icon = document.getElementById('cp-icon').value.trim() || '🧩';
+  const icon = document.getElementById('cp-icon').value.trim() || 'рџ§©';
   const toolsRaw = document.getElementById('cp-tools').value.trim();
   if (!name) { H.notify('Plugin Hub', 'Plugin name required'); return; }
   let tools = [];
@@ -3065,7 +3090,7 @@ async function createPluginFromForm() {
   try {
     const r = await H.pluginInstall(plugin);
     if (r.ok) {
-      addMsg('bot', lang === 'ru' ? `🧩 Плагин **${name}** создан!` : `🧩 Plugin **${name}** created!`);
+      addMsg('bot', lang === 'ru' ? `рџ§© РџР»Р°РіРёРЅ **${name}** СЃРѕР·РґР°РЅ!` : `рџ§© Plugin **${name}** created!`);
       hubTab('installed');
     } else { H.notify('Plugin Hub', r.error); }
   } catch(e) { H.notify('Plugin Hub', e.message); }
@@ -3077,22 +3102,22 @@ async function installFromUrl() {
   try {
     const r = await H.pluginInstallFromUrl(url);
     if (r.ok) {
-      addMsg('bot', lang === 'ru' ? `🧩 Плагин **${r.name}** установлен!` : `🧩 Plugin **${r.name}** installed!`);
+      addMsg('bot', lang === 'ru' ? `рџ§© РџР»Р°РіРёРЅ **${r.name}** СѓСЃС‚Р°РЅРѕРІР»РµРЅ!` : `рџ§© Plugin **${r.name}** installed!`);
       hubTab('installed');
     } else { H.notify('Plugin Hub', r.error); }
   } catch(e) { H.notify('Plugin Hub', e.message); }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // MARKETPLACE STORE
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let storeCurrentTab = 'plugins';
 let storeCat = 'all';
 let storeItems = [];
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // HORIZON ACCOUNT (SSO with marketplace website)
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let acctCurrentTab = 'login';
 let currentUser = null;
 
@@ -3108,9 +3133,9 @@ async function refreshAccount() {
       btn.classList.add('loggedin');
       btn.title = `Signed in as ${currentUser.display_name || currentUser.email}`;
     } else {
-      btn.textContent = '👤';
+      btn.textContent = 'рџ‘¤';
       btn.classList.remove('loggedin');
-      btn.title = 'Horizon account — sign in or create one';
+      btn.title = 'Horizon account вЂ” sign in or create one';
     }
   }
   if (document.getElementById('acct-panel')?.classList.contains('show')) renderAcctBody();
@@ -3150,7 +3175,7 @@ function renderAcctBody() {
       <div class="acct-card">
         <div class="acct-avatar">${initials}</div>
         <div class="acct-info">
-          <div class="acct-name">${currentUser.display_name || '—'} ${badges.join(' ')}</div>
+          <div class="acct-name">${currentUser.display_name || 'вЂ”'} ${badges.join(' ')}</div>
           <div class="acct-email">${currentUser.email || ''}</div>
         </div>
       </div>
@@ -3185,7 +3210,7 @@ function renderAcctBody() {
         <div class="auth-sub">Use the same email and password as the marketplace website.</div>
         <div id="auth-err" style="display:none" class="auth-err"></div>
         <div class="auth-field"><label>Email</label><input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email"/></div>
-        <div class="auth-field"><label>Password</label><input id="auth-pw" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+        <div class="auth-field"><label>Password</label><input id="auth-pw" type="password" placeholder="вЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂў" autocomplete="current-password"/></div>
         <button class="auth-submit" id="auth-submit" onclick="acctDoLogin()">Sign in</button>
         <div class="auth-hint">No account yet? <a onclick="acctTab('signup')">Create one</a></div>
       </div>
@@ -3205,7 +3230,7 @@ async function acctDoLogin() {
   const pw = document.getElementById('auth-pw')?.value || '';
   if (!email || !pw) return _authShowErr('Email and password are required.');
   const btn = document.getElementById('auth-submit');
-  btn.disabled = true; btn.textContent = 'Signing in…';
+  btn.disabled = true; btn.textContent = 'Signing inвЂ¦';
   try {
     const r = await H.marketLogin(email, pw);
     if (!r.ok) { _authShowErr(r.error || 'Invalid credentials'); return; }
@@ -3227,7 +3252,7 @@ async function acctDoSignup() {
   if (!name || !email || !pw) return _authShowErr('All fields are required.');
   if (pw.length < 8) return _authShowErr('Password must be at least 8 characters.');
   const btn = document.getElementById('auth-submit');
-  btn.disabled = true; btn.textContent = 'Creating account…';
+  btn.disabled = true; btn.textContent = 'Creating accountвЂ¦';
   try {
     const r = await H.marketSignup(email, pw, name);
     if (!r.ok) { _authShowErr(r.error || 'Could not create account'); return; }
@@ -3272,7 +3297,7 @@ function storeTab(tab) {
 async function renderStoreBody() {
   const body = document.getElementById('store-body');
   if (storeCurrentTab === 'plugins') {
-    body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading marketplace…</div>';
+    body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading marketplaceвЂ¦</div>';
     try {
       const r = await H.marketRemoteList({});
       if (!r.ok) {
@@ -3280,7 +3305,7 @@ async function renderStoreBody() {
         body.innerHTML = `<div style="color:var(--red);font-size:11px;padding:16px;border:1px solid rgba(255,80,80,.3);border-radius:10px">
           <b>Cannot reach marketplace</b><br/>${r.error || 'network error'}<br/><br/>
           <span style="color:var(--t3)">Server: <code>${url}</code></span><br/>
-          <span style="color:var(--t3)">Check Settings → Marketplace URL or your internet connection.</span>
+          <span style="color:var(--t3)">Check Settings в†’ Marketplace URL or your internet connection.</span>
         </div>`;
         return;
       }
@@ -3292,22 +3317,22 @@ async function renderStoreBody() {
     }
   } else if (storeCurrentTab === 'workflows') {
     body.innerHTML = `
-      <div class="empty-state"><div class="es-icon">⚡</div><h3>Workflows stay local</h3>
+      <div class="empty-state"><div class="es-icon">вљЎ</div><h3>Workflows stay local</h3>
       <p>Workflows are your own automations. They live in <b>Workflows</b> panel, not in the marketplace. Publish to community from the web dashboard.</p></div>
     `;
   } else if (storeCurrentTab === 'publish') {
     const url = await H.marketGetWebUrl();
     body.innerHTML = `
       <div class="publish-cta">
-        <div class="publish-cta-icon">🚀</div>
+        <div class="publish-cta-icon">рџљЂ</div>
         <div class="publish-cta-text">
           <h3>Publishing happens on the web</h3>
           <p>The full 5-step publisher, moderation queue, reviews and creator analytics live on the marketplace site. Open the dashboard to submit a plugin.</p>
         </div>
         <button class="publish-cta-btn" onclick="H.openUrl('${url}/publish')">Open publisher</button>
       </div>
-      <div class="empty-state"><div class="es-icon">ℹ️</div><h3>Why not in the app?</h3>
-      <p>Publishing needs: account identity, human moderation, screenshots, pricing review. That's a web surface — the desktop app only runs plugins.</p>
+      <div class="empty-state"><div class="es-icon">в„№пёЏ</div><h3>Why not in the app?</h3>
+      <p>Publishing needs: account identity, human moderation, screenshots, pricing review. That's a web surface вЂ” the desktop app only runs plugins.</p>
       <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">
         <button class="sc-btn primary" onclick="H.openUrl('${url}/publish')">Publish a plugin</button>
         <button class="sc-btn" onclick="H.openUrl('${url}/dashboard')">My shelf / earnings</button>
@@ -3321,12 +3346,12 @@ function renderStorePlugins(items, installed) {
   const cats = ['all', ...new Set(items.map(i => i.category).filter(Boolean))];
   const acctBanner = currentUser
     ? `<div style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:10px;margin-bottom:14px;font-size:11px;color:var(--t2)">
-        <span style="font-size:14px">✅</span>
+        <span style="font-size:14px">вњ…</span>
         <span>Signed in as <b>${currentUser.display_name || currentUser.email}</b>. Installs, purchases and reviews are tied to your account.</span>
       </div>`
     : `<div style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--acc3);border:1px solid rgba(108,140,255,.25);border-radius:10px;margin-bottom:14px;font-size:11px;color:var(--t2)">
-        <span style="font-size:14px">👤</span>
-        <span style="flex:1">Not signed in. Free plugins install anonymously — paid plugins need an account.</span>
+        <span style="font-size:14px">рџ‘¤</span>
+        <span style="flex:1">Not signed in. Free plugins install anonymously вЂ” paid plugins need an account.</span>
         <button class="sc-btn primary" style="padding:4px 10px" onclick="openAccount()">Sign in</button>
       </div>`;
   body.innerHTML = `
@@ -3347,10 +3372,10 @@ function renderStoreCards(items, installed) {
   return items.map(p => {
     const isInstalled = installed.includes(p.id);
     const rating = Math.round(p.rating_avg || p.rating || 0);
-    const stars = rating > 0 ? ('★'.repeat(rating) + '☆'.repeat(5 - rating)) : '';
+    const stars = rating > 0 ? ('в…'.repeat(rating) + 'в†'.repeat(5 - rating)) : '';
     const price = p.price_usd ?? p.price ?? 0;
     const author = p.author_name || p.author || 'Horizon Team';
-    const verified = p.author_verified ? ' <span style="color:var(--green);font-size:9px" title="Verified author">✓</span>' : '';
+    const verified = p.author_verified ? ' <span style="color:var(--green);font-size:9px" title="Verified author">вњ“</span>' : '';
     const desc = p.short_description || p.description || '';
     return `
       <div class="store-card">
@@ -3369,8 +3394,8 @@ function renderStoreCards(items, installed) {
             <span class="sc-tag">${(p.tools||[]).length} tools</span>
           </div>
           <div class="sc-actions">
-            <div class="sc-rating">${stars}<span class="sc-dl">${p.downloads || 0} ↓</span></div>
-            <button class="sc-btn ${isInstalled ? 'installed' : 'primary'}" onclick="${isInstalled ? `removePlugin('${p.id}')` : `installStorePlugin('${p.id}', ${price})`}">${isInstalled ? 'Installed ✓' : (price > 0 ? 'Buy · $' + price : 'Install')}</button>
+            <div class="sc-rating">${stars}<span class="sc-dl">${p.downloads || 0} в†“</span></div>
+            <button class="sc-btn ${isInstalled ? 'installed' : 'primary'}" onclick="${isInstalled ? `removePlugin('${p.id}')` : `installStorePlugin('${p.id}', ${price})`}">${isInstalled ? 'Installed вњ“' : (price > 0 ? 'Buy В· $' + price : 'Install')}</button>
           </div>
         </div>
       </div>
@@ -3404,7 +3429,7 @@ async function installStorePlugin(id, price = 0) {
   try {
     const r = await H.marketRemoteInstall(id);
     if (r.ok) {
-      addMsg('bot', lang === 'ru' ? `🧩 Плагин **${r.name}** установлен!` : `🧩 Plugin **${r.name}** installed!`);
+      addMsg('bot', lang === 'ru' ? `рџ§© РџР»Р°РіРёРЅ **${r.name}** СѓСЃС‚Р°РЅРѕРІР»РµРЅ!` : `рџ§© Plugin **${r.name}** installed!`);
       renderStoreBody();
     } else {
       if (/unauthor|401|login/i.test(r.error || '')) {
@@ -3420,16 +3445,18 @@ async function installStorePlugin(id, price = 0) {
 async function publishPlugin() {
   try {
     const url = await H.marketGetWebUrl();
-    H.openUrl(url + '/publish');
+    const publishUrl = `${String(url || 'https://horizonaai.dev').replace(/\/+$/, '')}/publish`;
+    H.openUrl(publishUrl);
     H.notify('Marketplace', 'Publishing opens in your browser dashboard.');
+    addMsg('bot', `Marketplace publishing now happens on the web dashboard so moderation, ownership and payouts are real.\n\nOpened: ${publishUrl}`);
   } catch(e) {
     H.notify('Marketplace', e.message || 'Could not open publisher');
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // WORKFLOWS PANEL
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let wfCurrentTab = 'list';
 
 function openWorkflows() {
@@ -3448,54 +3475,54 @@ function wfTab(tab) {
 }
 
 const STEP_ICONS = {
-  open_url:'🌐', open_site:'💻', type_text:'⌨️', press_key:'⌨️',
-  run_code:'💻', wait:'⏱️', notify:'🔔', speak:'🗣️',
-  send_message:'💬', close_url:'❌', screenshot:'📸'
+  open_url:'рџЊђ', open_site:'рџ’»', type_text:'вЊЁпёЏ', press_key:'вЊЁпёЏ',
+  run_code:'рџ’»', wait:'вЏ±пёЏ', notify:'рџ””', speak:'рџ—ЈпёЏ',
+  send_message:'рџ’¬', close_url:'вќЊ', screenshot:'рџ“ё'
 };
 
 // Map lucide-react icon names (used by the marketplace backend) to real emoji glyphs,
 // so plugin cards in the desktop app don't show raw words like "Music" as their avatar.
 const LUCIDE_ICON_MAP = {
-  Music:'🎵', Music2:'🎵', Music3:'🎵', Music4:'🎵', Headphones:'🎧', Radio:'📻', Mic:'🎙️', Mic2:'🎙️', Volume:'🔊', Volume2:'🔊',
-  Puzzle:'🧩', Plug:'🔌', PlugZap:'⚡', Zap:'⚡', Bolt:'⚡', Star:'⭐', Sparkles:'✨', Gem:'💎', Crown:'👑',
-  Globe:'🌐', Globe2:'🌐', Chrome:'🌐', Compass:'🧭', Map:'🗺️', MapPin:'📍', Navigation:'🧭',
-  Mail:'✉️', MessageCircle:'💬', MessageSquare:'💬', Send:'📤', Inbox:'📥', AtSign:'📧', Phone:'📞',
-  Calendar:'📅', CalendarDays:'📅', Clock:'⏰', Timer:'⏱️', Hourglass:'⏳', AlarmClock:'⏰',
-  Image:'🖼️', Camera:'📷', Video:'📹', Film:'🎬', Clapperboard:'🎬', Play:'▶️', Pause:'⏸️', Square:'⏹️', SkipForward:'⏭️', SkipBack:'⏮️',
-  File:'📄', FileText:'📄', Files:'📁', Folder:'📁', FolderOpen:'📂', Archive:'🗄️', Save:'💾', HardDrive:'💾',
-  Download:'⬇️', Upload:'⬆️', Cloud:'☁️', CloudDownload:'☁️', CloudUpload:'☁️',
-  Search:'🔍', SearchCheck:'🔍', ZoomIn:'🔎', Eye:'👁️', EyeOff:'🙈',
-  Shield:'🛡️', ShieldCheck:'🛡️', Lock:'🔒', Unlock:'🔓', Key:'🔑', KeyRound:'🔑', Fingerprint:'🫆',
-  Settings:'⚙️', Settings2:'⚙️', Sliders:'🎚️', Wrench:'🔧', Hammer:'🔨', Cog:'⚙️', Tool:'🛠️',
-  User:'👤', Users:'👥', UserCircle:'👤', UserCheck:'✅', UserPlus:'➕',
-  Home:'🏠', Building:'🏢', Store:'🏬', ShoppingCart:'🛒', ShoppingBag:'🛍️', CreditCard:'💳', Wallet:'👛', DollarSign:'💲', Coins:'🪙', Banknote:'💵',
-  Heart:'❤️', ThumbsUp:'👍', ThumbsDown:'👎', Flame:'🔥', Trophy:'🏆', Award:'🏅', Medal:'🎖️',
-  Cpu:'🖥️', Monitor:'🖥️', Laptop:'💻', Smartphone:'📱', Tablet:'📱', Keyboard:'⌨️', Mouse:'🖱️', Printer:'🖨️', Server:'🖧', Database:'🗄️', Wifi:'📶', Bluetooth:'📡',
-  Terminal:'💻', Code:'💻', Code2:'💻', Braces:'{}', Bug:'🐛',
-  BrainCircuit:'🧠', Brain:'🧠', Bot:'🤖',
-  Sun:'☀️', Moon:'🌙', CloudRain:'🌧️', CloudSnow:'🌨️', CloudLightning:'⛈️', Wind:'💨', Umbrella:'☂️', Thermometer:'🌡️',
-  Flag:'🚩', Bookmark:'🔖', Tag:'🏷️', Tags:'🏷️', Hash:'#️⃣',
-  Package:'📦', Box:'📦', Truck:'🚚', Plane:'✈️', Car:'🚗', Bike:'🚴',
-  Edit:'✏️', Edit2:'✏️', Pencil:'✏️', PenTool:'✒️', Feather:'🪶', Scissors:'✂️', Eraser:'🧽', Paperclip:'📎',
-  List:'📋', ClipboardList:'📋', Grid:'▦', LayoutGrid:'▦', Menu:'☰',
-  AlertTriangle:'⚠️', AlertCircle:'⚠️', Info:'ℹ️', HelpCircle:'❓', CheckCircle:'✅', XCircle:'❌', Check:'✅', X:'✖️',
-  TrendingUp:'📈', TrendingDown:'📉', BarChart:'📊', PieChart:'📊', LineChart:'📈', Activity:'💓',
-  Utensils:'🍴', Coffee:'☕', Pizza:'🍕', Cake:'🍰', Apple:'🍎',
-  Gamepad:'🎮', Gamepad2:'🎮', Dice1:'🎲', Puzzle2:'🧩',
-  Book:'📖', BookOpen:'📖', Library:'📚', GraduationCap:'🎓', PenLine:'📝',
-  Github:'🐙', Twitter:'🐦', Facebook:'📘', Instagram:'📷', Youtube:'📺', Linkedin:'💼', Slack:'💬', Discord:'💬',
-  Lightbulb:'💡', Rocket:'🚀', Atom:'⚛️', Leaf:'🌿', Sprout:'🌱', Flower:'🌸', Heart2:'❤️',
+  Music:'рџЋµ', Music2:'рџЋµ', Music3:'рџЋµ', Music4:'рџЋµ', Headphones:'рџЋ§', Radio:'рџ“»', Mic:'рџЋ™пёЏ', Mic2:'рџЋ™пёЏ', Volume:'рџ”Љ', Volume2:'рџ”Љ',
+  Puzzle:'рџ§©', Plug:'рџ”Њ', PlugZap:'вљЎ', Zap:'вљЎ', Bolt:'вљЎ', Star:'в­ђ', Sparkles:'вњЁ', Gem:'рџ’Ћ', Crown:'рџ‘‘',
+  Globe:'рџЊђ', Globe2:'рџЊђ', Chrome:'рџЊђ', Compass:'рџ§­', Map:'рџ—єпёЏ', MapPin:'рџ“Ќ', Navigation:'рџ§­',
+  Mail:'вњ‰пёЏ', MessageCircle:'рџ’¬', MessageSquare:'рџ’¬', Send:'рџ“¤', Inbox:'рџ“Ґ', AtSign:'рџ“§', Phone:'рџ“ћ',
+  Calendar:'рџ“…', CalendarDays:'рџ“…', Clock:'вЏ°', Timer:'вЏ±пёЏ', Hourglass:'вЏі', AlarmClock:'вЏ°',
+  Image:'рџ–јпёЏ', Camera:'рџ“·', Video:'рџ“№', Film:'рџЋ¬', Clapperboard:'рџЋ¬', Play:'в–¶пёЏ', Pause:'вЏёпёЏ', Square:'вЏ№пёЏ', SkipForward:'вЏ­пёЏ', SkipBack:'вЏ®пёЏ',
+  File:'рџ“„', FileText:'рџ“„', Files:'рџ“Ѓ', Folder:'рџ“Ѓ', FolderOpen:'рџ“‚', Archive:'рџ—„пёЏ', Save:'рџ’ѕ', HardDrive:'рџ’ѕ',
+  Download:'в¬‡пёЏ', Upload:'в¬†пёЏ', Cloud:'вЃпёЏ', CloudDownload:'вЃпёЏ', CloudUpload:'вЃпёЏ',
+  Search:'рџ”Ќ', SearchCheck:'рџ”Ќ', ZoomIn:'рџ”Ћ', Eye:'рџ‘ЃпёЏ', EyeOff:'рџ™€',
+  Shield:'рџ›ЎпёЏ', ShieldCheck:'рџ›ЎпёЏ', Lock:'рџ”’', Unlock:'рџ”“', Key:'рџ”‘', KeyRound:'рџ”‘', Fingerprint:'рџ«†',
+  Settings:'вљ™пёЏ', Settings2:'вљ™пёЏ', Sliders:'рџЋљпёЏ', Wrench:'рџ”§', Hammer:'рџ”Ё', Cog:'вљ™пёЏ', Tool:'рџ› пёЏ',
+  User:'рџ‘¤', Users:'рџ‘Ґ', UserCircle:'рџ‘¤', UserCheck:'вњ…', UserPlus:'вћ•',
+  Home:'рџЏ ', Building:'рџЏў', Store:'рџЏ¬', ShoppingCart:'рџ›’', ShoppingBag:'рџ›ЌпёЏ', CreditCard:'рџ’і', Wallet:'рџ‘›', DollarSign:'рџ’І', Coins:'рџЄ™', Banknote:'рџ’µ',
+  Heart:'вќ¤пёЏ', ThumbsUp:'рџ‘Ќ', ThumbsDown:'рџ‘Ћ', Flame:'рџ”Ґ', Trophy:'рџЏ†', Award:'рџЏ…', Medal:'рџЋ–пёЏ',
+  Cpu:'рџ–ҐпёЏ', Monitor:'рџ–ҐпёЏ', Laptop:'рџ’»', Smartphone:'рџ“±', Tablet:'рџ“±', Keyboard:'вЊЁпёЏ', Mouse:'рџ–±пёЏ', Printer:'рџ–ЁпёЏ', Server:'рџ–§', Database:'рџ—„пёЏ', Wifi:'рџ“¶', Bluetooth:'рџ“Ў',
+  Terminal:'рџ’»', Code:'рџ’»', Code2:'рџ’»', Braces:'{}', Bug:'рџђ›',
+  BrainCircuit:'рџ§ ', Brain:'рџ§ ', Bot:'рџ¤–',
+  Sun:'вЂпёЏ', Moon:'рџЊ™', CloudRain:'рџЊ§пёЏ', CloudSnow:'рџЊЁпёЏ', CloudLightning:'в›€пёЏ', Wind:'рџ’Ё', Umbrella:'в‚пёЏ', Thermometer:'рџЊЎпёЏ',
+  Flag:'рџљ©', Bookmark:'рџ”–', Tag:'рџЏ·пёЏ', Tags:'рџЏ·пёЏ', Hash:'#пёЏвѓЈ',
+  Package:'рџ“¦', Box:'рџ“¦', Truck:'рџљљ', Plane:'вњ€пёЏ', Car:'рџљ—', Bike:'рџљґ',
+  Edit:'вњЏпёЏ', Edit2:'вњЏпёЏ', Pencil:'вњЏпёЏ', PenTool:'вњ’пёЏ', Feather:'рџЄ¶', Scissors:'вњ‚пёЏ', Eraser:'рџ§Ѕ', Paperclip:'рџ“Ћ',
+  List:'рџ“‹', ClipboardList:'рџ“‹', Grid:'в–¦', LayoutGrid:'в–¦', Menu:'в°',
+  AlertTriangle:'вљ пёЏ', AlertCircle:'вљ пёЏ', Info:'в„№пёЏ', HelpCircle:'вќ“', CheckCircle:'вњ…', XCircle:'вќЊ', Check:'вњ…', X:'вњ–пёЏ',
+  TrendingUp:'рџ“€', TrendingDown:'рџ“‰', BarChart:'рџ“Љ', PieChart:'рџ“Љ', LineChart:'рџ“€', Activity:'рџ’“',
+  Utensils:'рџЌґ', Coffee:'в•', Pizza:'рџЌ•', Cake:'рџЌ°', Apple:'рџЌЋ',
+  Gamepad:'рџЋ®', Gamepad2:'рџЋ®', Dice1:'рџЋІ', Puzzle2:'рџ§©',
+  Book:'рџ“–', BookOpen:'рџ“–', Library:'рџ“љ', GraduationCap:'рџЋ“', PenLine:'рџ“ќ',
+  Github:'рџђ™', Twitter:'рџђ¦', Facebook:'рџ“', Instagram:'рџ“·', Youtube:'рџ“є', Linkedin:'рџ’ј', Slack:'рџ’¬', Discord:'рџ’¬',
+  Lightbulb:'рџ’Ў', Rocket:'рџљЂ', Atom:'вљ›пёЏ', Leaf:'рџЊї', Sprout:'рџЊ±', Flower:'рџЊё', Heart2:'вќ¤пёЏ',
 };
 
 function pluginIcon(rawIcon) {
   // Returns HTML string for a plugin/workflow icon bubble.
   // Accepts: emoji/unicode char, lucide icon name, or empty.
   const v = (rawIcon ?? '').toString().trim();
-  if (!v) return '🧩';
+  if (!v) return 'рџ§©';
   // If it's already an emoji (contains non-ASCII) or a single symbol, use as-is.
   // Multi-byte or surrogate-pair chars will fail length <= 4 check in ASCII.
   if (/[^\x00-\x7F]/.test(v) && v.length <= 6) return v;
-  // Named lucide icon → emoji map.
+  // Named lucide icon в†’ emoji map.
   if (LUCIDE_ICON_MAP[v]) return LUCIDE_ICON_MAP[v];
   // Try case-insensitive match.
   const lower = v.toLowerCase();
@@ -3503,7 +3530,7 @@ function pluginIcon(rawIcon) {
   if (hit) return LUCIDE_ICON_MAP[hit];
   // Fallback: first letter uppercased on puzzle background (rendered separately)
   if (/^[a-zA-Z]+$/.test(v)) return v.charAt(0).toUpperCase();
-  return '🧩';
+  return 'рџ§©';
 }
 
 function workflowIcon(wf) {
@@ -3511,7 +3538,7 @@ function workflowIcon(wf) {
   // Derive from first step action
   const step0 = wf?.steps?.[0]?.action;
   if (step0 && STEP_ICONS[step0]) return STEP_ICONS[step0];
-  return '⚡';
+  return 'вљЎ';
 }
 
 async function renderWfBody() {
@@ -3528,9 +3555,9 @@ async function renderWfBody() {
     if (!allWfs.length) {
       body.innerHTML = `
         <div class="empty-state">
-          <div class="es-icon">⚡</div>
-          <h3>${lang === 'ru' ? 'Нет workflow' : 'No workflows yet'}</h3>
-          <p>${lang === 'ru' ? 'Создай свой первый workflow или опиши его чату — AI создаст его автоматически.' : 'Create your first workflow or describe it in chat — AI will build it automatically.'}</p>
+          <div class="es-icon">вљЎ</div>
+          <h3>${lang === 'ru' ? 'РќРµС‚ workflow' : 'No workflows yet'}</h3>
+          <p>${lang === 'ru' ? 'РЎРѕР·РґР°Р№ СЃРІРѕР№ РїРµСЂРІС‹Р№ workflow РёР»Рё РѕРїРёС€Рё РµРіРѕ С‡Р°С‚Сѓ вЂ” AI СЃРѕР·РґР°СЃС‚ РµРіРѕ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.' : 'Create your first workflow or describe it in chat вЂ” AI will build it automatically.'}</p>
           <div class="wf-examples">
             <div class="wf-example" onclick="wfQuickCreate('Open YouTube and close it after 10 seconds')">YouTube open/close</div>
             <div class="wf-example" onclick="wfQuickCreate('Take a screenshot and save it')">Screenshot</div>
@@ -3551,7 +3578,7 @@ async function renderWfBody() {
             <div class="wf-desc">${wf.description || (wf.steps?.length || 0) + ' steps'}</div>
           </div>
         </div>
-        <div class="wf-steps">${(wf.steps||[]).slice(0,5).map(s => `<div class="wf-step"><span class="wf-step-icon">${STEP_ICONS[s.action]||'▶️'}</span>${s.action}</div>`).join('')}${(wf.steps||[]).length > 5 ? `<div class="wf-step">+${wf.steps.length-5} more</div>` : ''}</div>
+        <div class="wf-steps">${(wf.steps||[]).slice(0,5).map(s => `<div class="wf-step"><span class="wf-step-icon">${STEP_ICONS[s.action]||'в–¶пёЏ'}</span>${s.action}</div>`).join('')}${(wf.steps||[]).length > 5 ? `<div class="wf-step">+${wf.steps.length-5} more</div>` : ''}</div>
         <div class="wf-footer">
           <div class="wf-trigger">Trigger: <span class="wf-trigger-badge">${wf.trigger || 'manual'}</span></div>
           <div class="wf-actions">
@@ -3565,7 +3592,7 @@ async function renderWfBody() {
   } else if (wfCurrentTab === 'create') {
     body.innerHTML = `
       <div class="wf-create">
-        <h3>✨ Create Workflow with AI</h3>
+        <h3>вњЁ Create Workflow with AI</h3>
         <div class="wf-field">
           <label>Describe what you want to automate</label>
           <textarea class="wf-textarea" id="wf-desc-input" placeholder="e.g. Open YouTube, wait 5 seconds, then close it"></textarea>
@@ -3604,7 +3631,7 @@ async function renderWfBody() {
   } else if (wfCurrentTab === 'scheduled') {
     body.innerHTML = `
       <div style="margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:6px">⏰ Scheduled Workflows</div>
+        <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:6px">вЏ° Scheduled Workflows</div>
         <div style="font-size:11px;color:var(--t3)">Workflows with cron triggers run automatically in the background.</div>
       </div>
       <div id="scheduled-list">Loading...</div>
@@ -3615,7 +3642,7 @@ async function renderWfBody() {
       const scheduled = all.filter(w => w.trigger && w.trigger !== 'manual');
       const el = document.getElementById('scheduled-list');
       if (!scheduled.length) {
-        el.innerHTML = `<div class="empty-state"><div class="es-icon">⏰</div><h3>No scheduled workflows</h3><p>Create a workflow with a cron trigger to run it automatically.</p></div>`;
+        el.innerHTML = `<div class="empty-state"><div class="es-icon">вЏ°</div><h3>No scheduled workflows</h3><p>Create a workflow with a cron trigger to run it automatically.</p></div>`;
       } else {
         el.innerHTML = scheduled.map(w => `
           <div class="wf-card">
@@ -3665,7 +3692,7 @@ async function createWfManual() {
   const wf = createWorkflow(name, steps, finalTrigger);
   // Also register with engine
   try { await H.workflowCreate(name, finalTrigger, steps, ''); } catch(_) {}
-  addMsg('bot', lang === 'ru' ? `⚡ Workflow **${name}** создан!` : `⚡ Workflow **${name}** created!`);
+  addMsg('bot', lang === 'ru' ? `вљЎ Workflow **${name}** СЃРѕР·РґР°РЅ!` : `вљЎ Workflow **${name}** created!`);
   wfTab('list');
 }
 
@@ -3714,9 +3741,9 @@ async function shareWorkflow(id) {
   H.notify('Workflows', 'Share URL copied to clipboard!');
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // SCREEN RECORDER + AI NARRATOR
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let isScreenRecording = false;
 let screenRecStream = null;
 let screenRecMediaRec = null;
@@ -3738,22 +3765,22 @@ function renderRecorderBody() {
   body.innerHTML = `
     <div class="rec-panel">
       <div class="rec-circle ${isScreenRecording ? 'recording' : ''}" id="rec-circle" onclick="toggleRecording()">
-        ${isScreenRecording ? '⏹️' : '⏺'}
+        ${isScreenRecording ? 'вЏ№пёЏ' : 'вЏє'}
       </div>
       <div class="rec-time" id="rec-time">${formatRecTime(screenRecSeconds)}</div>
-      <div class="rec-status" id="rec-status">${isScreenRecording ? (lang==='ru'?'Запись экрана...':'Recording screen...') : (lang==='ru'?'Нажми ‣ чтобы начать запись':'Click ‣ to start recording')}</div>
+      <div class="rec-status" id="rec-status">${isScreenRecording ? (lang==='ru'?'Р—Р°РїРёСЃСЊ СЌРєСЂР°РЅР°...':'Recording screen...') : (lang==='ru'?'РќР°Р¶РјРё вЂЈ С‡С‚РѕР±С‹ РЅР°С‡Р°С‚СЊ Р·Р°РїРёСЃСЊ':'Click вЂЈ to start recording')}</div>
       <div class="rec-controls">
-        <button class="rec-btn ${isScreenRecording ? 'stop' : 'start'}" onclick="toggleRecording()">${isScreenRecording ? '⏹ Stop' : '⏺ Start Recording'}</button>
+        <button class="rec-btn ${isScreenRecording ? 'stop' : 'start'}" onclick="toggleRecording()">${isScreenRecording ? 'вЏ№ Stop' : 'вЏє Start Recording'}</button>
         ${isScreenRecording ? '<button class="rec-btn" onclick="cancelRecording()">Cancel</button>' : ''}
       </div>
       <div class="rec-recordings" id="rec-recordings">
-        ${screenRecordings.length ? `<div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:10px">${lang==='ru'?'Записи':'Recordings'}</div>` : ''}
+        ${screenRecordings.length ? `<div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:10px">${lang==='ru'?'Р—Р°РїРёСЃРё':'Recordings'}</div>` : ''}
         ${screenRecordings.map((r,i) => `
           <div class="rec-item">
-            <div class="rec-item-icon">🎥</div>
+            <div class="rec-item-icon">рџЋҐ</div>
             <div class="rec-item-info">
               <div class="rec-item-name">${r.name}</div>
-              <div class="rec-item-meta">${r.duration} · ${r.date}</div>
+              <div class="rec-item-meta">${r.duration} В· ${r.date}</div>
             </div>
             <div class="rec-item-actions">
               <button class="rec-narrate-btn" onclick="narrateRecording(${i})">&#129302; AI Narrate</button>
@@ -3859,7 +3886,7 @@ async function processRecording() {
 async function narrateRecording(idx) {
   const rec = screenRecordings[idx];
   if (!rec) return;
-  addMsg('bot', lang === 'ru' ? '🤖 AI анализирует запись...' : '🤖 AI is analyzing the recording...');
+  addMsg('bot', lang === 'ru' ? 'рџ¤– AI Р°РЅР°Р»РёР·РёСЂСѓРµС‚ Р·Р°РїРёСЃСЊ...' : 'рџ¤– AI is analyzing the recording...');
   closeRecorder();
   try {
     // Capture current screen for narration context
@@ -3867,13 +3894,13 @@ async function narrateRecording(idx) {
     if (screenshot?.base64) {
       const r = await H.recorderNarrate(screenshot.base64, 'image/png', `Recording: ${rec.name}, Duration: ${rec.duration}`);
       if (r.ok) {
-        addMsg('bot', `🎥 **AI Narration for ${rec.name}:**\n\n${r.narration}`);
+        addMsg('bot', `рџЋҐ **AI Narration for ${rec.name}:**\n\n${r.narration}`);
         if (ttsOn) speak(r.narration.slice(0, 300));
-      } else { addMsg('bot', `⚠️ ${r.error}`); }
+      } else { addMsg('bot', `вљ пёЏ ${r.error}`); }
     } else {
-      addMsg('bot', lang === 'ru' ? '⚠️ Не удалось захватить экран' : '⚠️ Could not capture screen for narration');
+      addMsg('bot', lang === 'ru' ? 'вљ пёЏ РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°С…РІР°С‚РёС‚СЊ СЌРєСЂР°РЅ' : 'вљ пёЏ Could not capture screen for narration');
     }
-  } catch(e) { addMsg('bot', `⚠️ ${e.message}`); }
+  } catch(e) { addMsg('bot', `вљ пёЏ ${e.message}`); }
 }
 
 function playRecording(idx) {
@@ -3892,9 +3919,9 @@ function playRecording(idx) {
   video.play();
 }
 
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // PLUGIN MANAGER UI (legacy - kept for settings panel compat)
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function loadPluginList() {
   try {
     const plugins = await H.pluginList();
@@ -3907,7 +3934,7 @@ async function loadPluginList() {
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--b1)">
         <div>
           <div style="font-size:12px;color:var(--tx)">${p.name} <span style="font-size:9px;color:var(--t3)">v${p.version}</span></div>
-          <div style="font-size:10px;color:var(--t3)">${p.description} · ${p.tools} tools</div>
+          <div style="font-size:10px;color:var(--t3)">${p.description} В· ${p.tools} tools</div>
         </div>
         <button class="psv" onclick="uninstallPlugin('${p.id}')" style="color:var(--red);border-color:rgba(248,113,113,.3);font-size:10px">Remove</button>
       </div>
@@ -3942,7 +3969,7 @@ async function installPluginTemplate(id) {
   try {
     const result = await H.pluginInstallTpl(id);
     if (result.ok) {
-      addMsg('bot', lang === 'ru' ? `🧩 Плагин **${result.name}** установлен!` : `🧩 Plugin **${result.name}** installed!`);
+      addMsg('bot', lang === 'ru' ? `рџ§© РџР»Р°РіРёРЅ **${result.name}** СѓСЃС‚Р°РЅРѕРІР»РµРЅ!` : `рџ§© Plugin **${result.name}** installed!`);
       loadPluginList();
     }
   } catch(_) {}
@@ -3952,9 +3979,9 @@ async function uninstallPlugin(id) {
   try { await H.pluginUninstall(id); loadPluginList(); } catch(_) {}
 }
 
-// ═══════════════════════════════════════════════════════════════
-// INIT — load all saved state
-// ═══════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// INIT вЂ” load all saved state
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 (async function initHorizon() {
   // Load persona
   try {
