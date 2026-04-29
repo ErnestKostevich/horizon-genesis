@@ -88,4 +88,4 @@ Do NOT open a public issue for security problems. See [SECURITY.md](SECURITY.md)
 
 ## License
 
-By contributing, you agree your contributions will be licensed under the [MIT License](LICENSE).
+By contributing, you agree your contributions will be licensed under the [Business Source License 1.1](LICENSE).

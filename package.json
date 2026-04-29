@@ -6,7 +6,7 @@
     "name": "Ernest Kostevich",
     "email": "ernest2011kostevich@gmail.com"
   },
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "homepage": "https://horizonaai.dev",
   "repository": {
     "type": "git",
@@ -36,14 +36,32 @@
     "appId": "com.horizonai.app",
     "productName": "Horizon AI",
     "asar": true,
-    "files": ["src/**/*", "assets/**/*", "builtin-plugins/**/*"],
-    "directories": { "output": "dist" },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "builtin-plugins/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
     "protocols": [
-      { "name": "Horizon Plugin Installer", "schemes": ["horizon"] }
+      {
+        "name": "Horizon Plugin Installer",
+        "schemes": [
+          "horizon"
+        ]
+      }
     ],
     "win": {
       "icon": "assets/icon.ico",
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "requestedExecutionLevel": "asInvoker"
     },
     "mac": {
@@ -51,7 +69,15 @@
       "category": "public.app-category.productivity",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "target": [{ "target": "dmg", "arch": ["x64","arm64"] }]
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
     },
     "linux": {
       "icon": "assets/icon.png",
@@ -61,10 +87,25 @@
       "description": "Horizon Genesis — cross-platform AI assistant with personas, plugins, workflows, and computer use.",
       "executableName": "horizon-ai",
       "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb",      "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false, "shortcutName": "Horizon AI" }
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "Horizon AI"
+    }
   }
 }
