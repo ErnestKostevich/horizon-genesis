@@ -3567,11 +3567,28 @@ async function installStorePlugin(id, price = 0) {
       if (/unauthor|401|login/i.test(r.error || '')) {
         H.notify?.('Marketplace', 'Sign in required to install this plugin.');
         openAccount();
+      } else if (price > 0) {
+        const url = await H.marketGetWebUrl();
+        const pluginUrl = `${String(url || 'https://horizonaai.dev').replace(/\/+$/, '')}/plugin/${id}`;
+        H.openUrl(pluginUrl);
+        H.notify?.('Marketplace', 'Opening browser to complete purchase securely.');
+        addMsg('bot', `Plugin purchases are securely handled on the marketplace website.\n\nOpened: ${pluginUrl}`);
       } else {
         H.notify?.('Marketplace', r.error || 'install failed');
       }
     }
-  } catch(e) { H.notify?.('Marketplace', e.message); }
+  } catch(e) { 
+    if (price > 0) {
+      H.marketGetWebUrl().then(url => {
+        const pluginUrl = `${String(url || 'https://horizonaai.dev').replace(/\/+$/, '')}/plugin/${id}`;
+        H.openUrl(pluginUrl);
+        H.notify?.('Marketplace', 'Opening browser to complete purchase securely.');
+        addMsg('bot', `Plugin purchases are securely handled on the marketplace website.\n\nOpened: ${pluginUrl}`);
+      });
+    } else {
+      H.notify?.('Marketplace', e.message); 
+    }
+  }
 }
 
 async function publishPlugin() {
