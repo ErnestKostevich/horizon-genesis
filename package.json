@@ -54,6 +54,7 @@
     ],
     "win": {
       "icon": "assets/icon.ico",
+      "artifactName": "Horizon-AI-Setup-${version}.${ext}",
       "target": [
         {
           "target": "nsis",
