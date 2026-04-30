@@ -29,9 +29,15 @@
       if (typeof window.H.licenseOpenUpgradePage === 'function') {
         const result = await window.H.licenseOpenUpgradePage();
         if (result?.ok) return;
+        console.warn('[license-ui] upgrade open failed', result?.error || result);
       }
-    } catch (_) {}
-    if (typeof window.H.openUrl === 'function') window.H.openUrl(PRICING_URL);
+    } catch (err) {
+      console.warn('[license-ui] upgrade open exception', err);
+    }
+    if (typeof window.H.openUrl === 'function') {
+      const result = await window.H.openUrl(PRICING_URL);
+      if (!result?.ok && result !== true) console.warn('[license-ui] fallback open failed', result);
+    }
   }
 
   function render(state) {

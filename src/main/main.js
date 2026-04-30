@@ -15,6 +15,45 @@ const Store  = require('electron-store');
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 
+function getMarketplaceWebBase() {
+  const configured = settingsStore?.get?.('marketplaceWebUrl') || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev';
+  return String(configured || 'https://horizonaai.dev').replace(/\/+$/, '');
+}
+
+async function openExternalReliable(rawUrl, title = 'Horizon') {
+  const url = String(rawUrl || '').trim();
+  if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url) && !/^horizon:\/\//i.test(url)) {
+    return { ok: false, url, error: 'Unsupported URL' };
+  }
+  try {
+    await shell.openExternal(url, { activate: true });
+    return { ok: true, url, method: 'system-browser' };
+  } catch (externalError) {
+    if (!/^https?:\/\//i.test(url)) {
+      return { ok: false, url, error: externalError.message };
+    }
+    try {
+      const browser = new BrowserWindow({
+        width: 1180,
+        height: 820,
+        title,
+        show: true,
+        backgroundColor: '#080b10',
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+        },
+      });
+      browser.setMenuBarVisibility(false);
+      await browser.loadURL(url);
+      return { ok: true, url, method: 'fallback-window', warning: externalError.message };
+    } catch (fallbackError) {
+      return { ok: false, url, error: `${externalError.message}; fallback failed: ${fallbackError.message}` };
+    }
+  }
+}
+
 // ── Pro feature guard ────────────────────────────────────────────────────────
 // Wraps ipcMain.handle for any channel that touches a Pro-only feature. When
 // the license manager says the user is not allowed (trial ended, subscription
@@ -352,10 +391,7 @@ ipcMain.handle('localProviderStatus', async (_, provider) => {
 ipcMain.handle('copy',         (_, t) => { clipboard.writeText(t); return true; });
 ipcMain.handle('paste',        ()     => clipboard.readText());
 ipcMain.handle('getClipboard', ()     => ({ text: clipboard.readText() }));
-ipcMain.handle('openUrl',      async (_, u) => {
-  await shell.openExternal(u);
-  return true;
-});
+ipcMain.handle('openUrl',      async (_, u) => openExternalReliable(u, 'Horizon Link'));
 ipcMain.handle('notify',       (_, t, b) => { new Notification({ title: `◈ ${t}`, body: b }).show(); return true; });
 
 ipcMain.handle('sysInfo', () => ({
@@ -2005,10 +2041,9 @@ ipcMain.handle('licensePollInvoice', async (_, invoiceId) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle('licenseOpenUpgradePage', async () => {
-  const base = String(marketClient?.webBase || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev').replace(/\/+$/, '');
-  const url = `${base}/pricing?src=desktop`;
-  await shell.openExternal(url);
-  return { ok: true, url };
+  const base = getMarketplaceWebBase();
+  const url = `${base}/pricing?src=desktop&intent=upgrade`;
+  return openExternalReliable(url, 'Horizon Pro');
 });
 ipcMain.handle('licenseOpenContactLink', (_, channel) => {
   const links = {
@@ -2018,8 +2053,8 @@ ipcMain.handle('licenseOpenContactLink', (_, channel) => {
     email_secondary:    'mailto:ernestkostevich@gmail.com',
   };
   const url = links[channel];
-  if (url) shell.openExternal(url);
-  return { ok: !!url, url };
+  if (!url) return { ok: false, url };
+  return openExternalReliable(url, 'Horizon Support');
 });
 // Wipe the license cache when the user logs out of the marketplace account,
 // so the next login forces a fresh server check.
@@ -2077,11 +2112,10 @@ ipcMain.handle('marketMe', async () => {
   }
 });
 ipcMain.handle('marketOpenWebAuth', async (_, mode = 'login') => {
-  const base = String(marketClient.webBase || 'https://horizonaai.dev').replace(/\/+$/, '');
+  const base = getMarketplaceWebBase();
   const pathName = mode === 'signup' ? '/signup' : '/login';
   const url = `${base}${pathName}?desktop=1`;
-  await shell.openExternal(url);
-  return { ok: true, url };
+  return openExternalReliable(url, 'Horizon Account');
 });
 
 // Register horizon:// protocol so the marketplace website can install
