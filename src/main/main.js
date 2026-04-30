@@ -135,9 +135,11 @@ const ALLOWED_SETTING_KEYS = new Set([
   'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider',
   'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
   'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
+  'mode', 'searchOn',
   'workflows', 'persona', 'onboarded', 'marketplaceUrl', 'marketplaceWebUrl',
   'ollamaUrl', 'ollamaModel', 'lmStudioUrl', 'lmStudioModel',
   'localAiUrl', 'localAiModel',
+  'wakeStrictMode', 'wakeVolumeThreshold', 'wakeConfirmBeep',
 ]);
 
 function assertAllowedKey(service) {

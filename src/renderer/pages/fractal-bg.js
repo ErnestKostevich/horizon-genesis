@@ -94,7 +94,7 @@
     canvas.style.height         = '100vh';
     canvas.style.zIndex         = '-1';
     canvas.style.pointerEvents  = 'none';
-    canvas.style.opacity        = '0.16';
+    canvas.style.opacity        = '0.11';
 
     const gl = canvas.getContext('webgl', { antialias: false, alpha: false })
           || canvas.getContext('experimental-webgl');
@@ -129,7 +129,7 @@
     const uTime = gl.getUniformLocation(prog, 'uTime');
 
     function resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1);
       canvas.width  = Math.round(canvas.clientWidth  * dpr);
       canvas.height = Math.round(canvas.clientHeight * dpr);
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -139,8 +139,15 @@
 
     const start = performance.now();
     let rafId = 0;
-    function frame() {
-      const t = (performance.now() - start) / 1000;
+    let lastDraw = 0;
+    const minFrameMs = 50; // 20fps is enough for the slow "alive" motion and saves GPU.
+    function frame(now = performance.now()) {
+      if (now - lastDraw < minFrameMs) {
+        rafId = requestAnimationFrame(frame);
+        return;
+      }
+      lastDraw = now;
+      const t = (now - start) / 1000;
       gl.uniform2f(uRes,  canvas.width, canvas.height);
       gl.uniform1f(uTime, t);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
