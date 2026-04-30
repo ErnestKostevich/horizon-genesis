@@ -44,6 +44,11 @@ jobs:
               dist/*.exe
               dist/*.exe.blockmap
               dist/latest*.yml
+          - os: windows-latest
+            label: windows-portable
+            build_script: build:win:portable
+            artifact_glob: |
+              dist/*.exe
           - os: macos-latest
             label: mac
             build_script: build:mac
@@ -136,6 +141,12 @@ jobs:
           name: horizon-windows
           path: release-assets/windows
 
+      - name: Download Windows portable artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: horizon-windows-portable
+          path: release-assets/windows-portable
+
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
@@ -159,6 +170,7 @@ jobs:
           overwrite_files: true
           files: |
             release-assets/windows/*
+            release-assets/windows-portable/*
             release-assets/mac/*
             release-assets/linux/*
           body: |
@@ -169,6 +181,7 @@ jobs:
             ### Downloads
 
             - **Windows:** `Horizon AI Setup *.exe` (x64, NSIS)
+            - **Windows portable:** `Horizon AI *.exe` (x64, no installer)
             - **macOS:** `Horizon AI-*.dmg` (Intel + Apple Silicon, unsigned; right-click Open if Gatekeeper warns)
             - **Linux:** `Horizon AI-*.AppImage` (x64, portable) or `horizon-ai_*.deb` (Debian/Ubuntu)
 

@@ -18,10 +18,12 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:mac:universal": "electron-builder --mac --universal",
-    "build:linux": "electron-builder --linux"
+    "stamp-build": "node scripts/stamp-build-info.js",
+    "build:win": "npm run stamp-build -- --runner=windows && electron-builder --win",
+    "build:win:portable": "npm run stamp-build -- --runner=windows-portable && electron-builder --win portable",
+    "build:mac": "npm run stamp-build -- --runner=mac && electron-builder --mac",
+    "build:mac:universal": "npm run stamp-build -- --runner=mac-universal && electron-builder --mac --universal",
+    "build:linux": "npm run stamp-build -- --runner=linux && electron-builder --linux"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
@@ -107,6 +109,9 @@
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "shortcutName": "Horizon AI"
+    },
+    "portable": {
+      "artifactName": "Horizon-AI-Portable-${version}.${ext}"
     }
   }
 }
