@@ -75,18 +75,30 @@ body{
 /* ─── Header ─── */
 .hd{display:flex;align-items:center;gap:12px;margin-bottom:22px}
 .logo{
-  width:40px;height:40px;border-radius:12px;
-  background:linear-gradient(135deg, var(--amber-0), var(--amber-2));
+  width:44px;height:44px;border-radius:50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(245,253,255,1) 0 6%, rgba(126,230,255,.95) 7% 13%, transparent 14%),
+    repeating-conic-gradient(from 20deg, rgba(180,250,255,.98) 0deg 7deg, rgba(75,160,255,.70) 9deg 18deg, rgba(14,19,39,.38) 20deg 29deg),
+    radial-gradient(circle at 48% 52%, rgba(91,213,245,.24), rgba(3,8,15,.96) 72%);
   display:flex;align-items:center;justify-content:center;
-  font-size:18px;font-weight:700;color:#1a0f03;
-  box-shadow:var(--glow-amber);
+  font-size:0;color:transparent;
+  box-shadow:0 0 0 1px rgba(126,230,255,.38), 0 0 34px rgba(91,213,245,.42), inset 0 0 22px rgba(3,8,15,.9);
   position:relative;
+  animation:logoBreathe 7s ease-in-out infinite;
 }
 .logo::after{
-  content:'';position:absolute;inset:-6px;border-radius:18px;
-  background:radial-gradient(circle, rgba(232,160,80,.35), transparent 60%);
-  z-index:-1;filter:blur(6px);
+  content:'';position:absolute;inset:38%;border-radius:50%;
+  background:#effdff;
+  box-shadow:0 0 16px rgba(126,230,255,1), 0 0 36px rgba(91,213,245,.48);
 }
+.logo::before{
+  content:'';position:absolute;inset:13%;border-radius:48% 52% 44% 56% / 55% 45% 52% 48%;
+  border:1px solid rgba(218,251,255,.72);
+  box-shadow:0 0 14px rgba(126,230,255,.42), inset 0 0 12px rgba(126,230,255,.20);
+  animation:logoOrbit 12s linear infinite;
+}
+@keyframes logoBreathe{0%,100%{filter:saturate(1) brightness(1)}50%{filter:saturate(1.2) brightness(1.12)}}
+@keyframes logoOrbit{to{transform:rotate(360deg)}}
 .brand{display:flex;flex-direction:column;gap:1px}
 .brand .nm{font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--tx-0)}
 .brand .sub{font-size:10.5px;color:var(--tx-2);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
@@ -304,7 +316,7 @@ h1 .acc{
 
   <button class="cta-primary" id="cta-pay">
     <span class="sym">$</span>
-    <span>Pay with crypto</span>
+    <span>Upgrade on website</span>
   </button>
 
   <div class="sec-row">
@@ -312,7 +324,10 @@ h1 .acc{
       <span>OK</span> I've paid - recheck
     </button>
     <button class="cta-sec" id="cta-login" title="Sign in if you have a Horizon account">
-      <span>Go</span> Sign in
+      <span>Go</span> Sign in on web
+    </button>
+    <button class="cta-sec" id="cta-signup" title="Create a Horizon account on the website">
+      <span>+</span> Create account
     </button>
   </div>
 
@@ -466,21 +481,20 @@ async function renderState() {
   }
 }
 
-// Pay with crypto -> NOWPayments invoice -> open pay_url in browser -> poll
+// Monetization is owned by the website. Desktop should reliably hand users to
+// the live pricing/checkout surface, then recheck Pro state after payment.
 document.getElementById('cta-pay').addEventListener('click', async () => {
-  toast('Creating invoice...', 'loading');
-  const r = await H.licenseCreateCrypto(selectedPlan);
-  if (!r.ok) {
-    if (r.error === 'not-logged-in') {
-      toast('Sign in first - button to the right', 'err');
+  toast('Opening Horizon pricing...', 'loading');
+  try {
+    const r = await H.licenseOpenUpgradePage?.();
+    if (r?.ok) {
+      toast('Browser opened. Complete Pro checkout there, then recheck here.', 'ok');
       return;
     }
-    toast(`Error: ${r.error}`, 'err');
-    return;
+    toast(r?.error ? `Cannot open browser: ${r.error}` : 'Cannot open pricing page', 'err');
+  } catch (err) {
+    toast(`Cannot open pricing page: ${err.message || err}`, 'err');
   }
-  H.openUrl(r.invoice.pay_url);
-  toast('Browser opened. Complete the payment - we will detect it automatically.', 'ok');
-  startPollingInvoice(r.invoice.invoice_id);
 });
 
 // Recheck (if user paid externally and server hasn't pushed yet)
@@ -489,7 +503,9 @@ document.getElementById('cta-recheck').addEventListener('click', async () => {
   const s = await H.licenseRefresh();
   if (s.allowed && s.reason === 'pro') {
     toast('Pro active! Reloading...', 'ok');
-    setTimeout(() => location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`, 900);
+    setTimeout(async () => {
+      location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`;
+    }, 900);
   } else {
     toast('No active subscription yet. Try again in a minute.', 'err');
   }
@@ -500,12 +516,22 @@ document.getElementById('cta-recheck').addEventListener('click', async () => {
 // magic-link style token which the desktop will pick up via the horizon://
 // protocol (handled in main.js).
 document.getElementById('cta-login').addEventListener('click', async () => {
-  try {
-    const result = await H.licenseOpenUpgradePage();
-    if (result?.ok) return;
-  } catch (_) {}
-  H.openUrl?.('https://horizonaai.dev/pricing?src=desktop');
+  await openWebAuth('login');
 });
+
+document.getElementById('cta-signup').addEventListener('click', async () => {
+  await openWebAuth('signup');
+});
+
+async function openWebAuth(mode) {
+  try {
+    const result = await H.marketOpenWebAuth?.(mode);
+    if (result?.ok) return;
+    toast(result?.error ? `Cannot open browser: ${result.error}` : 'Cannot open browser', 'err');
+  } catch (err) {
+    toast(`Cannot open browser: ${err.message || err}`, 'err');
+  }
+}
 
 // Contact links (Telegram / email)
 document.querySelectorAll('.contact .link').forEach(a => {
