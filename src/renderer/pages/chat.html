@@ -924,7 +924,18 @@ const WAKE_EXACT = new Set([
 //     less sensitive (skips quiet background) but might miss soft "Horizon".
 //   • wake.confirmBeep (default OFF) — play a short tone after fire so the
 //     user knows it heard them.
-function wakeCfg(key, def) {
+const WAKE_SETTING_KEYS = {
+  strictMode: 'wakeStrictMode',
+  volumeThreshold: 'wakeVolumeThreshold',
+  confirmBeep: 'wakeConfirmBeep',
+};
+const wakeSettings = {
+  strictMode: true,
+  volumeThreshold: 18,
+  confirmBeep: false,
+};
+
+function localWakeCfg(key, def) {
   try {
     const v = localStorage.getItem('wake.' + key);
     if (v === null) return def;
@@ -933,8 +944,23 @@ function wakeCfg(key, def) {
     return v;
   } catch { return def; }
 }
+function wakeCfg(key, def) {
+  if (Object.prototype.hasOwnProperty.call(wakeSettings, key)) return wakeSettings[key];
+  return localWakeCfg(key, def);
+}
 function setWakeCfg(key, val) {
+  if (Object.prototype.hasOwnProperty.call(wakeSettings, key)) wakeSettings[key] = val;
   try { localStorage.setItem('wake.' + key, String(val)); } catch {}
+  const storeKey = WAKE_SETTING_KEYS[key];
+  if (storeKey) H.set(storeKey, val).catch(() => {});
+}
+async function loadWakeSettings() {
+  const strict = await H.get('wakeStrictMode').catch(() => null);
+  const vol = await H.get('wakeVolumeThreshold').catch(() => null);
+  const beep = await H.get('wakeConfirmBeep').catch(() => null);
+  wakeSettings.strictMode = strict === null ? localWakeCfg('strictMode', true) : !!strict;
+  wakeSettings.volumeThreshold = vol === null ? localWakeCfg('volumeThreshold', 18) : Math.max(5, Math.min(50, +vol || 18));
+  wakeSettings.confirmBeep = beep === null ? localWakeCfg('confirmBeep', false) : !!beep;
 }
 
 // Hot window
@@ -1346,7 +1372,7 @@ function setWakeBar(state){
 
 function toggleWake(){
   wakeOn=!wakeOn;
-  H.set('wakeOn', wakeOn);
+  H.set('wakeOn', wakeOn).catch(()=>{});
   const btn=document.getElementById('tc-wake');
   btn.classList.toggle('on', wakeOn);
   if(wakeOn) startWakeMode(); else stopWakeMode();
@@ -1785,23 +1811,29 @@ function applyLang(){
 // INIT
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async()=>{
-  const[nm,lg,pr,gm,ts,ey,wo,vp]=await Promise.all([
+  const[nm,lg,pr,gm,ts,ey,wo,vp,md,so]=await Promise.all([
     H.get('userName'),H.get('lang'),H.get('provider'),H.get('geminiModel'),
-    H.get('tts'),H.get('screenWatcher'),H.get('wakeOn'),H.get('voiceProvider')
+    H.get('tts'),H.get('screenWatcher'),H.get('wakeOn'),H.get('voiceProvider'),
+    H.get('mode'),H.get('searchOn'),loadWakeSettings()
   ]);
   if(nm){userName=nm;document.getElementById('tb-sub').textContent=nm.toUpperCase();}
   if(lg)lang=lg;
   if(pr)prov=pr;
+  if(md)mode=md;
   if(gm)geminiModel=gm;
   if(ts===false)ttsOn=false;
+  if(ey===true)eyeOn=true;
   if(ey===false)eyeOn=false;
+  if(so===true)searchOn=true;
   if(vp)voiceProvider=vp;
   const savedTTS=await H.get('ttsProvider');if(savedTTS)ttsProvider=savedTTS;
   const savedElV=await H.get('elevenLabsVoice');if(savedElV)elevenLabsVoice=savedElV;
   const savedOAIV=await H.get('openaiTtsVoice');if(savedOAIV)openaiTtsVoice=savedOAIV;
-  applyLang(); setProv(prov,false); showGreeting();
+  applyLang(); setProv(prov,false); setMode(mode,false); showGreeting();
   if(!ttsOn)document.getElementById('sw-tts').classList.remove('on');
-  if(!eyeOn){document.getElementById('sw-eye').classList.remove('on');document.getElementById('tc-eye').classList.remove('on');}
+  document.getElementById('sw-eye')?.classList.toggle('on', eyeOn);
+  document.getElementById('tc-eye')?.classList.toggle('on', eyeOn);
+  document.getElementById('tc-search')?.classList.toggle('on', searchOn);
   if(wo){wakeOn=true;document.getElementById('tc-wake').classList.add('on','special');}
   // Load panel async without blocking
   loadPanel().catch(()=>{});
@@ -1851,6 +1883,7 @@ async function loadPanel(){
   if(elv){elevenLabsVoice=elv;document.getElementById('pi-elvid').value=elv;}
   if(oaitv){openaiTtsVoice=oaitv;document.getElementById('pi-oaitts').value=oaitv;}
   // Wake-word calibration toggles + sensitivity slider.
+  await loadWakeSettings();
   initWakeCalibrationUI();
   const [ou, om, lu, lm] = await Promise.all([
     H.get('ollamaUrl'), H.get('ollamaModel'), H.get('lmStudioUrl'), H.get('lmStudioModel')
@@ -1962,7 +1995,7 @@ async function removeGithubRepo(fullName){
   await H.githubRemoveRepo(fullName).catch(()=>false);
   await loadGithubRepos();
 }
-function togSw(key,id){const on=document.getElementById(id).classList.toggle('on');H.set(key,on);if(key==='tts')ttsOn=on;if(key==='screenWatcher'){eyeOn=on;document.getElementById('tc-eye').classList.toggle('on',on);}}
+function togSw(key,id){const on=document.getElementById(id).classList.toggle('on');H.set(key,on).catch(()=>{});if(key==='tts')ttsOn=on;if(key==='screenWatcher'){eyeOn=on;document.getElementById('tc-eye').classList.toggle('on',on);}}
 
 // ═══ WAKE WORD CALIBRATION HANDLERS ═══
 function toggleWakeStrict(){
@@ -1999,10 +2032,10 @@ async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все клю
 // ═══════════════════════════════════════════════════════════════
 // PROVIDER / MODE / TOGGLES
 // ═══════════════════════════════════════════════════════════════
-function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)H.set('provider',p);}
-function setMode(m){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');}
-function toggleSearch(){searchOn=!searchOn;document.getElementById('tc-search').classList.toggle('on',searchOn);}
-function toggleEye(){eyeOn=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',eyeOn);H.set('screenWatcher',eyeOn);}
+function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)H.set('provider',p).catch(()=>{});}
+function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)H.set('mode',m).catch(()=>{});}
+function toggleSearch(){searchOn=!searchOn;document.getElementById('tc-search').classList.toggle('on',searchOn);H.set('searchOn',searchOn).catch(()=>{});}
+function toggleEye(){eyeOn=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',eyeOn);H.set('screenWatcher',eyeOn).catch(()=>{});}
 
 // ═══════════════════════════════════════════════════════════════
 // MAIN SEND

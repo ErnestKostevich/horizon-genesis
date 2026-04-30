@@ -577,3 +577,33 @@ textarea:focus {
   .greet h3 { font-size: 22px !important; }
   .msgs { padding-left: 14px !important; padding-right: 14px !important; }
 }
+
+/* Performance guardrails: keep the AI Alive mood without cooking CPU/GPU. */
+body::before,
+body::after {
+  filter: blur(26px) !important;
+  opacity: 0.52 !important;
+}
+
+.g-mark,
+.logo {
+  animation-duration: 12s !important;
+}
+
+.store-card,
+.ch,
+.ibtn,
+.btn-send {
+  transition-duration: 160ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}
