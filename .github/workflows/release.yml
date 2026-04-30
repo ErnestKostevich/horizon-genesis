@@ -43,6 +43,7 @@ jobs:
             artifact_glob: |
               dist/*.exe
               dist/*.exe.blockmap
+              dist/latest*.yml
           - os: macos-latest
             label: mac
             build_script: build:mac
@@ -50,12 +51,14 @@ jobs:
               dist/*.dmg
               dist/*.dmg.blockmap
               dist/*.zip
+              dist/latest*.yml
           - os: ubuntu-latest
             label: linux
             build_script: build:linux
             artifact_glob: |
               dist/*.AppImage
               dist/*.deb
+              dist/latest*.yml
 
     runs-on: ${{ matrix.os }}
 
@@ -153,6 +156,7 @@ jobs:
           draft: false
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
+          overwrite_files: true
           files: |
             release-assets/windows/*
             release-assets/mac/*
