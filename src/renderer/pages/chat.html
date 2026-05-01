@@ -471,6 +471,7 @@ textarea::placeholder{color:var(--t3)}
       <div class="psl">👤 Profile</div>
       <div class="pf"><label>Name</label><div class="pr"><input class="pi" type="text" id="pi-name" placeholder="Ernest"/><button class="psv" onclick="savePf()">Save</button></div></div>
       <div class="pf"><label>Language</label><select class="sel" id="pi-lang" onchange="saveLang()"><option value="ru">🇷🇺 Русский</option><option value="en">🇺🇸 English</option></select></div>
+      <div class="pf"><label>Theme</label><select class="sel" id="pi-theme" onchange="saveTheme()"><option value="apex">Apex Glass (Premium)</option><option value="dark">Minimal Dark</option><option value="light">Minimal Light</option></select></div>
     </div>
 
     <!-- AI Providers -->
@@ -861,6 +862,25 @@ let isSpeaking = false;  // true while TTS is playing
 let speakEndTime = 0;    // timestamp when TTS finished
 const ECHO_COOLDOWN = 1500; // ignore mic for 1.5s after TTS ends
 
+const MIN_SUSTAINED_SPEECH_FRAMES = 5; // 500ms
+function isSustainedSpeech(frames) { return frames >= MIN_SUSTAINED_SPEECH_FRAMES; }
+
+function pauseWakeForTts(){
+  if(!wakeActive) return;
+  if(wakePhase==='command') return;
+  try { if(wakeRec && wakeRec.state === 'recording') wakeRec.stop(); } catch(_){}
+  clearTimeout(wakeLoopTimer);
+  setWakeBar('paused');
+}
+function resumeWakeAfterTts(){
+  if(!wakeActive) return;
+  if(wakePhase==='command') return;
+  const remaining = Math.max(0, ECHO_COOLDOWN - (Date.now() - speakEndTime));
+  setTimeout(()=>{
+    if(wakeActive && wakePhase!=='command') runWakeChunk();
+  }, remaining + 50);
+}
+
 // ═══ AMBIENT MODE STATE ═══
 let ambientOn = false;
 let ambientInterval = null;
@@ -1139,6 +1159,8 @@ function runWakeChunk(){
 
   wakeChunks=[];
   wakePeakVolume = 0;
+  let consecutiveSpeechFrames = 0;
+  let maxConsecutiveSpeechFrames = 0;
 
   try {
     wakeRec = new MediaRecorder(wakeStream, {mimeType});
@@ -1150,6 +1172,18 @@ function runWakeChunk(){
   let volumeCheckInterval = setInterval(() => {
     const vol = getWakeVolume();
     if (vol > wakePeakVolume) wakePeakVolume = vol;
+    
+    // Sustained-speech tracking
+    const volThreshold = wakeCfg('volumeThreshold', 18);
+    if (vol > volThreshold) {
+      consecutiveSpeechFrames++;
+      if (consecutiveSpeechFrames > maxConsecutiveSpeechFrames) {
+        maxConsecutiveSpeechFrames = consecutiveSpeechFrames;
+      }
+    } else {
+      consecutiveSpeechFrames = 0;
+    }
+    
     // Update wake bar
     try { document.getElementById('wb-bar').style.width = Math.min(vol * 2.5, 100) + '%'; } catch(_){}
   }, 100);
@@ -1169,7 +1203,9 @@ function runWakeChunk(){
     // (range 5-50). Lower = more sensitive (catches quiet "Horizon" but
     // more false positives), higher = stricter.
     const volThreshold = wakeCfg('volumeThreshold', 18);
-    if(blob.size < 3000 || wakePeakVolume < volThreshold){
+    const strictMode = wakeCfg('strictMode', true);
+    
+    if(blob.size < 3000 || wakePeakVolume < volThreshold || (strictMode && maxConsecutiveSpeechFrames < MIN_SUSTAINED_SPEECH_FRAMES)){
       scheduleNextChunk();
       return;
     }
@@ -1368,6 +1404,7 @@ function setWakeBar(state){
   else if(state==='transcribing'){ bar.classList.add('recording'); txt.textContent=t('wakeTranscribing'); }
   else if(state==='command'){ bar.classList.add('command'); txt.textContent=t('wakeCommand'); }
   else if(state==='heard'){ bar.classList.add('heard'); txt.textContent='◈ Слышу тебя, Сэр…'; }
+  else if(state==='paused'){ bar.classList.add('idle'); txt.textContent=t('wakePaused') || 'Пауза — Хорайзон говорит'; }
 }
 
 function toggleWake(){
@@ -1613,6 +1650,7 @@ async function speakAndThen(text, callback){
 
   // ECHO DETECTION: Mark that Horizon is speaking
   isSpeaking = true;
+  pauseWakeForTts();
 
   let cbCalled=false;
   const safeCb = ()=>{ 
@@ -1621,6 +1659,7 @@ async function speakAndThen(text, callback){
       // Mark speaking end for echo detection
       isSpeaking = false;
       speakEndTime = Date.now();
+      resumeWakeAfterTts();
       // Activate hot window after TTS completes
       if(wakeOn && wakeActive) activateHotWindow();
       if(callback)callback();
@@ -1829,6 +1868,7 @@ window.addEventListener('DOMContentLoaded', async()=>{
   const savedTTS=await H.get('ttsProvider');if(savedTTS)ttsProvider=savedTTS;
   const savedElV=await H.get('elevenLabsVoice');if(savedElV)elevenLabsVoice=savedElV;
   const savedOAIV=await H.get('openaiTtsVoice');if(savedOAIV)openaiTtsVoice=savedOAIV;
+  const savedTheme=await H.get('theme');applyTheme(savedTheme || 'apex');
   applyLang(); setProv(prov,false); setMode(mode,false); showGreeting();
   if(!ttsOn)document.getElementById('sw-tts').classList.remove('on');
   document.getElementById('sw-eye')?.classList.toggle('on', eyeOn);
@@ -1896,6 +1936,18 @@ async function loadPanel(){
 
 async function savePf(){const n=document.getElementById('pi-name').value.trim();if(!n)return;await H.set('userName',n);userName=n;document.getElementById('tb-sub').textContent=n.toUpperCase();showGreeting();}
 async function saveLang(){lang=document.getElementById('pi-lang').value;await H.set('lang',lang);applyLang();showGreeting();}
+function applyTheme(theme){
+  const value = ['apex','dark','light'].includes(theme) ? theme : 'apex';
+  document.body.classList.remove('dark','light');
+  if(value !== 'apex') document.body.classList.add(value);
+  const select = document.getElementById('pi-theme');
+  if(select) select.value = value;
+}
+async function saveTheme(){
+  const theme = document.getElementById('pi-theme').value;
+  await H.set('theme', theme);
+  applyTheme(theme);
+}
 async function saveVP(){
   voiceProvider=document.getElementById('pi-vprov').value;
   await H.set('voiceProvider',voiceProvider);

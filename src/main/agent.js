@@ -417,8 +417,13 @@ async function getRunningApps() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function browserNavigate(url) {
-  // This is handled by main.js shell.openExternal
-  return { ok: true, out: `Opening ${url}...`, action: 'browser_open', url };
+  try {
+    const { shell } = require('electron');
+    await shell.openExternal(url);
+    return { ok: true, out: `Opened ${url} in default browser.`, action: 'browser_open', url };
+  } catch (e) {
+    return { ok: false, err: `Failed to open browser: ${e.message}` };
+  }
 }
 
 async function browserSearch(query, engine = 'google') {
@@ -429,7 +434,13 @@ async function browserSearch(query, engine = 'google') {
     duckduckgo: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`
   };
   const url = urls[engine] || urls.google;
-  return { ok: true, out: `Searching for: ${query}`, action: 'browser_open', url };
+  try {
+    const { shell } = require('electron');
+    await shell.openExternal(url);
+    return { ok: true, out: `Opened search for: ${query}`, action: 'browser_open', url };
+  } catch (e) {
+    return { ok: false, err: `Failed to open browser: ${e.message}` };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -512,6 +523,15 @@ async function dispatchTool(name, args = {}) {
       return browserNavigate(args.url);
     case 'browser_search':
       return browserSearch(args.query, args.engine);
+    case 'open_site':
+      const sites = {
+        'youtube': 'https://youtube.com',
+        'google': 'https://google.com',
+        'gmail': 'https://mail.google.com',
+        'github': 'https://github.com'
+      };
+      const siteUrl = sites[(args.name || '').toLowerCase()] || `https://${args.name}.com`;
+      return browserNavigate(siteUrl);
     case 'get_system_info':
       return getDetailedSysInfo();
     case 'get_running_apps':
