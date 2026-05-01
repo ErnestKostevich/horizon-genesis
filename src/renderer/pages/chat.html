@@ -503,6 +503,41 @@ body.with-sidebar .chat-status-bar{display:flex}
 .csb-pill.warn{border-color:rgba(245,158,11,.35);color:#fbbf24;background:rgba(245,158,11,.06)}
 .csb-pill.danger{border-color:rgba(248,113,113,.35);color:#fca5a5;background:rgba(248,113,113,.06)}
 #csb-license:hover{filter:brightness(1.2)}
+.csb-clickable{cursor:pointer;transition:all .15s}
+.csb-clickable:hover{border-color:rgba(108,140,255,.5);color:var(--tx)}
+.csb-byok{border-color:rgba(52,211,153,.3);color:#6ee7b7;background:rgba(52,211,153,.05);cursor:default}
+.csb-focus{border-color:rgba(167,139,250,.3);color:#c4b5fd;background:rgba(167,139,250,.06)}
+.csb-focus-start{background:none;border:1px solid var(--b1);color:var(--t3);font-family:var(--mono);font-size:9px;font-weight:600;padding:2px 8px;border-radius:20px;cursor:pointer;transition:all .15s}
+.csb-focus-start:hover{border-color:rgba(167,139,250,.4);color:#c4b5fd}
+/* ═══ INLINE TOOL REPORT ═══ */
+.tool-report-inline{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-family:var(--mono);color:var(--t3);background:rgba(255,255,255,.03);border:1px solid var(--b1);border-radius:6px;padding:2px 6px;margin:2px 4px 2px 0;animation:fade-in .3s ease-out}
+.tool-report-inline .tri-icon{font-size:9px;color:var(--acc)}
+.tool-report-inline .tri-time{color:var(--t4,#5b6377)}
+@keyframes fade-in{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:translateY(0)}}
+/* ═══ ACTION CARD (V2) — interactive suggestions after assistant reply ═══ */
+.action-card{margin:8px 0 0 0;padding:10px 14px;background:linear-gradient(135deg,rgba(108,140,255,.08),rgba(167,139,250,.04));border:1px solid rgba(108,140,255,.25);border-radius:10px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;animation:fade-in .35s ease-out}
+.action-card-prompt{font-size:12px;color:var(--tx);flex:1;min-width:160px}
+.action-card-actions{display:flex;gap:6px;flex-wrap:wrap}
+.action-card-btn{padding:6px 12px;border-radius:7px;font-family:var(--mono);font-size:10.5px;font-weight:600;border:1px solid var(--b1);cursor:pointer;transition:all .15s}
+.action-card-btn.primary{background:rgba(108,140,255,.18);color:var(--tx);border-color:rgba(108,140,255,.45)}
+.action-card-btn.primary:hover{background:rgba(108,140,255,.3);border-color:rgba(108,140,255,.65)}
+.action-card-btn.skip{background:transparent;color:var(--t3)}
+.action-card-btn.skip:hover{color:var(--tx);border-color:var(--t3)}
+/* ═══ PERMISSION CARD (P3) — gate destructive actions ═══ */
+.perm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:200;display:flex;align-items:center;justify-content:center;animation:fade-in .2s ease-out}
+.perm-card{max-width:520px;width:90%;background:linear-gradient(180deg,rgba(15,18,28,.98),rgba(11,14,22,.98));border:1px solid rgba(108,140,255,.3);border-radius:12px;padding:24px;box-shadow:0 25px 80px rgba(0,0,0,.6);animation:perm-enter .25s ease-out}
+@keyframes perm-enter{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.perm-eyebrow{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#fbbf24;font-weight:600}
+.perm-title{font-size:16px;font-weight:700;color:var(--tx);margin:6px 0 4px}
+.perm-desc{font-size:12.5px;color:var(--t2);line-height:1.55;margin-bottom:14px}
+.perm-detail{font-family:var(--mono);font-size:11px;color:var(--t2);background:rgba(0,0,0,.35);border:1px solid var(--b1);border-radius:7px;padding:10px 12px;margin-bottom:18px;max-height:140px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.perm-actions{display:flex;justify-content:flex-end;gap:8px}
+.perm-btn{padding:8px 16px;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:600;border:1px solid var(--b1);cursor:pointer;transition:all .15s}
+.perm-btn.deny{background:transparent;color:var(--t2)}
+.perm-btn.deny:hover{color:#fca5a5;border-color:rgba(248,113,113,.4)}
+.perm-btn.allow{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border-color:rgba(108,140,255,.6)}
+.perm-btn.allow:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.perm-hint{font-family:var(--mono);font-size:9.5px;color:var(--t3);margin-top:10px;text-align:right}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
@@ -533,9 +568,12 @@ body.with-sidebar .chat-status-bar{display:flex}
 <div class="chat-status-bar" id="chat-status-bar">
   <span class="csb-title" id="csb-title">New chat</span>
   <span class="csb-pill" id="csb-license" style="display:none;cursor:pointer" onclick="onLicensePillClick()" title="Manage subscription">● TRIAL</span>
-  <span class="csb-pill accent" id="csb-provider">Gemini</span>
-  <span class="csb-pill" id="csb-model">2.5-flash</span>
+  <span class="csb-pill accent csb-clickable" id="csb-provider" onclick="openProviderSettings()" title="Click to switch provider">Gemini</span>
+  <span class="csb-pill csb-clickable" id="csb-model" onclick="openProviderSettings()" title="Click to switch model">2.5-flash</span>
   <span class="csb-pill" id="csb-tokens">0 tokens</span>
+  <span class="csb-pill csb-byok" id="csb-byok" title="Your API keys live on your machine — calls go directly from your machine to the provider. Horizon never sees prompts.">🔒 BYOK</span>
+  <span class="csb-pill csb-focus" id="csb-focus" style="display:none;cursor:pointer" onclick="toggleFocusTimer()" title="Focus timer (Pomodoro). Click to pause/resume.">⏱ <span id="csb-focus-time">25:00</span></span>
+  <button class="csb-focus-start" id="csb-focus-start" onclick="startFocusTimer()" title="Start 25-minute focus session">⏱ Focus</button>
 </div>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
@@ -2254,6 +2292,260 @@ function onLicensePillClick() {
 }
 // Update license pill when desktop pushes a license-state event.
 try { H.onLicenseChange && H.onLicenseChange(() => refreshLicensePill()); } catch(_){}
+
+// ═══ PROVIDER / MODEL CLICK-SWITCH (P1) ═══
+function openProviderSettings(){
+  try {
+    openPanel();
+    setTimeout(()=>{
+      try {
+        const provSection = document.getElementById('panel')?.querySelector('[data-section="providers"]') ||
+                            document.querySelector('#pi-' + prov);
+        if (provSection) provSection.scrollIntoView({behavior:'smooth', block:'center'});
+      } catch(_){}
+    }, 80);
+  } catch(_){}
+}
+
+// ═══ FOCUS TIMER — pomodoro (P1) ═══
+let focusInterval = null;
+let focusRemaining = 25 * 60; // seconds
+let focusActive = false;
+let focusPaused = false;
+const FOCUS_DEFAULT_SECS = 25 * 60;
+function _renderFocusTime(){
+  const m = Math.floor(focusRemaining / 60);
+  const s = focusRemaining % 60;
+  const txt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  try { document.getElementById('csb-focus-time').textContent = txt; } catch(_){}
+}
+function startFocusTimer(){
+  focusActive = true;
+  focusPaused = false;
+  focusRemaining = FOCUS_DEFAULT_SECS;
+  _renderFocusTime();
+  try {
+    document.getElementById('csb-focus').style.display = 'inline-flex';
+    document.getElementById('csb-focus-start').style.display = 'none';
+  } catch(_){}
+  if (focusInterval) clearInterval(focusInterval);
+  focusInterval = setInterval(()=>{
+    if (focusPaused) return;
+    focusRemaining = Math.max(0, focusRemaining - 1);
+    _renderFocusTime();
+    if (focusRemaining === 0) {
+      _focusDone();
+    }
+  }, 1000);
+}
+function toggleFocusTimer(){
+  if (!focusActive) return;
+  if (focusRemaining === 0) { _resetFocus(); return; }
+  focusPaused = !focusPaused;
+  try {
+    const pill = document.getElementById('csb-focus');
+    if (pill) pill.style.opacity = focusPaused ? '0.55' : '1';
+  } catch(_){}
+}
+function _focusDone(){
+  if (focusInterval) clearInterval(focusInterval);
+  focusInterval = null;
+  try { H.notify && H.notify('Horizon · Focus', lang==='ru'?'Сессия фокусировки окончена. Отдохни 5 минут.':'Focus session done. Take a 5-minute break.'); } catch(_){}
+  // Auto-collapse pill after 30s, show start button again
+  setTimeout(()=>_resetFocus(), 30000);
+}
+function _resetFocus(){
+  focusActive = false;
+  focusPaused = false;
+  focusRemaining = FOCUS_DEFAULT_SECS;
+  if (focusInterval) clearInterval(focusInterval);
+  focusInterval = null;
+  try {
+    document.getElementById('csb-focus').style.display = 'none';
+    document.getElementById('csb-focus-start').style.display = 'inline-block';
+    document.getElementById('csb-focus').style.opacity = '1';
+  } catch(_){}
+}
+
+// ═══ INLINE TOOL REPORT (V2 / P1) ═══
+// Render a compact inline pill on the most recent assistant message
+// describing what tool ran ("read · 2 files · 0.4s"). Hooked via H.onAgentStep.
+function _attachToolReport(step){
+  try {
+    if (!step || !step.tool) return;
+    const msgs = document.getElementById('msgs');
+    if (!msgs) return;
+    const lastBot = msgs.querySelector('.msg.bot:last-of-type .bub');
+    if (!lastBot) return;
+    let tray = lastBot.querySelector('.tool-report-tray');
+    if (!tray) {
+      tray = document.createElement('div');
+      tray.className = 'tool-report-tray';
+      tray.style.cssText = 'margin-top:6px;display:flex;flex-wrap:wrap';
+      lastBot.appendChild(tray);
+    }
+    const pill = document.createElement('span');
+    pill.className = 'tool-report-inline';
+    const icon = ({read_file:'📖',write_file:'✎',list_dir:'📁',run_code:'⚡',shell:'❯',screenshot:'📷',analyze_screen:'👁',websearch:'🔎',open:'↗'})[step.tool] || '⚙';
+    const detail = step.detail || (step.args ? JSON.stringify(step.args).slice(0,40) : '');
+    const ms = step.duration_ms != null ? (step.duration_ms < 1000 ? step.duration_ms+'ms' : (step.duration_ms/1000).toFixed(1)+'s') : '';
+    pill.innerHTML = '<span class="tri-icon">'+icon+'</span><span>'+_escHtml(step.tool)+'</span>'+(detail?'<span>· '+_escHtml(detail)+'</span>':'')+(ms?'<span class="tri-time">· '+_escHtml(ms)+'</span>':'');
+    tray.appendChild(pill);
+  } catch(_){}
+}
+try { H.onAgentStep && H.onAgentStep((step) => _attachToolReport(step)); } catch(_){}
+
+// ═══ ACTION CARD (V2) ═══
+// If the assistant reply ends with a "[[ACTION:label|intent|args]]" tag
+// (or an explicit JSON suggestion), render an interactive Skip/Apply card.
+function renderActionCard(reply, onApply, onSkip){
+  try {
+    const msgs = document.getElementById('msgs');
+    if (!msgs) return null;
+    const lastBot = msgs.querySelector('.msg.bot:last-of-type');
+    if (!lastBot) return null;
+    // Strip control tags from displayed text — caller already did that.
+    const card = document.createElement('div');
+    card.className = 'action-card';
+    const prompt = document.createElement('div');
+    prompt.className = 'action-card-prompt';
+    prompt.textContent = reply.prompt || (lang==='ru'?'Применить предложение?':'Apply this suggestion?');
+    const actions = document.createElement('div');
+    actions.className = 'action-card-actions';
+    const skipBtn = document.createElement('button');
+    skipBtn.className = 'action-card-btn skip';
+    skipBtn.textContent = lang==='ru'?'Пропустить':'Skip';
+    skipBtn.onclick = () => { card.remove(); onSkip && onSkip(); };
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'action-card-btn primary';
+    applyBtn.textContent = (reply.label || (lang==='ru'?'Применить':'Apply'));
+    applyBtn.onclick = () => { card.remove(); onApply && onApply(reply); };
+    actions.appendChild(skipBtn);
+    actions.appendChild(applyBtn);
+    card.appendChild(prompt);
+    card.appendChild(actions);
+    lastBot.appendChild(card);
+    return card;
+  } catch(_) { return null; }
+}
+// Parser: extract action suggestion from an LLM reply.
+// Recognised forms (kept LLM-prompt-light so any provider can emit them):
+//   1) Trailing "[[ACTION: <label> | <intent> | <args-json> | <prompt>]]"
+//   2) JSON object on the last line: {"_action":{"label":"...","intent":"...","args":{...},"prompt":"..."}}
+function _parseActionSuggestion(text){
+  if (!text) return null;
+  // Form 1
+  const m = text.match(/\[\[ACTION:\s*([^|\]]+)\|([^|\]]+)\|([^\]]*?)(?:\|([^\]]+))?\]\]\s*$/);
+  if (m) {
+    let args = {};
+    try { args = JSON.parse(m[3].trim() || '{}'); } catch(_) { args = { raw: m[3] }; }
+    return { label: m[1].trim(), intent: m[2].trim(), args, prompt: (m[4]||'').trim() };
+  }
+  // Form 2
+  const lines = text.trim().split(/\n+/);
+  const last = lines[lines.length-1] || '';
+  if (last.startsWith('{') && last.includes('"_action"')) {
+    try {
+      const o = JSON.parse(last);
+      if (o && o._action) return o._action;
+    } catch(_){}
+  }
+  return null;
+}
+async function _executeActionIntent(action){
+  if (!action || !action.intent) return;
+  const intent = String(action.intent);
+  const args = action.args || {};
+  try {
+    if (intent === 'run_code') {
+      await H.execCode(args.code || '', args.lang || 'python');
+    } else if (intent === 'open_url') {
+      await H.openUrl(args.url || '');
+    } else if (intent === 'send_message') {
+      const inp = document.getElementById('inp');
+      if (inp) { inp.value = args.text || ''; sendMsg(); }
+    } else if (intent === 'plugin') {
+      await H.pluginExecTool(args.plugin_id, args.tool, args.tool_args || {});
+    } else {
+      addMsg('bot', `Unknown action intent: ${intent}`);
+    }
+  } catch(e) { addMsg('bot', `Action failed: ${e.message}`); }
+}
+
+// ═══ PERMISSION CARD (P3) — gate destructive operations ═══
+// Returns Promise<boolean>. true = allow, false = deny. Esc = deny, Enter = allow.
+function requestPermission(opts){
+  return new Promise(resolve => {
+    try {
+      const overlay = document.createElement('div');
+      overlay.className = 'perm-overlay';
+      const card = document.createElement('div');
+      card.className = 'perm-card';
+      card.innerHTML =
+        '<div class="perm-eyebrow">'+_escHtml(opts.eyebrow || (lang==='ru'?'Требуется разрешение':'Permission required'))+'</div>'+
+        '<div class="perm-title">'+_escHtml(opts.title || 'Action')+'</div>'+
+        '<div class="perm-desc">'+_escHtml(opts.description || '')+'</div>'+
+        (opts.detail ? '<pre class="perm-detail">'+_escHtml(opts.detail)+'</pre>' : '')+
+        '<div class="perm-actions">'+
+          '<button class="perm-btn deny" data-act="deny">'+_escHtml(lang==='ru'?'Отклонить':'Deny')+'</button>'+
+          '<button class="perm-btn allow" data-act="allow">'+_escHtml(lang==='ru'?'Разрешить':'Allow')+' ⏎</button>'+
+        '</div>'+
+        '<div class="perm-hint">'+_escHtml(lang==='ru'?'Esc — отклонить · Enter — разрешить':'Esc to deny · Enter to allow')+'</div>';
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      const cleanup = (val) => {
+        try { document.removeEventListener('keydown', onKey); } catch(_){}
+        try { overlay.remove(); } catch(_){}
+        resolve(val);
+      };
+      const onKey = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); cleanup(true); }
+      };
+      document.addEventListener('keydown', onKey);
+      card.querySelector('[data-act="deny"]').onclick = () => cleanup(false);
+      card.querySelector('[data-act="allow"]').onclick = () => cleanup(true);
+      // Focus the Allow button for keyboard users
+      setTimeout(()=>{ try { card.querySelector('[data-act="allow"]').focus(); } catch(_){} }, 30);
+    } catch(_) { resolve(false); }
+  });
+}
+// User-facing toggle so power users can disable the gate (off by default).
+let permissionGateEnabled = true;
+async function _gateDestructive(intent, opts) {
+  if (!permissionGateEnabled) return true;
+  return await requestPermission(opts);
+}
+async function safeExecCode(code, langCode){
+  const ok = await _gateDestructive('exec_code', {
+    eyebrow: lang==='ru'?'Запустить код':'Run code',
+    title: (langCode||'python').toUpperCase()+' · execute',
+    description: lang==='ru'?'Этот код будет выполнен с правами Horizon на твоей машине.':'This code will run on your machine with Horizon\'s privileges.',
+    detail: code
+  });
+  if (!ok) return { ok:false, err:'denied by user' };
+  return await H.execCode(code, langCode);
+}
+async function safeShell(cmd){
+  const ok = await _gateDestructive('shell', {
+    eyebrow: lang==='ru'?'Выполнить команду':'Run shell command',
+    title: 'shell · '+(cmd||'').slice(0,60),
+    description: lang==='ru'?'Команда будет выполнена в системной оболочке.':'The command will run in the system shell.',
+    detail: cmd
+  });
+  if (!ok) return { ok:false, err:'denied by user' };
+  return await H.pcShell(cmd);
+}
+async function safeWriteFile(filePath, content){
+  const ok = await _gateDestructive('write_file', {
+    eyebrow: lang==='ru'?'Записать файл':'Write file',
+    title: filePath,
+    description: lang==='ru'?(`Будет перезаписан/создан файл (${(content||'').length} символов).`):'This file will be created or overwritten ('+ (content||'').length +' chars).',
+    detail: (content||'').slice(0,400) + ((content||'').length>400?'\n…':'')
+  });
+  if (!ok) return { ok:false, err:'denied by user' };
+  return await H.pcWriteFile(filePath, content);
+}
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
 function applyLang(){
   setStatus(t('ready'));
@@ -3019,7 +3311,19 @@ ${fileContext}`}];
     const res=await H.ai(history,prov,sys,opts);
     rmTyping();
     if(res.error) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
-    else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});trackTokens(res.reply,'assistant',prov);speak(res.reply);}
+    else{
+      // Strip any [[ACTION:...]] / {"_action":...} suggestion tag from the
+      // displayed text but keep the original reply for history persistence
+      // and parsing.
+      const action = _parseActionSuggestion(res.reply);
+      const cleanReply = action ? res.reply.replace(/\[\[ACTION:[^\]]+\]\]\s*$/, '').replace(/\{"_action"[^\n]*\}\s*$/, '').trim() : res.reply;
+      addMsg('bot',cleanReply,{model:res.model||prov});
+      history.push({role:'assistant',content:res.reply});
+      _persistChatMessage('assistant',res.reply,{model:res.model||prov});
+      trackTokens(res.reply,'assistant',prov);
+      speak(cleanReply);
+      if (action) renderActionCard(action, _executeActionIntent, ()=>{});
+    }
   } catch(e) {
     rmTyping();
     addMsg('bot',`❌ Ошибка: ${e.message}`);
