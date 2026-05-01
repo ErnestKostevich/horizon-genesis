@@ -471,7 +471,18 @@ textarea::placeholder{color:var(--t3)}
       <div class="psl">👤 Profile</div>
       <div class="pf"><label>Name</label><div class="pr"><input class="pi" type="text" id="pi-name" placeholder="Ernest"/><button class="psv" onclick="savePf()">Save</button></div></div>
       <div class="pf"><label>Language</label><select class="sel" id="pi-lang" onchange="saveLang()"><option value="ru">🇷🇺 Русский</option><option value="en">🇺🇸 English</option></select></div>
-      <div class="pf"><label>Theme</label><select class="sel" id="pi-theme" onchange="saveTheme()"><option value="apex">Apex Glass (Premium)</option><option value="dark">Minimal Dark</option><option value="light">Minimal Light</option></select></div>
+      <div class="local-status ok" id="settings-save-status">Settings are stored locally and restored on launch.</div>
+    </div>
+
+    <!-- Settings health -->
+    <div class="ps">
+      <div class="psl">Settings health</div>
+      <div class="local-status" id="settings-health">Checking saved settings...</div>
+      <div class="pr" style="margin-top:10px">
+        <button class="psv" onclick="verifySettingsPersistence()">Verify persistence</button>
+        <button class="psv" onclick="openSettingsFolder()">Open settings folder</button>
+        <button class="psv" onclick="loadSettingsHealth()">Refresh status</button>
+      </div>
     </div>
 
     <!-- AI Providers -->
@@ -972,7 +983,7 @@ function setWakeCfg(key, val) {
   if (Object.prototype.hasOwnProperty.call(wakeSettings, key)) wakeSettings[key] = val;
   try { localStorage.setItem('wake.' + key, String(val)); } catch {}
   const storeKey = WAKE_SETTING_KEYS[key];
-  if (storeKey) H.set(storeKey, val).catch(() => {});
+  if (storeKey) saveSetting(storeKey, val, 'Wake calibration');
 }
 async function loadWakeSettings() {
   const strict = await H.get('wakeStrictMode').catch(() => null);
@@ -1408,11 +1419,14 @@ function setWakeBar(state){
 }
 
 function toggleWake(){
-  wakeOn=!wakeOn;
-  H.set('wakeOn', wakeOn).catch(()=>{});
+  const next=!wakeOn;
   const btn=document.getElementById('tc-wake');
-  btn.classList.toggle('on', wakeOn);
-  if(wakeOn) startWakeMode(); else stopWakeMode();
+  btn.classList.toggle('on', next);
+  saveSetting('wakeOn', next, 'Wake mode').then(ok=>{
+    if(!ok){btn.classList.toggle('on', wakeOn);return;}
+    wakeOn=next;
+    if(wakeOn) startWakeMode(); else stopWakeMode();
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1868,7 +1882,6 @@ window.addEventListener('DOMContentLoaded', async()=>{
   const savedTTS=await H.get('ttsProvider');if(savedTTS)ttsProvider=savedTTS;
   const savedElV=await H.get('elevenLabsVoice');if(savedElV)elevenLabsVoice=savedElV;
   const savedOAIV=await H.get('openaiTtsVoice');if(savedOAIV)openaiTtsVoice=savedOAIV;
-  const savedTheme=await H.get('theme');applyTheme(savedTheme || 'apex');
   applyLang(); setProv(prov,false); setMode(mode,false); showGreeting();
   if(!ttsOn)document.getElementById('sw-tts').classList.remove('on');
   document.getElementById('sw-eye')?.classList.toggle('on', eyeOn);
@@ -1932,43 +1945,101 @@ async function loadPanel(){
   document.getElementById('pi-ollama-model').value = om || 'llama3.1';
   document.getElementById('pi-lmstudio-url').value = lu || 'http://127.0.0.1:1234/v1';
   document.getElementById('pi-lmstudio-model').value = lm || 'local-model';
+  await loadSettingsHealth();
 }
 
-async function savePf(){const n=document.getElementById('pi-name').value.trim();if(!n)return;await H.set('userName',n);userName=n;document.getElementById('tb-sub').textContent=n.toUpperCase();showGreeting();}
-async function saveLang(){lang=document.getElementById('pi-lang').value;await H.set('lang',lang);applyLang();showGreeting();}
-function applyTheme(theme){
-  const value = ['apex','dark','light'].includes(theme) ? theme : 'apex';
-  document.documentElement.dataset.theme = value;
-  document.documentElement.classList.toggle('theme-dark', value === 'dark');
-  document.documentElement.classList.toggle('theme-light', value === 'light');
-  document.body.dataset.theme = value;
-  document.body.classList.remove('dark','light','theme-dark','theme-light');
-  if(value !== 'apex'){
-    document.body.classList.add(value, `theme-${value}`);
+function setSettingsStatus(text, ok=true){
+  const el=document.getElementById('settings-save-status');
+  if(!el) return;
+  el.textContent=text;
+  el.classList.toggle('ok', ok);
+  el.classList.toggle('bad', !ok);
+}
+
+async function saveSetting(key,value,label=key){
+  try{
+    await H.set(key,value);
+    setSettingsStatus(`${label} saved. It will be restored after restart.`, true);
+    await loadSettingsHealth();
+    return true;
+  }catch(e){
+    const msg=e?.message||String(e);
+    setSettingsStatus(`Could not save ${label}: ${msg}`, false);
+    H.notify?.('Settings save failed', `${label}: ${msg}`);
+    return false;
   }
-  const select = document.getElementById('pi-theme');
-  if(select) select.value = value;
 }
-async function saveTheme(){
-  const theme = document.getElementById('pi-theme').value;
-  await H.set('theme', theme);
-  applyTheme(theme);
+
+async function readSetting(key,fallback=null){
+  try{
+    const value=await H.get(key);
+    return value ?? fallback;
+  }catch(_){
+    return fallback;
+  }
 }
+
+async function loadSettingsHealth(){
+  const el=document.getElementById('settings-health');
+  if(!el || !H.settingsDiagnostics) return;
+  try{
+    const d=await H.settingsDiagnostics();
+    const s=d.saved||{};
+    const enabled=[
+      s.wakeOn?'Wake':'',
+      s.screenWatcher?'Screen AI':'',
+      s.searchOn?'Search':'',
+      s.ambientOn?'Ambient':'',
+      s.notificationsOn?'Notifications':''
+    ].filter(Boolean).join(', ') || 'base chat';
+    const localModels=[
+      s.ollamaModel?`Ollama: ${escHtml(s.ollamaModel)}`:'',
+      s.lmStudioModel?`LM Studio: ${escHtml(s.lmStudioModel)}`:''
+    ].filter(Boolean).join(' · ') || 'local models not configured';
+    el.className='local-status ok';
+    el.innerHTML=[
+      `<b>Storage OK.</b> ${escHtml(d.settingsPath||d.userDataPath||'Electron userData')}`,
+      `Account: ${d.marketplaceUser?escHtml(d.marketplaceUser.email||d.marketplaceUser.display_name||'signed in'):'not signed in'} · Provider: ${escHtml(s.provider||provider||'gemini')} · Mode: ${escHtml(s.mode||mode||'chat')}`,
+      `Enabled: ${escHtml(enabled)}`,
+      `Local: ${localModels}`,
+      s.settingsHealthCheckAt?`Last persistence check: ${escHtml(s.settingsHealthCheckAt)}`:''
+    ].filter(Boolean).join('<br>');
+  }catch(e){
+    el.className='local-status bad';
+    el.textContent=`Settings diagnostics failed: ${e?.message||e}`;
+  }
+}
+
+async function verifySettingsPersistence(){
+  const stamp=new Date().toISOString();
+  const ok=await saveSetting('settingsHealthCheckAt', stamp, 'Persistence check');
+  if(!ok) return;
+  const value=await readSetting('settingsHealthCheckAt', '');
+  setSettingsStatus(value===stamp?'Persistence verified. Restart will restore saved settings.':'Persistence check did not round-trip.', value===stamp);
+  await loadSettingsHealth();
+}
+
+async function openSettingsFolder(){
+  const r=await H.openSettingsFolder?.().catch(e=>({ok:false,error:e.message}));
+  setSettingsStatus(r?.ok?`Opened settings folder: ${r.path}`:`Could not open settings folder: ${r?.error||'unknown error'}`, !!r?.ok);
+}
+async function savePf(){const n=document.getElementById('pi-name').value.trim();if(!n)return;if(await saveSetting('userName',n,'Name')){userName=n;document.getElementById('tb-sub').textContent=n.toUpperCase();showGreeting();}}
+async function saveLang(){const next=document.getElementById('pi-lang').value;if(await saveSetting('lang',next,'Language')){lang=next;applyLang();showGreeting();}}
 async function saveVP(){
   voiceProvider=document.getElementById('pi-vprov').value;
-  await H.set('voiceProvider',voiceProvider);
+  await saveSetting('voiceProvider',voiceProvider,'Voice provider');
   const dg=document.getElementById('deepgram-section');
   if(dg) dg.style.display=(voiceProvider==='deepgram')?'block':'none';
 }
 async function saveLocalProvider(kind){
   if(kind==='ollama'){
-    await H.set('ollamaUrl', document.getElementById('pi-ollama-url').value.trim() || 'http://127.0.0.1:11434/v1');
-    await H.set('ollamaModel', document.getElementById('pi-ollama-model').value.trim() || 'llama3.1');
+    await saveSetting('ollamaUrl', document.getElementById('pi-ollama-url').value.trim() || 'http://127.0.0.1:11434/v1','Ollama URL');
+    await saveSetting('ollamaModel', document.getElementById('pi-ollama-model').value.trim() || 'llama3.1','Ollama model');
     document.getElementById('pd-ollama')?.classList.add('on');
   }
   if(kind==='lmstudio'){
-    await H.set('lmStudioUrl', document.getElementById('pi-lmstudio-url').value.trim() || 'http://127.0.0.1:1234/v1');
-    await H.set('lmStudioModel', document.getElementById('pi-lmstudio-model').value.trim() || 'local-model');
+    await saveSetting('lmStudioUrl', document.getElementById('pi-lmstudio-url').value.trim() || 'http://127.0.0.1:1234/v1','LM Studio URL');
+    await saveSetting('lmStudioModel', document.getElementById('pi-lmstudio-model').value.trim() || 'local-model','LM Studio model');
     document.getElementById('pd-lmstudio')?.classList.add('on');
   }
   H.notify?.('Local models', 'Saved local provider settings.');
@@ -2008,7 +2079,7 @@ async function testLocalProvider(kind){
 
 async function saveTTSProv(){
   ttsProvider=document.getElementById('pi-ttsprov').value;
-  await H.set('ttsProvider',ttsProvider);
+  await saveSetting('ttsProvider',ttsProvider,'TTS provider');
   document.getElementById('el-section').style.display=(ttsProvider==='elevenlabs')?'block':'none';
   document.getElementById('oaitts-section').style.display=(ttsProvider==='openai')?'block':'none';
   document.getElementById('kokoro-section').style.display=(ttsProvider==='kokoro')?'block':'none';
@@ -2016,11 +2087,11 @@ async function saveTTSProv(){
 }
 async function saveElVoice(){
   elevenLabsVoice=document.getElementById('pi-elvid').value.trim()||'pNInz6obpgDQGcFmaJgB';
-  await H.set('elevenLabsVoice',elevenLabsVoice);
+  await saveSetting('elevenLabsVoice',elevenLabsVoice,'ElevenLabs voice');
 }
 async function saveOAITTSVoice(){
   openaiTtsVoice=document.getElementById('pi-oaitts').value;
-  await H.set('openaiTtsVoice',openaiTtsVoice);
+  await saveSetting('openaiTtsVoice',openaiTtsVoice,'OpenAI TTS voice');
 }
 function loadKokoro(){
   if(typeof window.KokoroTTS !== 'undefined') return;
@@ -2053,7 +2124,15 @@ async function removeGithubRepo(fullName){
   await H.githubRemoveRepo(fullName).catch(()=>false);
   await loadGithubRepos();
 }
-function togSw(key,id){const on=document.getElementById(id).classList.toggle('on');H.set(key,on).catch(()=>{});if(key==='tts')ttsOn=on;if(key==='screenWatcher'){eyeOn=on;document.getElementById('tc-eye').classList.toggle('on',on);}}
+function togSw(key,id){
+  const el=document.getElementById(id);
+  const on=el.classList.toggle('on');
+  saveSetting(key,on,key).then(ok=>{
+    if(!ok){el.classList.toggle('on', !on);return;}
+    if(key==='tts')ttsOn=on;
+    if(key==='screenWatcher'){eyeOn=on;document.getElementById('tc-eye').classList.toggle('on',on);}
+  });
+}
 
 // ═══ WAKE WORD CALIBRATION HANDLERS ═══
 function toggleWakeStrict(){
@@ -2090,10 +2169,10 @@ async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все клю
 // ═══════════════════════════════════════════════════════════════
 // PROVIDER / MODE / TOGGLES
 // ═══════════════════════════════════════════════════════════════
-function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)H.set('provider',p).catch(()=>{});}
-function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)H.set('mode',m).catch(()=>{});}
-function toggleSearch(){searchOn=!searchOn;document.getElementById('tc-search').classList.toggle('on',searchOn);H.set('searchOn',searchOn).catch(()=>{});}
-function toggleEye(){eyeOn=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',eyeOn);H.set('screenWatcher',eyeOn).catch(()=>{});}
+function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');}
+function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)saveSetting('mode',m,'Mode');}
+function toggleSearch(){const next=!searchOn;document.getElementById('tc-search').classList.toggle('on',next);saveSetting('searchOn',next,'Search toggle').then(ok=>{if(ok){searchOn=next;}else{document.getElementById('tc-search').classList.toggle('on',searchOn);}});}
+function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',next);saveSetting('screenWatcher',next,'Screen AI toggle').then(ok=>{if(ok){eyeOn=next;document.getElementById('sw-eye')?.classList.toggle('on',next);}else{document.getElementById('tc-eye').classList.toggle('on',eyeOn);}});}
 
 // ═══════════════════════════════════════════════════════════════
 // MAIN SEND
@@ -2708,9 +2787,13 @@ function updateFocusDisplay() {
 // AMBIENT MODE — AI proactively analyzes screen and suggests help
 // ═══════════════════════════════════════════════════════════════
 async function toggleAmbient() {
-  ambientOn = !ambientOn;
-  document.getElementById('sw-ambient').classList.toggle('on', ambientOn);
-  await H.set('ambientOn', ambientOn);
+  const next = !ambientOn;
+  document.getElementById('sw-ambient').classList.toggle('on', next);
+  if(!(await saveSetting('ambientOn', next, 'Ambient Mode'))){
+    document.getElementById('sw-ambient').classList.toggle('on', ambientOn);
+    return;
+  }
+  ambientOn = next;
   
   if (ambientOn) {
     startAmbientMode();
@@ -2765,9 +2848,13 @@ Do NOT suggest help if user is just watching video, reading, or idle.`;
 // SMART NOTIFICATIONS — daily briefing
 // ═══════════════════════════════════════════════════════════════
 async function toggleNotifications() {
-  notificationsOn = !notificationsOn;
-  document.getElementById('sw-notifs').classList.toggle('on', notificationsOn);
-  await H.set('notificationsOn', notificationsOn);
+  const next = !notificationsOn;
+  document.getElementById('sw-notifs').classList.toggle('on', next);
+  if(!(await saveSetting('notificationsOn', next, 'Smart Notifications'))){
+    document.getElementById('sw-notifs').classList.toggle('on', notificationsOn);
+    return;
+  }
+  notificationsOn = next;
   
   if (notificationsOn) {
     startNotifications();
@@ -2860,7 +2947,7 @@ async function loadWorkflows() {
 }
 
 async function saveWorkflows() {
-  try { await H.set('workflows', JSON.stringify(workflows)); } catch(_) {}
+  await saveSetting('workflows', JSON.stringify(workflows), 'Workflows');
 }
 
 function createWorkflow(name, steps, trigger = 'manual') {
@@ -2991,7 +3078,7 @@ let currentPersona = 'jarvis';
 
 async function setPersona(id) {
   currentPersona = id;
-  await H.set('persona', id);
+  await saveSetting('persona', id, 'Persona');
   try {
     const p = await H.getPersona(id);
     if (p) {
