@@ -140,6 +140,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'ollamaUrl', 'ollamaModel', 'lmStudioUrl', 'lmStudioModel',
   'localAiUrl', 'localAiModel',
   'wakeStrictMode', 'wakeVolumeThreshold', 'wakeConfirmBeep',
+  'settingsHealthCheckAt',
 ]);
 
 function assertAllowedKey(service) {
@@ -360,6 +361,41 @@ ipcMain.handle('deleteKey', (_, s)    => { assertAllowedKey(s); keysStore.delete
 ipcMain.handle('set',       (_, k, v) => { assertAllowedSetting(k); settingsStore.set(k, v); return true; });
 ipcMain.handle('get',       (_, k)    => { assertAllowedSetting(k); return settingsStore.get(k, null); });
 ipcMain.handle('getPort',   ()        => port);
+ipcMain.handle('settingsDiagnostics', () => {
+  const userDataPath = app.getPath('userData');
+  return {
+    ok: true,
+    version: app.getVersion(),
+    userDataPath,
+    settingsPath: settingsStore.path || path.join(userDataPath, 'horizon-settings.json'),
+    hasMarketplaceToken: !!settingsStore.get('marketplaceToken'),
+    marketplaceUser: settingsStore.get('marketplaceUser') || null,
+    saved: {
+      userName: settingsStore.get('userName') || null,
+      lang: settingsStore.get('lang') || null,
+      provider: settingsStore.get('provider') || null,
+      mode: settingsStore.get('mode') || null,
+      voiceProvider: settingsStore.get('voiceProvider') || null,
+      ttsProvider: settingsStore.get('ttsProvider') || null,
+      wakeOn: !!settingsStore.get('wakeOn'),
+      searchOn: !!settingsStore.get('searchOn'),
+      screenWatcher: !!settingsStore.get('screenWatcher'),
+      ambientOn: !!settingsStore.get('ambientOn'),
+      notificationsOn: !!settingsStore.get('notificationsOn'),
+      persona: settingsStore.get('persona') || null,
+      ollamaUrl: settingsStore.get('ollamaUrl') || null,
+      ollamaModel: settingsStore.get('ollamaModel') || null,
+      lmStudioUrl: settingsStore.get('lmStudioUrl') || null,
+      lmStudioModel: settingsStore.get('lmStudioModel') || null,
+      settingsHealthCheckAt: settingsStore.get('settingsHealthCheckAt') || null,
+    },
+  };
+});
+ipcMain.handle('openSettingsFolder', async () => {
+  const userDataPath = app.getPath('userData');
+  const error = await shell.openPath(userDataPath);
+  return error ? { ok: false, path: userDataPath, error } : { ok: true, path: userDataPath };
+});
 ipcMain.handle('localProviderStatus', async (_, provider) => {
   const ep = localOpenAIEndpoint(provider);
   if (!ep) return { ok: false, error: 'Unknown local provider' };
