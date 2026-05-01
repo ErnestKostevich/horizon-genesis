@@ -1938,8 +1938,14 @@ async function savePf(){const n=document.getElementById('pi-name').value.trim();
 async function saveLang(){lang=document.getElementById('pi-lang').value;await H.set('lang',lang);applyLang();showGreeting();}
 function applyTheme(theme){
   const value = ['apex','dark','light'].includes(theme) ? theme : 'apex';
-  document.body.classList.remove('dark','light');
-  if(value !== 'apex') document.body.classList.add(value);
+  document.documentElement.dataset.theme = value;
+  document.documentElement.classList.toggle('theme-dark', value === 'dark');
+  document.documentElement.classList.toggle('theme-light', value === 'light');
+  document.body.dataset.theme = value;
+  document.body.classList.remove('dark','light','theme-dark','theme-light');
+  if(value !== 'apex'){
+    document.body.classList.add(value, `theme-${value}`);
+  }
   const select = document.getElementById('pi-theme');
   if(select) select.value = value;
 }
