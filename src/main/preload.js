@@ -90,6 +90,16 @@ contextBridge.exposeInMainWorld('H', {
   githubRemoveRepo: (repo)     => ipcRenderer.invoke('githubRemoveRepo', repo),
   githubRepoContext:(repo)     => ipcRenderer.invoke('githubRepoContext', repo),
 
+  // ── CHAT MANAGEMENT ────────────────────────────────────────────────────────
+  chatList:         ()              => ipcRenderer.invoke('chatList'),
+  chatGet:          (id)            => ipcRenderer.invoke('chatGet', id),
+  chatCreate:       (opts)          => ipcRenderer.invoke('chatCreate', opts),
+  chatSwitch:       (id)            => ipcRenderer.invoke('chatSwitch', id),
+  chatRename:       (id, title)     => ipcRenderer.invoke('chatRename', id, title),
+  chatDelete:       (id)            => ipcRenderer.invoke('chatDelete', id),
+  chatAddMessage:   (id, r, c, m)   => ipcRenderer.invoke('chatAddMessage', id, r, c, m),
+  chatGetCurrent:   ()              => ipcRenderer.invoke('chatGetCurrent'),
+
   // ── NUTRITION ─────────────────────────────────────────────────────────────────
   nutritionLog:     (d, cal, p, c, f) => ipcRenderer.invoke('nutritionLog', d, cal, p, c, f),
   nutritionGet:     (days)            => ipcRenderer.invoke('nutritionGet', days),
