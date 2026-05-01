@@ -1231,6 +1231,7 @@ ipcMain.handle('search', async (_, query) => {
 
 let agentTools = null;
 let agentMemory = null;
+let chatStore = null;
 let agentLoop = null;
 let mcpManager = null;
 let computerUse = null;
@@ -1246,11 +1247,18 @@ function loadAgentModules() {
   if (!agentTools) {
     try {
       agentTools = require('./agent');
-      const { AgentMemory, setMemoryInstance } = agentTools;
+      const { AgentMemory, ChatStore, setMemoryInstance } = agentTools;
       const memPath = path.join(app.getPath('userData'), 'horizon_memory.db');
       agentMemory = new AgentMemory(memPath);
       agentMemory.init();
       setMemoryInstance(agentMemory);
+      // Initialize ChatStore for multi-chat persistence
+      if (!chatStore) {
+        const chatPath = path.join(app.getPath('userData'), 'horizon_chats.db');
+        chatStore = new ChatStore(chatPath);
+        chatStore.init();
+        console.log('✓ ChatStore loaded');
+      }
       console.log('✓ Agent tools loaded');
     } catch(e) {
       console.error('Agent tools failed:', e.message);
@@ -1583,6 +1591,40 @@ ipcMain.handle('githubRepoContext', async (_, fullName) => {
   if (!githubConnector) return { ok: false, error: 'GitHub connector not loaded' };
   try { return { ok: true, ...(await githubConnector.repoContext(fullName)) }; }
   catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ── CHAT MANAGEMENT ──────────────────────────────────────────────────────────
+ipcMain.handle('chatList', () => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.list() : []; } catch (e) { return []; }
+});
+ipcMain.handle('chatGet', (_, id) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.get(id) : null; } catch (e) { return null; }
+});
+ipcMain.handle('chatCreate', (_, opts) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.create(opts) : null; } catch (e) { return null; }
+});
+ipcMain.handle('chatSwitch', (_, id) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.switchTo(id) : null; } catch (e) { return null; }
+});
+ipcMain.handle('chatRename', (_, id, title) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.rename(id, title) : false; } catch (e) { return false; }
+});
+ipcMain.handle('chatDelete', (_, id) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.remove(id) : { ok: false }; } catch (e) { return { ok: false }; }
+});
+ipcMain.handle('chatAddMessage', (_, id, role, content, meta) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.addMessage(id, role, content, meta) : { ok: false }; } catch (e) { return { ok: false }; }
+});
+ipcMain.handle('chatGetCurrent', () => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.getCurrent() : null; } catch (e) { return null; }
 });
 
 // ── CODE EXECUTION ────────────────────────────────────────────────────────────

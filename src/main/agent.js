@@ -586,8 +586,191 @@ async function dispatchTool(name, args = {}) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHAT STORE — multi-chat persistence (separate JSON sibling of AgentMemory)
+// MVP scope: thread CRUD + auto-title from first user message + stable current_chat_id.
+// Schema versioned; older clients upgrade by re-saving on first init.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CHAT_STORE_MAX_CHATS = 200;
+const CHAT_STORE_MAX_MESSAGES_PER_CHAT = 1000;
+const CHAT_STORE_TITLE_MAX = 80;
+const CHAT_STORE_PREVIEW_MAX = 160;
+
+class ChatStore {
+  constructor(dbPath) {
+    this.filePath = dbPath.replace(/\.db$/, '.json');
+    this.ready = false;
+    this._data = { version: 1, current_chat_id: null, chats: [] };
+  }
+
+  init() {
+    try {
+      if (fs.existsSync(this.filePath)) {
+        const raw = fs.readFileSync(this.filePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        this._data = {
+          version: parsed.version || 1,
+          current_chat_id: parsed.current_chat_id || null,
+          chats: Array.isArray(parsed.chats) ? parsed.chats : [],
+        };
+      } else {
+        this._save();
+      }
+      this.ready = true;
+    } catch (e) {
+      console.error('ChatStore init error:', e.message);
+      this.ready = true;
+    }
+    return true;
+  }
+
+  _save() {
+    try {
+      fs.writeFileSync(this.filePath, JSON.stringify(this._data, null, 2));
+    } catch (e) {
+      console.error('ChatStore save error:', e.message);
+    }
+  }
+
+  _genId() {
+    return 'chat_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  _findIndex(id) {
+    return this._data.chats.findIndex(c => c.id === id);
+  }
+
+  _stripPreview(s) {
+    return String(s || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`>_~]/g, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_STORE_PREVIEW_MAX);
+  }
+
+  _summary(chat) {
+    return {
+      id: chat.id,
+      title: chat.title || '',
+      created_at: chat.created_at,
+      updated_at: chat.updated_at,
+      message_count: (chat.messages || []).length,
+      preview: chat.preview || '',
+    };
+  }
+
+  _trimChats() {
+    if (this._data.chats.length > CHAT_STORE_MAX_CHATS) {
+      this._data.chats.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+      this._data.chats = this._data.chats.slice(0, CHAT_STORE_MAX_CHATS);
+    }
+  }
+
+  list() {
+    return [...this._data.chats]
+      .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+      .map(c => this._summary(c));
+  }
+
+  get(id) {
+    const i = this._findIndex(id);
+    if (i < 0) return null;
+    return JSON.parse(JSON.stringify(this._data.chats[i]));
+  }
+
+  create(opts) {
+    if (!this.ready) return null;
+    opts = opts || {};
+    const now = new Date().toISOString();
+    const chat = {
+      id: this._genId(),
+      title: (opts.title || '').slice(0, CHAT_STORE_TITLE_MAX),
+      created_at: now,
+      updated_at: now,
+      message_count: 0,
+      preview: '',
+      messages: [],
+    };
+    this._data.chats.push(chat);
+    if (opts.switch !== false) this._data.current_chat_id = chat.id;
+    this._trimChats();
+    this._save();
+    return JSON.parse(JSON.stringify(chat));
+  }
+
+  switchTo(id) {
+    const i = this._findIndex(id);
+    if (i < 0) return null;
+    this._data.current_chat_id = id;
+    this._save();
+    return JSON.parse(JSON.stringify(this._data.chats[i]));
+  }
+
+  rename(id, title) {
+    const i = this._findIndex(id);
+    if (i < 0) return false;
+    this._data.chats[i].title = String(title || '').slice(0, CHAT_STORE_TITLE_MAX);
+    this._data.chats[i].updated_at = new Date().toISOString();
+    this._save();
+    return true;
+  }
+
+  remove(id) {
+    const i = this._findIndex(id);
+    if (i < 0) return { ok: false };
+    this._data.chats.splice(i, 1);
+    let next_current_id = null;
+    if (this._data.current_chat_id === id) {
+      if (this._data.chats.length > 0) {
+        const sorted = [...this._data.chats].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+        next_current_id = sorted[0].id;
+        this._data.current_chat_id = next_current_id;
+      } else {
+        this._data.current_chat_id = null;
+      }
+    }
+    this._save();
+    return { ok: true, next_current_id };
+  }
+
+  addMessage(id, role, content, meta) {
+    const i = this._findIndex(id);
+    if (i < 0) return { ok: false, error: 'chat not found' };
+    const chat = this._data.chats[i];
+    const now = new Date().toISOString();
+    const text = String(content || '');
+    const msg = { role: role === 'assistant' ? 'assistant' : 'user', content: text, ts: now, meta: meta || {} };
+    chat.messages = chat.messages || [];
+    chat.messages.push(msg);
+    if (chat.messages.length > CHAT_STORE_MAX_MESSAGES_PER_CHAT) {
+      chat.messages = chat.messages.slice(-CHAT_STORE_MAX_MESSAGES_PER_CHAT);
+    }
+    chat.message_count = chat.messages.length;
+    chat.updated_at = now;
+    chat.preview = this._stripPreview(text);
+    if (msg.role === 'user' && (!chat.title || /^untitled/i.test(chat.title))) {
+      chat.title = this._stripPreview(text).slice(0, 50);
+    }
+    this._save();
+    return { ok: true, message_count: chat.message_count, title: chat.title };
+  }
+
+  getCurrent() {
+    if (!this._data.current_chat_id) {
+      return this.create({});
+    }
+    const found = this.get(this._data.current_chat_id);
+    if (found) return found;
+    if (this._data.chats.length > 0) {
+      const sorted = [...this._data.chats].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+      this._data.current_chat_id = sorted[0].id;
+      this._save();
+      return this.get(this._data.current_chat_id);
+    }
+    return this.create({});
+  }
+}
+
 module.exports = {
   AgentMemory,
+  ChatStore,
   dispatchTool,
   setMemoryInstance,
   executeCode,

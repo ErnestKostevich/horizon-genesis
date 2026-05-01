@@ -454,12 +454,50 @@ textarea::placeholder{color:var(--t3)}
 .focus-timer{display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(52,211,153,.05);border:1px solid rgba(52,211,153,.15);border-radius:20px;font-size:11px;color:var(--green);font-family:var(--mono);font-weight:600}
 .focus-timer.show{display:flex}
 .focus-timer-btn{background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:2px}
+
+/* ═══ MULTI-CHAT SIDEBAR ═══ */
+.chatside{position:fixed;top:0;left:0;bottom:0;width:260px;background:rgba(11,14,22,.92);border-right:1px solid var(--b1);z-index:60;display:flex;flex-direction:column;backdrop-filter:blur(20px);-webkit-app-region:no-drag;overflow:hidden}
+body.with-sidebar > .tb,
+body.with-sidebar > .wake-bar,
+body.with-sidebar > .sb,
+body.with-sidebar > .modes,
+body.with-sidebar > .msgs,
+body.with-sidebar > .inp-wrap,
+body.with-sidebar > .panel,
+body.with-sidebar > #fractalBg{margin-left:260px}
+.chatside .cs-head{padding:14px 14px 8px 14px;-webkit-app-region:drag}
+.chatside .cs-new{-webkit-app-region:no-drag;width:100%;padding:10px 12px;background:linear-gradient(135deg,rgba(108,140,255,.18),rgba(167,139,250,.12));border:1px solid rgba(108,140,255,.35);border-radius:10px;color:var(--tx);font:600 13px var(--font);cursor:pointer;letter-spacing:.2px;transition:transform .15s,background .2s,border-color .2s}
+.chatside .cs-new:hover{background:linear-gradient(135deg,rgba(108,140,255,.28),rgba(167,139,250,.18));border-color:rgba(108,140,255,.55);transform:translateY(-1px)}
+.cs-list{flex:1;overflow-y:auto;padding:6px 8px 12px 8px}
+.cs-list::-webkit-scrollbar{width:6px}
+.cs-list::-webkit-scrollbar-thumb{background:rgba(108,140,255,.18);border-radius:6px}
+.cs-empty{color:var(--t3);font-size:12px;padding:18px 12px;text-align:center;font-style:italic}
+.cs-group-heading{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1.2px;color:var(--t3);padding:14px 10px 6px 10px}
+.cs-item{position:relative;padding:10px 12px;margin:2px 0;border-radius:8px;cursor:pointer;transition:background .15s;border-left:2px solid transparent}
+.cs-item:hover{background:rgba(108,140,255,.07)}
+.cs-item.active{background:rgba(108,140,255,.13);border-left-color:rgba(108,140,255,.7)}
+.cs-item .cs-title{font-size:13px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:42px}
+.cs-item .cs-preview{font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;padding-right:42px}
+.cs-item .cs-meta{font-size:10px;color:var(--t4,#5b6377);font-family:var(--mono);margin-top:2px}
+.cs-actions{position:absolute;right:8px;top:8px;display:flex;gap:4px;opacity:0;transition:opacity .15s}
+.cs-item:hover .cs-actions{opacity:1}
+.cs-act-btn{background:rgba(255,255,255,.04);border:1px solid var(--b1);color:var(--t2,#9ba3b8);padding:3px 6px;border-radius:5px;font-size:10px;cursor:pointer}
+.cs-act-btn:hover{background:rgba(108,140,255,.18);color:var(--tx);border-color:rgba(108,140,255,.4)}
+.cs-act-btn.danger:hover{background:rgba(248,113,113,.18);border-color:rgba(248,113,113,.4);color:#fca5a5}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
 </head>
 <body>
 <canvas id="fractalBg" aria-hidden="true"></canvas>
+
+<!-- ═══════════ MULTI-CHAT SIDEBAR (mounted at boot) ═══════════ -->
+<aside id="chatside" class="chatside" hidden>
+  <div class="cs-head">
+    <button class="cs-new" id="cs-new-btn" onclick="createNewChat()">+ New chat</button>
+  </div>
+  <div class="cs-list" id="chatlist"></div>
+</aside>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
 <div class="panel" id="panel">
@@ -858,6 +896,10 @@ let isRecording=false, isProcessing=false;
 let audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 let history=[];
 
+// ═══ MULTI-CHAT STATE ═══
+let currentChatId = null;
+let chatsCache = []; // sidebar payload only (no messages)
+
 // ═══ WAKE WORD ENGINE STATE ═══
 let wakeActive=false;
 let wakePhase='off';
@@ -915,7 +957,19 @@ const TX={
     wakeListening:'Записываю… (скажи «Горизонт»)',
     wakeTranscribing:'Распознаю…',
     wakeCommand:'Слушаю команду…',
-    chips:['Что ты умеешь?','Открой YouTube','Открой папку Game на D','Что запущено?','Помоги с кодом','Переведи текст на английский','Напиши письмо','Планы на день']
+    chips:['Что ты умеешь?','Открой YouTube','Открой папку Game на D','Что запущено?','Помоги с кодом','Переведи текст на английский','Напиши письмо','Планы на день'],
+    newChat:'+ Новый чат',
+    today:'Сегодня',
+    yesterday:'Вчера',
+    thisWeek:'На этой неделе',
+    thisMonth:'В этом месяце',
+    older:'Раньше',
+    untitledChat:'Без названия',
+    renameChat:'Переименовать',
+    deleteChat:'Удалить',
+    confirmDeleteChat:'Удалить этот чат? Это действие необратимо.',
+    noChatsYet:'Чатов пока нет',
+    chatRenamePrompt:'Новое название чата:'
   },
   en:{
     ready:'Ready',thinking:'Thinking…',searching:'Searching…',recording:'Recording…',processing:'Processing…',
@@ -926,7 +980,19 @@ const TX={
     wakeListening:'Recording… (say "Horizon")',
     wakeTranscribing:'Transcribing…',
     wakeCommand:'Listening for command…',
-    chips:['What can you do?','Open YouTube','Open folder Documents','Take screenshot','Help me code','Translate to Russian','Write an email','Plan my day']
+    chips:['What can you do?','Open YouTube','Open folder Documents','Take screenshot','Help me code','Translate to Russian','Write an email','Plan my day'],
+    newChat:'+ New chat',
+    today:'Today',
+    yesterday:'Yesterday',
+    thisWeek:'This week',
+    thisMonth:'This month',
+    older:'Older',
+    untitledChat:'Untitled',
+    renameChat:'Rename',
+    deleteChat:'Delete',
+    confirmDeleteChat:'Delete this chat? This cannot be undone.',
+    noChatsYet:'No chats yet',
+    chatRenamePrompt:'New chat title:'
   }
 };
 const t=k=>TX[lang]?.[k]||TX.en[k]||k;
@@ -1854,6 +1920,160 @@ async function cpMsg(btn){const t=btn.closest('.msg').querySelector('.bub').inne
 function spkMsg(btn){window.speechSynthesis.cancel();speak(btn.closest('.msg').querySelector('.bub').innerText);}
 function addTyping(){rmGreet();const w=document.getElementById('msgs'),d=document.createElement('div');d.className='msg bot typing';d.id='typing';d.innerHTML='<div class="bub"><div class="td"></div><div class="td"></div><div class="td"></div></div>';w.appendChild(d);w.scrollTop=w.scrollHeight;}
 function rmTyping(){document.getElementById('typing')?.remove();}
+
+// ═══════════════════════════════════════════════════════════════
+// MULTI-CHAT FUNCTIONS
+// ═══════════════════════════════════════════════════════════════
+function _chatGroupKey(u){
+  if (!u) return 'older';
+  const now = new Date();
+  const sameDay = (a, b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  const today = new Date(now); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  const u_d = new Date(u); u_d.setHours(0,0,0,0);
+  if (sameDay(u_d, today)) return 'today';
+  if (sameDay(u_d, yesterday)) return 'yesterday';
+  const weekAgo = new Date(today); weekAgo.setDate(today.getDate()-7);
+  if (u_d.getTime() > weekAgo.getTime()) return 'thisWeek';
+  if (u_d.getFullYear()===now.getFullYear() && u_d.getMonth()===now.getMonth()) return 'thisMonth';
+  return 'older';
+}
+function _escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function _escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _shortTs(iso){
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    return hh+':'+mm;
+  } catch { return ''; }
+}
+function renderChatSidebar(){
+  const list = document.getElementById('chatlist');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!chatsCache || chatsCache.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'cs-empty';
+    empty.textContent = t('noChatsYet');
+    list.appendChild(empty);
+    return;
+  }
+  const groups = { today: [], yesterday: [], thisWeek: [], thisMonth: [], older: [] };
+  for (const c of chatsCache) groups[_chatGroupKey(c.updated_at)].push(c);
+  const order = ['today','yesterday','thisWeek','thisMonth','older'];
+  for (const key of order) {
+    const arr = groups[key];
+    if (!arr.length) continue;
+    const h = document.createElement('div');
+    h.className = 'cs-group-heading';
+    h.textContent = t(key);
+    list.appendChild(h);
+    for (const c of arr) {
+      const item = document.createElement('div');
+      item.className = 'cs-item' + (c.id === currentChatId ? ' active' : '');
+      item.dataset.chatId = c.id;
+      const titleText = (c.title && c.title.trim()) ? c.title : t('untitledChat');
+      const preview = c.preview || '';
+      item.innerHTML =
+        '<div class="cs-title" title="'+_escAttr(titleText)+'">'+_escHtml(titleText)+'</div>'+
+        (preview ? '<div class="cs-preview">'+_escHtml(preview)+'</div>' : '')+
+        '<div class="cs-meta">'+_shortTs(c.updated_at)+' · '+(c.message_count||0)+'</div>'+
+        '<div class="cs-actions">'+
+          '<button class="cs-act-btn" title="'+_escAttr(t('renameChat'))+'" onclick="event.stopPropagation();renameChatPrompt(\''+c.id+'\')">✎</button>'+
+          '<button class="cs-act-btn danger" title="'+_escAttr(t('deleteChat'))+'" onclick="event.stopPropagation();deleteChatConfirm(\''+c.id+'\')">×</button>'+
+        '</div>';
+      item.addEventListener('click', () => switchChat(c.id));
+      list.appendChild(item);
+    }
+  }
+}
+async function loadChatList(){
+  try {
+    const list = await H.chatList();
+    chatsCache = Array.isArray(list) ? list : [];
+    renderChatSidebar();
+  } catch (e) { console.warn('chatList failed:', e?.message); }
+}
+function _replayMessages(messages){
+  const w = document.getElementById('msgs');
+  if (!w) return;
+  w.innerHTML = '';
+  history = [];
+  for (const m of (messages || [])) {
+    const role = m.role === 'assistant' ? 'bot' : 'user';
+    const meta = m.meta || {};
+    addMsg(role, m.content || '', { model: meta.model });
+    history.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' });
+  }
+}
+async function switchChat(id){
+  if (!id || id === currentChatId) return;
+  try {
+    const chat = await H.chatSwitch(id);
+    if (!chat || !chat.id) return;
+    currentChatId = chat.id;
+    _replayMessages(chat.messages);
+    renderChatSidebar();
+  } catch (e) { console.warn('switchChat failed:', e?.message); }
+}
+async function createNewChat(){
+  try {
+    const chat = await H.chatCreate({});
+    if (!chat || !chat.id) return;
+    currentChatId = chat.id;
+    _replayMessages([]);
+    await loadChatList();
+    setTimeout(()=>{ try { document.getElementById('inp')?.focus(); } catch(_){} }, 30);
+  } catch (e) { console.warn('createNewChat failed:', e?.message); }
+}
+async function renameChatPrompt(id){
+  try {
+    const cur = chatsCache.find(c => c.id === id);
+    const old = cur && cur.title ? cur.title : '';
+    const next = window.prompt(t('chatRenamePrompt'), old);
+    if (next === null) return;
+    const trimmed = String(next).trim();
+    if (!trimmed) return;
+    await H.chatRename(id, trimmed);
+    await loadChatList();
+  } catch (e) { console.warn('renameChat failed:', e?.message); }
+}
+async function deleteChatConfirm(id){
+  try {
+    if (!window.confirm(t('confirmDeleteChat'))) return;
+    const res = await H.chatDelete(id);
+    if (id === currentChatId) {
+      if (res && res.next_current_id) {
+        await switchChat(res.next_current_id);
+      } else {
+        await createNewChat();
+      }
+    } else {
+      await loadChatList();
+    }
+  } catch (e) { console.warn('deleteChat failed:', e?.message); }
+}
+async function bootCurrentChat(){
+  try {
+    const cur = await H.chatGetCurrent();
+    if (cur && cur.id) {
+      currentChatId = cur.id;
+      if (Array.isArray(cur.messages) && cur.messages.length) {
+        _replayMessages(cur.messages);
+      }
+    }
+    document.body.classList.add('with-sidebar');
+    document.getElementById('chatside')?.removeAttribute('hidden');
+    try { document.getElementById('cs-new-btn').textContent = t('newChat'); } catch(_){}
+    await loadChatList();
+  } catch (e) { console.warn('bootCurrentChat failed:', e?.message); }
+}
+function _persistChatMessage(role, content, meta){
+  if (!currentChatId) return;
+  try { H.chatAddMessage(currentChatId, role, content, meta || {}); } catch(_){}
+}
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
 function applyLang(){
   setStatus(t('ready'));
@@ -1888,6 +2108,8 @@ window.addEventListener('DOMContentLoaded', async()=>{
   document.getElementById('tc-eye')?.classList.toggle('on', eyeOn);
   document.getElementById('tc-search')?.classList.toggle('on', searchOn);
   if(wo){wakeOn=true;document.getElementById('tc-wake').classList.add('on','special');}
+  // Multi-chat: hydrate current chat + sidebar list (non-blocking on errors).
+  bootCurrentChat().catch(()=>{});
   // Load panel async without blocking
   loadPanel().catch(()=>{});
   
@@ -2366,6 +2588,7 @@ async function runAgent(text) {
     if (result.ok && result.answer) {
       history.push({ role: 'user', content: text });
       history.push({ role: 'assistant', content: result.answer });
+      _persistChatMessage('assistant', result.answer, {model:'agent'});
       speak(result.answer.slice(0, 400).replace(/[*#`]/g, ''));
       // Save to long-term memory
       try { H.memSaveConversation(text, result.answer); } catch(_){}
@@ -2408,7 +2631,7 @@ async function sendMsg(){
 ? *${names}*` : `? *${names}*`;
   }
   addMsg('user', displayText || text);
-  if(text) history.push({role:'user',content:text});
+  if(text) { history.push({role:'user',content:text}); _persistChatMessage('user', text, {}); }
   addTyping();
 
   // Process attachments first
@@ -2432,6 +2655,7 @@ async function sendMsg(){
         msgs.appendChild(card);
         msgs.scrollTop=msgs.scrollHeight;
         history.push({role:'assistant',content:r.analysis});
+        _persistChatMessage('assistant', r.analysis, {model:r.model});
         speak(r.analysis.slice(0,300));
         addTyping();
         cleanup();
@@ -2455,7 +2679,7 @@ ${fileContext}`}];
         catch(e) { res = {error: e.message}; }
         rmTyping();
         if(res.error) addMsg('bot',`❌ ${res.error}`);
-        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); speak(res.reply.slice(0,300)); }
+        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov}); speak(res.reply.slice(0,300)); }
         cleanup(); return;
       }
     }
@@ -2582,7 +2806,7 @@ ${fileContext}`}];
       catch(e){ res={error:e.message}; }
       rmTyping();
       if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-      else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});speak(res.reply);}
+      else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});speak(res.reply);}
     }else{
       rmTyping();
       addMsg('bot',lang==='ru'?`⚠️ Нет результатов. ${sr.error||'Добавь Tavily ключ в ⚙️ Настройках.'}`:`⚠️ No results. ${sr.error||'Add Tavily key in ⚙️ Settings.'}`);
@@ -2614,7 +2838,7 @@ ${fileContext}`}];
     const res=await H.ai(history,prov,sys,opts);
     rmTyping();
     if(res.error) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
-    else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});speak(res.reply);}
+    else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});speak(res.reply);}
   } catch(e) {
     rmTyping();
     addMsg('bot',`❌ Ошибка: ${e.message}`);
