@@ -456,7 +456,7 @@ textarea::placeholder{color:var(--t3)}
 .focus-timer-btn{background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:2px}
 
 /* ═══ MULTI-CHAT SIDEBAR ═══ */
-.chatside{position:fixed;top:0;left:0;bottom:0;width:260px;background:rgba(11,14,22,.92);border-right:1px solid var(--b1);z-index:60;display:flex;flex-direction:column;backdrop-filter:blur(20px);-webkit-app-region:no-drag;overflow:hidden}
+.chatside{position:fixed;top:0;left:0;bottom:0;width:280px;background:rgba(11,14,22,.95);border-right:1px solid var(--b1);z-index:60;display:flex;flex-direction:column;backdrop-filter:blur(24px);-webkit-app-region:no-drag;overflow:hidden;transition:width .2s}
 body.with-sidebar > .tb,
 body.with-sidebar > .wake-bar,
 body.with-sidebar > .sb,
@@ -464,26 +464,42 @@ body.with-sidebar > .modes,
 body.with-sidebar > .msgs,
 body.with-sidebar > .inp-wrap,
 body.with-sidebar > .panel,
-body.with-sidebar > #fractalBg{margin-left:260px}
-.chatside .cs-head{padding:14px 14px 8px 14px;-webkit-app-region:drag}
-.chatside .cs-new{-webkit-app-region:no-drag;width:100%;padding:10px 12px;background:linear-gradient(135deg,rgba(108,140,255,.18),rgba(167,139,250,.12));border:1px solid rgba(108,140,255,.35);border-radius:10px;color:var(--tx);font:600 13px var(--font);cursor:pointer;letter-spacing:.2px;transition:transform .15s,background .2s,border-color .2s}
-.chatside .cs-new:hover{background:linear-gradient(135deg,rgba(108,140,255,.28),rgba(167,139,250,.18));border-color:rgba(108,140,255,.55);transform:translateY(-1px)}
-.cs-list{flex:1;overflow-y:auto;padding:6px 8px 12px 8px}
-.cs-list::-webkit-scrollbar{width:6px}
-.cs-list::-webkit-scrollbar-thumb{background:rgba(108,140,255,.18);border-radius:6px}
-.cs-empty{color:var(--t3);font-size:12px;padding:18px 12px;text-align:center;font-style:italic}
-.cs-group-heading{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1.2px;color:var(--t3);padding:14px 10px 6px 10px}
-.cs-item{position:relative;padding:10px 12px;margin:2px 0;border-radius:8px;cursor:pointer;transition:background .15s;border-left:2px solid transparent}
-.cs-item:hover{background:rgba(108,140,255,.07)}
-.cs-item.active{background:rgba(108,140,255,.13);border-left-color:rgba(108,140,255,.7)}
-.cs-item .cs-title{font-size:13px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:42px}
-.cs-item .cs-preview{font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;padding-right:42px}
-.cs-item .cs-meta{font-size:10px;color:var(--t4,#5b6377);font-family:var(--mono);margin-top:2px}
-.cs-actions{position:absolute;right:8px;top:8px;display:flex;gap:4px;opacity:0;transition:opacity .15s}
+body.with-sidebar > #fractalBg{margin-left:280px}
+.chatside .cs-head{padding:12px 12px 6px 12px;-webkit-app-region:drag;flex-shrink:0}
+.chatside .cs-new{-webkit-app-region:no-drag;width:100%;padding:9px 12px;background:linear-gradient(135deg,rgba(108,140,255,.14),rgba(167,139,250,.08));border:1px solid rgba(108,140,255,.25);border-radius:10px;color:var(--tx);font:600 12.5px var(--font);cursor:pointer;letter-spacing:.2px;transition:all .18s;display:flex;align-items:center;gap:8px;justify-content:center}
+.chatside .cs-new:hover{background:linear-gradient(135deg,rgba(108,140,255,.24),rgba(167,139,250,.15));border-color:rgba(108,140,255,.5);transform:translateY(-1px)}
+.cs-search{padding:6px 12px;flex-shrink:0}
+.cs-search-input{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--b1);border-radius:8px;padding:7px 10px 7px 30px;color:var(--tx);font-size:11.5px;font-family:var(--font);outline:none;transition:all .2s;box-sizing:border-box}
+.cs-search-input:focus{border-color:rgba(108,140,255,.4);background:rgba(108,140,255,.04)}
+.cs-search-input::placeholder{color:var(--t3)}
+.cs-search-wrap{position:relative}
+.cs-search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--t3);pointer-events:none}
+.cs-list{flex:1;overflow-y:auto;padding:4px 8px 12px 8px}
+.cs-list::-webkit-scrollbar{width:4px}
+.cs-list::-webkit-scrollbar-thumb{background:rgba(108,140,255,.15);border-radius:4px}
+.cs-empty{color:var(--t3);font-size:11.5px;padding:24px 12px;text-align:center;font-style:italic;line-height:1.7}
+.cs-group-heading{font-size:9.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1.4px;color:var(--t3);padding:14px 10px 5px 10px;font-weight:600}
+.cs-item{position:relative;padding:9px 10px;margin:1px 0;border-radius:8px;cursor:pointer;transition:all .15s;border-left:2px solid transparent;min-height:32px}
+.cs-item:hover{background:rgba(108,140,255,.06)}
+.cs-item.active{background:rgba(108,140,255,.11);border-left-color:rgba(108,140,255,.7)}
+.cs-item .cs-title{font-size:12.5px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:50px;line-height:1.3}
+.cs-item .cs-preview{font-size:10.5px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;padding-right:50px}
+.cs-item .cs-meta{font-size:9.5px;color:var(--t4,#5b6377);font-family:var(--mono);margin-top:3px}
+.cs-actions{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;gap:3px;opacity:0;transition:opacity .15s}
 .cs-item:hover .cs-actions{opacity:1}
-.cs-act-btn{background:rgba(255,255,255,.04);border:1px solid var(--b1);color:var(--t2,#9ba3b8);padding:3px 6px;border-radius:5px;font-size:10px;cursor:pointer}
+.cs-act-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:var(--t2,#9ba3b8);width:24px;height:24px;border-radius:6px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0}
 .cs-act-btn:hover{background:rgba(108,140,255,.18);color:var(--tx);border-color:rgba(108,140,255,.4)}
-.cs-act-btn.danger:hover{background:rgba(248,113,113,.18);border-color:rgba(248,113,113,.4);color:#fca5a5}
+.cs-act-btn.danger:hover{background:rgba(248,113,113,.15);border-color:rgba(248,113,113,.35);color:#fca5a5}
+/* Token counter bar */
+.cs-stats{padding:8px 12px;border-top:1px solid var(--b1);flex-shrink:0;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:9.5px;color:var(--t3);font-family:var(--mono)}
+.cs-stat{display:flex;align-items:center;gap:4px}
+.cs-stat-val{color:var(--t2);font-weight:600}
+/* Status bar above chat */
+.chat-status-bar{display:none;padding:6px 14px;border-bottom:1px solid var(--b1);background:rgba(8,9,12,.7);backdrop-filter:blur(12px);font-size:11px;color:var(--t2);flex-shrink:0;gap:8px;align-items:center;flex-wrap:wrap;-webkit-app-region:no-drag}
+body.with-sidebar .chat-status-bar{display:flex}
+.csb-title{font-weight:600;color:var(--tx);margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.csb-pill{background:var(--b1);border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:2px 8px;font-size:9px;font-weight:600;color:var(--t3);font-family:var(--mono);cursor:default}
+.csb-pill.accent{border-color:rgba(108,140,255,.25);color:var(--acc)}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
@@ -496,8 +512,27 @@ body.with-sidebar > #fractalBg{margin-left:260px}
   <div class="cs-head">
     <button class="cs-new" id="cs-new-btn" onclick="createNewChat()">+ New chat</button>
   </div>
+  <div class="cs-search">
+    <div class="cs-search-wrap">
+      <span class="cs-search-icon">⚡</span>
+      <input class="cs-search-input" id="cs-search" placeholder="Search chats…" oninput="filterChats(this.value)" />
+    </div>
+  </div>
   <div class="cs-list" id="chatlist"></div>
+  <div class="cs-stats" id="cs-stats">
+    <div class="cs-stat"><span>✉</span> <span class="cs-stat-val" id="stat-msgs">0</span> msgs</div>
+    <div class="cs-stat"><span>⭐</span> <span class="cs-stat-val" id="stat-tokens">0</span> tokens</div>
+    <div class="cs-stat"><span>💰</span> <span class="cs-stat-val" id="stat-cost">$0.00</span></div>
+  </div>
 </aside>
+
+<!-- ═════ STATUS BAR (above messages) ═════ -->
+<div class="chat-status-bar" id="chat-status-bar">
+  <span class="csb-title" id="csb-title">New chat</span>
+  <span class="csb-pill accent" id="csb-provider">Gemini</span>
+  <span class="csb-pill" id="csb-model">2.5-flash</span>
+  <span class="csb-pill" id="csb-tokens">0 tokens</span>
+</div>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
 <div class="panel" id="panel">
@@ -899,6 +934,43 @@ let history=[];
 // ═══ MULTI-CHAT STATE ═══
 let currentChatId = null;
 let chatsCache = []; // sidebar payload only (no messages)
+let chatSearchQuery = ''; // sidebar search filter
+
+// ═══ TOKEN TRACKING ═══
+let sessionTokens = 0;
+let sessionCost = 0;
+let sessionMsgs = 0;
+const TOKEN_COSTS = {
+  gemini: {input:0.000000075, output:0.0000003},
+  groq: {input:0.00000005, output:0.00000008},
+  deepseek: {input:0.00000014, output:0.00000028},
+  mistral: {input:0.000002, output:0.000006},
+  qwen: {input:0.0000006, output:0.0000006},
+  grok: {input:0.000005, output:0.000015},
+  claude: {input:0.000003, output:0.000015},
+  openai: {input:0.0000025, output:0.00001},
+  perplexity: {input:0.000001, output:0.000001},
+  cohere: {input:0.0000005, output:0.0000015}
+};
+function trackTokens(text, role, provider) {
+  const tokens = Math.ceil((text||'').length / 3.5);
+  const costs = TOKEN_COSTS[provider] || TOKEN_COSTS.gemini;
+  const cost = role === 'user' ? tokens * costs.input : tokens * costs.output;
+  sessionTokens += tokens;
+  sessionCost += cost;
+  if (role === 'user') sessionMsgs++;
+  updateTokenDisplay();
+  return tokens;
+}
+function updateTokenDisplay() {
+  const fmt = n => n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n);
+  try {
+    document.getElementById('stat-msgs').textContent = sessionMsgs;
+    document.getElementById('stat-tokens').textContent = fmt(sessionTokens);
+    document.getElementById('stat-cost').textContent = '$' + sessionCost.toFixed(3);
+    document.getElementById('csb-tokens').textContent = fmt(sessionTokens) + ' tokens';
+  } catch(_) {}
+}
 
 // ═══ WAKE WORD ENGINE STATE ═══
 let wakeActive=false;
@@ -1953,15 +2025,21 @@ function renderChatSidebar(){
   const list = document.getElementById('chatlist');
   if (!list) return;
   list.innerHTML = '';
-  if (!chatsCache || chatsCache.length === 0) {
+  // Filter by search
+  let filtered = chatsCache || [];
+  if (chatSearchQuery) {
+    const q = chatSearchQuery.toLowerCase();
+    filtered = filtered.filter(c => (c.title||'').toLowerCase().includes(q) || (c.preview||'').toLowerCase().includes(q));
+  }
+  if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'cs-empty';
-    empty.textContent = t('noChatsYet');
+    empty.textContent = chatSearchQuery ? (lang==='ru'?'Ничего не найдено':'No matches') : t('noChatsYet');
     list.appendChild(empty);
     return;
   }
   const groups = { today: [], yesterday: [], thisWeek: [], thisMonth: [], older: [] };
-  for (const c of chatsCache) groups[_chatGroupKey(c.updated_at)].push(c);
+  for (const c of filtered) groups[_chatGroupKey(c.updated_at)].push(c);
   const order = ['today','yesterday','thisWeek','thisMonth','older'];
   for (const key of order) {
     const arr = groups[key];
@@ -1976,18 +2054,46 @@ function renderChatSidebar(){
       item.dataset.chatId = c.id;
       const titleText = (c.title && c.title.trim()) ? c.title : t('untitledChat');
       const preview = c.preview || '';
-      item.innerHTML =
-        '<div class="cs-title" title="'+_escAttr(titleText)+'">'+_escHtml(titleText)+'</div>'+
-        (preview ? '<div class="cs-preview">'+_escHtml(preview)+'</div>' : '')+
-        '<div class="cs-meta">'+_shortTs(c.updated_at)+' · '+(c.message_count||0)+'</div>'+
-        '<div class="cs-actions">'+
-          '<button class="cs-act-btn" title="'+_escAttr(t('renameChat'))+'" onclick="event.stopPropagation();renameChatPrompt(\''+c.id+'\')">✎</button>'+
-          '<button class="cs-act-btn danger" title="'+_escAttr(t('deleteChat'))+'" onclick="event.stopPropagation();deleteChatConfirm(\''+c.id+'\')">×</button>'+
-        '</div>';
+      // Build DOM properly instead of innerHTML with escaped quotes
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'cs-title';
+      titleDiv.title = titleText;
+      titleDiv.textContent = titleText;
+      item.appendChild(titleDiv);
+      if (preview) {
+        const prevDiv = document.createElement('div');
+        prevDiv.className = 'cs-preview';
+        prevDiv.textContent = preview;
+        item.appendChild(prevDiv);
+      }
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'cs-meta';
+      metaDiv.textContent = _shortTs(c.updated_at) + ' · ' + (c.message_count||0) + ' msgs';
+      item.appendChild(metaDiv);
+      // Action buttons — built via DOM, not innerHTML
+      const actions = document.createElement('div');
+      actions.className = 'cs-actions';
+      const renBtn = document.createElement('button');
+      renBtn.className = 'cs-act-btn';
+      renBtn.title = t('renameChat');
+      renBtn.textContent = '✎';
+      renBtn.addEventListener('click', (e) => { e.stopPropagation(); renameChatPrompt(c.id); });
+      actions.appendChild(renBtn);
+      const delBtn = document.createElement('button');
+      delBtn.className = 'cs-act-btn danger';
+      delBtn.title = t('deleteChat');
+      delBtn.textContent = '×';
+      delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteChatConfirm(c.id); });
+      actions.appendChild(delBtn);
+      item.appendChild(actions);
       item.addEventListener('click', () => switchChat(c.id));
       list.appendChild(item);
     }
   }
+}
+function filterChats(query) {
+  chatSearchQuery = (query || '').trim();
+  renderChatSidebar();
 }
 async function loadChatList(){
   try {
@@ -2016,6 +2122,7 @@ async function switchChat(id){
     currentChatId = chat.id;
     _replayMessages(chat.messages);
     renderChatSidebar();
+    updateStatusBar(chat.title);
   } catch (e) { console.warn('switchChat failed:', e?.message); }
 }
 async function createNewChat(){
@@ -2025,6 +2132,7 @@ async function createNewChat(){
     currentChatId = chat.id;
     _replayMessages([]);
     await loadChatList();
+    updateStatusBar(lang==='ru'?'Новый чат':'New chat');
     setTimeout(()=>{ try { document.getElementById('inp')?.focus(); } catch(_){} }, 30);
   } catch (e) { console.warn('createNewChat failed:', e?.message); }
 }
@@ -2038,6 +2146,7 @@ async function renameChatPrompt(id){
     if (!trimmed) return;
     await H.chatRename(id, trimmed);
     await loadChatList();
+    if (id === currentChatId) updateStatusBar(trimmed);
   } catch (e) { console.warn('renameChat failed:', e?.message); }
 }
 async function deleteChatConfirm(id){
@@ -2063,16 +2172,46 @@ async function bootCurrentChat(){
       if (Array.isArray(cur.messages) && cur.messages.length) {
         _replayMessages(cur.messages);
       }
+      updateStatusBar(cur.title);
     }
     document.body.classList.add('with-sidebar');
     document.getElementById('chatside')?.removeAttribute('hidden');
     try { document.getElementById('cs-new-btn').textContent = t('newChat'); } catch(_){}
+    try { document.getElementById('cs-search').placeholder = lang==='ru'?'Поиск чатов…':'Search chats…'; } catch(_){}
     await loadChatList();
   } catch (e) { console.warn('bootCurrentChat failed:', e?.message); }
 }
 function _persistChatMessage(role, content, meta){
   if (!currentChatId) return;
   try { H.chatAddMessage(currentChatId, role, content, meta || {}); } catch(_){}
+  // After first user message, trigger AI auto-naming
+  if (role === 'user' && sessionMsgs <= 1) {
+    _autoNameChat(content);
+  }
+}
+async function _autoNameChat(userMsg) {
+  if (!currentChatId) return;
+  const cur = chatsCache.find(c => c.id === currentChatId);
+  if (cur && cur.title && cur.title.trim() && cur.title !== t('untitledChat')) return; // already named
+  try {
+    const sys = 'Generate a very short chat title (3-6 words max) for a conversation starting with the following message. Return ONLY the title, no quotes, no explanation.';
+    const res = await H.ai([{role:'user', content: userMsg}], prov, sys, {model: geminiModel});
+    if (res && res.reply) {
+      const title = res.reply.trim().replace(/^["']|["']$/g,'').slice(0,50);
+      if (title) {
+        await H.chatRename(currentChatId, title);
+        updateStatusBar(title);
+        await loadChatList();
+      }
+    }
+  } catch(_) {}
+}
+function updateStatusBar(title) {
+  try {
+    document.getElementById('csb-title').textContent = title || (lang==='ru'?'Новый чат':'New chat');
+    document.getElementById('csb-provider').textContent = prov.charAt(0).toUpperCase() + prov.slice(1);
+    document.getElementById('csb-model').textContent = prov === 'gemini' ? geminiModel.replace('gemini-','') : prov;
+  } catch(_) {}
 }
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
 function applyLang(){
@@ -2631,7 +2770,7 @@ async function sendMsg(){
 ? *${names}*` : `? *${names}*`;
   }
   addMsg('user', displayText || text);
-  if(text) { history.push({role:'user',content:text}); _persistChatMessage('user', text, {}); }
+  if(text) { history.push({role:'user',content:text}); _persistChatMessage('user', text, {}); trackTokens(text, 'user', prov); }
   addTyping();
 
   // Process attachments first
@@ -2838,7 +2977,7 @@ ${fileContext}`}];
     const res=await H.ai(history,prov,sys,opts);
     rmTyping();
     if(res.error) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
-    else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});speak(res.reply);}
+    else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});trackTokens(res.reply,'assistant',prov);speak(res.reply);}
   } catch(e) {
     rmTyping();
     addMsg('bot',`❌ Ошибка: ${e.message}`);
