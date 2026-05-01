@@ -3651,6 +3651,8 @@ function renderStoreCards(items, installed) {
     const rating = Math.round(p.rating_avg || p.rating || 0);
     const stars = rating > 0 ? ('★'.repeat(rating) + '☆'.repeat(5 - rating)) : '';
     const price = p.price_usd ?? p.price ?? 0;
+    const safeId = String(p.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const safeSlug = String(p.slug || p.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const author = p.author_name || p.author || 'Horizon Team';
     const verified = p.author_verified ? ' <span style="color:var(--green);font-size:9px" title="Verified author">\u2713</span>' : '';
     const desc = p.short_description || p.description || '';
@@ -3672,7 +3674,7 @@ function renderStoreCards(items, installed) {
           </div>
           <div class="sc-actions">
             <div class="sc-rating">${stars}<span class="sc-dl">${p.downloads || 0} ↓</span></div>
-            <button class="sc-btn ${isInstalled ? 'installed' : 'primary'}" onclick="${isInstalled ? `removePlugin('${p.id}')` : `installStorePlugin('${p.id}', ${price})`}">${isInstalled ? 'Installed \u2713' : (price > 0 ? 'Buy · $' + price : 'Install')}</button>
+            <button class="sc-btn ${isInstalled ? 'installed' : 'primary'}" onclick="${isInstalled ? `removePlugin('${safeId}')` : `installStorePlugin('${safeId}', ${price}, '${safeSlug}')`}">${isInstalled ? 'Installed \u2713' : (price > 0 ? 'Buy · $' + price : 'Install')}</button>
           </div>
         </div>
       </div>
@@ -3697,10 +3699,17 @@ function filterStore(q) {
   if (grid) grid.innerHTML = renderStoreCards(filtered, []);
 }
 
-async function installStorePlugin(id, price = 0) {
-  if (price > 0 && !currentUser) {
-    H.notify?.('Marketplace', 'Sign in to buy plugins.');
-    openAccount();
+async function installStorePlugin(id, price = 0, slug = '') {
+  const openPluginPurchase = async () => {
+    const url = await H.marketGetWebUrl();
+    const pluginKey = slug || id;
+    const pluginUrl = `${String(url || 'https://horizonaai.dev').replace(/\/+$/, '')}/plugin/${encodeURIComponent(pluginKey)}`;
+    H.openUrl(pluginUrl);
+    H.notify?.('Marketplace', 'Opening browser to complete purchase securely.');
+    addMsg('bot', `Plugin purchases are securely handled on the marketplace website.\n\nOpened: ${pluginUrl}`);
+  };
+  if (price > 0) {
+    await openPluginPurchase();
     return;
   }
   try {
@@ -3712,27 +3721,12 @@ async function installStorePlugin(id, price = 0) {
       if (/unauthor|401|login/i.test(r.error || '')) {
         H.notify?.('Marketplace', 'Sign in required to install this plugin.');
         openAccount();
-      } else if (price > 0) {
-        const url = await H.marketGetWebUrl();
-        const pluginUrl = `${String(url || 'https://horizonaai.dev').replace(/\/+$/, '')}/plugin/${id}`;
-        H.openUrl(pluginUrl);
-        H.notify?.('Marketplace', 'Opening browser to complete purchase securely.');
-        addMsg('bot', `Plugin purchases are securely handled on the marketplace website.\n\nOpened: ${pluginUrl}`);
       } else {
         H.notify?.('Marketplace', r.error || 'install failed');
       }
     }
   } catch(e) { 
-    if (price > 0) {
-      H.marketGetWebUrl().then(url => {
-        const pluginUrl = `${String(url || 'https://horizonaai.dev').replace(/\/+$/, '')}/plugin/${id}`;
-        H.openUrl(pluginUrl);
-        H.notify?.('Marketplace', 'Opening browser to complete purchase securely.');
-        addMsg('bot', `Plugin purchases are securely handled on the marketplace website.\n\nOpened: ${pluginUrl}`);
-      });
-    } else {
-      H.notify?.('Marketplace', e.message); 
-    }
+    H.notify?.('Marketplace', e.message); 
   }
 }
 
