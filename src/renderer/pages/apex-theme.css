@@ -108,23 +108,22 @@
    BODY — fractal canvas shows through a soft tinted veil.
    ========================================================================= */
 html, body {
-  background: transparent !important;
+  background: #060709 !important;
   font-family: var(--font);
   color: var(--tx-1);
   letter-spacing: 0.01em;
   font-feature-settings: "cv11", "ss01";
 }
 body {
-  background:
-    radial-gradient(ellipse 70% 55% at 15% -5%, rgba(255, 181, 102, 0.07), transparent 60%),
-    radial-gradient(ellipse 80% 60% at 90% 110%, rgba(126, 230, 255, 0.06), transparent 65%),
-    linear-gradient(180deg, rgba(6, 7, 9, 0.68), rgba(6, 7, 9, 0.82)) !important;
+  /* Premium static CSS mesh gradient - 0% GPU cost */
+  background: 
+    radial-gradient(circle at 15% 50%, rgba(255, 181, 102, 0.08), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(126, 230, 255, 0.08), transparent 50%),
+    linear-gradient(180deg, #0b0d12 0%, #060709 100%) !important;
+  background-attachment: fixed !important;
 }
 #fractalBg {
-  position: fixed; inset: 0;
-  width: 100vw; height: 100vh;
-  z-index: -1; pointer-events: none;
-  opacity: 0.24;
+  display: none !important;
 }
 
 /* Global scrollbars. */
@@ -1104,3 +1103,43 @@ textarea:focus, input:focus, .cmd-input:focus {
   }
   #fractalBg { opacity: 0.18; }
 }
+
+
+/* =========================================================================
+   THEME MODIFIERS: Light & Minimal Dark
+   Overrides glass variables for solid, flat, minimalistic look
+   ========================================================================= */
+
+body.dark {
+  background: #0f0f11 !important;
+  --glass-1: #151518 !important;
+  --glass-2: #1c1c21 !important;
+  --glass-3: #222228 !important;
+  --bd-1: rgba(255, 255, 255, 0.05) !important;
+  --bd-2: rgba(255, 255, 255, 0.08) !important;
+  --tx-1: #ffffff !important;
+  --tx-2: #a0a0a5 !important;
+  --sh-1: none !important;
+  --sh-2: none !important;
+  --sh-3: none !important;
+  --glow-amber: none !important;
+}
+
+body.light {
+  background: #f7f7fa !important;
+  --glass-1: #ffffff !important;
+  --glass-2: #f0f0f4 !important;
+  --glass-3: #e5e5eb !important;
+  --bd-1: rgba(0, 0, 0, 0.08) !important;
+  --bd-2: rgba(0, 0, 0, 0.12) !important;
+  --bd-3: rgba(0, 0, 0, 0.2) !important;
+  --tx-1: #111111 !important;
+  --tx-2: #555555 !important;
+  --tx-3: #888888 !important;
+  --tx-4: #aaaaaa !important;
+  --sh-1: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  --sh-2: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  --sh-3: 0 12px 24px rgba(0, 0, 0, 0.1) !important;
+  --glow-amber: none !important;
+}
+
