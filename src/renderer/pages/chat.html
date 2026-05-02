@@ -927,8 +927,6 @@ body.with-sidebar .chat-status-bar{display:flex}
   <span class="csb-pill csb-clickable" id="csb-model" onclick="openProviderSettings()" title="Click to switch model">2.5-flash</span>
   <span class="csb-pill" id="csb-tokens">0 tokens</span>
   <span class="csb-pill csb-byok" id="csb-byok" title="Your API keys live on your machine — calls go directly from your machine to the provider. Horizon never sees prompts.">🔒 BYOK</span>
-  <span class="csb-pill csb-focus" id="csb-focus" style="display:none;cursor:pointer" onclick="toggleFocusTimer()" title="Pomodoro timer. Click to pause/resume.">🍅 <span id="csb-focus-time">25:00</span></span>
-  <button class="csb-focus-start" id="csb-focus-start" onclick="startFocusTimer()" title="Start 25-minute Pomodoro session">🍅 Pomodoro</button>
 </div>
 
 <!-- ═══════════ MESSAGES ═══════════ -->
@@ -2315,64 +2313,12 @@ function openProviderSettings(){
 }
 
 // ═══ FOCUS TIMER — pomodoro (P1) ═══
-let focusInterval = null;
-let focusRemaining = 25 * 60; // seconds
-let focusActive = false;
-let focusPaused = false;
-const FOCUS_DEFAULT_SECS = 25 * 60;
-function _renderFocusTime(){
-  const m = Math.floor(focusRemaining / 60);
-  const s = focusRemaining % 60;
-  const txt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-  try { document.getElementById('csb-focus-time').textContent = txt; } catch(_){}
-}
-function startFocusTimer(){
-  focusActive = true;
-  focusPaused = false;
-  focusRemaining = FOCUS_DEFAULT_SECS;
-  _renderFocusTime();
-  try {
-    document.getElementById('csb-focus').style.display = 'inline-flex';
-    document.getElementById('csb-focus-start').style.display = 'none';
-  } catch(_){}
-  if (focusInterval) clearInterval(focusInterval);
-  focusInterval = setInterval(()=>{
-    if (focusPaused) return;
-    focusRemaining = Math.max(0, focusRemaining - 1);
-    _renderFocusTime();
-    if (focusRemaining === 0) {
-      _focusDone();
-    }
-  }, 1000);
-}
-function toggleFocusTimer(){
-  if (!focusActive) return;
-  if (focusRemaining === 0) { _resetFocus(); return; }
-  focusPaused = !focusPaused;
-  try {
-    const pill = document.getElementById('csb-focus');
-    if (pill) pill.style.opacity = focusPaused ? '0.55' : '1';
-  } catch(_){}
-}
-function _focusDone(){
-  if (focusInterval) clearInterval(focusInterval);
-  focusInterval = null;
-  try { H.notify && H.notify('Horizon · Focus', lang==='ru'?'Сессия фокусировки окончена. Отдохни 5 минут.':'Focus session done. Take a 5-minute break.'); } catch(_){}
-  // Auto-collapse pill after 30s, show start button again
-  setTimeout(()=>_resetFocus(), 30000);
-}
-function _resetFocus(){
-  focusActive = false;
-  focusPaused = false;
-  focusRemaining = FOCUS_DEFAULT_SECS;
-  if (focusInterval) clearInterval(focusInterval);
-  focusInterval = null;
-  try {
-    document.getElementById('csb-focus').style.display = 'none';
-    document.getElementById('csb-focus-start').style.display = 'inline-block';
-    document.getElementById('csb-focus').style.opacity = '1';
-  } catch(_){}
-}
+// NOTE: the actual timer state and `startFocusTimer / toggleFocusTimer /
+// stopFocusTimer / updateFocusDisplay` functions live further down in this
+// file (originally added by Codex), keyed off the #focus-timer / #focus-toggle
+// / #focus-time DOM elements in the title bar. Re-declaring `let
+// focusInterval` here would crash the entire script with a SyntaxError, which
+// is exactly what was breaking every button on the page.
 
 // ═══ INLINE TOOL REPORT (V2 / P1) ═══
 // Render a compact inline pill on the most recent assistant message
