@@ -2105,6 +2105,25 @@ licenseManager.onChange((state) => {
   }
 });
 
+// Local license guard — server polling runs once per hour, but trial
+// expiration is purely date-based and should kick in within seconds of
+// the trial day flipping over. Re-evaluate every 60 s and on every
+// window focus, redirecting to progate.html if access dropped.
+function _licenseTickRedirect() {
+  if (!win || win.isDestroyed()) return;
+  try {
+    const state = licenseManager.evaluate();
+    if (!state.allowed) {
+      const cur = win.webContents.getURL();
+      if (!cur.includes('/progate.html')) {
+        win.loadURL(`http://127.0.0.1:${port}/progate.html`);
+      }
+    }
+  } catch (_) {}
+}
+setInterval(_licenseTickRedirect, 60 * 1000);
+app.on('browser-window-focus', _licenseTickRedirect);
+
 ipcMain.handle('licenseState',   () => licenseManager.evaluate());
 ipcMain.handle('licenseRefresh', () => licenseManager.refresh());
 ipcMain.handle('licenseCreateCryptoPayment', async (_, plan) => {
