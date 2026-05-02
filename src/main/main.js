@@ -263,15 +263,18 @@ function createWindow(page = 'chat') {
 
   // Open at ~75% of the primary display, clamped to a sensible max.
   // User can still resize freely; this just avoids the old 420×820 postage-stamp.
+  // Floor bumped to 1180×740 so the multi-chat sidebar (280px) + the title-bar
+  // pills (license, TRIAL/UPGRADE, 7 ic-btns, window controls) all fit on
+  // first launch without colliding.
   const { screen } = require('electron');
   const primary = screen.getPrimaryDisplay();
   const work = primary.workAreaSize;
-  const initW = Math.min(1280, Math.max(1000, Math.round(work.width  * 0.75)));
-  const initH = Math.min(860,  Math.max(720,  Math.round(work.height * 0.82)));
+  const initW = Math.min(1440, Math.max(1180, Math.round(work.width  * 0.78)));
+  const initH = Math.min(900,  Math.max(740,  Math.round(work.height * 0.84)));
 
   win = new BrowserWindow({
     width: initW, height: initH,
-    minWidth: 900, minHeight: 640,
+    minWidth: 1100, minHeight: 700,
     center: true,
     frame: false, transparent: true,
     webPreferences: {
