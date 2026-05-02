@@ -464,7 +464,8 @@ body.with-sidebar > .modes,
 body.with-sidebar > .msgs,
 body.with-sidebar > .inp-wrap,
 body.with-sidebar > .panel,
-body.with-sidebar > #fractalBg{margin-left:280px}
+body.with-sidebar > #fractalBg,
+body.with-sidebar > .chat-status-bar{margin-left:280px}
 .chatside .cs-head{padding:12px 12px 6px 12px;-webkit-app-region:drag;flex-shrink:0}
 .chatside .cs-new{-webkit-app-region:no-drag;width:100%;padding:9px 12px;background:linear-gradient(135deg,rgba(108,140,255,.14),rgba(167,139,250,.08));border:1px solid rgba(108,140,255,.25);border-radius:10px;color:var(--tx);font:600 12.5px var(--font);cursor:pointer;letter-spacing:.2px;transition:all .18s;display:flex;align-items:center;gap:8px;justify-content:center}
 .chatside .cs-new:hover{background:linear-gradient(135deg,rgba(108,140,255,.24),rgba(167,139,250,.15));border-color:rgba(108,140,255,.5);transform:translateY(-1px)}
@@ -563,18 +564,6 @@ body.with-sidebar .chat-status-bar{display:flex}
     <div class="cs-stat"><span>💰</span> <span class="cs-stat-val" id="stat-cost">$0.00</span></div>
   </div>
 </aside>
-
-<!-- ═════ STATUS BAR (above messages) ═════ -->
-<div class="chat-status-bar" id="chat-status-bar">
-  <span class="csb-title" id="csb-title">New chat</span>
-  <span class="csb-pill" id="csb-license" style="display:none;cursor:pointer" onclick="onLicensePillClick()" title="Manage subscription">● TRIAL</span>
-  <span class="csb-pill accent csb-clickable" id="csb-provider" onclick="openProviderSettings()" title="Click to switch provider">Gemini</span>
-  <span class="csb-pill csb-clickable" id="csb-model" onclick="openProviderSettings()" title="Click to switch model">2.5-flash</span>
-  <span class="csb-pill" id="csb-tokens">0 tokens</span>
-  <span class="csb-pill csb-byok" id="csb-byok" title="Your API keys live on your machine — calls go directly from your machine to the provider. Horizon never sees prompts.">🔒 BYOK</span>
-  <span class="csb-pill csb-focus" id="csb-focus" style="display:none;cursor:pointer" onclick="toggleFocusTimer()" title="Focus timer (Pomodoro). Click to pause/resume.">⏱ <span id="csb-focus-time">25:00</span></span>
-  <button class="csb-focus-start" id="csb-focus-start" onclick="startFocusTimer()" title="Start 25-minute focus session">⏱ Focus</button>
-</div>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
 <div class="panel" id="panel">
@@ -929,6 +918,17 @@ body.with-sidebar .chat-status-bar{display:flex}
   <button class="mt"    id="m-search"  onclick="setMode('search')">&#128269; Search</button>
   <button class="mt"    id="m-translate" onclick="setMode('translate')">🌐 Translate</button>
   <button class="mt"    id="m-roleplay" onclick="setMode('roleplay')">🎭 Roleplay</button>
+</div>
+
+<!-- ═════ STATUS BAR (above messages) ═════ -->
+<div class="chat-status-bar" id="chat-status-bar">
+  <span class="csb-title" id="csb-title">New chat</span>
+  <span class="csb-pill accent csb-clickable" id="csb-provider" onclick="openProviderSettings()" title="Click to switch provider">Gemini</span>
+  <span class="csb-pill csb-clickable" id="csb-model" onclick="openProviderSettings()" title="Click to switch model">2.5-flash</span>
+  <span class="csb-pill" id="csb-tokens">0 tokens</span>
+  <span class="csb-pill csb-byok" id="csb-byok" title="Your API keys live on your machine — calls go directly from your machine to the provider. Horizon never sees prompts.">🔒 BYOK</span>
+  <span class="csb-pill csb-focus" id="csb-focus" style="display:none;cursor:pointer" onclick="toggleFocusTimer()" title="Pomodoro timer. Click to pause/resume.">🍅 <span id="csb-focus-time">25:00</span></span>
+  <button class="csb-focus-start" id="csb-focus-start" onclick="startFocusTimer()" title="Start 25-minute Pomodoro session">🍅 Pomodoro</button>
 </div>
 
 <!-- ═══════════ MESSAGES ═══════════ -->
@@ -2149,7 +2149,14 @@ function _replayMessages(messages){
   if (!w) return;
   w.innerHTML = '';
   history = [];
-  for (const m of (messages || [])) {
+  if (!messages || messages.length === 0) {
+    // Empty chat → restore the welcome greeting so the canvas isn't blank.
+    if (typeof showGreeting === 'function') {
+      try { showGreeting(); } catch(_){}
+    }
+    return;
+  }
+  for (const m of messages) {
     const role = m.role === 'assistant' ? 'bot' : 'user';
     const meta = m.meta || {};
     addMsg(role, m.content || '', { model: meta.model });
