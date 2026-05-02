@@ -2147,11 +2147,16 @@ function _replayMessages(messages){
   if (!w) return;
   w.innerHTML = '';
   history = [];
+  // Reset per-chat counters; they'll be re-accumulated as we replay.
+  sessionTokens = 0;
+  sessionCost = 0;
+  sessionMsgs = 0;
   if (!messages || messages.length === 0) {
     // Empty chat → restore the welcome greeting so the canvas isn't blank.
     if (typeof showGreeting === 'function') {
       try { showGreeting(); } catch(_){}
     }
+    updateTokenDisplay();
     return;
   }
   for (const m of messages) {
@@ -2159,6 +2164,9 @@ function _replayMessages(messages){
     const meta = m.meta || {};
     addMsg(role, m.content || '', { model: meta.model });
     history.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' });
+    // Re-account tokens for this chat. Provider stored on meta when known,
+    // fall back to the active provider so the heuristic still runs.
+    try { trackTokens(m.content || '', m.role === 'assistant' ? 'assistant' : 'user', meta.provider || prov); } catch(_){}
   }
 }
 async function switchChat(id){
@@ -2183,11 +2191,58 @@ async function createNewChat(){
     setTimeout(()=>{ try { document.getElementById('inp')?.focus(); } catch(_){} }, 30);
   } catch (e) { console.warn('createNewChat failed:', e?.message); }
 }
+// ═══ Custom prompt / confirm — window.prompt is disabled in Electron renderer
+// (returns immediately without showing UI), so we ship our own modals.
+function customPrompt(title, defaultValue) {
+  return new Promise(resolve => {
+    try {
+      const overlay = document.createElement('div');
+      overlay.className = 'perm-overlay';
+      const card = document.createElement('div');
+      card.className = 'perm-card';
+      card.style.maxWidth = '420px';
+      card.innerHTML =
+        '<div class="perm-eyebrow">'+_escHtml(lang==='ru'?'Ввод':'Input')+'</div>'+
+        '<div class="perm-title">'+_escHtml(title || '')+'</div>'+
+        '<input type="text" class="cprompt-input" style="width:100%;background:rgba(0,0,0,.4);border:1px solid var(--b1);border-radius:7px;padding:10px 12px;color:var(--tx);font:13px var(--font);margin-bottom:18px;outline:none;box-sizing:border-box" />'+
+        '<div class="perm-actions">'+
+          '<button class="perm-btn deny" data-act="cancel">'+_escHtml(lang==='ru'?'Отмена':'Cancel')+'</button>'+
+          '<button class="perm-btn allow" data-act="ok">'+_escHtml(lang==='ru'?'Сохранить':'Save')+' ⏎</button>'+
+        '</div>';
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      const input = card.querySelector('.cprompt-input');
+      input.value = defaultValue || '';
+      input.focus();
+      input.select();
+      const cleanup = (val) => {
+        try { document.removeEventListener('keydown', onKey); } catch(_){}
+        try { overlay.remove(); } catch(_){}
+        resolve(val);
+      };
+      const onKey = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+        else if (e.key === 'Enter') { e.preventDefault(); cleanup(input.value); }
+      };
+      document.addEventListener('keydown', onKey);
+      card.querySelector('[data-act="cancel"]').onclick = () => cleanup(null);
+      card.querySelector('[data-act="ok"]').onclick = () => cleanup(input.value);
+    } catch(_) { resolve(null); }
+  });
+}
+function customConfirm(message) {
+  return requestPermission({
+    eyebrow: lang==='ru'?'Подтверждение':'Confirm',
+    title: lang==='ru'?'Уверены?':'Are you sure?',
+    description: message || ''
+  });
+}
+
 async function renameChatPrompt(id){
   try {
     const cur = chatsCache.find(c => c.id === id);
     const old = cur && cur.title ? cur.title : '';
-    const next = window.prompt(t('chatRenamePrompt'), old);
+    const next = await customPrompt(t('chatRenamePrompt'), old);
     if (next === null) return;
     const trimmed = String(next).trim();
     if (!trimmed) return;
@@ -2198,7 +2253,8 @@ async function renameChatPrompt(id){
 }
 async function deleteChatConfirm(id){
   try {
-    if (!window.confirm(t('confirmDeleteChat'))) return;
+    const ok = await customConfirm(t('confirmDeleteChat'));
+    if (!ok) return;
     const res = await H.chatDelete(id);
     if (id === currentChatId) {
       if (res && res.next_current_id) {
