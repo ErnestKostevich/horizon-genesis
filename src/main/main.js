@@ -264,14 +264,13 @@ function createWindow(page = 'chat') {
   // Open the window large enough that the multi-chat sidebar (280 px) +
   // the provider row (~12 chips + Wake + persona) + the modes row
   // (12 chips) + the title bar pills + the chat status bar all fit on
-  // screen without horizontal clipping. On laptop-class screens
-  // (≤ 1900×1100) we go full-maximize on launch so the user starts with
-  // every control visible; on big monitors we open a generous default
-  // window the user can still drag around.
+  // screen without horizontal clipping. We always maximize on launch
+  // so the user starts with every control visible; they can resize
+  // back down via the standard window-restore button if they prefer.
   const { screen } = require('electron');
   const primary = screen.getPrimaryDisplay();
   const work = primary.workAreaSize;
-  const _shouldMaximizeOnLaunch = work.width < 1900 || work.height < 1100;
+  const _shouldMaximizeOnLaunch = true;
   const initW = Math.min(1600, Math.max(1280, Math.round(work.width  * 0.85)));
   const initH = Math.min(980,  Math.max(800,  Math.round(work.height * 0.88)));
 
@@ -1093,22 +1092,28 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'claude': {
         const k = keysStore.get('k_claude');
         if (!k) return { error: lang==='ru'?'Ключ Claude не задан → Настройки':'Claude key not set → Settings' };
+        // Default: Sonnet 4.6 — best speed/intelligence balance per Anthropic.
+        // User can override via settingsStore.get('model.claude') or opts.model.
+        const claudeModel = opts?.model || settingsStore.get('model.claude') || 'claude-sonnet-4-6';
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method:'POST', headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
-          body:JSON.stringify({ model:opts?.model||'claude-opus-4-5', max_tokens:4096, system:sysMsg, messages })
+          body:JSON.stringify({ model:claudeModel, max_tokens:4096, system:sysMsg, messages })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.content?.[0]?.text || 'No response', model: 'claude' };
+        return { reply: d.content?.[0]?.text || 'No response', model: claudeModel };
       }
       case 'openai': {
         const k = keysStore.get('k_openai');
         if (!k) return { error: lang==='ru'?'Ключ OpenAI не задан':'OpenAI key not set' };
+        // Default: gpt-4o (broadly available + cheap). gpt-5 / gpt-5-mini are
+        // available but not every account has access on first key issue.
+        const openaiModel = opts?.model || settingsStore.get('model.openai') || 'gpt-4o';
         const r = await fetch('https://api.openai.com/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:opts?.model||'gpt-4o', max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+          body:JSON.stringify({ model:openaiModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'gpt-4o' };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: openaiModel };
       }
       case 'gemini': {
         const k = keysStore.get('k_gemini');
@@ -1151,52 +1156,62 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'groq': {
         const k = keysStore.get('k_groq');
         if (!k) return { error: lang==='ru'?'Ключ Groq не задан. Бесплатно: groq.com':'Groq key not set. Free at groq.com' };
+        const groqModel = opts?.model || settingsStore.get('model.groq') || 'llama-3.3-70b-versatile';
         const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:opts?.model||'llama-3.3-70b-versatile', max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+          body:JSON.stringify({ model:groqModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'groq/llama3' };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: groqModel };
       }
       case 'grok': {
         const k = keysStore.get('k_grok');
         if (!k) return { error: lang==='ru'?'Ключ Grok (xAI) не задан → console.x.ai':'Grok (xAI) key not set → console.x.ai' };
+        // Default to grok-4 (current flagship). 'grok-3-latest' was the
+        // previous default and is now deprecated by xAI.
+        const grokModel = opts?.model || settingsStore.get('model.grok') || 'grok-4';
         const r = await fetch('https://api.x.ai/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:opts?.model||'grok-3-latest', max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+          body:JSON.stringify({ model:grokModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'grok-3' };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: grokModel };
       }
       case 'deepseek': {
         const k = keysStore.get('k_deepseek');
         if (!k) return { error: lang==='ru'?'Ключ DeepSeek не задан → platform.deepseek.com':'DeepSeek key not set → platform.deepseek.com' };
+        // 'deepseek-chat' is the cheap-fast alias (currently → V3.1). For the
+        // V4 generation pass 'deepseek-v4-pro' or 'deepseek-v4-flash'.
+        const deepseekModel = opts?.model || settingsStore.get('model.deepseek') || 'deepseek-chat';
         const r = await fetch('https://api.deepseek.com/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:'deepseek-chat', max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+          body:JSON.stringify({ model:deepseekModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'deepseek-v3' };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: deepseekModel };
       }
       case 'mistral': {
         const k = keysStore.get('k_mistral');
         if (!k) return { error: lang==='ru'?'Ключ Mistral не задан → console.mistral.ai':'Mistral key not set → console.mistral.ai' };
+        const mistralModel = opts?.model || settingsStore.get('model.mistral') || 'mistral-large-latest';
         const r = await fetch('https://api.mistral.ai/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:'mistral-large-latest', max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+          body:JSON.stringify({ model:mistralModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'mistral-large' };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: mistralModel };
       }
       case 'qwen': {
         const k = keysStore.get('k_qwen');
         if (!k) return { error: lang==='ru'?'Ключ Qwen не задан → dashscope.aliyuncs.com':'Qwen key not set → dashscope.aliyuncs.com' };
+        // qwen-plus is the cheap workhorse. qwen3-max is the flagship.
+        const qwenModel = opts?.model || settingsStore.get('model.qwen') || 'qwen-plus';
         const r = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:'qwen-plus', max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+          body:JSON.stringify({ model:qwenModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'qwen-plus' };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: qwenModel };
       }
       case 'ollama':
       case 'lmstudio':
