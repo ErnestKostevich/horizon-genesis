@@ -1087,6 +1087,39 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
     ? (system.includes('Ты') || system.includes('You are') ? system : `${identity}\n\n${system}`)
     : identity;
 
+  // Normalise per-provider usage shapes to {prompt, completion, total}.
+  // Returns null if the response didn't include usage info (e.g. local models
+  // that don't surface token counts) — renderer falls back to estimate.
+  const _usage = (d, provider) => {
+    try {
+      if (provider === 'claude') {
+        const u = d?.usage; if (!u) return null;
+        const p = u.input_tokens || 0, c = u.output_tokens || 0;
+        return { prompt: p, completion: c, total: p + c };
+      }
+      if (provider === 'gemini') {
+        const u = d?.usageMetadata; if (!u) return null;
+        return {
+          prompt: u.promptTokenCount || 0,
+          completion: u.candidatesTokenCount || 0,
+          total: u.totalTokenCount || ((u.promptTokenCount||0)+(u.candidatesTokenCount||0))
+        };
+      }
+      if (provider === 'cohere') {
+        const t = d?.usage?.tokens || d?.meta?.tokens; if (!t) return null;
+        const p = t.input_tokens || 0, c = t.output_tokens || 0;
+        return { prompt: p, completion: c, total: p + c };
+      }
+      // OpenAI-compatible: openai, groq, deepseek, mistral, qwen, grok, perplexity, ollama, lmstudio
+      const u = d?.usage; if (!u) return null;
+      return {
+        prompt: u.prompt_tokens || 0,
+        completion: u.completion_tokens || 0,
+        total: u.total_tokens || ((u.prompt_tokens||0)+(u.completion_tokens||0))
+      };
+    } catch (_) { return null; }
+  };
+
   try {
     switch (provider) {
       case 'claude': {
@@ -1100,7 +1133,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           body:JSON.stringify({ model:claudeModel, max_tokens:4096, system:sysMsg, messages })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.content?.[0]?.text || 'No response', model: claudeModel };
+        return { reply: d.content?.[0]?.text || 'No response', model: claudeModel, usage: _usage(d,'claude') };
       }
       case 'openai': {
         const k = keysStore.get('k_openai');
@@ -1113,7 +1146,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           body:JSON.stringify({ model:openaiModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: openaiModel };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: openaiModel, usage: _usage(d,'openai') };
       }
       case 'gemini': {
         const k = keysStore.get('k_gemini');
@@ -1151,7 +1184,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           const reason = d.candidates?.[0]?.finishReason || d.promptFeedback?.blockReason || 'empty response';
           return { error: `Gemini: ${reason}. Check your API key at aistudio.google.com` };
         }
-        return { reply: text, model };
+        return { reply: text, model, usage: _usage(d,'gemini') };
       }
       case 'groq': {
         const k = keysStore.get('k_groq');
@@ -1162,7 +1195,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           body:JSON.stringify({ model:groqModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: groqModel };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: groqModel, usage: _usage(d,'groq') };
       }
       case 'grok': {
         const k = keysStore.get('k_grok');
@@ -1175,7 +1208,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           body:JSON.stringify({ model:grokModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: grokModel };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: grokModel, usage: _usage(d,'grok') };
       }
       case 'deepseek': {
         const k = keysStore.get('k_deepseek');
@@ -1188,7 +1221,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           body:JSON.stringify({ model:deepseekModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: deepseekModel };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: deepseekModel, usage: _usage(d,'deepseek') };
       }
       case 'mistral': {
         const k = keysStore.get('k_mistral');
@@ -1199,7 +1232,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           body:JSON.stringify({ model:mistralModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: mistralModel };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: mistralModel, usage: _usage(d,'mistral') };
       }
       case 'qwen': {
         const k = keysStore.get('k_qwen');
@@ -1211,7 +1244,35 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           body:JSON.stringify({ model:qwenModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: qwenModel };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: qwenModel, usage: _usage(d,'qwen') };
+      }
+      case 'perplexity': {
+        const k = keysStore.get('k_perplexity');
+        if (!k) return { error: lang==='ru'?'Ключ Perplexity не задан → perplexity.ai/settings/api':'Perplexity key not set → perplexity.ai/settings/api' };
+        // Sonar models hit the live web for grounded answers — different
+        // cost/latency profile than other providers but the OpenAI-shape
+        // /chat/completions endpoint is the same.
+        const pplxModel = opts?.model || settingsStore.get('model.perplexity') || 'sonar-pro';
+        const r = await fetch('https://api.perplexity.ai/chat/completions', {
+          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
+          body:JSON.stringify({ model:pplxModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+        });
+        const d = await r.json(); if (d.error) return { error: d.error.message || d.error };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: pplxModel, usage: _usage(d,'perplexity') };
+      }
+      case 'cohere': {
+        const k = keysStore.get('k_cohere');
+        if (!k) return { error: lang==='ru'?'Ключ Cohere не задан → dashboard.cohere.com':'Cohere key not set → dashboard.cohere.com' };
+        const cohereModel = opts?.model || settingsStore.get('model.cohere') || 'command-a-03-2025';
+        // Cohere v2 chat API: takes `messages` (system role supported), returns
+        // d.message.content[0].text. Different shape from OpenAI-compatible.
+        const r = await fetch('https://api.cohere.com/v2/chat', {
+          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
+          body:JSON.stringify({ model:cohereModel, messages:[{role:'system',content:sysMsg},...messages], max_tokens:4096 })
+        });
+        const d = await r.json(); if (d.message?.error || d.error) return { error: d.message?.error || d.error || 'Cohere error' };
+        const text = d.message?.content?.[0]?.text || d.text || 'No response';
+        return { reply: text, model: cohereModel, usage: _usage(d,'cohere') };
       }
       case 'ollama':
       case 'lmstudio':
@@ -1230,7 +1291,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok || d.error) return { error: d.error?.message || d.error || `${provider} connection failed (${r.status})` };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: ep.label };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: ep.label, usage: _usage(d, provider) };
       }
       default: return { error: `Unknown provider: ${provider}` };
     }
