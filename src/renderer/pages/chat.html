@@ -507,6 +507,10 @@ body.with-sidebar .chat-status-bar{display:flex}
 .ms-sel{background:rgba(0,0,0,.35);border:1px solid var(--b1);border-radius:7px;padding:8px 10px;color:var(--tx);font:13px var(--font);outline:none;width:100%;cursor:pointer;transition:border-color .15s}
 .ms-sel:hover,.ms-sel:focus{border-color:rgba(108,140,255,.45)}
 .ms-sel option{background:rgb(15,18,28);color:var(--tx)}
+/* Connections help panel */
+.connections-help{font-size:12px;color:var(--t2);background:rgba(108,140,255,.04);border:1px solid rgba(108,140,255,.15);border-radius:8px;padding:10px 14px;margin-bottom:10px;line-height:1.55}
+.connections-help b{color:var(--tx)}
+.connections-help li{font-size:12px}
 .csb-pill.danger{border-color:rgba(248,113,113,.35);color:#fca5a5;background:rgba(248,113,113,.06)}
 #csb-license:hover{filter:brightness(1.2)}
 .csb-clickable{cursor:pointer;transition:all .15s}
@@ -574,6 +578,36 @@ body.with-sidebar .chat-status-bar{display:flex}
 <div class="panel" id="panel">
   <div class="ph"><h2>◈ Settings — Horizon AI</h2><button class="ph-x" onclick="closePanel()">×</button></div>
   <div class="pbody">
+
+    <!-- Connections — unified entry point for OAuth-based services and a
+         clear note about why AI providers need API keys (no OAuth flow
+         exists for their developer APIs, this is a limitation of those
+         platforms, not Horizon). -->
+    <div class="ps">
+      <div class="psl">🔌 Connections</div>
+      <div class="connections-help">
+        Two kinds of connections live in Horizon:
+        <ul style="margin:6px 0 0 18px;padding:0;line-height:1.6">
+          <li><b>OAuth services</b> (Google, GitHub) — click <b>Connect</b> below, sign in in your browser, you're done. No keys to copy.</li>
+          <li><b>AI providers</b> (Claude, OpenAI, Gemini, Groq, etc.) — these don't expose OAuth for their developer APIs, so you have to copy an API key from their dashboard once. Find each "Get key ↗" link in the <b>AI Providers</b> section below.</li>
+        </ul>
+      </div>
+      <div class="pf"><label><span class="d2" id="pd-google-conn"></span>Google Workspace (Gmail / Calendar)</label>
+        <div class="pr">
+          <button class="psv" id="conn-google-btn" onclick="connectGoogle()">Connect Google</button>
+          <button class="psv" id="conn-google-disc" onclick="disconnectGoogle()" style="display:none">Disconnect</button>
+        </div>
+        <div class="local-status" id="conn-google-status">Not connected. Connect to let the agent read Gmail and your calendar with your permission.</div>
+      </div>
+      <div class="pf"><label><span class="d2" id="pd-github-conn"></span>GitHub <span style="color:var(--t3);font-size:10px">(Personal Access Token)</span></label>
+        <div class="pr">
+          <input class="pi" type="password" id="pi-github-conn" placeholder="github_pat_..." />
+          <button class="psv" onclick="connectGithub()">Save</button>
+          <a class="psv" style="text-decoration:none;text-align:center" onclick="H.openUrl('https://github.com/settings/tokens/new?scopes=repo,read:user&description=Horizon%20AI')">Create token ↗</a>
+        </div>
+        <div class="local-status" id="conn-github-status">Used to attach repos for the agent to read. GitHub doesn't expose a true OAuth flow for repo access in CLIs — token is the canonical path.</div>
+      </div>
+    </div>
 
     <!-- Profile -->
     <div class="ps">
@@ -648,6 +682,12 @@ body.with-sidebar .chat-status-bar{display:flex}
         <option value="qwen3.5-plus">qwen3.5-plus — newer mid-tier</option>
         <option value="qwen3.5-flash">qwen3.5-flash — fast</option>
         <option value="qwen3-coder-plus">qwen3-coder-plus — code-tuned</option>
+      </select></div></div>
+      <div class="pf"><label>Perplexity (web-grounded)</label><div class="pr"><select class="pi ms-sel" id="ms-perplexity" onchange="saveModelSetting('perplexity', this.value)">
+        <option value="sonar-pro">sonar-pro — search-grounded chat (default)</option>
+        <option value="sonar">sonar — basic search chat</option>
+        <option value="sonar-reasoning">sonar-reasoning — w/ chain-of-thought</option>
+        <option value="sonar-reasoning-pro">sonar-reasoning-pro — pro reasoning</option>
       </select></div></div>
       <div class="pf"><label>Cohere</label><div class="pr"><select class="pi ms-sel" id="ms-cohere" onchange="saveModelSetting('cohere', this.value)">
         <option value="command-a-03-2025">command-a-03-2025 — flagship (default)</option>
@@ -1060,10 +1100,26 @@ const TOKEN_COSTS = {
   perplexity: {input:0.000001, output:0.000001},
   cohere: {input:0.0000005, output:0.0000015}
 };
-function trackTokens(text, role, provider) {
-  const tokens = Math.ceil((text||'').length / 3.5);
+// trackTokens(text, role, provider [, usage])
+// `usage` is the normalised {prompt, completion, total} object that the
+// main-process H.ai handler now returns next to `reply`. When supplied, we
+// use the real token count from the API instead of the chars/3.5 estimate.
+// Gemini, Anthropic, OpenAI, Groq, DeepSeek, Mistral, Qwen, Grok, Cohere,
+// and Perplexity all expose token counts on every successful response.
+function trackTokens(text, role, provider, usage) {
   const costs = TOKEN_COSTS[provider] || TOKEN_COSTS.gemini;
-  const cost = role === 'user' ? tokens * costs.input : tokens * costs.output;
+  let pTok = 0, cTok = 0;
+  if (usage && (usage.prompt != null || usage.completion != null)) {
+    pTok = usage.prompt || 0;
+    cTok = usage.completion || 0;
+  } else {
+    // Fallback: estimate from text length only if the API didn't surface
+    // counts (local models, errors, missing usage block).
+    const est = Math.ceil((text||'').length / 3.5);
+    if (role === 'user') pTok = est; else cTok = est;
+  }
+  const tokens = pTok + cTok;
+  const cost = pTok * costs.input + cTok * costs.output;
   sessionTokens += tokens;
   sessionCost += cost;
   if (role === 'user') sessionMsgs++;
@@ -2694,7 +2750,8 @@ async function loadPanel(){
   const _modelDefaults = {
     claude:'claude-sonnet-4-6', openai:'gpt-4o', gemini:'gemini-2.5-flash',
     groq:'llama-3.3-70b-versatile', deepseek:'deepseek-chat', grok:'grok-4',
-    mistral:'mistral-large-latest', qwen:'qwen-plus', cohere:'command-a-03-2025'
+    mistral:'mistral-large-latest', qwen:'qwen-plus',
+    perplexity:'sonar-pro', cohere:'command-a-03-2025'
   };
   await Promise.all(Object.keys(_modelDefaults).map(async (p) => {
     try {
@@ -2703,6 +2760,19 @@ async function loadPanel(){
       if (sel) sel.value = stored || _modelDefaults[p];
     } catch(_) {}
   }));
+  // Hydrate Connections section state.
+  try {
+    const gAuth = await H.googleAuthStatus();
+    _setConnStatus('google', !!(gAuth && gAuth.authenticated));
+  } catch(_) { _setConnStatus('google', false); }
+  try {
+    const ghKey = await H.hasKey('github');
+    _setConnStatus('github', !!ghKey);
+    if (ghKey) {
+      const inp = document.getElementById('pi-github-conn');
+      if (inp) inp.placeholder = '••••••••••';
+    }
+  } catch(_) {}
   // Profile
   if(nm) document.getElementById('pi-name').value=nm;
   if(lg) document.getElementById('pi-lang').value=lg;
@@ -2809,6 +2879,61 @@ async function openSettingsFolder(){
   setSettingsStatus(r?.ok?`Opened settings folder: ${r.path}`:`Could not open settings folder: ${r?.error||'unknown error'}`, !!r?.ok);
 }
 async function savePf(){const n=document.getElementById('pi-name').value.trim();if(!n)return;if(await saveSetting('userName',n,'Name')){userName=n;document.getElementById('tb-sub').textContent=n.toUpperCase();showGreeting();}}
+
+// ═══ Connections — unified OAuth + token entry points ═══
+async function connectGoogle(){
+  try {
+    const cid = (await H.get('googleClientId')) || '';
+    const cs  = (await H.get('googleClientSecret')) || '';
+    if (!cid || !cs) {
+      alert(lang==='ru'
+        ? 'Сначала добавь Client ID и Client Secret для Google в секции Google Workspace ниже на странице.'
+        : 'Add the Google Client ID + Secret in the Google Workspace section below first.');
+      return;
+    }
+    const r = await H.googleAuth(cid, cs);
+    if (r?.ok) {
+      _setConnStatus('google', true);
+    } else {
+      alert((r && r.error) || (lang==='ru'?'Не удалось подключить Google':'Google sign-in failed'));
+    }
+  } catch(e) { console.warn('connectGoogle:', e?.message); }
+}
+async function disconnectGoogle(){
+  try {
+    await H.googleLogout();
+    _setConnStatus('google', false);
+  } catch(e) { console.warn('disconnectGoogle:', e?.message); }
+}
+async function connectGithub(){
+  try {
+    const inp = document.getElementById('pi-github-conn');
+    const v = (inp?.value || '').trim();
+    if (!v) return;
+    await H.saveKey('github', v);
+    _setConnStatus('github', true);
+    inp.value = '';
+    inp.placeholder = '••••••••••';
+  } catch(e) { console.warn('connectGithub:', e?.message); }
+}
+function _setConnStatus(svc, connected){
+  try {
+    const dot = document.getElementById('pd-' + svc + '-conn');
+    const st  = document.getElementById('conn-' + svc + '-status');
+    if (dot) dot.classList.toggle('on', !!connected);
+    if (st)  st.textContent = connected
+      ? (lang==='ru' ? 'Подключено.' : 'Connected.')
+      : (svc === 'google'
+          ? (lang==='ru'?'Не подключено.':'Not connected.')
+          : (lang==='ru'?'Не сохранено.':'Not saved.'));
+    if (svc === 'google') {
+      const btn = document.getElementById('conn-google-btn');
+      const dis = document.getElementById('conn-google-disc');
+      if (btn) btn.style.display = connected ? 'none' : '';
+      if (dis) dis.style.display = connected ? '' : 'none';
+    }
+  } catch(_){}
+}
 
 // Per-provider model selection (Settings → Models). Persists to electron
 // settingsStore under "model.<provider>" keys; main.js H.ai handlers read
@@ -3258,7 +3383,7 @@ ${fileContext}`}];
         catch(e) { res = {error: e.message}; }
         rmTyping();
         if(res.error) addMsg('bot',`❌ ${res.error}`);
-        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov}); trackTokens(res.reply, 'assistant', prov); speak(res.reply.slice(0,300)); }
+        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov}); trackTokens(res.reply, 'assistant', prov, res.usage); speak(res.reply.slice(0,300)); }
         cleanup(); return;
       }
     }
@@ -3277,7 +3402,7 @@ ${fileContext}`}];
           setStatus(lang==='ru'?'◉ Смотрю на экран…':'◉ Seeing screen…',true);
           res=await H.analyzeScreen(text);rmTyping();
           if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model});trackTokens(res.reply,'assistant',prov);speak(res.reply);}
+          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
           cleanup();return;
         case 'open':
           res=await H.pcOpen(cmd.arg);rmTyping();
@@ -3363,7 +3488,7 @@ ${fileContext}`}];
     setStatus(lang==='ru'?'◉ Смотрю…':'◉ Seeing…',true);
     const res=await H.analyzeScreen(text);rmTyping();
     if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model});trackTokens(res.reply,'assistant',prov);speak(res.reply);}
+    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     cleanup();return;
   }
 
@@ -3385,7 +3510,7 @@ ${fileContext}`}];
       catch(e){ res={error:e.message}; }
       rmTyping();
       if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-      else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});trackTokens(res.reply,'assistant',prov);speak(res.reply);}
+      else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     }else{
       rmTyping();
       addMsg('bot',lang==='ru'?`⚠️ Нет результатов. ${sr.error||'Добавь Tavily ключ в ⚙️ Настройках.'}`:`⚠️ No results. ${sr.error||'Add Tavily key in ⚙️ Settings.'}`);
@@ -3426,7 +3551,7 @@ ${fileContext}`}];
       addMsg('bot',cleanReply,{model:res.model||prov});
       history.push({role:'assistant',content:res.reply});
       _persistChatMessage('assistant',res.reply,{model:res.model||prov});
-      trackTokens(res.reply,'assistant',prov);
+      trackTokens(res.reply,'assistant',prov,res.usage);
       speak(cleanReply);
       if (action) renderActionCard(action, _executeActionIntent, ()=>{});
     }
