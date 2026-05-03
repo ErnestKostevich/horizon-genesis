@@ -261,20 +261,23 @@ function createWindow(page = 'chat') {
   const url = `http://127.0.0.1:${port}/${page}.html`;
   if (win) { win.loadURL(url); win.show(); return; }
 
-  // Open at ~75% of the primary display, clamped to a sensible max.
-  // User can still resize freely; this just avoids the old 420×820 postage-stamp.
-  // Floor bumped to 1180×740 so the multi-chat sidebar (280px) + the title-bar
-  // pills (license, TRIAL/UPGRADE, 7 ic-btns, window controls) all fit on
-  // first launch without colliding.
+  // Open the window large enough that the multi-chat sidebar (280 px) +
+  // the provider row (~12 chips + Wake + persona) + the modes row
+  // (12 chips) + the title bar pills + the chat status bar all fit on
+  // screen without horizontal clipping. On laptop-class screens
+  // (≤ 1900×1100) we go full-maximize on launch so the user starts with
+  // every control visible; on big monitors we open a generous default
+  // window the user can still drag around.
   const { screen } = require('electron');
   const primary = screen.getPrimaryDisplay();
   const work = primary.workAreaSize;
-  const initW = Math.min(1440, Math.max(1180, Math.round(work.width  * 0.78)));
-  const initH = Math.min(900,  Math.max(740,  Math.round(work.height * 0.84)));
+  const _shouldMaximizeOnLaunch = work.width < 1900 || work.height < 1100;
+  const initW = Math.min(1600, Math.max(1280, Math.round(work.width  * 0.85)));
+  const initH = Math.min(980,  Math.max(800,  Math.round(work.height * 0.88)));
 
   win = new BrowserWindow({
     width: initW, height: initH,
-    minWidth: 1100, minHeight: 700,
+    minWidth: 1280, minHeight: 760,
     center: true,
     frame: false, transparent: true,
     webPreferences: {
@@ -318,6 +321,13 @@ function createWindow(page = 'chat') {
   _proGuardWindowRef = win;
 
   win.loadURL(url);
+
+  // On laptop-class displays open maximized so all toolbar/sidebar
+  // controls (Wake button, persona dropdown, every provider chip,
+  // every mode chip, title-bar icons) are visible from the start.
+  if (_shouldMaximizeOnLaunch) {
+    try { win.maximize(); } catch (_) {}
+  }
 
   win.on('close', e => {
     if (!isQuitting) { e.preventDefault(); win.hide(); }
