@@ -86,7 +86,7 @@ class LicenseManager {
     const cachedAt = this.settings.get(K_CACHED_AT);
     const cachedFresh = cachedAt && (now - Date.parse(cachedAt) < OFFLINE_GRACE_HOURS * 3600e3);
 
-    if (cached && cachedFresh && cached.active && (cached.in_trial || cached.plan === 'trial')) {
+    if (cached && cachedFresh && cached.active && (!cached.plan || cached.plan === 'trial')) {
       const trialEnd = cached.trial_ends_at || cached.expires_at || null;
       const trialDaysLeft = this._daysLeftUntil(trialEnd, now);
       return {
