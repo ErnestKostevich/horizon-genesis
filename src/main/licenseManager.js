@@ -49,6 +49,13 @@ const K_CACHED_STATUS  = 'lic.cachedStatus';
 const K_CACHED_AT      = 'lic.cachedStatusAt';
 const K_LAST_CHECK     = 'lic.lastCheckAt';
 
+const OWNER_EMAILS = new Set(
+  String(process.env.HORIZON_OWNER_EMAIL || 'ernest2011kostevich@gmail.com')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 class LicenseManager {
   constructor({ settingsStore, marketplaceClient, logger }) {
     this.settings  = settingsStore;
@@ -80,6 +87,9 @@ class LicenseManager {
    */
   evaluate() {
     const now = Date.now();
+
+    const ownerState = this._ownerEntitlement();
+    if (ownerState) return ownerState;
 
     // Server-known state first (authoritative if fresh).
     const cached = this.settings.get(K_CACHED_STATUS);
@@ -172,6 +182,9 @@ class LicenseManager {
       this.log('[license] server status:', status);
     } catch (e) {
       this.log('[license] server poll failed:', e.message);
+      if (!this.market.token) {
+        this.clearCache();
+      }
       // Keep old cache — offline grace handles it.
     }
     return this._emit(this.evaluate());
@@ -228,6 +241,24 @@ class LicenseManager {
     const end = Date.parse(value);
     if (!Number.isFinite(end)) return 0;
     return Math.max(0, Math.ceil((end - now) / 86400e3));
+  }
+
+  _ownerEntitlement() {
+    const user = this.settings.get('marketplaceUser');
+    if (!user || typeof user !== 'object') return null;
+    const email = String(user.email || '').trim().toLowerCase();
+    const ownerLike = (email && OWNER_EMAILS.has(email)) || user.is_admin === true || user.is_official === true;
+    if (!ownerLike) return null;
+    const ownerEmail = email && OWNER_EMAILS.has(email);
+    return {
+      allowed: true,
+      reason: 'pro',
+      trialDaysLeft: 0,
+      plan: (user.is_admin || ownerEmail) ? 'owner' : 'official',
+      expiresAt: null,
+      offline: false,
+      accountLinked: true,
+    };
   }
 }
 

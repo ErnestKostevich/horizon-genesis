@@ -2387,6 +2387,14 @@ app.whenReady().then(async () => {
   // We do a non-blocking server refresh too, so if the cache is stale it
   // gets corrected within a few seconds after the window is already shown.
   const onboarded = settingsStore.get('onboarded');
+  if (marketClient.token) {
+    try {
+      await Promise.race([
+        licenseManager.refresh(),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+    } catch (_) {}
+  }
   const state = licenseManager.evaluate();
   const initialPage = state.allowed
     ? (onboarded ? 'chat' : 'setup')
