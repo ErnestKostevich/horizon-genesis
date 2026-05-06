@@ -712,6 +712,20 @@ function smartOpenUrl(raw) {
     const q = raw.replace(/открой?|запусти|launch|open|start/i,'').trim();
     return `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
   }
+  
+  // Single word top-level sites
+  const topSites = {
+    'ютуб': 'https://youtube.com', 'youtube': 'https://youtube.com',
+    'вк': 'https://vk.com', 'vk': 'https://vk.com',
+    'гугл': 'https://google.com', 'google': 'https://google.com',
+    'телеграм': 'https://web.telegram.org', 'telegram': 'https://web.telegram.org',
+    'ватсап': 'https://web.whatsapp.com', 'whatsapp': 'https://web.whatsapp.com',
+    'инста': 'https://instagram.com', 'instagram': 'https://instagram.com',
+    'чатгпт': 'https://chat.openai.com', 'chatgpt': 'https://chat.openai.com',
+    'твитч': 'https://twitch.tv', 'twitch': 'https://twitch.tv'
+  };
+  if (topSites[lo]) return topSites[lo];
+  if (raw.includes('.')) return `https://${raw}`;
   return null;
 }
 
