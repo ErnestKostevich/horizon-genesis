@@ -2737,7 +2737,7 @@ function closePanel(){document.getElementById('panel').classList.remove('show');
 
 async function loadPanel(){
   // Parallel fetch — fast, no sequential bottleneck
-  const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily','elevenlabs','deepgram','github'];
+  const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','tavily','elevenlabs','deepgram','localai','github'];
   const [keyFlags, nm, lg, vp, tp, elv, oaitv] = await Promise.all([
     Promise.all(svcs.map(s=>H.hasKey(s))),
     H.get('userName'), H.get('lang'), H.get('voiceProvider'),
@@ -2764,6 +2764,12 @@ async function loadPanel(){
   try {
     const gAuth = await H.googleAuthStatus();
     _setConnStatus('google', !!(gAuth && gAuth.authenticated));
+    const storedGoogleClientId = await H.get('googleClientId').catch(()=>null);
+    const hasGoogleSecret = await H.hasKey('google_client_secret').catch(()=>false);
+    const googleClientIdInput = document.getElementById('pi-gcid');
+    const googleSecretInput = document.getElementById('pi-gcs');
+    if (googleClientIdInput && storedGoogleClientId) googleClientIdInput.value = storedGoogleClientId;
+    if (googleSecretInput && hasGoogleSecret) googleSecretInput.placeholder = '••••••••••';
   } catch(_) { _setConnStatus('google', false); }
   try {
     const ghKey = await H.hasKey('github');
@@ -2881,10 +2887,10 @@ async function openSettingsFolder(){
 async function savePf(){const n=document.getElementById('pi-name').value.trim();if(!n)return;if(await saveSetting('userName',n,'Name')){userName=n;document.getElementById('tb-sub').textContent=n.toUpperCase();showGreeting();}}
 
 // ═══ Connections — unified OAuth + token entry points ═══
-async function connectGoogle(){
+async function connectGoogleFromConnections(){
   try {
     const cid = (await H.get('googleClientId')) || '';
-    const cs  = (await H.get('googleClientSecret')) || '';
+    const cs  = (await H.getKey('google_client_secret')) || '';
     if (!cid || !cs) {
       alert(lang==='ru'
         ? 'Сначала добавь Client ID и Client Secret для Google в секции Google Workspace ниже на странице.'
@@ -3089,7 +3095,7 @@ function initWakeCalibrationUI(){
   if (lbl)    lbl.textContent = vol;
 }
 function clearHist(){if(!confirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
-async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','tavily'])await H.deleteKey(s);await loadPanel();}
+async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','groq_voice','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','tavily','elevenlabs','deepgram','localai','github','google_client_secret'])await H.deleteKey(s);await loadPanel();}
 
 // ═══════════════════════════════════════════════════════════════
 // PROVIDER / MODE / TOGGLES
@@ -4032,23 +4038,47 @@ async function setPersona(id) {
 // GOOGLE OAUTH
 // ═══════════════════════════════════════════════════════════════
 async function connectGoogle() {
-  const cid = document.getElementById('pi-gcid').value.trim();
-  const cs = document.getElementById('pi-gcs').value.trim();
+  const cidInput = document.getElementById('pi-gcid');
+  const csInput = document.getElementById('pi-gcs');
   const status = document.getElementById('google-auth-status');
-  status.textContent = lang === 'ru' ? 'Подключение...' : 'Connecting...';
-  status.style.color = 'var(--acc)';
+  const cid = (cidInput?.value || '').trim() || await H.get('googleClientId') || '';
+  const cs = (csInput?.value || '').trim() || await H.getKey('google_client_secret') || '';
+  if (status) {
+    status.textContent = lang === 'ru' ? 'Подключение...' : 'Connecting...';
+    status.style.color = 'var(--acc)';
+  }
   try {
+    if (!cid || !cs) {
+      const msg = lang === 'ru'
+        ? 'Добавь Google Client ID и Client Secret, затем повтори подключение.'
+        : 'Add Google Client ID and Client Secret, then connect again.';
+      if (status) { status.textContent = msg; status.style.color = 'var(--red)'; }
+      _setConnStatus('google', false);
+      return;
+    }
+    await H.set('googleClientId', cid);
+    await H.saveKey('google_client_secret', cs);
+    if (csInput) { csInput.value = ''; csInput.placeholder = '••••••••••'; }
     const result = await H.googleAuth(cid, cs);
     if (result.ok) {
-      status.textContent = lang === 'ru' ? '✅ Google подключён!' : '✅ Google connected!';
-      status.style.color = 'var(--green)';
+      if (status) {
+        status.textContent = lang === 'ru' ? '✅ Google подключён!' : '✅ Google connected!';
+        status.style.color = 'var(--green)';
+      }
+      _setConnStatus('google', true);
     } else {
-      status.textContent = `❌ ${result.error}`;
-      status.style.color = 'var(--red)';
+      if (status) {
+        status.textContent = `❌ ${result.error}`;
+        status.style.color = 'var(--red)';
+      }
+      _setConnStatus('google', false);
     }
   } catch(e) {
-    status.textContent = `❌ ${e.message}`;
-    status.style.color = 'var(--red)';
+    if (status) {
+      status.textContent = `❌ ${e.message}`;
+      status.style.color = 'var(--red)';
+    }
+    _setConnStatus('google', false);
   }
 }
 
