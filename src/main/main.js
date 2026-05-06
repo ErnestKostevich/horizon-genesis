@@ -129,7 +129,11 @@ const settingsStore = new Store({ name: 'horizon-settings' });
 const ALLOWED_KEY_IDS = new Set([
   'gemini', 'groq', 'groq_voice', 'deepseek', 'mistral', 'qwen', 'grok',
   'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
-  'github',
+  'perplexity', 'cohere', 'github', 'google_client_secret',
+]);
+const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
+  'claude', 'openai', 'gemini', 'groq', 'deepseek',
+  'grok', 'mistral', 'qwen', 'perplexity', 'cohere',
 ]);
 const ALLOWED_SETTING_KEYS = new Set([
   'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider',
@@ -140,7 +144,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'ollamaUrl', 'ollamaModel', 'lmStudioUrl', 'lmStudioModel',
   'localAiUrl', 'localAiModel',
   'wakeStrictMode', 'wakeVolumeThreshold', 'wakeConfirmBeep',
-  'settingsHealthCheckAt',
+  'settingsHealthCheckAt', 'googleClientId',
 ]);
 
 function assertAllowedKey(service) {
@@ -150,7 +154,12 @@ function assertAllowedKey(service) {
 }
 
 function assertAllowedSetting(key) {
-  if (!ALLOWED_SETTING_KEYS.has(String(key || ''))) {
+  const safeKey = String(key || '');
+  if (safeKey.startsWith('model.')) {
+    const provider = safeKey.slice('model.'.length);
+    if (ALLOWED_MODEL_SETTING_PROVIDERS.has(provider)) return;
+  }
+  if (!ALLOWED_SETTING_KEYS.has(safeKey)) {
     throw new Error(`Unsupported setting: ${key}`);
   }
 }
