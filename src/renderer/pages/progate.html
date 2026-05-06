@@ -438,9 +438,41 @@ h1 .acc{
 /* ════════════════════════════════════════════════════════════════════════════
    App logic: license state → plan selection → payment → polling.
    ════════════════════════════════════════════════════════════════════════════ */
-const H = window.H;
+const H = window.H || {};
 let selectedPlan = 'monthly';
 let pollTimer = null;
+const WEB_BASE = 'https://horizonaai.dev';
+
+function bridgeReady(name) {
+  return typeof H[name] === 'function';
+}
+
+function safeQuit() {
+  try {
+    if (bridgeReady('quit')) {
+      H.quit();
+      return;
+    }
+  } catch (_) {}
+  try { window.close(); } catch (_) {}
+}
+
+function safeMinimize() {
+  try {
+    if (bridgeReady('minimize')) H.minimize();
+  } catch (_) {}
+}
+
+async function appPageUrl(page) {
+  try {
+    if (bridgeReady('getPort')) return `http://127.0.0.1:${await H.getPort()}/${page}.html`;
+  } catch (_) {}
+  return `${page}.html`;
+}
+
+function openFallback(url) {
+  try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+}
 
 // Select plan
 document.querySelectorAll('.plan').forEach(el => {
@@ -453,7 +485,12 @@ document.querySelectorAll('.plan').forEach(el => {
 
 // Render current state
 async function renderState() {
-  const s = await H.licenseState();
+  let s;
+  try {
+    s = bridgeReady('licenseState') ? await H.licenseState() : { allowed: false, reason: 'bridge-missing' };
+  } catch (_) {
+    s = { allowed: false, reason: 'bridge-error' };
+  }
   const pill = document.getElementById('status-pill');
   const pillT = document.getElementById('status-text');
   const head = document.getElementById('headline');
@@ -476,7 +513,7 @@ async function renderState() {
     head.innerHTML = `Subscription <span class="acc">lapsed</span>`;
     lede.textContent = 'Your Pro subscription has ended. Renew to continue using Horizon AI. Previous conversations and settings remain intact.';
   } else {
-    pillT.textContent = 'Trial expired';
+    pillT.textContent = s.reason === 'bridge-missing' || s.reason === 'bridge-error' ? 'Desktop bridge offline' : 'Trial expired';
     head.innerHTML = `Your trial has <span class="acc">ended</span>`;
   }
 }
@@ -486,7 +523,9 @@ async function renderState() {
 document.getElementById('cta-pay').addEventListener('click', async () => {
   toast('Opening Horizon pricing...', 'loading');
   try {
-    const r = await H.licenseOpenUpgradePage?.();
+    const r = bridgeReady('licenseOpenUpgradePage')
+      ? await H.licenseOpenUpgradePage()
+      : (openFallback(`${WEB_BASE}/pricing?src=desktop&intent=upgrade`), { ok: true });
     if (r?.ok) {
       toast('Browser opened. Complete Pro checkout there, then recheck here.', 'ok');
       return;
@@ -500,11 +539,15 @@ document.getElementById('cta-pay').addEventListener('click', async () => {
 // Recheck (if user paid externally and server hasn't pushed yet)
 document.getElementById('cta-recheck').addEventListener('click', async () => {
   toast('Checking server...', 'loading');
+  if (!bridgeReady('licenseRefresh')) {
+    toast('Desktop bridge is not ready. Close and reopen Horizon.', 'err');
+    return;
+  }
   const s = await H.licenseRefresh();
   if (s.allowed && s.reason === 'pro') {
     toast('Pro active! Reloading...', 'ok');
     setTimeout(async () => {
-      location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`;
+      location.href = await appPageUrl('chat');
     }, 900);
   } else {
     toast('No active subscription yet. Try again in a minute.', 'err');
@@ -525,7 +568,9 @@ document.getElementById('cta-signup').addEventListener('click', async () => {
 
 async function openWebAuth(mode) {
   try {
-    const result = await H.marketOpenWebAuth?.(mode);
+    const result = bridgeReady('marketOpenWebAuth')
+      ? await H.marketOpenWebAuth(mode)
+      : (openFallback(`${WEB_BASE}/${mode === 'signup' ? 'signup' : 'login'}?desktop=1`), { ok: true });
     if (result?.ok) return;
     toast(result?.error ? `Cannot open browser: ${result.error}` : 'Cannot open browser', 'err');
   } catch (err) {
@@ -537,14 +582,16 @@ async function openWebAuth(mode) {
 document.querySelectorAll('.contact .link').forEach(a => {
   a.addEventListener('click', (e) => {
     e.preventDefault();
-    H.licenseOpenContact(a.dataset.ch);
+    if (bridgeReady('licenseOpenContact')) H.licenseOpenContact(a.dataset.ch);
+    else if (String(a.dataset.ch || '').startsWith('email')) openFallback('mailto:ernest2011kostevich@gmail.com');
+    else openFallback('https://t.me/Ernest_Kostevich');
   });
 });
 
 // Window controls
-document.getElementById('win-min').addEventListener('click', () => H.minimize());
-document.getElementById('win-cls').addEventListener('click', () => H.quit());
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') H.quit(); });
+document.getElementById('win-min').addEventListener('click', safeMinimize);
+document.getElementById('win-cls').addEventListener('click', safeQuit);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') safeQuit(); });
 
 // Poll invoice status every 8s until paid (or user leaves)
 function startPollingInvoice(id) {
@@ -556,7 +603,7 @@ function startPollingInvoice(id) {
       clearInterval(pollTimer); pollTimer = null;
       toast('Payment confirmed! Unlocking...', 'ok');
       await H.licenseRefresh();
-      setTimeout(async () => location.href = `http://127.0.0.1:${await H.getPort()}/chat.html`, 1200);
+      setTimeout(async () => location.href = await appPageUrl('chat'), 1200);
     } else if (r.status === 'failed' || r.status === 'expired') {
       clearInterval(pollTimer); pollTimer = null;
       toast(`Payment ${r.status}. Try again or message Ernest.`, 'err');
