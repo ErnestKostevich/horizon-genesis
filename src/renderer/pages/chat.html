@@ -488,6 +488,18 @@ body.code-mode-active .chat-status-bar{position:fixed;top:42px;right:0;left:calc
 body.code-mode-active .msgs{top:76px;bottom:100px;left:calc(100vw - 450px);position:fixed}
 body.code-mode-active .inp-wrap{bottom:0;position:fixed;left:calc(100vw - 450px);z-index:20}
 
+/* ═══ OPERATOR MODE ═══ */
+.operator-pane { display:none; position:fixed; bottom:0; left:280px; right:0; height:220px; background:#111111; border-top:1px solid rgba(167,139,250,.3); z-index:50; flex-direction:column; font-family:var(--mono); color:var(--t2); font-size:11px; }
+body.operator-mode-active .operator-pane { display:flex; }
+body.operator-mode-active .msgs { bottom:calc(100px + 220px); }
+body.operator-mode-active .inp-wrap { bottom:220px; }
+body.code-mode-active.operator-mode-active .operator-pane { left:calc(100vw - 450px); width:450px; }
+.op-header { padding:6px 12px; background:#1a1a1a; border-bottom:1px solid #333; display:flex; gap:12px; color:#c4b5fd; font-weight:600; text-transform:uppercase; letter-spacing:1px; }
+.op-content { flex:1; overflow-y:auto; padding:8px 12px; line-height:1.6; }
+.op-log-line { margin:2px 0; border-left:2px solid transparent; padding-left:6px; word-break:break-all; }
+.op-log-line.error { color:#fca5a5; border-left-color:#ef4444; }
+.op-log-line.tool { color:#6ee7b7; border-left-color:#10b981; }
+
 .cs-empty{color:var(--t3);font-size:11.5px;padding:24px 12px;text-align:center;font-style:italic;line-height:1.7}
 .cs-group-heading{font-size:9.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1.4px;color:var(--t3);padding:14px 10px 5px 10px;font-weight:600}
 .cs-item{position:relative;padding:9px 10px;margin:1px 0;border-radius:8px;cursor:pointer;transition:all .15s;border-left:2px solid transparent;min-height:32px}
@@ -892,6 +904,7 @@ body.with-sidebar .chat-status-bar{display:flex}
       <button class="focus-timer-btn" id="focus-toggle" onclick="toggleFocusTimer()">||</button>
       <button class="focus-timer-btn" onclick="stopFocusTimer()">x</button>
     </div>
+    <button class="ic-btn" id="operator-mode-btn" onclick="toggleOperatorMode()" title="Operator Console">📟</button>
     <button class="ic-btn" id="code-mode-btn" onclick="toggleCodeMode()" title="Code Mode IDE">💻</button>
     <button class="ic-btn hub" onclick="openHub()" title="Plugin Hub">🧩</button>
     <button class="ic-btn wf" onclick="openWorkflows()" title="Workflows">⚡</button>
@@ -1063,6 +1076,19 @@ body.with-sidebar .chat-status-bar{display:flex}
     <span style="margin-left:auto;font-size:10px;color:#888" id="cm-file-path">No file opened</span>
   </div>
   <div id="monaco-container"></div>
+</div>
+
+</div>
+
+<!-- ═══════════ OPERATOR PANE ═══════════ -->
+<div id="operator-pane" class="operator-pane">
+  <div class="op-header">
+    <span>📟 Operator Console</span>
+    <span style="color:var(--t3);margin-left:auto;font-size:10px">Active Runs: 0</span>
+  </div>
+  <div class="op-content" id="op-log">
+    <div class="op-log-line tool">[SYSTEM] Operator Mode initialized. Ready for telemetry.</div>
+  </div>
 </div>
 
 <!-- ═══════════ MESSAGES ═══════════ -->
@@ -5367,6 +5393,37 @@ function loadMonaco() {
   };
   document.head.appendChild(script);
 }
+
+let operatorModeActive = false;
+function toggleOperatorMode() {
+  operatorModeActive = !operatorModeActive;
+  if (operatorModeActive) {
+    document.body.classList.add('operator-mode-active');
+    document.getElementById('operator-mode-btn').classList.add('proc');
+  } else {
+    document.body.classList.remove('operator-mode-active');
+    document.getElementById('operator-mode-btn').classList.remove('proc');
+  }
+}
+function opLog(msg, type='info') {
+  const log = document.getElementById('op-log');
+  if (!log) return;
+  const line = document.createElement('div');
+  line.className = `op-log-line ${type}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+const origLog = console.log;
+console.log = function(...args) {
+  origLog.apply(console, args);
+  if(operatorModeActive) opLog(args.join(' '));
+};
+const origError = console.error;
+console.error = function(...args) {
+  origError.apply(console, args);
+  if(operatorModeActive) opLog(args.join(' '), 'error');
+};
 </script>
 <script src="fractal-bg.js"></script>
 </body>
