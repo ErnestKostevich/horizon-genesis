@@ -221,7 +221,7 @@ select.sel option{background:#14121a;color:var(--tx-0)}
     <div class="logo-big">◈</div>
     <h1>Welcome to <span class="acc">Horizon AI</span></h1>
     <p class="lede">Your personal desktop AI agent. Add at least one provider key to get started — everything else can be configured later in Settings.</p>
-    <div class="trial-badge"><span class="dot"></span><span id="trial-text">15-day free trial starts on launch</span></div>
+    <div class="trial-badge"><span class="dot"></span><span id="trial-text">5-day account trial syncs after sign-in</span></div>
   </div>
 
   <!-- Profile -->
@@ -412,7 +412,7 @@ async function finish() {
     const s = await H.licenseState?.();
     if (s && s.reason === 'trial' && s.trialDaysLeft > 0) {
       document.getElementById('trial-text').textContent =
-        `${s.trialDaysLeft}-day free trial active · No card required`;
+        `${s.trialDaysLeft}-day account trial active - No card required`;
     }
   } catch (_) {}
 })();

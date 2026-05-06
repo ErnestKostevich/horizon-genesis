@@ -3,12 +3,12 @@
  * Horizon License Manager
  * ======================
  *
- * Gates access to the app behind a 15-day free trial + paid subscription.
+ * Gates access to the app behind the account trial + paid subscription.
  *
  *   Trial flow:
- *     First run   → trial starts, 15 days of unrestricted access.
- *     Trial active→ app works normally.
- *     Trial ended → app shows block screen; user must have active Pro.
+ *     Sign-in     -> server trial window becomes authoritative.
+ *     Trial active -> app works normally.
+ *     Trial ended  -> app shows block screen; user must have active Pro.
  *
  *   Pro flow:
  *     User signs up on horizonaai.dev, pays via NOWPayments (crypto).
@@ -31,7 +31,7 @@
  *   Offline grace:
  *     - License status is cached for 72h. Net failures don't boot
  *       paying users offline.
- *     - First-ever run requires no network (trial starts locally).
+ *     - First-ever run requires no network (fallback trial starts locally).
  *
  *   Fields stored (in horizon-settings, plain electron-store):
  *     lic.trialStart         ISO date, set on first run, never overwritten
@@ -40,7 +40,7 @@
  *     lic.lastCheckAt        ISO date of last attempt (success or fail)
  */
 
-const TRIAL_DAYS          = 15;
+const TRIAL_DAYS          = 5;
 const OFFLINE_GRACE_HOURS = 72;
 const POLL_INTERVAL_MS    = 60 * 60 * 1000;  // 1 hour
 
@@ -86,6 +86,20 @@ class LicenseManager {
     const cachedAt = this.settings.get(K_CACHED_AT);
     const cachedFresh = cachedAt && (now - Date.parse(cachedAt) < OFFLINE_GRACE_HOURS * 3600e3);
 
+    if (cached && cachedFresh && cached.active && (cached.in_trial || cached.plan === 'trial')) {
+      const trialEnd = cached.trial_ends_at || cached.expires_at || null;
+      const trialDaysLeft = this._daysLeftUntil(trialEnd, now);
+      return {
+        allowed: trialDaysLeft > 0,
+        reason: trialDaysLeft > 0 ? 'trial' : 'trial-expired',
+        trialDaysLeft,
+        plan: 'trial',
+        expiresAt: trialEnd,
+        offline: false,
+        accountLinked: true,
+      };
+    }
+
     if (cached && cachedFresh && cached.active) {
       return {
         allowed: true,
@@ -94,10 +108,23 @@ class LicenseManager {
         plan: cached.plan || 'pro',
         expiresAt: cached.expires_at || null,
         offline: false,
+        accountLinked: true,
       };
     }
 
-    // Trial state (local-only; starts on first run).
+    if (cached && cachedFresh && !cached.active) {
+      return {
+        allowed: false,
+        reason: cached.trial_expired ? 'trial-expired' : 'expired',
+        trialDaysLeft: 0,
+        plan: cached.plan || null,
+        expiresAt: cached.trial_ends_at || cached.expires_at || null,
+        offline: false,
+        accountLinked: true,
+      };
+    }
+
+    // Trial state (local fallback only; starts on first run without account truth).
     const ts = this.settings.get(K_TRIAL_START);
     const trialEnd = new Date(ts);
     trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS);
@@ -111,6 +138,7 @@ class LicenseManager {
         plan: null,
         expiresAt: null,
         offline: !cachedFresh,
+        accountLinked: false,
       };
     }
 
@@ -122,6 +150,7 @@ class LicenseManager {
       plan: cached?.plan || null,
       expiresAt: cached?.expires_at || null,
       offline: !cachedFresh,
+      accountLinked: false,
     };
   }
 
@@ -192,6 +221,13 @@ class LicenseManager {
       try { fn(state); } catch (e) { this.log('[license] listener error:', e.message); }
     }
     return state;
+  }
+
+  _daysLeftUntil(value, now = Date.now()) {
+    if (!value) return 0;
+    const end = Date.parse(value);
+    if (!Number.isFinite(end)) return 0;
+    return Math.max(0, Math.ceil((end - now) / 86400e3));
   }
 }
 
