@@ -1255,8 +1255,9 @@ body.with-sidebar .chat-status-bar{display:flex}
       <span class="op-tab" id="op-tab-tools" onclick="opTab('tools')">TOOLS</span>
       <span class="op-tab" id="op-tab-runs" onclick="opTab('runs')">RUNS</span>
     </div>
-    <!-- Pause / Step / Stop are hidden until they actually pause the agent
-         loop. Until then, only Clear and Copy do real work. -->
+    <button class="op-btn" id="op-pause-btn" onclick="opPause()">Pause</button>
+    <button class="op-btn" onclick="opStep()">Step</button>
+    <button class="op-btn" onclick="opStop()">Stop</button>
     <button class="op-btn" onclick="opClear()">Clear</button>
     <button class="op-btn" onclick="opCopy()">Copy</button>
     <span id="op-active-runs" style="color:var(--t3);margin-left:auto;font-size:10px">Active Runs: 0</span>
@@ -3833,36 +3834,20 @@ async function runAgent(text) {
 
   const steps = [];
   let agentPanelRef = renderAgentPanel([], null, true);
-
-  // Listen for step updates
-  // Listen for step updates from agent
-  H.onAgentStep((step) => {
-    opLog(`tool ${step.type || 'step'} ${step.tool || ''} ${step.reason || ''}`, 'tool');
-    if (step.type === 'executing') {
-      steps.push({ tool: step.tool, reason: step.reason, result: null });
-    } else if (step.type === 'result') {
-      if (steps.length > 0) steps[steps.length - 1].result = step.result;
-    }
-    agentPanelRef = renderAgentPanel(steps, null, true);
-  });
+  activeAgentPanelSteps = steps;
+  activeAgentPanelRef = agentPanelRef;
+  ensureOperatorAgentListener();
 
   // FIX: Use the global 'provider' variable correctly
   const currentProvider = provider || 'gemini';
 
   try {
-    // Add timeout to prevent infinite loading
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Agent timeout - took too long')), 90000)
-    );
-    
-    const agentPromise = H.agentRun(text, {
+    const result = await H.agentRun(text, {
       provider: currentProvider,
       model: getSelectedModelForProvider(currentProvider),
       history: history.slice(-8),
       maxSteps: 8
     });
-
-    const result = await Promise.race([agentPromise, timeoutPromise]);
 
     // Final render
     renderAgentPanel(result.steps || steps, result.ok ? result.answer : `Error: ${result.error}`);
@@ -3886,6 +3871,8 @@ async function runAgent(text) {
       : `⚠️ Agent couldn't complete the task: ${e.message}. Try rephrasing.`);
   }
 
+  activeAgentPanelSteps = null;
+  activeAgentPanelRef = null;
   cleanup();
 }
 
@@ -5885,6 +5872,13 @@ let operatorLogLines = [];
 let operatorTab = 'log';
 let operatorPaused = false;
 let operatorStopRequested = false;
+let operatorCurrentAgentRunId = '';
+let operatorWaitingStepId = '';
+let operatorRunHistory = [];
+let operatorRunJson = null;
+let operatorAgentListenerInstalled = false;
+let activeAgentPanelSteps = null;
+let activeAgentPanelRef = null;
 let opSeq = 0;
 let activeMessageRun = null;
 
@@ -6002,6 +5996,83 @@ async function askCodeAi(kind){
   opEndRun(run,'done');
 }
 
+function updateOperatorStepPanel(step){
+  if(!activeAgentPanelSteps) return;
+  if(step.type === 'executing'){
+    activeAgentPanelSteps.push({ id:step.stepId, runId:step.runId, tool:step.tool, args:step.args, reason:step.reason, result:null });
+  } else if(step.type === 'result'){
+    const target = activeAgentPanelSteps.find(s=>s.id && s.id===step.stepId) || activeAgentPanelSteps[activeAgentPanelSteps.length - 1];
+    if(target) target.result = step.result;
+  } else if(step.type === 'denied' || step.type === 'stopped'){
+    activeAgentPanelSteps.push({ id:step.stepId, runId:step.runId, tool:step.tool, args:step.args, reason:step.reason || step.error, result:{ok:false,error:step.error || step.reason || step.type} });
+  }
+  activeAgentPanelRef = renderAgentPanel(activeAgentPanelSteps, null, true);
+}
+
+function handleOperatorAgentStep(step){
+  if(!step) return;
+  if(step.type === 'run-start'){
+    operatorCurrentAgentRunId = step.runId || operatorCurrentAgentRunId;
+    operatorWaitingStepId = '';
+    operatorPaused = false;
+    operatorStopRequested = false;
+    opLog(`agent run started ${step.runId || ''} (${step.provider || ''}/${step.model || 'default'})`, 'run');
+    opLoadRuns().catch(()=>{});
+    opRefresh();
+    return;
+  }
+  if(step.type === 'waiting'){
+    operatorCurrentAgentRunId = step.runId || operatorCurrentAgentRunId;
+    operatorWaitingStepId = step.stepId || '';
+    operatorPaused = Boolean(step.paused || operatorPaused);
+    opLog(`waiting before ${step.tool || 'tool'} ${step.stepId || ''}`, 'run');
+    opRefresh();
+    return;
+  }
+  if(step.type === 'executing'){
+    operatorCurrentAgentRunId = step.runId || operatorCurrentAgentRunId;
+    if(step.stepId && step.stepId === operatorWaitingStepId) operatorWaitingStepId = '';
+    opLog(`tool executing ${step.tool || ''} ${step.reason || ''}`, 'tool');
+    updateOperatorStepPanel(step);
+    opRefresh();
+    return;
+  }
+  if(step.type === 'result'){
+    if(step.stepId && step.stepId === operatorWaitingStepId) operatorWaitingStepId = '';
+    opLog(`tool result ${step.tool || ''}`, 'tool');
+    updateOperatorStepPanel(step);
+    opRefresh();
+    return;
+  }
+  if(step.type === 'denied' || step.type === 'stopped'){
+    if(step.stepId && step.stepId === operatorWaitingStepId) operatorWaitingStepId = '';
+    opLog(`${step.type} ${step.tool || ''} ${step.reason || step.error || ''}`, step.type === 'stopped' ? 'error' : 'run');
+    updateOperatorStepPanel(step);
+    opRefresh();
+    return;
+  }
+  if(step.type === 'run-end'){
+    if(!step.runId || step.runId === operatorCurrentAgentRunId){
+      operatorCurrentAgentRunId = '';
+      operatorWaitingStepId = '';
+      operatorPaused = false;
+    }
+    opLog(`agent run ${step.status || 'ended'} ${step.runId || ''}`, step.status === 'error' ? 'error' : 'run');
+    opLoadRuns().catch(()=>{});
+    opRefresh();
+    return;
+  }
+  opLog(`agent ${step.type || 'step'} ${step.tool || ''} ${step.reason || ''}`, 'tool');
+}
+
+function ensureOperatorAgentListener(){
+  if(operatorAgentListenerInstalled || !H.onAgentStep) return;
+  try {
+    H.onAgentStep((step)=>handleOperatorAgentStep(step));
+    operatorAgentListenerInstalled = true;
+  } catch(_) {}
+}
+
 function opStartRun(kind, label){
   const id='run-'+(++opSeq);
   operatorStopRequested = false;
@@ -6018,9 +6089,13 @@ function opEndRun(id,status='done'){
   opRefresh();
 }
 function opRefresh(){
-  const active=[...operatorRuns.values()].filter(r=>r.status==='running').length;
+  const localActive=[...operatorRuns.values()].filter(r=>r.status==='running').length;
+  const remoteActive=operatorRunHistory.filter(r=>r.status==='running').length;
+  const active=Math.max(localActive, remoteActive, operatorCurrentAgentRunId ? 1 : 0);
   const el=document.getElementById('op-active-runs');
   if(el) el.textContent=`Active Runs: ${active}`;
+  const pauseBtn=document.getElementById('op-pause-btn');
+  if(pauseBtn) pauseBtn.textContent=operatorPaused ? 'Resume' : 'Pause';
   opRender();
 }
 function opClear(){ operatorLogLines=[]; opRender(); }
@@ -6028,23 +6103,79 @@ async function opCopy(){ try{ await H.copy(document.getElementById('op-log')?.in
 function opTab(tab){
   operatorTab=tab;
   ['log','tools','runs'].forEach(t=>document.getElementById(`op-tab-${t}`)?.classList.toggle('on', t===tab));
+  if(tab==='runs') opLoadRuns().catch(e=>opLog(`runs load failed: ${e.message}`, 'error'));
   opRender();
 }
-function opPause(){
-  operatorPaused=!operatorPaused;
-  opLog(operatorPaused ? 'pause requested' : 'resume requested', 'run');
+async function opPause(){
+  if(!operatorCurrentAgentRunId){ opLog('no active agent run to pause', 'error'); return; }
+  const action=operatorPaused ? 'resume' : 'pause';
+  const r=await H.agentControl?.(operatorCurrentAgentRunId, action).catch(e=>({ok:false,error:e.message}));
+  if(!r?.ok){ opLog(r?.error || `${action} failed`, 'error'); return; }
+  operatorPaused = action === 'pause';
+  if(!operatorPaused) operatorWaitingStepId = '';
+  opLog(operatorPaused ? 'agent pause armed before next tool' : 'agent resumed', 'run');
+  opRefresh();
 }
-function opStep(){
-  operatorPaused=false;
-  opLog('manual step requested', 'run');
+async function opStep(){
+  if(operatorWaitingStepId){
+    const r=await H.agentStep?.(operatorWaitingStepId,{decision:'allow',reason:'operator step'}).catch(e=>({ok:false,error:e.message}));
+    if(!r?.ok){ opLog(r?.error || 'step failed', 'error'); return; }
+    opLog(`step allowed ${operatorWaitingStepId}`, 'run');
+    operatorWaitingStepId='';
+    operatorPaused=true;
+    opRefresh();
+    return;
+  }
+  if(!operatorCurrentAgentRunId){ opLog('no active agent run to step', 'error'); return; }
+  const r=await H.agentControl?.(operatorCurrentAgentRunId,'step').catch(e=>({ok:false,error:e.message}));
+  if(!r?.ok){ opLog(r?.error || 'step failed', 'error'); return; }
+  operatorPaused=true;
+  opLog('next tool will run as a single step', 'run');
+  opRefresh();
 }
-function opStop(){
+async function opStop(){
   operatorStopRequested=true;
+  if(operatorWaitingStepId){
+    await H.agentStep?.(operatorWaitingStepId,{decision:'stop',reason:'operator stop'}).catch(()=>{});
+    operatorWaitingStepId='';
+  }
+  if(operatorCurrentAgentRunId){
+    const r=await H.agentControl?.(operatorCurrentAgentRunId,'stop').catch(e=>({ok:false,error:e.message}));
+    if(!r?.ok) opLog(r?.error || 'stop failed', 'error');
+  }
   for(const r of operatorRuns.values()){
     if(r.status==='running'){ r.status='stopped'; r.ended=Date.now(); }
   }
+  operatorPaused=false;
   opLog('stop requested for active runs', 'error');
   opRefresh();
+}
+async function opLoadRuns(){
+  const r=await H.agentRuns?.(50);
+  if(!r?.ok) throw new Error(r?.error || 'Could not load runs');
+  if(!operatorCurrentAgentRunId && r.active?.[0]?.id) operatorCurrentAgentRunId = r.active[0].id;
+  if(operatorCurrentAgentRunId && !(r.active||[]).some(run=>run.id===operatorCurrentAgentRunId)) operatorCurrentAgentRunId = '';
+  const seen=new Set();
+  operatorRunHistory=[...(r.active||[]),...(r.history||[])].filter(run=>{
+    if(!run?.id || seen.has(run.id)) return false;
+    seen.add(run.id);
+    return true;
+  });
+  if(operatorTab==='runs') opRender();
+}
+async function opShowRunJson(id){
+  const r=await H.agentRunDetails?.(id).catch(e=>({ok:false,error:e.message}));
+  if(!r?.ok){ opLog(r?.error || 'Could not load run JSON', 'error'); return; }
+  operatorRunJson=r.run || {};
+  operatorTab='json';
+  ['log','tools','runs'].forEach(t=>document.getElementById(`op-tab-${t}`)?.classList.toggle('on', false));
+  opRender();
+}
+function opBackToRuns(){
+  operatorTab='runs';
+  operatorRunJson=null;
+  ['log','tools','runs'].forEach(t=>document.getElementById(`op-tab-${t}`)?.classList.toggle('on', t==='runs'));
+  opRender();
 }
 function opRender(){
   const log=document.getElementById('op-log');
@@ -6056,16 +6187,36 @@ function opRender(){
       ['workspace', codeWorkspace || 'not selected'],
       ['permission gate', permissionGateEnabled ? 'enabled' : 'disabled'],
       ['paused', operatorPaused ? 'yes' : 'no'],
+      ['active run', operatorCurrentAgentRunId || 'none'],
+      ['waiting step', operatorWaitingStepId || 'none'],
     ];
     log.innerHTML=rows.map(([k,v])=>`<div class="op-log-line tool"><b>${esc(k)}</b> · ${esc(String(v))}</div>`).join('');
     return;
   }
   if(operatorTab==='runs'){
+    const localRows=[...operatorRuns.values()].reverse().map(r=>({source:'ui',...r}));
+    const remoteRows=operatorRunHistory.map(r=>({source:'agent',...r}));
+    const rows=[...remoteRows,...localRows];
+    log.innerHTML=rows.length ? rows.map(r=>{
+      const started=r.started || (r.startedAt ? Date.parse(r.startedAt) : Date.now());
+      const ended=r.ended || (r.endedAt ? Date.parse(r.endedAt) : Date.now());
+      const label=r.label || r.prompt || r.model || '';
+      const click=r.source==='agent' ? ` onclick="opShowRunJson('${String(r.id).replace(/'/g,"\\'")}')"` : '';
+      return `<div class="op-log-line run"${click} style="${r.source==='agent'?'cursor:pointer':''}"><b>${esc(r.status||'unknown')}</b> - ${esc(r.source)} - ${esc(r.kind||r.provider||'agent')} - ${esc(String(label).slice(0,90))} - ${Math.max(0,Math.round((ended-started)/1000))}s</div>`;
+    }).join('') : '<div class="op-log-line tool">No runs yet.</div>';
+    return;
+  }
+  if(false && operatorTab==='runs'){
     const rows=[...operatorRuns.values()].reverse();
     log.innerHTML=rows.length ? rows.map(r=>{
       const end=r.ended || Date.now();
       return `<div class="op-log-line run"><b>${esc(r.status)}</b> · ${esc(r.kind)} · ${esc(r.label||'')} · ${Math.round((end-r.started)/1000)}s</div>`;
     }).join('') : '<div class="op-log-line tool">No runs yet.</div>';
+    return;
+  }
+  if(operatorTab==='json'){
+    const json=JSON.stringify(operatorRunJson || {}, null, 2);
+    log.innerHTML=`<div class="op-log-line run"><button class="op-btn" onclick="opBackToRuns()">Back to runs</button></div><pre class="op-log-line tool" style="white-space:pre-wrap;line-height:1.5">${esc(json)}</pre>`;
     return;
   }
   log.innerHTML=operatorLogLines.slice(-200).map(l=>`<div class="op-log-line ${l.type}">[${esc(l.time)}] ${esc(l.msg)}</div>`).join('');
@@ -6092,6 +6243,8 @@ function toggleOperatorMode() {
   if (operatorModeActive) {
     document.body.classList.add('operator-mode-active');
     document.getElementById('operator-mode-btn').classList.add('proc');
+    ensureOperatorAgentListener();
+    opLoadRuns().catch(()=>{});
     opRefresh();
   } else {
     document.body.classList.remove('operator-mode-active');
