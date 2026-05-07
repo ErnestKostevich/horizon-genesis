@@ -2,7 +2,7 @@
 
 const {
   app, BrowserWindow, ipcMain, Tray, Menu, Notification,
-  shell, clipboard, nativeImage, desktopCapturer, screen
+  shell, clipboard, nativeImage, desktopCapturer, screen, dialog
 } = require('electron');
 const path   = require('path');
 const crypto = require('crypto');
@@ -74,7 +74,7 @@ const PRO_HANDLERS = new Set([
   // Computer use / OS control
   'pcShell', 'pcKillProc', 'pcOpen',
   'pcType', 'pcKeyPress', 'pcVolume',
-  'pcReadFile', 'pcWriteFile', 'pcListDir',
+  'pcReadFile', 'pcWriteFile', 'pcListDir', 'pcChooseFolder',
   'pcMouseMove', 'pcMouseClick', 'pcMouseDoubleClick',
   'pcMouseScroll', 'pcMouseDrag',
   'smartClick', 'findUIElements',
@@ -129,23 +129,41 @@ const settingsStore = new Store({ name: 'horizon-settings' });
 const ALLOWED_KEY_IDS = new Set([
   'gemini', 'groq', 'groq_voice', 'deepseek', 'mistral', 'qwen', 'grok',
   'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
-  'perplexity', 'cohere', 'github', 'google_client_secret',
+  'perplexity', 'cohere', 'openrouter', 'github', 'google_client_secret',
 ]);
 const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
   'claude', 'openai', 'gemini', 'groq', 'deepseek',
   'grok', 'mistral', 'qwen', 'perplexity', 'cohere',
+  'openrouter',
 ]);
 const ALLOWED_SETTING_KEYS = new Set([
   'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider',
   'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
   'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
-  'mode', 'searchOn',
+  'mode', 'searchOn', 'responseProfile',
   'workflows', 'persona', 'onboarded', 'marketplaceUrl', 'marketplaceWebUrl',
   'ollamaUrl', 'ollamaModel', 'lmStudioUrl', 'lmStudioModel',
   'localAiUrl', 'localAiModel',
   'wakeStrictMode', 'wakeVolumeThreshold', 'wakeConfirmBeep',
   'settingsHealthCheckAt', 'googleClientId',
+  'openrouter.modelsCache', 'openrouter.modelsCacheAt',
+  'mcp.enabled', 'mcp.servers', 'mcp.toolsCache', 'mcp.toolsCacheAt',
+  'codeWorkspace',
 ]);
+
+const DEFAULT_PROVIDER_MODELS = {
+  claude: 'claude-sonnet-4-6',
+  openai: 'gpt-4o',
+  gemini: 'gemini-2.5-flash',
+  groq: 'llama-3.3-70b-versatile',
+  deepseek: 'deepseek-chat',
+  grok: 'grok-4',
+  mistral: 'mistral-large-latest',
+  qwen: 'qwen-plus',
+  perplexity: 'sonar-pro',
+  cohere: 'command-a-03-2025',
+  openrouter: 'openai/gpt-4o-mini',
+};
 
 function assertAllowedKey(service) {
   if (!ALLOWED_KEY_IDS.has(String(service || ''))) {
@@ -193,6 +211,46 @@ function localOpenAIEndpoint(provider) {
     };
   }
   return null;
+}
+
+function selectedModel(provider, opts = {}) {
+  if (opts && typeof opts.model === 'string' && opts.model.trim()) return opts.model.trim();
+  if (provider === 'gemini') {
+    return settingsStore.get('model.gemini') || settingsStore.get('geminiModel') || DEFAULT_PROVIDER_MODELS.gemini;
+  }
+  const localEp = localOpenAIEndpoint(provider);
+  if (localEp) return localEp.model;
+  return settingsStore.get(`model.${provider}`) || DEFAULT_PROVIDER_MODELS[provider] || DEFAULT_PROVIDER_MODELS.openai;
+}
+
+function responseProfile() {
+  const value = settingsStore.get('responseProfile') || 'balanced';
+  return value === 'fast' || value === 'deep' ? value : 'balanced';
+}
+
+function applyReasoningProfile(provider, model, body) {
+  const profile = responseProfile();
+  if (provider === 'claude' && profile === 'deep') {
+    body.thinking = { type: 'enabled', budget_tokens: 8000 };
+    body.max_tokens = Math.max(body.max_tokens || 4096, 16000);
+  }
+  if (provider === 'openai') {
+    const isReasoningModel = /^o[134]/.test(model || '') || /thinking|reasoning/.test(model || '');
+    if (isReasoningModel && profile === 'deep') body.reasoning_effort = 'high';
+    if (isReasoningModel && profile === 'fast') body.reasoning_effort = 'low';
+  }
+  if (provider === 'gemini') {
+    body.generationConfig = body.generationConfig || {};
+    if (/^gemini-(2\.5|3)/.test(model || '')) {
+      if (profile === 'deep') body.generationConfig.thinkingConfig = { thinkingBudget: -1 };
+      if (profile === 'fast') body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
+  }
+  return body;
+}
+
+function firstTextFromAnthropic(d) {
+  return (d.content || []).find(b => b && b.type === 'text')?.text || d.content?.[0]?.text || 'No response';
 }
 
 // ── Source-preview build check ────────────────────────────────────────────────
@@ -584,52 +642,55 @@ ipcMain.handle('analyzeScreen', async (_, question) => {
     // Try Claude Vision
     const claudeKey = keysStore.get('k_claude');
     if (claudeKey) {
+      const model = selectedModel('claude');
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({
-          model: 'claude-opus-4-5', max_tokens: 1024,
+        body: JSON.stringify(applyReasoningProfile('claude', model, {
+          model, max_tokens: 1024,
           messages: [{ role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
             { type: 'text', text: q }
           ]}]
-        })
+        }))
       });
       const d = await r.json();
-      if (!d.error) return { reply: d.content?.[0]?.text || 'No response', model: 'Claude Vision', base64 };
+      if (!d.error) return { reply: firstTextFromAnthropic(d), model, base64 };
     }
 
     // Try GPT-4o Vision
     const openaiKey = keysStore.get('k_openai');
     if (openaiKey) {
+      const model = selectedModel('openai');
       const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
-        body: JSON.stringify({
-          model: 'gpt-4o', max_tokens: 1024,
+        body: JSON.stringify(applyReasoningProfile('openai', model, {
+          model, max_tokens: 1024,
           messages: [{ role: 'user', content: [
             { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}` } },
             { type: 'text', text: q }
           ]}]
-        })
+        }))
       });
       const d = await r.json();
-      if (!d.error) return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'GPT-4o Vision', base64 };
+      if (!d.error) return { reply: d.choices?.[0]?.message?.content || 'No response', model, base64 };
     }
 
     // Try Gemini Vision
     const geminiKey = keysStore.get('k_gemini');
     if (geminiKey) {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+      const model = selectedModel('gemini');
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [
+        body: JSON.stringify(applyReasoningProfile('gemini', model, { contents: [{ parts: [
           { inline_data: { mime_type: 'image/png', data: base64 } },
           { text: q }
-        ]}]})
+        ]}]}))
       });
       const d = await r.json();
-      if (!d.error && d.candidates?.[0]?.content?.parts?.[0]?.text) return { reply: d.candidates[0].content.parts[0].text, model: 'Gemini Vision', base64 };
+      if (!d.error && d.candidates?.[0]?.content?.parts?.[0]?.text) return { reply: d.candidates[0].content.parts[0].text, model, base64 };
     }
 
     return { error: lang === 'ru'
@@ -881,6 +942,17 @@ ipcMain.handle('pcVolume', async (_, level) => {
 ipcMain.handle('pcReadFile',  (_, p) => { try { return {ok:true,content:fs.readFileSync(p,'utf8')}; } catch(e) { return {ok:false,err:e.message}; } });
 ipcMain.handle('pcWriteFile', (_, p, c) => { try { fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,c,'utf8');return {ok:true}; } catch(e) { return {ok:false,err:e.message}; } });
 ipcMain.handle('pcListDir',   (_, d) => { try { return {ok:true,entries:fs.readdirSync(d,{withFileTypes:true}).map(e=>({name:e.name,isDir:e.isDirectory()}))}; } catch(e) { return {ok:false,err:e.message}; } });
+ipcMain.handle('pcChooseFolder', async () => {
+  try {
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Choose Horizon workspace',
+      properties: ['openDirectory']
+    });
+    if (r.canceled || !r.filePaths?.[0]) return { ok:false, canceled:true };
+    settingsStore.set('codeWorkspace', r.filePaths[0]);
+    return { ok:true, path:r.filePaths[0] };
+  } catch(e) { return { ok:false, err:e.message }; }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MOUSE & KEYBOARD — PowerShell only (no external deps, works on all Windows)
@@ -953,53 +1025,55 @@ ipcMain.handle('analyzeImage', async (_, base64, mimeType, question) => {
   // Try Claude first (best vision)
   const claudeKey = keysStore.get('k_claude');
   if (claudeKey) {
+    const model = selectedModel('claude');
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5', max_tokens: 2048,
+      body: JSON.stringify(applyReasoningProfile('claude', model, {
+        model, max_tokens: 2048,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: mimeType || 'image/jpeg', data: base64 } },
           { type: 'text', text: q }
         ]}]
-      })
+      }))
     });
     const d = await r.json();
-    if (!d.error) return { reply: d.content?.[0]?.text || 'No response', model: 'Claude Vision' };
+    if (!d.error) return { reply: firstTextFromAnthropic(d), model };
   }
 
   // Try GPT-4o
   const openaiKey = keysStore.get('k_openai');
   if (openaiKey) {
+    const model = selectedModel('openai');
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
-      body: JSON.stringify({
-        model: 'gpt-4o', max_tokens: 2048,
+      body: JSON.stringify(applyReasoningProfile('openai', model, {
+        model, max_tokens: 2048,
         messages: [{ role: 'user', content: [
           { type: 'image_url', image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${base64}` } },
           { type: 'text', text: q }
         ]}]
-      })
+      }))
     });
     const d = await r.json();
-    if (!d.error) return { reply: d.choices?.[0]?.message?.content || 'No response', model: 'GPT-4o Vision' };
+    if (!d.error) return { reply: d.choices?.[0]?.message?.content || 'No response', model };
   }
 
   // Try Gemini
   const geminiKey = keysStore.get('k_gemini');
   if (geminiKey) {
-    const model = settingsStore.get('geminiModel') || 'gemini-2.5-flash';
+    const model = selectedModel('gemini');
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [
+      body: JSON.stringify(applyReasoningProfile('gemini', model, { contents: [{ parts: [
         { inline_data: { mime_type: mimeType || 'image/jpeg', data: base64 } },
         { text: q }
-      ]}]})
+      ]}]}))
     });
     const d = await r.json();
-    if (!d.error && d.candidates?.[0]?.content?.parts?.[0]?.text) return { reply: d.candidates[0].content.parts[0].text, model: 'Gemini Vision' };
+    if (!d.error && d.candidates?.[0]?.content?.parts?.[0]?.text) return { reply: d.candidates[0].content.parts[0].text, model };
   }
 
   return { error: lang === 'ru'
@@ -1170,7 +1244,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         if (!k) return { error: lang==='ru'?'Ключ Claude не задан → Настройки':'Claude key not set → Settings' };
         // Default: Sonnet 4.6 — best speed/intelligence balance per Anthropic.
         // User can override via settingsStore.get('model.claude') or opts.model.
-        const claudeModel = opts?.model || settingsStore.get('model.claude') || 'claude-sonnet-4-6';
+        const claudeModel = selectedModel('claude', opts);
         const respProfile = settingsStore.get('responseProfile') || 'balanced';
         const claudeBody = { model: claudeModel, max_tokens: 4096, system: sysMsg, messages };
         // Deep → enable extended thinking. Need headroom on max_tokens because
@@ -1195,7 +1269,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         if (!k) return { error: lang==='ru'?'Ключ OpenAI не задан':'OpenAI key not set' };
         // Default: gpt-4o (broadly available + cheap). gpt-5 / gpt-5-mini are
         // available but not every account has access on first key issue.
-        const openaiModel = opts?.model || settingsStore.get('model.openai') || 'gpt-4o';
+        const openaiModel = selectedModel('openai', opts);
         const respProfile = settingsStore.get('responseProfile') || 'balanced';
         // reasoning_effort is only honoured by reasoning models (o-series and
         // the *-thinking SKUs of gpt-5). Sending it to gpt-4o is a 400.
@@ -1216,7 +1290,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'gemini': {
         const k = keysStore.get('k_gemini');
         if (!k) return { error: lang==='ru'?'Ключ Gemini не задан. Бесплатно: aistudio.google.com':'Gemini key not set. Free at aistudio.google.com' };
-        const model = opts?.model || 'gemini-2.5-flash';
+        const model = selectedModel('gemini', opts);
 
         // Fix alternating roles — Gemini requires user/model/user/model sequence
         // Remove consecutive duplicates and ensure starts with 'user'
@@ -1263,7 +1337,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'groq': {
         const k = keysStore.get('k_groq');
         if (!k) return { error: lang==='ru'?'Ключ Groq не задан. Бесплатно: groq.com':'Groq key not set. Free at groq.com' };
-        const groqModel = opts?.model || settingsStore.get('model.groq') || 'llama-3.3-70b-versatile';
+        const groqModel = selectedModel('groq', opts);
         const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
           body:JSON.stringify({ model:groqModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
@@ -1274,9 +1348,8 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'grok': {
         const k = keysStore.get('k_grok');
         if (!k) return { error: lang==='ru'?'Ключ Grok (xAI) не задан → console.x.ai':'Grok (xAI) key not set → console.x.ai' };
-        // Default to grok-4 (current flagship). 'grok-3-latest' was the
-        // previous default and is now deprecated by xAI.
-        const grokModel = opts?.model || settingsStore.get('model.grok') || 'grok-4';
+        // Keep Grok model selection centralized with the rest of the providers.
+        const grokModel = selectedModel('grok', opts);
         const r = await fetch('https://api.x.ai/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
           body:JSON.stringify({ model:grokModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
@@ -1289,7 +1362,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         if (!k) return { error: lang==='ru'?'Ключ DeepSeek не задан → platform.deepseek.com':'DeepSeek key not set → platform.deepseek.com' };
         // 'deepseek-chat' is the cheap-fast alias (currently → V3.1). For the
         // V4 generation pass 'deepseek-v4-pro' or 'deepseek-v4-flash'.
-        const deepseekModel = opts?.model || settingsStore.get('model.deepseek') || 'deepseek-chat';
+        const deepseekModel = selectedModel('deepseek', opts);
         const r = await fetch('https://api.deepseek.com/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
           body:JSON.stringify({ model:deepseekModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
@@ -1300,7 +1373,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'mistral': {
         const k = keysStore.get('k_mistral');
         if (!k) return { error: lang==='ru'?'Ключ Mistral не задан → console.mistral.ai':'Mistral key not set → console.mistral.ai' };
-        const mistralModel = opts?.model || settingsStore.get('model.mistral') || 'mistral-large-latest';
+        const mistralModel = selectedModel('mistral', opts);
         const r = await fetch('https://api.mistral.ai/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
           body:JSON.stringify({ model:mistralModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
@@ -1312,7 +1385,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         const k = keysStore.get('k_qwen');
         if (!k) return { error: lang==='ru'?'Ключ Qwen не задан → dashscope.aliyuncs.com':'Qwen key not set → dashscope.aliyuncs.com' };
         // qwen-plus is the cheap workhorse. qwen3-max is the flagship.
-        const qwenModel = opts?.model || settingsStore.get('model.qwen') || 'qwen-plus';
+        const qwenModel = selectedModel('qwen', opts);
         const r = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
           body:JSON.stringify({ model:qwenModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
@@ -1326,7 +1399,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         // Sonar models hit the live web for grounded answers — different
         // cost/latency profile than other providers but the OpenAI-shape
         // /chat/completions endpoint is the same.
-        const pplxModel = opts?.model || settingsStore.get('model.perplexity') || 'sonar-pro';
+        const pplxModel = selectedModel('perplexity', opts);
         const r = await fetch('https://api.perplexity.ai/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
           body:JSON.stringify({ model:pplxModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
@@ -1337,7 +1410,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'cohere': {
         const k = keysStore.get('k_cohere');
         if (!k) return { error: lang==='ru'?'Ключ Cohere не задан → dashboard.cohere.com':'Cohere key not set → dashboard.cohere.com' };
-        const cohereModel = opts?.model || settingsStore.get('model.cohere') || 'command-a-03-2025';
+        const cohereModel = selectedModel('cohere', opts);
         // Cohere v2 chat API: takes `messages` (system role supported), returns
         // d.message.content[0].text. Different shape from OpenAI-compatible.
         const r = await fetch('https://api.cohere.com/v2/chat', {
@@ -1354,7 +1427,7 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         // OpenRouter is a router across 200+ models behind one OpenAI-compatible
         // endpoint. The HTTP-Referer + X-Title headers are recommended by their
         // attribution policy and unlock the per-app analytics page.
-        const orModel = opts?.model || settingsStore.get('model.openrouter') || 'openai/gpt-4o-mini';
+        const orModel = selectedModel('openrouter', opts);
         const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -1379,14 +1452,14 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
           method: 'POST',
           headers,
           body: JSON.stringify({
-            model: opts?.model || ep.model,
+            model: selectedModel(provider, opts),
             max_tokens: 4096,
             messages: [{ role: 'system', content: sysMsg }, ...messages],
           }),
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok || d.error) return { error: d.error?.message || d.error || `${provider} connection failed (${r.status})` };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: ep.label, usage: _usage(d, provider) };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: selectedModel(provider, opts), usage: _usage(d, provider) };
       }
       default: return { error: `Unknown provider: ${provider}` };
     }
@@ -1579,7 +1652,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
 
     try {
       if (provider === 'gemini') {
-        const model = settingsStore.get('geminiModel') || 'gemini-2.5-flash';
+        const model = selectedModel('gemini', opts);
         const contents = messages.map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content || '...' }]
@@ -1593,50 +1666,73 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         }
         if (!fixed.length) fixed.push({ role:'user', parts:[{text: userMessage}] });
         if (fixed[fixed.length-1].role !== 'user') fixed.push({ role:'user', parts:[{text:'continue'}] });
+        const geminiBody = applyReasoningProfile('gemini', model, {
+          system_instruction:{parts:[{text:systemPrompt}]},
+          contents:fixed,
+          generationConfig:{maxOutputTokens:4096}
+        });
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ system_instruction:{parts:[{text:systemPrompt}]}, contents:fixed, generationConfig:{maxOutputTokens:4096} })
+          body:JSON.stringify(geminiBody)
         });
         const d = await r.json();
         if (d.error) return { error: d.error.message };
-        return { reply: d.candidates?.[0]?.content?.parts?.[0]?.text || 'No response' };
+        return { reply: d.candidates?.[0]?.content?.parts?.[0]?.text || 'No response', model };
       }
 
       if (provider === 'claude') {
+        const model = selectedModel('claude', opts);
+        const body = applyReasoningProfile('claude', model, { model, max_tokens:4096, system:systemPrompt, messages });
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method:'POST',
           headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
-          body:JSON.stringify({ model:'claude-opus-4-5', max_tokens:4096, system:systemPrompt, messages })
+          body:JSON.stringify(body)
         });
         const d = await r.json();
         if (d.error) return { error: d.error.message };
         if (!d.content || !d.content[0]) return { error: 'Empty response from Claude' };
-        return { reply: d.content[0].text };
+        return { reply: firstTextFromAnthropic(d), model };
       }
 
       // OpenAI-compatible (openai, groq, grok, deepseek, mistral, qwen, perplexity, cohere)
       const endpoints = {
-        openai:     { url:'https://api.openai.com/v1/chat/completions',                    model:'gpt-4o' },
-        groq:       { url:'https://api.groq.com/openai/v1/chat/completions',               model:'llama-3.3-70b-versatile' },
-        grok:       { url:'https://api.x.ai/v1/chat/completions',                          model:'grok-3-latest' },
-        deepseek:   { url:'https://api.deepseek.com/chat/completions',                     model:'deepseek-chat' },
-        mistral:    { url:'https://api.mistral.ai/v1/chat/completions',                    model:'mistral-large-latest' },
-        qwen:       { url:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model:'qwen-plus' },
-        perplexity: { url:'https://api.perplexity.ai/chat/completions',                    model:'sonar-pro' },
-        cohere:     { url:'https://api.cohere.com/v2/chat',                                model:'command-r-plus' },
+        openai:     { url:'https://api.openai.com/v1/chat/completions',                    model:selectedModel('openai', opts) },
+        groq:       { url:'https://api.groq.com/openai/v1/chat/completions',               model:selectedModel('groq', opts) },
+        grok:       { url:'https://api.x.ai/v1/chat/completions',                          model:selectedModel('grok', opts) },
+        deepseek:   { url:'https://api.deepseek.com/chat/completions',                     model:selectedModel('deepseek', opts) },
+        mistral:    { url:'https://api.mistral.ai/v1/chat/completions',                    model:selectedModel('mistral', opts) },
+        qwen:       { url:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model:selectedModel('qwen', opts) },
+        perplexity: { url:'https://api.perplexity.ai/chat/completions',                    model:selectedModel('perplexity', opts) },
+        openrouter: { url:'https://openrouter.ai/api/v1/chat/completions',                 model:selectedModel('openrouter', opts) },
       };
       const ep = localEp || endpoints[provider] || endpoints.openai;
       const headers = {'Content-Type':'application/json'};
       if (!localEp || localEp.key) headers.Authorization = `Bearer ${k}`;
+      if (provider === 'openrouter') {
+        headers['HTTP-Referer'] = 'https://horizonaai.dev';
+        headers['X-Title'] = 'Horizon Genesis';
+      }
+      if (provider === 'cohere') {
+        const model = selectedModel('cohere', opts);
+        const r = await fetch('https://api.cohere.com/v2/chat', {
+          method:'POST',
+          headers,
+          body:JSON.stringify({ model, messages:[{role:'system',content:systemPrompt},...messages], max_tokens:4096 })
+        });
+        const d = await r.json();
+        if (d.message?.error || d.error) return { error: d.message?.error || d.error || 'Cohere error' };
+        return { reply: d.message?.content?.[0]?.text || d.text || 'No response', model };
+      }
+      const body = applyReasoningProfile(provider, ep.model, { model:ep.model, max_tokens:4096, messages:[{role:'system',content:systemPrompt},...messages] });
       const r = await fetch(ep.url, {
         method:'POST',
         headers,
-        body:JSON.stringify({ model:ep.model, max_tokens:4096, messages:[{role:'system',content:systemPrompt},...messages] })
+        body:JSON.stringify(body)
       });
       const d = await r.json();
       if (d.error) return { error: d.error.message };
       if (!d.choices || !d.choices[0]) return { error: `Empty response from ${provider}` };
-      return { reply: d.choices[0].message.content };
+      return { reply: d.choices[0].message.content, model: ep.model };
 
     } catch(e) { return { error: e.message }; }
   };
@@ -1944,19 +2040,16 @@ ipcMain.handle('smartClick', async (_, targetDescription) => {
     } catch { return null; }
   };
   
-  const provider = settingsStore.get('provider') || 'gemini';
-  const k = keysStore.get(`k_${provider}`);
-  if (!k) return { ok: false, error: `${provider} key not set` };
+  const geminiKey = keysStore.get('k_gemini');
+  if (!geminiKey) return { ok: false, error: 'Gemini key needed for vision' };
   
   const aiVisionFn = async (base64, prompt) => {
     const fetch = require('node-fetch');
-    // Use Gemini for vision since it supports images well
-    const geminiKey = keysStore.get('k_gemini') || k;
-    const model = 'gemini-2.5-flash';
+    const model = selectedModel('gemini');
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
+      body: JSON.stringify(applyReasoningProfile('gemini', model, {
         contents: [{
           role: 'user',
           parts: [
@@ -1964,7 +2057,7 @@ ipcMain.handle('smartClick', async (_, targetDescription) => {
             { inline_data: { mime_type: 'image/png', data: base64 } }
           ]
         }]
-      })
+      }))
     });
     const d = await r.json();
     if (d.error) return { error: d.error.message };
@@ -1994,12 +2087,13 @@ ipcMain.handle('findUIElements', async () => {
     
     const fetch = require('node-fetch');
     const aiVisionFn = async (b64, prompt) => {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+      const model = selectedModel('gemini');
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
+        body: JSON.stringify(applyReasoningProfile('gemini', model, {
           contents: [{role:'user', parts:[{text:prompt},{inline_data:{mime_type:'image/png',data:b64}}]}]
-        })
+        }))
       });
       const d = await r.json();
       return { text: d.candidates?.[0]?.content?.parts?.[0]?.text || '' };
