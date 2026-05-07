@@ -66,7 +66,7 @@ async function openExternalReliable(rawUrl, title = 'Horizon') {
 // differentiator (agent, workflows, recorder) goes in.
 const PRO_HANDLERS = new Set([
   // AI / costly
-  'ai', 'agentRun', 'agentTool', 'analyzeScreen', 'analyzeImage',
+  'ai', 'agentRun', 'agentControl', 'agentStep', 'agentTool', 'analyzeScreen', 'analyzeImage',
   'ttsElevenLabs', 'ttsOpenAI', 'transcribeAudio',
   'search', 'mcpWebSearch',
   'captureScreen', 'pcScreenshot',
@@ -82,6 +82,7 @@ const PRO_HANDLERS = new Set([
   'browserOpenUrl', 'browserSearch', 'browserOpenSite',
   // MCP write actions
   'mcpGmailSend', 'mcpCalendarCreate', 'mcpCalendarQuickAdd',
+  'mcpServerUpsert', 'mcpServerRemove', 'mcpServerEnable', 'mcpServerTest', 'mcpToolsRefresh',
   // Workflows / recorder
   'workflowRun',
   'recorderStart', 'recorderStop', 'recorderSave', 'recorderNarrate',
@@ -259,6 +260,130 @@ function firstTextFromAnthropic(d) {
 // into this directory before packaging. When the app is run from a source clone
 // the file doesn't exist — we show a preview window and exit. Source is BSL 1.1 and
 // readable for audit/contribution; runnable builds come from GitHub Releases.
+// Native tool-call conversion helpers for agent mode.
+function toolParamsToJsonSchema(params = {}) {
+  const properties = {};
+  for (const [name, hint] of Object.entries(params || {})) {
+    const text = String(hint || '');
+    let type = 'string';
+    if (/number|integer|float/i.test(text)) type = 'number';
+    else if (/boolean|bool/i.test(text)) type = 'boolean';
+    else if (/array|list/i.test(text)) type = 'array';
+    else if (/object/i.test(text)) type = 'object';
+    properties[name] = { type, description: text || name };
+  }
+  return { type: 'object', properties, additionalProperties: true };
+}
+
+function toOpenAITools(tools = []) {
+  return tools.map(t => ({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.desc || t.description || t.name,
+      parameters: t.inputSchema || toolParamsToJsonSchema(t.params)
+    }
+  }));
+}
+
+function toAnthropicTools(tools = []) {
+  return tools.map(t => ({
+    name: t.name,
+    description: t.desc || t.description || t.name,
+    input_schema: t.inputSchema || toolParamsToJsonSchema(t.params)
+  }));
+}
+
+function safeJsonParseArgs(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return {}; }
+}
+
+function toOpenAIChatMessages(messages = [], systemPrompt = '') {
+  const out = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
+  for (const m of messages || []) {
+    if (m.role === 'tool') {
+      out.push({
+        role: 'tool',
+        tool_call_id: m.toolCallId || m.id || m.name || 'tool_call',
+        name: m.name,
+        content: String(m.content || '')
+      });
+      continue;
+    }
+    if (m.role === 'assistant' && Array.isArray(m.toolCalls) && m.toolCalls.length) {
+      out.push({
+        role: 'assistant',
+        content: m.content || null,
+        tool_calls: m.toolCalls.map(call => ({
+          id: call.id || `${call.tool || call.name || 'tool'}_call`,
+          type: 'function',
+          function: { name: call.tool || call.name, arguments: JSON.stringify(call.args || {}) }
+        }))
+      });
+      continue;
+    }
+    out.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') });
+  }
+  return out;
+}
+
+function asAnthropicBlocks(content) {
+  return Array.isArray(content) ? content : [{ type: 'text', text: String(content || '') }];
+}
+
+function appendAnthropicMessage(out, message) {
+  const last = out[out.length - 1];
+  if (last && last.role === message.role) {
+    last.content = [...asAnthropicBlocks(last.content), ...asAnthropicBlocks(message.content)];
+  } else {
+    out.push(message);
+  }
+}
+
+function toAnthropicMessages(messages = []) {
+  const out = [];
+  for (const m of messages || []) {
+    if (m.role === 'tool') {
+      appendAnthropicMessage(out, {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: m.toolCallId || m.id || m.name || 'tool_call', content: String(m.content || '') }]
+      });
+      continue;
+    }
+    if (m.role === 'assistant' && Array.isArray(m.toolCalls) && m.toolCalls.length) {
+      const content = [];
+      if (m.content) content.push({ type: 'text', text: String(m.content) });
+      for (const call of m.toolCalls) {
+        content.push({ type: 'tool_use', id: call.id || `${call.tool || call.name || 'tool'}_call`, name: call.tool || call.name, input: call.args || {} });
+      }
+      appendAnthropicMessage(out, { role: 'assistant', content });
+      continue;
+    }
+    appendAnthropicMessage(out, { role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') });
+  }
+  return out;
+}
+
+function parseAnthropicToolCalls(d) {
+  return (d.content || [])
+    .filter(block => block && block.type === 'tool_use')
+    .map(block => ({ id: block.id, tool: block.name, args: block.input || {}, reason: 'Claude tool_use' }));
+}
+
+function parseOpenAIToolCalls(message = {}) {
+  return (message.tool_calls || [])
+    .filter(call => call?.type === 'function' && call.function?.name)
+    .map(call => ({
+      id: call.id,
+      tool: call.function.name,
+      args: safeJsonParseArgs(call.function.arguments),
+      reason: 'OpenAI tool_call'
+    }));
+}
+
+// Source-preview build check.
 const BUILD_INFO_PATH = path.join(__dirname, 'build-info.json');
 let IS_OFFICIAL_BUILD = false;
 let BUILD_INFO = null;
@@ -1519,6 +1644,159 @@ let personas = null;
 let workflowEngine = null;
 let screenRecorder = null;
 let githubConnector = null;
+let mcpRegistry = null;
+const activeAgentRuns = new Map();
+const pendingAgentSteps = new Map();
+
+function agentRunsPath() {
+  return path.join(app.getPath('userData'), 'horizon-runs.jsonl');
+}
+
+function scrubRunValue(value, key = '') {
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    if (/base64|image|data/i.test(key) && value.length > 120) return `[omitted ${value.length} chars]`;
+    return value.length > 4000 ? `${value.slice(0, 4000)}\n...[truncated ${value.length - 4000} chars]` : value;
+  }
+  if (Array.isArray(value)) return value.slice(0, 80).map(v => scrubRunValue(v, key));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = scrubRunValue(v, k);
+    return out;
+  }
+  return value;
+}
+
+function appendAgentRun(record) {
+  try {
+    fs.mkdirSync(path.dirname(agentRunsPath()), { recursive: true });
+    fs.appendFileSync(agentRunsPath(), `${JSON.stringify(scrubRunValue(record))}\n`, 'utf8');
+  } catch (e) {
+    console.warn('Could not persist agent run:', e.message);
+  }
+}
+
+function readAgentRuns(limit = 50) {
+  try {
+    const raw = fs.readFileSync(agentRunsPath(), 'utf8').trim();
+    if (!raw) return [];
+    return raw.split(/\r?\n/).slice(-Math.max(1, Number(limit) || 50)).map(line => {
+      try { return JSON.parse(line); } catch { return null; }
+    }).filter(Boolean).reverse();
+  } catch (_) {
+    return [];
+  }
+}
+
+function compactAgentRun(record) {
+  return {
+    id: record.id,
+    prompt: record.prompt,
+    provider: record.provider,
+    model: record.model,
+    status: record.status,
+    startedAt: record.startedAt,
+    endedAt: record.endedAt,
+    stepCount: record.steps?.length || 0,
+  };
+}
+
+function findActiveRun(id) {
+  if (id && activeAgentRuns.has(id)) return activeAgentRuns.get(id);
+  return [...activeAgentRuns.values()].at(-1) || null;
+}
+
+class AgentRunController {
+  constructor(record) {
+    this.record = record;
+    this.paused = false;
+    this.stopped = false;
+    this.stepNext = false;
+    this.pending = null;
+  }
+
+  isPaused() { return this.paused; }
+  isStopped() { return this.stopped; }
+
+  observe(step) {
+    this.record.events.push({ ...scrubRunValue(step), at: new Date().toISOString() });
+    if (step?.type === 'waiting') {
+      this.record.currentStepId = step.stepId;
+      this.record.steps.push({
+        id: step.stepId,
+        index: step.step,
+        tool: step.tool,
+        args: scrubRunValue(step.args || {}),
+        reason: step.reason || '',
+        status: 'waiting',
+        startedAt: new Date().toISOString(),
+      });
+    }
+    const existing = step?.stepId ? this.record.steps.find(s => s.id === step.stepId) : null;
+    if (existing) {
+      if (step.type === 'executing') existing.status = 'executing';
+      if (step.type === 'denied') existing.status = 'denied';
+      if (step.type === 'stopped') existing.status = 'stopped';
+      if (step.type === 'result') existing.status = step.result?.ok ? 'done' : 'error';
+      if (step.result) {
+        existing.result = scrubRunValue(step.result);
+        existing.endedAt = new Date().toISOString();
+      }
+    }
+  }
+
+  pause() {
+    this.paused = true;
+    this.record.status = 'paused';
+    return { ok: true, id: this.record.id, status: 'paused' };
+  }
+
+  resume() {
+    this.paused = false;
+    this.record.status = 'running';
+    if (this.pending) this.resolveStep(this.pending.stepId, { decision: 'allow', reason: 'operator resume' });
+    return { ok: true, id: this.record.id, status: 'running' };
+  }
+
+  step() {
+    this.paused = true;
+    if (this.pending) return this.resolveStep(this.pending.stepId, { decision: 'allow', reason: 'operator step' });
+    this.stepNext = true;
+    return { ok: true, id: this.record.id, status: 'step-armed' };
+  }
+
+  stop() {
+    this.stopped = true;
+    this.paused = false;
+    this.record.status = 'stopped';
+    if (this.pending) this.resolveStep(this.pending.stepId, { decision: 'stop', reason: 'operator stop' });
+    return { ok: true, id: this.record.id, status: 'stopped' };
+  }
+
+  beforeTool(payload) {
+    if (this.stopped) return { decision: 'stop', reason: 'operator stop' };
+    if (this.stepNext) {
+      this.stepNext = false;
+      return { decision: 'allow', reason: 'operator step' };
+    }
+    if (!this.paused) return { decision: 'allow' };
+    return new Promise(resolve => {
+      this.pending = { stepId: payload.stepId, resolve };
+      pendingAgentSteps.set(payload.stepId, this);
+    });
+  }
+
+  resolveStep(stepId, decision) {
+    if (!this.pending || this.pending.stepId !== stepId) return { ok: false, error: 'Step is not waiting' };
+    const normalized = typeof decision === 'string' ? { decision } : (decision || { decision: 'allow' });
+    const next = normalized.decision === 'step' ? { decision: 'allow', reason: 'operator step' } : normalized;
+    const resolve = this.pending.resolve;
+    this.pending = null;
+    pendingAgentSteps.delete(stepId);
+    resolve(next);
+    return { ok: true, id: this.record.id, stepId, decision: next.decision };
+  }
+}
 
 function loadAgentModules() {
   if (!agentTools) {
@@ -1556,6 +1834,15 @@ function loadAgentModules() {
       console.log('✓ MCP servers loaded');
     } catch(e) {
       console.error('MCP servers failed:', e.message);
+    }
+  }
+  if (!mcpRegistry) {
+    try {
+      const { MCPRegistry } = require('./mcp/mcpRegistry');
+      mcpRegistry = new MCPRegistry(settingsStore);
+      console.log('✓ MCP client registry loaded');
+    } catch(e) {
+      console.error('MCP client registry failed:', e.message);
     }
   }
   if (!computerUse) {
@@ -1635,6 +1922,75 @@ function loadAgentModules() {
 }
 
 // ── AGENT LOOP: autonomous multi-step task execution ─────────────────────────
+ipcMain.handle('mcpServersList', async () => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded', servers: [] };
+  return { ok: true, servers: await mcpRegistry.listServers() };
+});
+
+ipcMain.handle('mcpServerUpsert', async (_, config) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return { ok: true, server: await mcpRegistry.upsertServer(config) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpServerRemove', async (_, id) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { await mcpRegistry.removeServer(id); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpServerEnable', async (_, id, enabled) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return { ok: true, server: await mcpRegistry.setEnabled(id, enabled) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpServerTest', async (_, config) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return await mcpRegistry.testServer(config); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpToolsRefresh', async () => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return { ok: true, tools: await mcpRegistry.refreshTools() }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('agentControl', async (_, runId, action) => {
+  const run = findActiveRun(runId);
+  if (!run) return { ok: false, error: 'No active agent run' };
+  if (action === 'pause') return run.pause();
+  if (action === 'resume') return run.resume();
+  if (action === 'step') return run.step();
+  if (action === 'stop') return run.stop();
+  return { ok: false, error: `Unknown agent control: ${action}` };
+});
+
+ipcMain.handle('agentStep', async (_, stepId, decision) => {
+  const run = pendingAgentSteps.get(stepId);
+  if (!run) return { ok: false, error: 'No waiting step for this id' };
+  return run.resolveStep(stepId, decision);
+});
+
+ipcMain.handle('agentRuns', async (_, limit = 50) => {
+  const active = [...activeAgentRuns.values()].map(r => compactAgentRun(r.record)).reverse();
+  return { ok: true, active, history: readAgentRuns(limit).map(compactAgentRun) };
+});
+
+ipcMain.handle('agentRunDetails', async (_, runId) => {
+  const active = activeAgentRuns.get(runId);
+  if (active) return { ok: true, run: scrubRunValue(active.record), active: true };
+  const found = readAgentRuns(200).find(r => r.id === runId);
+  return found ? { ok: true, run: found, active: false } : { ok: false, error: 'Run not found' };
+});
+
 ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   loadAgentModules();
 
@@ -1642,9 +1998,23 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     return { ok: false, error: 'Agent module not loaded', steps: [] };
   }
 
+  const runId = opts.runId || `agent-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
   const provider = opts.provider || settingsStore.get('provider') || 'gemini';
   const lang     = settingsStore.get('lang') || 'en';
   const userName = settingsStore.get('userName') || 'User';
+  const runRecord = {
+    id: runId,
+    prompt: String(userMessage || ''),
+    provider,
+    model: opts.model || selectedModel(provider, opts),
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    steps: [],
+    events: [],
+  };
+  const controller = new AgentRunController(runRecord);
+  activeAgentRuns.set(runId, controller);
 
   // Get system info for agent context
   let sysInfo = null;
@@ -1664,7 +2034,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   }
 
   // AI function wrapper
-  const aiFn = async (messages, systemPrompt) => {
+  const aiFn = async (messages, systemPrompt, agentMeta = {}) => {
     const fetch = require('node-fetch');
     const localEp = localOpenAIEndpoint(provider);
     const k = localEp ? (localEp.key || '__local_no_key__') : keysStore.get(`k_${provider}`);
@@ -1702,7 +2072,14 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
 
       if (provider === 'claude') {
         const model = selectedModel('claude', opts);
-        const body = applyReasoningProfile('claude', model, { model, max_tokens:4096, system:systemPrompt, messages });
+        const useNativeTools = Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
+        const body = applyReasoningProfile('claude', model, {
+          model,
+          max_tokens:4096,
+          system:systemPrompt,
+          messages: useNativeTools ? toAnthropicMessages(messages) : messages
+        });
+        if (useNativeTools) body.tools = toAnthropicTools(agentMeta.tools);
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method:'POST',
           headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
@@ -1711,7 +2088,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         const d = await r.json();
         if (d.error) return { error: d.error.message };
         if (!d.content || !d.content[0]) return { error: 'Empty response from Claude' };
-        return { reply: firstTextFromAnthropic(d), model };
+        const toolCalls = parseAnthropicToolCalls(d);
+        const text = (d.content || []).find(b => b && b.type === 'text')?.text || '';
+        return { reply: text || (toolCalls.length ? '' : firstTextFromAnthropic(d)), toolCalls, model };
       }
 
       // OpenAI-compatible (openai, groq, grok, deepseek, mistral, qwen, perplexity, cohere)
@@ -1743,7 +2122,13 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         if (d.message?.error || d.error) return { error: d.message?.error || d.error || 'Cohere error' };
         return { reply: d.message?.content?.[0]?.text || d.text || 'No response', model };
       }
-      const body = applyReasoningProfile(provider, ep.model, { model:ep.model, max_tokens:4096, messages:[{role:'system',content:systemPrompt},...messages] });
+      const useNativeOpenAITools = provider === 'openai' && Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
+      const body = applyReasoningProfile(provider, ep.model, {
+        model:ep.model,
+        max_tokens:4096,
+        messages: useNativeOpenAITools ? toOpenAIChatMessages(messages, systemPrompt) : [{role:'system',content:systemPrompt},...messages]
+      });
+      if (useNativeOpenAITools) body.tools = toOpenAITools(agentMeta.tools);
       const r = await fetch(ep.url, {
         method:'POST',
         headers,
@@ -1752,7 +2137,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       const d = await r.json();
       if (d.error) return { error: d.error.message };
       if (!d.choices || !d.choices[0]) return { error: `Empty response from ${provider}` };
-      return { reply: d.choices[0].message.content, model: ep.model };
+      const message = d.choices[0].message || {};
+      const toolCalls = useNativeOpenAITools ? parseOpenAIToolCalls(message) : [];
+      return { reply: message.content || '', toolCalls, model: ep.model };
 
     } catch(e) { return { error: e.message }; }
   };
@@ -1766,21 +2153,55 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     } catch { return null; }
   };
 
+  let mcpTools = [];
+  if (mcpRegistry && settingsStore.get('mcp.enabled') !== false) {
+    try { mcpTools = await mcpRegistry.toolsForAgent(); }
+    catch (e) { console.warn('MCP tools unavailable:', e.message); }
+  }
+  const dispatchToolFn = async (tool, args) => {
+    if (mcpRegistry && String(tool || '').includes('__')) {
+      const mcpResult = await mcpRegistry.dispatch(tool, args);
+      if (mcpResult) return mcpResult;
+    }
+    return agentTools.dispatchTool(tool, args);
+  };
+
   // Send step updates to renderer via the event sender
   const onStep = (step) => {
+    controller.observe(step);
     try { event.sender.send('agentStep', step); } catch {}
   };
 
-  const result = await agentLoop.runAgentLoop(userMessage, {
-    aiFn,
-    sysInfo,
-    lang,
-    userName,
-    history: opts.history || [],
-    maxSteps: opts.maxSteps || 8,
-    onStep,
-    analyzeScreenFn: screenCapFn
-  });
+  let result;
+  try {
+    try { event.sender.send('agentStep', { type: 'run-start', runId, provider, model: runRecord.model, prompt: runRecord.prompt }); } catch {}
+    result = await agentLoop.runAgentLoop(userMessage, {
+      aiFn,
+      sysInfo,
+      lang,
+      userName,
+      history: opts.history || [],
+      maxSteps: opts.maxSteps || 8,
+      onStep,
+      analyzeScreenFn: screenCapFn,
+      runId,
+      control: controller,
+      nativeTools: provider === 'claude' || provider === 'openai',
+      extraTools: mcpTools,
+      dispatchToolFn
+    });
+  } catch (e) {
+    result = { ok: false, error: e.message, steps: runRecord.steps };
+  } finally {
+    runRecord.status = controller.stopped || result?.stopped ? 'stopped' : (result?.ok ? 'done' : 'error');
+    runRecord.endedAt = new Date().toISOString();
+    runRecord.answer = result?.answer || null;
+    runRecord.error = result?.error || null;
+    activeAgentRuns.delete(runId);
+    if (controller.pending) pendingAgentSteps.delete(controller.pending.stepId);
+    appendAgentRun(runRecord);
+    try { event.sender.send('agentStep', { type: 'run-end', runId, status: runRecord.status, result: scrubRunValue(result) }); } catch {}
+  }
 
   // Save to memory
   if (agentMemory) {
@@ -1790,13 +2211,17 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     }
   }
 
-  return result;
+  return { ...result, runId };
 });
 
 // ── DIRECT TOOL CALLS (from chat toolbar/quick actions) ──────────────────────
 ipcMain.handle('agentTool', async (_, toolName, args) => {
   loadAgentModules();
   if (!agentTools) return { ok: false, err: 'Agent not loaded' };
+  if (mcpRegistry && String(toolName || '').includes('__')) {
+    const mcpResult = await mcpRegistry.dispatch(toolName, args);
+    if (mcpResult) return mcpResult;
+  }
   return agentTools.dispatchTool(toolName, args);
 });
 
