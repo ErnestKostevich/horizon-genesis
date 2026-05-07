@@ -667,11 +667,12 @@ body.with-sidebar .chat-status-bar{display:flex}
     <!-- Model selection -->
     <div class="ps">
       <div class="psl">Models — choose which model each provider uses</div>
-      <div class="pf"><label>Response Mode</label><div class="pr"><select class="pi ms-sel" id="ms-response-profile" onchange="saveResponseProfile(this.value)">
+      <div class="pf"><label>Response Mode</label><div class="pr"><select class="pi ms-sel" id="ms-response-profile" onchange="saveResponseProfile(this.value);updateThinkingHint()">
         <option value="fast">⚡ Fast (Speed)</option>
         <option value="balanced" selected>⚖️ Balanced</option>
         <option value="deep">🧠 Deep (Reasoning)</option>
-      </select></div></div>
+      </select></div>
+      <div class="local-status" id="thinking-hint" style="margin-top:6px;font-size:10.5px">Deep mode triggers extended thinking on Claude, Gemini 2.5+/3, and OpenAI o-series / gpt-5-thinking. Other providers ignore the setting.</div></div>
       <div class="pf"><label>Claude (Anthropic)</label><div class="pr"><select class="pi ms-sel" id="ms-claude" onchange="saveModelSetting('claude', this.value)">
         <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced (default)</option>
         <option value="claude-opus-4-7">Opus 4.7 — most capable, agentic coding</option>
@@ -684,12 +685,16 @@ body.with-sidebar .chat-status-bar{display:flex}
         <option value="gpt-4o-mini">gpt-4o-mini — cheap workhorse</option>
         <option value="gpt-5">gpt-5 — frontier (if account has access)</option>
         <option value="gpt-5-mini">gpt-5-mini — frontier-cheap</option>
+        <option value="gpt-5-thinking">gpt-5-thinking — extended reasoning 🧠</option>
         <option value="gpt-4.1">gpt-4.1 — long-context</option>
-        <option value="o4-mini">o4-mini — reasoning-tuned</option>
+        <option value="o3">o3 — top-tier reasoning 🧠</option>
+        <option value="o4-mini">o4-mini — reasoning-tuned, cheap 🧠</option>
       </select></div></div>
       <div class="pf"><label>Gemini (Google)</label><div class="pr"><select class="pi ms-sel" id="ms-gemini" onchange="saveModelSetting('gemini', this.value)">
-        <option value="gemini-2.5-flash">gemini-2.5-flash — fast, FREE tier (default)</option>
-        <option value="gemini-2.5-pro">gemini-2.5-pro — most capable</option>
+        <option value="gemini-3-pro">gemini-3-pro — frontier multimodal 🧠</option>
+        <option value="gemini-3-flash">gemini-3-flash — fast, agentic-tuned 🧠</option>
+        <option value="gemini-2.5-pro">gemini-2.5-pro — most capable (2.5) 🧠</option>
+        <option value="gemini-2.5-flash" selected>gemini-2.5-flash — fast, FREE tier (default) 🧠</option>
         <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite — cheapest</option>
         <option value="gemini-2.0-flash">gemini-2.0-flash — legacy</option>
       </select></div></div>
@@ -736,13 +741,20 @@ body.with-sidebar .chat-status-bar{display:flex}
         <option value="command-a-vision-07-2025">command-a-vision-07-2025</option>
         <option value="command-r-plus-08-2024">command-r-plus-08-2024 — legacy</option>
       </select></div></div>
+      <div class="pf"><label>OpenRouter <span style="color:var(--t3);font-size:10px">(one key, 200+ models)</span></label><div class="pr">
+        <select class="pi ms-sel" id="ms-openrouter" onchange="saveModelSetting('openrouter', this.value)">
+          <option value="">(refresh to load models)</option>
+        </select>
+        <input class="pi" type="text" id="pi-openrouter-search" placeholder="filter…" oninput="filterOpenRouterModels(this.value)" style="max-width:120px"/>
+        <button class="psv" onclick="refreshOpenRouterModels()" title="Pull the latest model catalog from OpenRouter">↻</button>
+      </div></div>
     </div>
 
     <!-- AI Providers -->
     <div class="ps">
       <div class="psl">AI Providers: local + cloud</div>
-      <div class="pf local-provider"><label><span class="d2" id="pd-ollama"></span>Ollama — local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><input class="pi" type="text" id="pi-ollama-model" placeholder="llama3.1"/><button class="psv" onclick="saveLocalProvider('ollama')">Save</button><button class="psv" onclick="testLocalProvider('ollama')">Test</button></div><div class="local-status" id="local-ollama-status">Install Ollama, run a model, then test the local server.</div></div>
-      <div class="pf local-provider"><label><span class="d2" id="pd-lmstudio"></span>LM Studio — local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><input class="pi" type="text" id="pi-lmstudio-model" placeholder="local-model"/><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button><button class="psv" onclick="testLocalProvider('lmstudio')">Test</button></div><div class="local-status" id="local-lmstudio-status">Install LM Studio, enable the local server, then test the endpoint.</div></div>
+      <div class="pf local-provider"><label><span class="d2" id="pd-ollama"></span>Ollama — local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><select class="pi" id="pi-ollama-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('ollama')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('ollama')">Save</button><button class="psv" onclick="testLocalProvider('ollama')">Test</button></div><div class="local-status" id="local-ollama-status">Install Ollama, run a model, then click ↻ to load the model list.</div></div>
+      <div class="pf local-provider"><label><span class="d2" id="pd-lmstudio"></span>LM Studio — local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><select class="pi" id="pi-lmstudio-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('lmstudio')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button><button class="psv" onclick="testLocalProvider('lmstudio')">Test</button></div><div class="local-status" id="local-lmstudio-status">Install LM Studio, start the local server, then click ↻ to load the model list.</div></div>
       <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini 2.5 Flash — FREE<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSy…"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-groq"></span>Groq — FREE + voice transcription<a onclick="H.openUrl('https://console.groq.com/keys')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-groq" placeholder="gsk_…"/><button class="psv" id="pb-groq" onclick="psvk('groq','pi-groq','pb-groq','pd-groq')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-deepseek"></span>DeepSeek V3 — cheap<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepseek" placeholder="sk-…"/><button class="psv" id="pb-deepseek" onclick="psvk('deepseek','pi-deepseek','pb-deepseek','pd-deepseek')">Save</button></div></div>
@@ -753,6 +765,7 @@ body.with-sidebar .chat-status-bar{display:flex}
       <div class="pf"><label><span class="d2" id="pd-openai"></span>OpenAI GPT-4o<a onclick="H.openUrl('https://platform.openai.com/api-keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-openai" placeholder="sk-…"/><button class="psv" id="pb-openai" onclick="psvk('openai','pi-openai','pb-openai','pd-openai')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-perplexity"></span>Perplexity (AI Search)<a onclick="H.openUrl('https://www.perplexity.ai/settings/api')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-perplexity" placeholder="pplx-…"/><button class="psv" id="pb-perplexity" onclick="psvk('perplexity','pi-perplexity','pb-perplexity','pd-perplexity')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-cohere"></span>Cohere Command R+<a onclick="H.openUrl('https://dashboard.cohere.com/api-keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-cohere" placeholder="…"/><button class="psv" id="pb-cohere" onclick="psvk('cohere','pi-cohere','pb-cohere','pd-cohere')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-openrouter"></span>OpenRouter — one key, 200+ models<a onclick="H.openUrl('https://openrouter.ai/keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-openrouter" placeholder="sk-or-…"/><button class="psv" id="pb-openrouter" onclick="psvk('openrouter','pi-openrouter','pb-openrouter','pd-openrouter')">Save</button></div></div>
     </div>
 
     <!-- Web Search -->
@@ -1032,6 +1045,7 @@ body.with-sidebar .chat-status-bar{display:flex}
   <button class="chip" id="pc-openai"   onclick="setProv('openai')">GPT-4o</button>
   <button class="chip" id="pc-perplexity" onclick="setProv('perplexity')">Perplexity</button>
   <button class="chip" id="pc-cohere"  onclick="setProv('cohere')">Cohere</button>
+  <button class="chip" id="pc-openrouter" onclick="setProv('openrouter')" title="One key, 200+ models">OpenRouter</button>
   <div class="sp"></div>
   <button class="chip" id="tc-search" onclick="toggleSearch()">&#128269;</button>
   <button class="chip on" id="tc-eye"  onclick="toggleEye()">&#128065; PC</button>
@@ -2834,7 +2848,7 @@ function closePanel(){document.getElementById('panel').classList.remove('show');
 
 async function loadPanel(){
   // Parallel fetch — fast, no sequential bottleneck
-  const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','tavily','elevenlabs','deepgram','localai','github'];
+  const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','openrouter','tavily','elevenlabs','deepgram','localai','github'];
   const [keyFlags, nm, lg, vp, tp, elv, oaitv] = await Promise.all([
     Promise.all(svcs.map(s=>H.hasKey(s))),
     H.get('userName'), H.get('lang'), H.get('voiceProvider'),
@@ -2900,10 +2914,153 @@ async function loadPanel(){
     H.get('ollamaUrl'), H.get('ollamaModel'), H.get('lmStudioUrl'), H.get('lmStudioModel')
   ]);
   document.getElementById('pi-ollama-url').value = ou || 'http://127.0.0.1:11434/v1';
-  document.getElementById('pi-ollama-model').value = om || 'llama3.1';
   document.getElementById('pi-lmstudio-url').value = lu || 'http://127.0.0.1:1234/v1';
-  document.getElementById('pi-lmstudio-model').value = lm || 'local-model';
+  // Seed the local-provider model selects with the saved value so it stays
+  // selected even if the local server is offline. Then refresh in the
+  // background to populate the rest of the list.
+  _seedLocalModelSelect('ollama', om || 'llama3.1');
+  _seedLocalModelSelect('lmstudio', lm || 'local-model');
+  refreshLocalModels('ollama').catch(()=>{});
+  refreshLocalModels('lmstudio').catch(()=>{});
+  refreshOpenRouterModels().catch(()=>{});
+  // Hydrate the Response Profile select from the saved value, then update the
+  // thinking-mode hint to reflect the current provider/model combo.
+  try {
+    const savedProfile = (await H.get('responseProfile')) || 'balanced';
+    const profSel = document.getElementById('ms-response-profile');
+    if (profSel) profSel.value = savedProfile;
+  } catch(_) {}
+  try { updateThinkingHint(); } catch(_) {}
   await loadSettingsHealth();
+}
+
+// Seed a local-provider <select> with the saved model so it stays selected
+// even when the local server is unreachable. Refresh later overlays the
+// real model list.
+function _seedLocalModelSelect(provider, savedValue){
+  const sel = document.getElementById('pi-' + provider + '-model');
+  if (!sel) return;
+  if (savedValue) {
+    const opt = document.createElement('option');
+    opt.value = savedValue;
+    opt.textContent = savedValue + ' (saved)';
+    opt.selected = true;
+    sel.innerHTML = '';
+    sel.appendChild(opt);
+  }
+}
+
+// ── OpenRouter ───────────────────────────────────────────────────────────────
+// OpenRouter exposes 200+ models behind one API key. We fetch its catalog,
+// cache it for 24h in settings, and surface a filterable <select> in
+// Settings → Models.
+let _openrouterAllModels = [];
+
+async function refreshOpenRouterModels(force=false){
+  const sel = document.getElementById('ms-openrouter');
+  if (!sel) return;
+  const previousValue = sel.value || (await H.get('model.openrouter')) || '';
+  // Try the cache first. We honour a 24h TTL.
+  const cache = await H.get('openrouter.modelsCache').catch(()=>null);
+  const cacheAt = await H.get('openrouter.modelsCacheAt').catch(()=>null);
+  const cacheFresh = cacheAt && (Date.now() - new Date(cacheAt).getTime() < 24*60*60*1000);
+  let models = (cache && cacheFresh && !force) ? cache : null;
+  if (!models) {
+    const r = await H.openrouterListModels?.().catch(()=>null);
+    if (r?.ok && Array.isArray(r.models) && r.models.length) {
+      models = r.models;
+      await H.set('openrouter.modelsCache', models);
+      await H.set('openrouter.modelsCacheAt', new Date().toISOString());
+    }
+  }
+  if (!Array.isArray(models) || !models.length) {
+    sel.innerHTML = '<option value="">(no models — check your OpenRouter key)</option>';
+    return;
+  }
+  _openrouterAllModels = models;
+  _renderOpenRouterOptions(models, previousValue);
+}
+
+function _renderOpenRouterOptions(models, selectedValue){
+  const sel = document.getElementById('ms-openrouter');
+  if (!sel) return;
+  sel.innerHTML = models.map(m => {
+    const id = (typeof m === 'string') ? m : m.id;
+    const label = (typeof m === 'string') ? m : (m.name ? `${m.id} — ${m.name}` : m.id);
+    return `<option value="${id}">${label}</option>`;
+  }).join('');
+  if (selectedValue) {
+    const present = Array.from(sel.options).some(o => o.value === selectedValue);
+    if (present) sel.value = selectedValue;
+    else {
+      const opt = document.createElement('option');
+      opt.value = selectedValue;
+      opt.textContent = selectedValue + ' (saved, not in catalog)';
+      sel.appendChild(opt);
+      sel.value = selectedValue;
+    }
+  }
+}
+
+function filterOpenRouterModels(query){
+  const q = (query || '').trim().toLowerCase();
+  if (!_openrouterAllModels.length) return;
+  const filtered = q
+    ? _openrouterAllModels.filter(m => {
+        const id = (typeof m === 'string') ? m : (m.id || '');
+        const name = (typeof m === 'string') ? '' : (m.name || '');
+        return id.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+      })
+    : _openrouterAllModels;
+  const sel = document.getElementById('ms-openrouter');
+  const current = sel?.value || '';
+  _renderOpenRouterOptions(filtered, current);
+}
+
+// Pull the live model list from the local server and rebuild the <select>.
+// Preserves the currently-saved selection when the server returns it.
+async function refreshLocalModels(provider){
+  const sel = document.getElementById('pi-' + provider + '-model');
+  if (!sel) return;
+  const statusEl = document.getElementById('local-' + provider + '-status');
+  const previousValue = sel.value;
+  try {
+    const r = await H.localProviderStatus(provider);
+    if (r?.ok && Array.isArray(r.models) && r.models.length) {
+      sel.innerHTML = r.models.map(m => `<option value="${m}">${m}</option>`).join('');
+      // Preserve selection if the saved model is in the new list. Otherwise
+      // append it so the user sees their saved choice even if the server
+      // doesn't ship that model anymore.
+      if (previousValue && r.models.includes(previousValue)) {
+        sel.value = previousValue;
+      } else if (previousValue) {
+        const opt = document.createElement('option');
+        opt.value = previousValue;
+        opt.textContent = previousValue + ' (saved, not on server)';
+        sel.appendChild(opt);
+        sel.value = previousValue;
+      }
+      if (statusEl) {
+        statusEl.textContent = `Loaded ${r.models.length} model${r.models.length===1?'':'s'} from ${r.url || 'local server'}.`;
+        statusEl.className = 'local-status ok';
+      }
+      return r.models;
+    }
+    // Server reachable but no models, or not reachable at all.
+    if (statusEl) {
+      const msg = r?.error || (provider === 'ollama'
+        ? 'No models found. Run `ollama pull <name>` then refresh.'
+        : 'No models found. Load a model in LM Studio and start the server.');
+      statusEl.textContent = msg;
+      statusEl.className = 'local-status bad';
+    }
+  } catch (e) {
+    if (statusEl) {
+      statusEl.textContent = e.message || 'Failed to refresh model list.';
+      statusEl.className = 'local-status bad';
+    }
+  }
+  return [];
 }
 
 function setSettingsStatus(text, ok=true){
@@ -3045,6 +3202,37 @@ async function saveResponseProfile(profile){
   } catch(e) { console.warn('saveResponseProfile failed:', e?.message); }
 }
 
+// Provider/model combos that actually honour the responseProfile flag.
+// Mirrors the logic in main.js around the Claude/OpenAI/Gemini switch arms.
+function _profileSupportsThinking(provider, model){
+  if (!provider) return false;
+  if (provider === 'claude') return true; // budget_tokens works on every modern Claude.
+  if (provider === 'openai') return /^o[134]/.test(model || '') || /thinking|reasoning/.test(model || '');
+  if (provider === 'gemini') return /^gemini-(2\.5|3)/.test(model || '');
+  return false;
+}
+
+function updateThinkingHint(){
+  const el = document.getElementById('thinking-hint');
+  if (!el) return;
+  const profile = document.getElementById('ms-response-profile')?.value || 'balanced';
+  const sel = document.getElementById('ms-' + (typeof prov !== 'undefined' ? prov : ''));
+  const model = sel?.value || '';
+  const supported = _profileSupportsThinking(typeof prov !== 'undefined' ? prov : '', model);
+  el.classList.remove('ok','bad');
+  if (profile !== 'deep') {
+    el.textContent = 'Deep mode triggers extended thinking on Claude, Gemini 2.5+/3, and OpenAI o-series / gpt-5-thinking.';
+    return;
+  }
+  if (supported) {
+    el.textContent = `🧠 Deep mode active for ${prov}${model ? ' / ' + model : ''} — extended thinking will be enabled on the next request.`;
+    el.classList.add('ok');
+  } else {
+    el.textContent = `Deep mode is selected, but ${prov || 'this provider'} does not expose a thinking parameter — request will run on default settings.`;
+    el.classList.add('bad');
+  }
+}
+
 // Per-provider model selection (Settings → Models). Persists to electron
 // settingsStore under "model.<provider>" keys; main.js H.ai handlers read
 // the same keys, so the next request goes to the picked model.
@@ -3057,6 +3245,7 @@ async function saveModelSetting(provider, model){
     if (typeof prov !== 'undefined' && prov === provider) {
       try { document.getElementById('csb-model').textContent = model; } catch(_){}
     }
+    try { updateThinkingHint(); } catch(_){}
   } catch(e) { console.warn('saveModelSetting failed:', e?.message); }
 }
 async function saveLang(){const next=document.getElementById('pi-lang').value;if(await saveSetting('lang',next,'Language')){lang=next;applyLang();showGreeting();}}
@@ -3199,12 +3388,12 @@ function initWakeCalibrationUI(){
   if (lbl)    lbl.textContent = vol;
 }
 function clearHist(){if(!confirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
-async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','groq_voice','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','tavily','elevenlabs','deepgram','localai','github','google_client_secret'])await H.deleteKey(s);await loadPanel();}
+async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','groq_voice','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','openrouter','tavily','elevenlabs','deepgram','localai','github','google_client_secret'])await H.deleteKey(s);await loadPanel();}
 
 // ═══════════════════════════════════════════════════════════════
 // PROVIDER / MODE / TOGGLES
 // ═══════════════════════════════════════════════════════════════
-function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');}
+function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');try{updateThinkingHint();}catch(_){}}
 function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)saveSetting('mode',m,'Mode');}
 function toggleSearch(){const next=!searchOn;document.getElementById('tc-search').classList.toggle('on',next);saveSetting('searchOn',next,'Search toggle').then(ok=>{if(ok){searchOn=next;}else{document.getElementById('tc-search').classList.toggle('on',searchOn);}});}
 function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',next);saveSetting('screenWatcher',next,'Screen AI toggle').then(ok=>{if(ok){eyeOn=next;document.getElementById('sw-eye')?.classList.toggle('on',next);}else{document.getElementById('tc-eye').classList.toggle('on',eyeOn);}});}
