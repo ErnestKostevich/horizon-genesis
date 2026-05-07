@@ -72,6 +72,10 @@ contextBridge.exposeInMainWorld('H', {
 
   // ── REAL AGENT ────────────────────────────────────────────────────────────────
   agentRun:    (msg, opts)     => ipcRenderer.invoke('agentRun', msg, opts),
+  agentControl:(runId, action) => ipcRenderer.invoke('agentControl', runId, action),
+  agentStep:   (stepId, decision) => ipcRenderer.invoke('agentStep', stepId, decision),
+  agentRuns:   (limit)         => ipcRenderer.invoke('agentRuns', limit),
+  agentRunDetails: (runId)     => ipcRenderer.invoke('agentRunDetails', runId),
   agentTool:   (tool, args)    => ipcRenderer.invoke('agentTool', tool, args),
   onAgentStep: (cb)            => ipcRenderer.on('agentStep', (_, step) => cb(step)),
 

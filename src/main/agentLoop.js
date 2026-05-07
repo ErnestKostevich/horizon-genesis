@@ -10,7 +10,21 @@
  * - Hot window support for follow-up queries
  */
 
+const { EventEmitter } = require('events');
 const { dispatchTool, TOOL_DEFINITIONS } = require('./agent');
+
+const agentEvents = new EventEmitter();
+agentEvents.setMaxListeners(100);
+
+function newStepId(runId, index) {
+  return `${runId || 'agent'}:step:${index}:${Date.now().toString(36)}`;
+}
+
+function normalizeDecision(decision) {
+  if (!decision) return { decision: 'allow' };
+  if (typeof decision === 'string') return { decision };
+  return { decision: decision.decision || 'allow', ...decision };
+}
 
 // Build the agent system prompt with available tools
 function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null) {
@@ -196,7 +210,9 @@ async function runAgentLoop(userMessage, opts = {}) {
     maxSteps = 8,   // max tool calls before stopping
     onStep,         // callback(step) for streaming updates
     analyzeScreenFn, // optional screen capture function
-    timeout = 60000  // 60 second timeout per step
+    timeout = 60000,  // 60 second timeout per step
+    runId = `agent-${Date.now().toString(36)}`,
+    control = null
   } = opts;
 
   // Select relevant tools for this query
@@ -214,6 +230,10 @@ async function runAgentLoop(userMessage, opts = {}) {
   let sameToolCount = 0;
 
   for (let i = 0; i < maxSteps; i++) {
+    if (control?.isStopped?.()) {
+      return { ok: false, stopped: true, error: 'Stopped by operator', steps };
+    }
+
     // Call AI with timeout
     let aiResult;
     try {
@@ -261,14 +281,55 @@ async function runAgentLoop(userMessage, opts = {}) {
       }
 
       const step = {
+        id:     newStepId(runId, i + 1),
+        runId,
+        index:  i + 1,
         tool:   parsed.tool,
         args:   parsed.args || {},
         reason: parsed.reason || '',
         result: null
       };
 
+      const waitingPayload = {
+        type: 'waiting',
+        runId,
+        stepId: step.id,
+        step: i + 1,
+        tool: step.tool,
+        args: step.args,
+        reason: step.reason,
+        paused: Boolean(control?.isPaused?.())
+      };
+      agentEvents.emit('pre-tool-dispatch', waitingPayload);
+      if (onStep) onStep(waitingPayload);
+
+      let decision = { decision: 'allow' };
+      try {
+        decision = normalizeDecision(await control?.beforeTool?.(waitingPayload));
+      } catch (e) {
+        decision = { decision: 'deny', reason: e.message };
+      }
+
+      if (decision.args && typeof decision.args === 'object') {
+        step.args = decision.args;
+      }
+      if (decision.decision === 'stop') {
+        step.result = { ok: false, err: decision.reason || 'Stopped by operator' };
+        steps.push(step);
+        if (onStep) onStep({ type: 'stopped', runId, stepId: step.id, step: i + 1, tool: step.tool, result: step.result });
+        return { ok: false, stopped: true, error: step.result.err, steps };
+      }
+      if (decision.decision === 'deny') {
+        step.result = { ok: false, err: decision.reason || 'Denied by operator' };
+        steps.push(step);
+        if (onStep) onStep({ type: 'denied', runId, stepId: step.id, step: i + 1, tool: step.tool, result: step.result });
+        messages.push({ role: 'assistant', content: aiResult.reply });
+        messages.push({ role: 'user', content: `Tool result for ${step.tool}:\nError: ${step.result.err}` });
+        continue;
+      }
+
       // Notify caller of progress
-      if (onStep) onStep({ type: 'executing', step: i+1, tool: step.tool, reason: step.reason });
+      if (onStep) onStep({ type: 'executing', runId, stepId: step.id, step: i+1, tool: step.tool, args: step.args, reason: step.reason });
 
       // Special: if AI wants screenshot, use our screen capture
       if (parsed.tool === 'screenshot' || parsed.tool === 'capture_screen') {
@@ -284,7 +345,7 @@ async function runAgentLoop(userMessage, opts = {}) {
         // Execute tool with timeout
         try {
           step.result = await Promise.race([
-            dispatchTool(parsed.tool, step.args),
+            dispatchTool(step.tool, step.args),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Tool timeout')), 30000))
           ]);
         } catch (e) {
@@ -305,7 +366,7 @@ async function runAgentLoop(userMessage, opts = {}) {
         content: `Tool result for ${step.tool}:\n${resultSummary}`
       });
 
-      if (onStep) onStep({ type: 'result', step: i+1, tool: step.tool, result: step.result });
+      if (onStep) onStep({ type: 'result', runId, stepId: step.id, step: i+1, tool: step.tool, result: step.result });
     } else {
       // Unknown response type - treat as answer
       finalAnswer = aiResult.reply;
@@ -328,4 +389,4 @@ async function runAgentLoop(userMessage, opts = {}) {
   return { ok: true, answer: finalAnswer, steps };
 }
 
-module.exports = { runAgentLoop, buildAgentSystemPrompt, parseAgentResponse, selectToolsForQuery };
+module.exports = { runAgentLoop, buildAgentSystemPrompt, parseAgentResponse, selectToolsForQuery, agentEvents };
