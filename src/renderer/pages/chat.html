@@ -174,8 +174,13 @@ textarea::placeholder{color:var(--t3)}
 .psnav-tab:hover{background:rgba(255,255,255,.04);color:var(--tx)}
 .psnav-tab.on{background:rgba(232,160,80,.12);color:var(--acc);border-color:rgba(232,160,80,.18)}
 .psn-i{font-size:14px;width:20px;text-align:center;flex-shrink:0}
-.psview{flex:1;overflow-y:auto;padding:22px 26px}
-.psview > section{display:none;max-width:760px}
+.psview{flex:1;overflow-y:auto;padding:22px 32px}
+/* Don't lock the section width — let it grow with the panel. The panel
+   itself already centers content via the parent flex layout, and capping
+   to 760px on a 1900px+ window left ~half the screen empty (looked
+   "narrowed"). Cap at 1100px so on 4K displays the lines don't get
+   uncomfortably long. */
+.psview > section{display:none;max-width:1100px;width:100%}
 .psview > section.on{display:block;animation:psFade .15s ease}
 @keyframes psFade{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
 .psview-h{font-size:18px;font-weight:600;color:var(--tx);margin-bottom:4px;font-family:var(--font)}
@@ -2608,10 +2613,25 @@ async function bootCurrentChat(){
   } catch (e) { console.warn('bootCurrentChat failed:', e?.message); }
 }
 function _persistChatMessage(role, content, meta){
-  if (!currentChatId) return;
-  try { H.chatAddMessage(currentChatId, role, content, meta || {}); } catch(_){}
-  // After first user message, trigger AI auto-naming
-  if (role === 'user' && sessionMsgs <= 1) {
+  if (!currentChatId) {
+    console.warn('[chat] _persistChatMessage skipped — no currentChatId');
+    return;
+  }
+  // chatAddMessage is an IPC invoke — it returns a Promise. The previous
+  // try/catch only caught synchronous errors and silently dropped any IPC
+  // rejection. Log the rejection so persistence failures show up in
+  // DevTools instead of looking like a phantom "messages don't save" bug.
+  Promise.resolve(H.chatAddMessage(currentChatId, role, content, meta || {}))
+    .then(r => {
+      if (r && r.ok === false) console.warn('[chat] chatAddMessage rejected:', r.error || r);
+    })
+    .catch(e => console.warn('[chat] chatAddMessage threw:', e?.message || e));
+  // After the first user message, trigger AI auto-naming. Use === 0
+  // (not <= 1): the previous gate fired on the first AND second message
+  // because trackTokens increments sessionMsgs AFTER this call. Firing
+  // twice meant a second model round-trip overwrote a perfectly good
+  // first title. Stick to once per chat.
+  if (role === 'user' && sessionMsgs === 0) {
     _autoNameChat(content);
   }
 }
@@ -2626,19 +2646,36 @@ function _persistChatMessage(role, content, meta){
 // never ran. We trust the call-site gate (sessionMsgs <= 1) instead and
 // always overwrite when we have a real candidate title from the model.
 async function _autoNameChat(userMsg) {
-  if (!currentChatId) return;
+  if (!currentChatId) {
+    console.warn('[autoname] skipped — no currentChatId');
+    return;
+  }
   try {
     const sys = 'Generate a very short chat title (3-6 words max) for a conversation starting with the following message. Return ONLY the title, no quotes, no explanation.';
-    const res = await H.ai([{role:'user', content: userMsg}], prov, sys, aiOptsForProvider(prov));
+    const opts = aiOptsForProvider(prov);
+    console.log('[autoname] requesting title via', prov, opts);
+    const res = await H.ai([{role:'user', content: userMsg}], prov, sys, opts);
+    if (res?.error) {
+      console.warn('[autoname] provider error:', res.error);
+      return;
+    }
     if (res && res.reply) {
       const title = res.reply.trim().replace(/^["']|["']$/g,'').slice(0,50);
       if (title) {
-        await H.chatRename(currentChatId, title);
+        const rr = await H.chatRename(currentChatId, title);
+        if (rr && rr.ok === false) console.warn('[autoname] chatRename rejected:', rr.error || rr);
         updateStatusBar(title);
         await loadChatList();
+        console.log('[autoname] renamed →', title);
+      } else {
+        console.warn('[autoname] empty title from model:', res.reply);
       }
+    } else {
+      console.warn('[autoname] no reply field on response:', res);
     }
-  } catch(_) {}
+  } catch(e) {
+    console.warn('[autoname] threw:', e?.message || e);
+  }
 }
 function updateStatusBar(title) {
   try {
