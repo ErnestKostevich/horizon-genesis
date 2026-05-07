@@ -480,9 +480,9 @@ body.with-sidebar > .chat-status-bar{margin-left:280px}
 .cs-list::-webkit-scrollbar-thumb{background:rgba(108,140,255,.15);border-radius:4px}
 
 /* ═══ APEX RIGHT SIDEBAR ═══ */
-.apex-right-pane { position:fixed; top:42px; right:-280px; bottom:0; width:280px; background:#0b0e16; border-left:1px solid #1a1d27; z-index:10; display:flex; flex-direction:column; padding:16px 0; overflow-y:auto; transition:right .2s; }
+.apex-right-pane { position:fixed; top:42px; right:-360px; bottom:0; width:360px; background:#0b0e16; border-left:1px solid #1a1d27; z-index:10; display:flex; flex-direction:column; padding:16px 0; overflow-y:auto; transition:right .2s; }
 body.code-mode-active .apex-right-pane { right:0; }
-body.code-mode-active .chat-status-bar, body.code-mode-active .msgs, body.code-mode-active .inp-wrap { margin-right:280px; }
+body.code-mode-active .chat-status-bar, body.code-mode-active .msgs, body.code-mode-active .inp-wrap { margin-right:360px; }
 .arp-section { margin-bottom:24px; padding:0 16px; }
 .arp-head { font-size:10px; font-weight:700; color:#4a5568; letter-spacing:1px; margin-bottom:12px; font-family:var(--mono); text-transform:uppercase; }
 .arp-card { display:flex; gap:12px; align-items:center; background:#161921; padding:12px; border-radius:12px; border:1px solid #1a1d27; }
@@ -496,17 +496,32 @@ body.code-mode-active .chat-status-bar, body.code-mode-active .msgs, body.code-m
 .arp-file { display:flex; justify-content:space-between; font-size:11px; color:#60a5fa; font-family:var(--mono); padding:6px 8px; background:rgba(96,165,250,.05); border-radius:6px; margin-bottom:6px; cursor:pointer; transition:all .2s; border:1px solid transparent; }
 .arp-file:hover { background:rgba(96,165,250,.1); border-color:rgba(96,165,250,.2); }
 .arp-footer { padding:0 16px; font-size:10px; color:#4a5568; line-height:1.6; }
+.code-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.code-btn{background:#161921;border:1px solid #242936;color:#d8deea;border-radius:7px;padding:7px 8px;font:11px var(--mono);cursor:pointer}
+.code-btn.primary{background:linear-gradient(135deg,#f3b250,#ffcf7a);color:#090b10;border-color:#f3b250;font-weight:700}
+.code-btn:hover{border-color:#f3b250;color:#fff}
+.code-btn.primary:hover{color:#090b10}
+.code-input{width:100%;box-sizing:border-box;background:#080b12;border:1px solid #242936;color:#e8ecf4;border-radius:7px;padding:8px;font:11px var(--mono);outline:none}
+.code-editor{width:100%;min-height:240px;resize:vertical;background:#05070c;border:1px solid #242936;color:#e8ecf4;border-radius:8px;padding:10px;font:11px/1.5 var(--mono);outline:none;box-sizing:border-box}
+.code-status{font:10px/1.45 var(--mono);color:#8d96ab;margin-top:8px;word-break:break-word}
+.arp-file.active{background:rgba(243,178,80,.12);border-color:rgba(243,178,80,.35);color:#f8d28c}
 
 /* ═══ OPERATOR MODE ═══ */
 .operator-pane { display:none; position:fixed; bottom:0; left:280px; right:0; height:220px; background:#111111; border-top:1px solid rgba(167,139,250,.3); z-index:50; flex-direction:column; font-family:var(--mono); color:var(--t2); font-size:11px; }
 body.operator-mode-active .operator-pane { display:flex; }
 body.operator-mode-active .msgs { bottom:calc(100px + 220px); }
 body.operator-mode-active .inp-wrap { bottom:220px; }
-.op-header { padding:6px 12px; background:#1a1a1a; border-bottom:1px solid #333; display:flex; gap:12px; color:#c4b5fd; font-weight:600; text-transform:uppercase; letter-spacing:1px; }
+.op-header { padding:6px 12px; background:#1a1a1a; border-bottom:1px solid #333; display:flex; gap:8px; align-items:center; color:#c4b5fd; font-weight:600; text-transform:uppercase; letter-spacing:1px; }
 .op-content { flex:1; overflow-y:auto; padding:8px 12px; line-height:1.6; }
 .op-log-line { margin:2px 0; border-left:2px solid transparent; padding-left:6px; word-break:break-all; }
 .op-log-line.error { color:#fca5a5; border-left-color:#ef4444; }
 .op-log-line.tool { color:#6ee7b7; border-left-color:#10b981; }
+.op-log-line.run { color:#f8d28c; border-left-color:#f3b250; }
+.op-btn{background:#171717;border:1px solid #333;color:#c4b5fd;border-radius:5px;padding:3px 7px;font:10px var(--mono);cursor:pointer}
+.op-btn:hover{border-color:#c4b5fd;color:#fff}
+.op-tabs{display:flex;gap:6px;margin-left:10px}
+.op-tab{color:#777;cursor:pointer}
+.op-tab.on{color:#f8d28c}
 
 .cs-empty{color:var(--t3);font-size:11.5px;padding:24px 12px;text-align:center;font-style:italic;line-height:1.7}
 .cs-group-heading{font-size:9.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1.4px;color:var(--t3);padding:14px 10px 5px 10px;font-weight:600}
@@ -600,7 +615,7 @@ body.with-sidebar .chat-status-bar{display:flex}
   <div class="cs-stats" id="cs-stats">
     <div class="cs-stat"><span>✉</span> <span class="cs-stat-val" id="stat-msgs">0</span> msgs</div>
     <div class="cs-stat"><span>⭐</span> <span class="cs-stat-val" id="stat-tokens">0</span> tokens</div>
-    <div class="cs-stat"><span>💰</span> <span class="cs-stat-val" id="stat-cost">$0.00</span></div>
+    <div class="cs-stat"><span>Usage</span> <span class="cs-stat-val" id="stat-usage">real only</span></div>
   </div>
 </aside>
 
@@ -676,26 +691,26 @@ body.with-sidebar .chat-status-bar{display:flex}
       <div class="pf"><label>Claude (Anthropic)</label><div class="pr"><select class="pi ms-sel" id="ms-claude" onchange="saveModelSetting('claude', this.value)">
         <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced (default)</option>
         <option value="claude-opus-4-7">Opus 4.7 — most capable, agentic coding</option>
-        <option value="claude-haiku-4-5">Haiku 4.5 — fastest, cheapest</option>
+        <option value="claude-haiku-4-5">Haiku 4.5 — fastest</option>
         <option value="claude-opus-4-6">Opus 4.6 — legacy</option>
         <option value="claude-sonnet-4-5">Sonnet 4.5 — legacy</option>
       </select></div></div>
       <div class="pf"><label>OpenAI</label><div class="pr"><select class="pi ms-sel" id="ms-openai" onchange="saveModelSetting('openai', this.value)">
         <option value="gpt-4o">gpt-4o — multimodal flagship (default)</option>
-        <option value="gpt-4o-mini">gpt-4o-mini — cheap workhorse</option>
+        <option value="gpt-4o-mini">gpt-4o-mini — smaller workhorse</option>
         <option value="gpt-5">gpt-5 — frontier (if account has access)</option>
-        <option value="gpt-5-mini">gpt-5-mini — frontier-cheap</option>
+        <option value="gpt-5-mini">gpt-5-mini — compact frontier</option>
         <option value="gpt-5-thinking">gpt-5-thinking — extended reasoning 🧠</option>
         <option value="gpt-4.1">gpt-4.1 — long-context</option>
         <option value="o3">o3 — top-tier reasoning 🧠</option>
-        <option value="o4-mini">o4-mini — reasoning-tuned, cheap 🧠</option>
+        <option value="o4-mini">o4-mini — reasoning-tuned 🧠</option>
       </select></div></div>
       <div class="pf"><label>Gemini (Google)</label><div class="pr"><select class="pi ms-sel" id="ms-gemini" onchange="saveModelSetting('gemini', this.value)">
         <option value="gemini-3-pro">gemini-3-pro — frontier multimodal 🧠</option>
         <option value="gemini-3-flash">gemini-3-flash — fast, agentic-tuned 🧠</option>
         <option value="gemini-2.5-pro">gemini-2.5-pro — most capable (2.5) 🧠</option>
-        <option value="gemini-2.5-flash" selected>gemini-2.5-flash — fast, FREE tier (default) 🧠</option>
-        <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite — cheapest</option>
+        <option value="gemini-2.5-flash" selected>gemini-2.5-flash — fast default 🧠</option>
+        <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite — lightweight</option>
         <option value="gemini-2.0-flash">gemini-2.0-flash — legacy</option>
       </select></div></div>
       <div class="pf"><label>Groq</label><div class="pr"><select class="pi ms-sel" id="ms-groq" onchange="saveModelSetting('groq', this.value)">
@@ -706,20 +721,20 @@ body.with-sidebar .chat-status-bar{display:flex}
         <option value="openai/gpt-oss-120b">GPT-OSS 120B (open-weight)</option>
       </select></div></div>
       <div class="pf"><label>DeepSeek</label><div class="pr"><select class="pi ms-sel" id="ms-deepseek" onchange="saveModelSetting('deepseek', this.value)">
-        <option value="deepseek-chat">deepseek-chat — V3.1 (default, cheap)</option>
+        <option value="deepseek-chat">deepseek-chat — default</option>
         <option value="deepseek-reasoner">deepseek-reasoner — chain-of-thought</option>
         <option value="deepseek-v4-pro">deepseek-v4-pro — flagship (if available)</option>
       </select></div></div>
       <div class="pf"><label>Grok (xAI)</label><div class="pr"><select class="pi ms-sel" id="ms-grok" onchange="saveModelSetting('grok', this.value)">
         <option value="grok-4">grok-4 — flagship (default)</option>
         <option value="grok-4-fast-reasoning">grok-4-fast-reasoning — quick reasoning</option>
-        <option value="grok-4-mini">grok-4-mini — cheap</option>
+        <option value="grok-4-mini">grok-4-mini — compact</option>
         <option value="grok-code-fast-1">grok-code-fast-1 — code-tuned</option>
       </select></div></div>
       <div class="pf"><label>Mistral</label><div class="pr"><select class="pi ms-sel" id="ms-mistral" onchange="saveModelSetting('mistral', this.value)">
         <option value="mistral-large-latest">mistral-large-latest (default)</option>
         <option value="mistral-medium-latest">mistral-medium-latest</option>
-        <option value="mistral-small-latest">mistral-small-latest — cheap</option>
+        <option value="mistral-small-latest">mistral-small-latest — compact</option>
         <option value="codestral-latest">codestral-latest — code</option>
       </select></div></div>
       <div class="pf"><label>Qwen (Alibaba)</label><div class="pr"><select class="pi ms-sel" id="ms-qwen" onchange="saveModelSetting('qwen', this.value)">
@@ -755,9 +770,9 @@ body.with-sidebar .chat-status-bar{display:flex}
       <div class="psl">AI Providers: local + cloud</div>
       <div class="pf local-provider"><label><span class="d2" id="pd-ollama"></span>Ollama — local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><select class="pi" id="pi-ollama-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('ollama')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('ollama')">Save</button><button class="psv" onclick="testLocalProvider('ollama')">Test</button></div><div class="local-status" id="local-ollama-status">Install Ollama, run a model, then click ↻ to load the model list.</div></div>
       <div class="pf local-provider"><label><span class="d2" id="pd-lmstudio"></span>LM Studio — local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><select class="pi" id="pi-lmstudio-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('lmstudio')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button><button class="psv" onclick="testLocalProvider('lmstudio')">Test</button></div><div class="local-status" id="local-lmstudio-status">Install LM Studio, start the local server, then click ↻ to load the model list.</div></div>
-      <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini 2.5 Flash — FREE<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSy…"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-groq"></span>Groq — FREE + voice transcription<a onclick="H.openUrl('https://console.groq.com/keys')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-groq" placeholder="gsk_…"/><button class="psv" id="pb-groq" onclick="psvk('groq','pi-groq','pb-groq','pd-groq')">Save</button></div></div>
-      <div class="pf"><label><span class="d2" id="pd-deepseek"></span>DeepSeek V3 — cheap<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepseek" placeholder="sk-…"/><button class="psv" id="pb-deepseek" onclick="psvk('deepseek','pi-deepseek','pb-deepseek','pd-deepseek')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini models<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSy…"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-groq"></span>Groq models + voice transcription<a onclick="H.openUrl('https://console.groq.com/keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-groq" placeholder="gsk_…"/><button class="psv" id="pb-groq" onclick="psvk('groq','pi-groq','pb-groq','pd-groq')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-deepseek"></span>DeepSeek models<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepseek" placeholder="sk-…"/><button class="psv" id="pb-deepseek" onclick="psvk('deepseek','pi-deepseek','pb-deepseek','pd-deepseek')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-mistral"></span>Mistral Large<a onclick="H.openUrl('https://console.mistral.ai/api-keys/')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-mistral" placeholder="…"/><button class="psv" id="pb-mistral" onclick="psvk('mistral','pi-mistral','pb-mistral','pd-mistral')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-qwen"></span>Qwen Plus (Alibaba)<a onclick="H.openUrl('https://dashscope.console.aliyun.com/apiKey')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-qwen" placeholder="sk-…"/><button class="psv" id="pb-qwen" onclick="psvk('qwen','pi-qwen','pb-qwen','pd-qwen')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-grok"></span>Grok 3 (xAI)<a onclick="H.openUrl('https://console.x.ai')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-grok" placeholder="xai-…"/><button class="psv" id="pb-grok" onclick="psvk('grok','pi-grok','pb-grok','pd-grok')">Save</button></div></div>
@@ -771,15 +786,14 @@ body.with-sidebar .chat-status-bar{display:flex}
     <!-- Web Search -->
     <div class="ps">
       <div class="psl">&#128269; Web Search</div>
-      <div class="pf"><label><span class="d2" id="pd-tavily"></span>Tavily — 1,000 free/month<a onclick="H.openUrl('https://app.tavily.com/home')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-tavily" placeholder="tvly-…"/><button class="psv" id="pb-tavily" onclick="psvk('tavily','pi-tavily','pb-tavily','pd-tavily')">Save</button></div></div>
+      <div class="pf"><label><span class="d2" id="pd-tavily"></span>Tavily search<a onclick="H.openUrl('https://app.tavily.com/home')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-tavily" placeholder="tvly-…"/><button class="psv" id="pb-tavily" onclick="psvk('tavily','pi-tavily','pb-tavily','pd-tavily')">Save</button></div></div>
     </div>
 
-    <!-- GitHub Connector -->
+    <!-- GitHub repository context -->
     <div class="ps">
-      <div class="psl">GitHub context</div>
-      <div class="pf"><label><span class="d2" id="pd-github"></span>GitHub token <a onclick="H.openUrl('https://github.com/settings/tokens')">Create token</a></label><div class="pr"><input class="pi" type="password" id="pi-github" placeholder="github_pat_..."/><button class="psv" id="pb-github" onclick="psvk('github','pi-github','pb-github','pd-github')">Save</button></div></div>
+      <div class="psl">Repository context</div>
       <div class="pf"><label>Attach repository</label><div class="pr"><input class="pi" type="text" id="pi-github-repo" placeholder="ErnestKostevich/horizon-genesis"/><button class="psv" onclick="attachGithubRepo()">Attach</button></div></div>
-      <div class="local-status" id="github-status">Public repos work without a token. Private repos need a GitHub token.</div>
+      <div class="local-status" id="github-status">Public repos work without a token. Private repos use the GitHub connection saved above.</div>
       <div id="github-repos" class="local-status" style="margin-top:8px"></div>
     </div>
 
@@ -788,9 +802,9 @@ body.with-sidebar .chat-status-bar{display:flex}
       <div class="psl">🎙 Voice & Wake Word</div>
       <div class="pf"><label>STT — Speech-to-Text</label>
         <select class="sel" id="pi-vprov" onchange="saveVP()">
-          <option value="groq">Groq Whisper — FREE, best for Russian ✅ RECOMMENDED</option>
+          <option value="groq">Groq Whisper — accurate, recommended for Russian</option>
           <option value="openai">OpenAI Whisper — Best quality</option>
-          <option value="deepgram">Deepgram Nova-2 — Free $200 credit</option>
+          <option value="deepgram">Deepgram Nova-2 — external account</option>
         </select>
       </div>
       <div class="pf"><label>TTS — Text-to-Speech (голос Horizon)</label>
@@ -822,8 +836,8 @@ body.with-sidebar .chat-status-bar{display:flex}
         <div style="font-size:10px;color:var(--t3);background:var(--bg3);border:1px solid var(--b1);border-radius:8px;padding:8px;margin-top:4px">🆓 Kokoro — бесплатный AI TTS, работает локально.<br>Загружается при первом использовании (~80MB).<br>Отличное качество без API ключей!</div>
       </div>
       <div id="deepgram-section" style="display:none;margin-top:6px">
-        <div class="pf"><label><span class="d2" id="pd-deepgram"></span>Deepgram Key<a onclick="H.openUrl('https://console.deepgram.com')">Get free ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepgram" placeholder="deepgram key…"/><button class="psv" id="pb-deepgram" onclick="psvk('deepgram','pi-deepgram','pb-deepgram','pd-deepgram')">Save</button></div></div>
-        <div style="font-size:9px;color:var(--t3)">Free $200 credit · multi-language · very accurate</div>
+        <div class="pf"><label><span class="d2" id="pd-deepgram"></span>Deepgram Key<a onclick="H.openUrl('https://console.deepgram.com')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepgram" placeholder="deepgram key…"/><button class="psv" id="pb-deepgram" onclick="psvk('deepgram','pi-deepgram','pb-deepgram','pd-deepgram')">Save</button></div></div>
+        <div style="font-size:9px;color:var(--t3)">External account · multi-language · very accurate</div>
       </div>
       <button class="mic-test-btn" onclick="testMic()">🎙 Test microphone</button>
       <div class="mic-st" id="mic-st"></div>
@@ -1096,17 +1110,22 @@ body.with-sidebar .chat-status-bar{display:flex}
      fake state was actively misleading. -->
 <div id="apex-right-pane" class="apex-right-pane">
   <div class="arp-section">
-    <div class="arp-head">ACTIVE PERSONA</div>
+    <div class="arp-head">ACTIVE CONTEXT</div>
     <div class="arp-card" id="arp-persona">
       <div style="font-size:24px">🪐</div>
       <div>
-        <div style="font-weight:600;color:var(--tx);font-size:14px">Default</div>
-        <div style="color:var(--t3);font-size:11px;margin-top:2px;font-family:var(--mono)">Switch personas in Settings → Personas</div>
+        <div style="font-weight:600;color:var(--tx);font-size:14px" id="code-context-title">Horizon Code Mode</div>
+        <div style="color:var(--t3);font-size:11px;margin-top:2px;font-family:var(--mono)" id="code-context-meta">provider / model / workspace</div>
       </div>
     </div>
+    <div class="code-actions">
+      <button class="code-btn primary" onclick="chooseCodeWorkspace()">Open folder</button>
+      <button class="code-btn" onclick="refreshCodeWorkspace()">Refresh</button>
+    </div>
+    <div class="code-status" id="code-workspace-status">No workspace selected yet.</div>
   </div>
 
-  <div class="arp-section" id="arp-tools-section" style="display:none">
+  <div class="arp-section" id="arp-tools-section">
     <div class="arp-head" id="arp-tools-head">TOOLS ENABLED</div>
     <div id="arp-tools-list"></div>
   </div>
@@ -1116,9 +1135,22 @@ body.with-sidebar .chat-status-bar{display:flex}
     <div id="arp-files-list">
       <div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">
         No workspace selected.<br/>
-        Open a folder once the agentic IDE ships to surface live tools and files in context here.
+        Choose a folder to surface live files in context here.
       </div>
     </div>
+  </div>
+
+  <div class="arp-section">
+    <div class="arp-head">EDITOR</div>
+    <input class="code-input" id="code-file-path" placeholder="No file open" readonly />
+    <textarea class="code-editor" id="code-editor" spellcheck="false" placeholder="Open a file from the workspace."></textarea>
+    <div class="code-actions">
+      <button class="code-btn primary" onclick="saveCodeFile()">Save</button>
+      <button class="code-btn" onclick="runCodeSelection()">Run selection</button>
+      <button class="code-btn" onclick="askCodeAi('explain')">Explain</button>
+      <button class="code-btn" onclick="askCodeAi('refactor')">Refactor</button>
+    </div>
+    <div class="code-status" id="code-editor-status">Workspace edits ask for permission before writing.</div>
   </div>
 
   <div style="flex:1"></div>
@@ -1132,8 +1164,18 @@ body.with-sidebar .chat-status-bar{display:flex}
 <!-- ═══════════ OPERATOR PANE ═══════════ -->
 <div id="operator-pane" class="operator-pane">
   <div class="op-header">
-    <span>📟 Operator Console</span>
-    <span style="color:var(--t3);margin-left:auto;font-size:10px">Active Runs: 0</span>
+    <span>Operator Console</span>
+    <div class="op-tabs">
+      <span class="op-tab on" id="op-tab-log" onclick="opTab('log')">LOG</span>
+      <span class="op-tab" id="op-tab-tools" onclick="opTab('tools')">TOOLS</span>
+      <span class="op-tab" id="op-tab-runs" onclick="opTab('runs')">RUNS</span>
+    </div>
+    <button class="op-btn" onclick="opPause()">Pause</button>
+    <button class="op-btn" onclick="opStep()">Step</button>
+    <button class="op-btn" onclick="opStop()">Stop</button>
+    <button class="op-btn" onclick="opClear()">Clear</button>
+    <button class="op-btn" onclick="opCopy()">Copy</button>
+    <span id="op-active-runs" style="color:var(--t3);margin-left:auto;font-size:10px">Active Runs: 0</span>
   </div>
   <div class="op-content" id="op-log">
     <div class="op-log-line tool">[SYSTEM] Operator Mode initialized. Ready for telemetry.</div>
@@ -1189,42 +1231,25 @@ let chatSearchQuery = ''; // sidebar search filter
 
 // ═══ TOKEN TRACKING ═══
 let sessionTokens = 0;
-let sessionCost = 0;
 let sessionMsgs = 0;
-const TOKEN_COSTS = {
-  gemini: {input:0.000000075, output:0.0000003},
-  groq: {input:0.00000005, output:0.00000008},
-  deepseek: {input:0.00000014, output:0.00000028},
-  mistral: {input:0.000002, output:0.000006},
-  qwen: {input:0.0000006, output:0.0000006},
-  grok: {input:0.000005, output:0.000015},
-  claude: {input:0.000003, output:0.000015},
-  openai: {input:0.0000025, output:0.00001},
-  perplexity: {input:0.000001, output:0.000001},
-  cohere: {input:0.0000005, output:0.0000015}
-};
+let sessionUsageKnown = false;
 // trackTokens(text, role, provider [, usage])
 // `usage` is the normalised {prompt, completion, total} object that the
-// main-process H.ai handler now returns next to `reply`. When supplied, we
-// use the real token count from the API instead of the chars/3.5 estimate.
-// Gemini, Anthropic, OpenAI, Groq, DeepSeek, Mistral, Qwen, Grok, Cohere,
-// and Perplexity all expose token counts on every successful response.
+// main-process H.ai handler now returns next to `reply`. No fake pricing or
+// char-based estimates: if the provider does not return usage, we say so.
 function trackTokens(text, role, provider, usage) {
-  const costs = TOKEN_COSTS[provider] || TOKEN_COSTS.gemini;
   let pTok = 0, cTok = 0;
   if (usage && (usage.prompt != null || usage.completion != null)) {
     pTok = usage.prompt || 0;
     cTok = usage.completion || 0;
+    sessionUsageKnown = true;
   } else {
-    // Fallback: estimate from text length only if the API didn't surface
-    // counts (local models, errors, missing usage block).
-    const est = Math.ceil((text||'').length / 3.5);
-    if (role === 'user') pTok = est; else cTok = est;
+    if (role === 'user') sessionMsgs++;
+    updateTokenDisplay();
+    return 0;
   }
   const tokens = pTok + cTok;
-  const cost = pTok * costs.input + cTok * costs.output;
   sessionTokens += tokens;
-  sessionCost += cost;
   if (role === 'user') sessionMsgs++;
   updateTokenDisplay();
   return tokens;
@@ -1234,8 +1259,8 @@ function updateTokenDisplay() {
   try {
     document.getElementById('stat-msgs').textContent = sessionMsgs;
     document.getElementById('stat-tokens').textContent = fmt(sessionTokens);
-    document.getElementById('stat-cost').textContent = '$' + sessionCost.toFixed(3);
-    document.getElementById('csb-tokens').textContent = fmt(sessionTokens) + ' tokens';
+    document.getElementById('stat-usage').textContent = sessionUsageKnown ? 'provider usage' : 'unavailable';
+    document.getElementById('csb-tokens').textContent = sessionUsageKnown ? fmt(sessionTokens) + ' tokens' : 'usage unavailable';
   } catch(_) {}
 }
 
@@ -1502,8 +1527,8 @@ async function startWakeMode(){
   const hasGroq = await H.hasKey('groq');
   if(!hasGroq){
     addMsg('bot', lang==='ru'
-      ? '⚠️ **Wake Word требует Groq ключ** для транскрипции голоса.\n\nПочему: Google Web Speech API сломан в Electron (network error — известный баг).\n\n✅ Решение: Добавь бесплатный Groq ключ в ⚙️ Настройки → AI Providers → Groq\n\nПолучить бесплатно: console.groq.com'
-      : '⚠️ **Wake Word requires a Groq key** for voice transcription.\n\nWhy: Google Web Speech API is broken in Electron (network error — known bug).\n\n✅ Fix: Add free Groq key in ⚙️ Settings → AI Providers → Groq\n\nGet free: console.groq.com');
+      ? '⚠️ **Wake Word требует Groq ключ** для транскрипции голоса.\n\nПочему: Google Web Speech API сломан в Electron (network error — известный баг).\n\n✅ Решение: Добавь Groq ключ в ⚙️ Настройки → AI Providers → Groq\n\nПолучить ключ: console.groq.com'
+      : '⚠️ **Wake Word requires a Groq key** for voice transcription.\n\nWhy: Google Web Speech API is broken in Electron (network error — known bug).\n\n✅ Fix: Add your Groq key in ⚙️ Settings → AI Providers → Groq\n\nGet key: console.groq.com');
     wakeOn=false;
     document.getElementById('tc-wake').classList.remove('on','special');
     return;
@@ -2279,6 +2304,7 @@ function _chatGroupKey(u){
 }
 function _escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function _escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+const esc = _escHtml;
 function _shortTs(iso){
   if (!iso) return '';
   try {
@@ -2376,8 +2402,8 @@ function _replayMessages(messages){
   history = [];
   // Reset per-chat counters; they'll be re-accumulated as we replay.
   sessionTokens = 0;
-  sessionCost = 0;
   sessionMsgs = 0;
+  sessionUsageKnown = false;
   if (!messages || messages.length === 0) {
     // Empty chat → restore the welcome greeting so the canvas isn't blank.
     if (typeof showGreeting === 'function') {
@@ -2526,7 +2552,7 @@ async function _autoNameChat(userMsg) {
   if (cur && cur.title && cur.title.trim() && cur.title !== t('untitledChat')) return; // already named
   try {
     const sys = 'Generate a very short chat title (3-6 words max) for a conversation starting with the following message. Return ONLY the title, no quotes, no explanation.';
-    const res = await H.ai([{role:'user', content: userMsg}], prov, sys, {model: geminiModel});
+    const res = await H.ai([{role:'user', content: userMsg}], prov, sys, aiOptsForProvider(prov));
     if (res && res.reply) {
       const title = res.reply.trim().replace(/^["']|["']$/g,'').slice(0,50);
       if (title) {
@@ -2541,8 +2567,24 @@ function updateStatusBar(title) {
   try {
     document.getElementById('csb-title').textContent = title || (lang==='ru'?'Новый чат':'New chat');
     document.getElementById('csb-provider').textContent = prov.charAt(0).toUpperCase() + prov.slice(1);
-    document.getElementById('csb-model').textContent = prov === 'gemini' ? geminiModel.replace('gemini-','') : prov;
+    document.getElementById('csb-model').textContent = getSelectedModelForProvider(prov) || prov;
   } catch(_) {}
+}
+
+function getSelectedModelForProvider(p){
+  try {
+    if (p === 'ollama') return document.getElementById('pi-ollama-model')?.value || '';
+    if (p === 'lmstudio') return document.getElementById('pi-lmstudio-model')?.value || '';
+    const sel = document.getElementById('ms-' + p);
+    if (sel?.value) return sel.value;
+    if (p === 'gemini') return geminiModel || 'gemini-2.5-flash';
+  } catch(_) {}
+  return '';
+}
+
+function aiOptsForProvider(p){
+  const model = getSelectedModelForProvider(p);
+  return model ? { model } : {};
 }
 
 // ═══ LICENSE PILL — show Pro/Trial/Expired status in chat status bar ═══
@@ -2862,7 +2904,7 @@ async function loadPanel(){
     claude:'claude-sonnet-4-6', openai:'gpt-4o', gemini:'gemini-2.5-flash',
     groq:'llama-3.3-70b-versatile', deepseek:'deepseek-chat', grok:'grok-4',
     mistral:'mistral-large-latest', qwen:'qwen-plus',
-    perplexity:'sonar-pro', cohere:'command-a-03-2025'
+    perplexity:'sonar-pro', cohere:'command-a-03-2025', openrouter:'openai/gpt-4o-mini'
   };
   await Promise.all(Object.keys(_modelDefaults).map(async (p) => {
     try {
@@ -3245,7 +3287,7 @@ async function saveModelSetting(provider, model){
     if (typeof prov !== 'undefined' && prov === provider) {
       try { document.getElementById('csb-model').textContent = model; } catch(_){}
     }
-    try { updateThinkingHint(); } catch(_){}
+    try { updateThinkingHint(); updateStatusBar(); renderCodeContext(); } catch(_){}
   } catch(e) { console.warn('saveModelSetting failed:', e?.message); }
 }
 async function saveLang(){const next=document.getElementById('pi-lang').value;if(await saveSetting('lang',next,'Language')){lang=next;applyLang();showGreeting();}}
@@ -3393,7 +3435,7 @@ async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все клю
 // ═══════════════════════════════════════════════════════════════
 // PROVIDER / MODE / TOGGLES
 // ═══════════════════════════════════════════════════════════════
-function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');try{updateThinkingHint();}catch(_){}}
+function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');try{updateThinkingHint();updateStatusBar();renderCodeContext();}catch(_){}}
 function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)saveSetting('mode',m,'Mode');}
 function toggleSearch(){const next=!searchOn;document.getElementById('tc-search').classList.toggle('on',next);saveSetting('searchOn',next,'Search toggle').then(ok=>{if(ok){searchOn=next;}else{document.getElementById('tc-search').classList.toggle('on',searchOn);}});}
 function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',next);saveSetting('screenWatcher',next,'Screen AI toggle').then(ok=>{if(ok){eyeOn=next;document.getElementById('sw-eye')?.classList.toggle('on',next);}else{document.getElementById('tc-eye').classList.toggle('on',eyeOn);}});}
@@ -3550,6 +3592,7 @@ function escHtml(str) {
 
 // Run agent loop with streaming UI updates
 async function runAgent(text) {
+  const opRun = opStartRun('agent', text);
   rmGreet();
   addMsg('user', text);
 
@@ -3559,6 +3602,7 @@ async function runAgent(text) {
   // Listen for step updates
   // Listen for step updates from agent
   H.onAgentStep((step) => {
+    opLog(`tool ${step.type || 'step'} ${step.tool || ''} ${step.reason || ''}`, 'tool');
     if (step.type === 'executing') {
       steps.push({ tool: step.tool, reason: step.reason, result: null });
     } else if (step.type === 'result') {
@@ -3578,6 +3622,7 @@ async function runAgent(text) {
     
     const agentPromise = H.agentRun(text, {
       provider: currentProvider,
+      model: getSelectedModelForProvider(currentProvider),
       history: history.slice(-8),
       maxSteps: 8
     });
@@ -3595,7 +3640,10 @@ async function runAgent(text) {
       // Save to long-term memory
       try { H.memSaveConversation(text, result.answer); } catch(_){}
     }
+    opEndRun(opRun, result.ok ? 'done' : 'error');
   } catch (e) {
+    opLog(`agent error: ${e.message}`, 'error');
+    opEndRun(opRun, 'error');
     // Handle timeout or other errors
     renderAgentPanel(steps, `Error: ${e.message}`);
     addMsg('bot', lang === 'ru' 
@@ -3622,6 +3670,7 @@ async function sendMsg(){
   }
 
   document.getElementById('btn-send').disabled=true;
+  activeMessageRun = opStartRun('chat', text || 'attachments');
   window.speechSynthesis?.cancel();
 
   // Show user message with attachment names
@@ -3678,7 +3727,7 @@ ${fileContext}`}];
         rmTyping(); addTyping();
         setStatus(lang==='ru'?'🤖 Анализирую файл…':'🤖 Analyzing file…', true);
         let res;
-        try { res = await H.ai(msgs_for_ai, prov, null, null); }
+        try { res = await H.ai(msgs_for_ai, prov, null, aiOptsForProvider(prov)); }
         catch(e) { res = {error: e.message}; }
         rmTyping();
         if(res.error) addMsg('bot',`❌ ${res.error}`);
@@ -3805,7 +3854,7 @@ ${fileContext}`}];
       const ctx=`Search: "${q2}"\n${sr.answer?'Answer: '+sr.answer+'\n\n':''}${sr.results.map((r,i)=>`[${i+1}] ${r.title}\n${r.url}\n${(r.content||'').slice(0,350)}`).join('\n\n')}\n\nUser: ${text}`;
       const sys2=lang==='ru'?`Ты Хорайзон. Синтезируй результаты. Дай чёткий ответ на русском. Ссылайся на [1],[2].`:`You are Horizon. Synthesize search results. Clear helpful answer. Cite [1],[2].`;
       let res;
-      try { res=await H.ai([...history.slice(0,-1),{role:'user',content:ctx}],prov,sys2); }
+      try { res=await H.ai([...history.slice(0,-1),{role:'user',content:ctx}],prov,sys2,aiOptsForProvider(prov)); }
       catch(e){ res={error:e.message}; }
       rmTyping();
       if(res.error)addMsg('bot',`⚠️ ${res.error}`);
@@ -3837,7 +3886,7 @@ ${fileContext}`}];
     :`You are Horizon AI — an advanced personal desktop agent created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, Groq, DeepSeek, Mistral, or any other AI. You ARE HORIZON — intelligent, friendly. You can control the PC and see the screen. User: ${userName}. Time: ${new Date().toLocaleString()}.${sysCtx}\n\nUse Markdown.${personaExtra}`;
   let sys=modeSys?`${identity}\n\n${modeSys}`:identity;
   
-  const opts=prov==='gemini'?{model:geminiModel}:undefined;
+  const opts=aiOptsForProvider(prov);
   try {
     const res=await H.ai(history,prov,sys,opts);
     rmTyping();
@@ -3864,6 +3913,7 @@ ${fileContext}`}];
 
 function cleanup(){
   try{rmTyping();}catch(e){}
+  try{ if(activeMessageRun){ opEndRun(activeMessageRun,'done'); activeMessageRun=null; } }catch(e){}
   try{document.getElementById('btn-send').disabled=false;}catch(e){}
   try{setStatus(t('ready'));}catch(e){}
   try{document.getElementById('inp').focus();}catch(e){}
@@ -4277,7 +4327,7 @@ Available actions: open_url(url), open_site(name), type_text(text,enter), press_
 Reply with ONLY JSON.`;
   
   try {
-    const res = await H.ai([{role:'user',content:prompt}], provider);
+    const res = await H.ai([{role:'user',content:prompt}], provider, null, aiOptsForProvider(provider));
     if (res.reply) {
       const jsonMatch = res.reply.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -5590,13 +5640,210 @@ H.onMarketAuthenticated?.(async (user) => {
   refreshAccount();
 })();
 
+// CODE MODE / OPERATOR MODE RUNTIME
 let codeModeActive = false;
+let codeWorkspace = '';
+let codeDir = '';
+let codeCurrentFile = '';
+let operatorRuns = new Map();
+let operatorLogLines = [];
+let operatorTab = 'log';
+let operatorPaused = false;
+let operatorStopRequested = false;
+let opSeq = 0;
+let activeMessageRun = null;
+
+function codeJoin(root, rel=''){
+  const sep = root.includes('\\') ? '\\' : '/';
+  if (!rel) return root;
+  return root.replace(/[\\/]+$/,'') + sep + rel.replace(/^[\\/]+/,'');
+}
+
+function codeRelJoin(base, name){
+  return [base, name].filter(Boolean).join('/');
+}
+
+function codeSetStatus(text, bad=false){
+  const el=document.getElementById('code-editor-status');
+  if(el){ el.textContent=text; el.style.color=bad?'#fca5a5':'#8d96ab'; }
+}
+
+function inferCodeLang(file){
+  const ext=(file||'').split('.').pop()?.toLowerCase();
+  return ({js:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',ps1:'powershell',sh:'bash',html:'html',css:'css',json:'json'}[ext]) || 'python';
+}
+
+function renderCodeContext(){
+  const meta=document.getElementById('code-context-meta');
+  if(meta) meta.textContent = `${prov || provider} / ${getSelectedModelForProvider(prov || provider) || 'default'} / ${codeWorkspace || 'no workspace'}`;
+  const tools=document.getElementById('arp-tools-list');
+  if(tools){
+    const rows=[
+      ['fs.read_file', codeWorkspace ? 'workspace scope' : 'no workspace'],
+      ['fs.write_file', 'permission required'],
+      ['shell.exec', 'permission required'],
+      ['ai.edit', `${prov || provider} model`],
+    ];
+    tools.innerHTML=rows.map(([name,desc])=>`<div class="arp-tool"><div><div class="arp-t-name">${name}</div><div class="arp-t-desc">${desc}</div></div><div class="arp-t-switch on"></div></div>`).join('');
+  }
+}
+
+async function chooseCodeWorkspace(){
+  const r=await H.pcChooseFolder?.().catch(e=>({ok:false,err:e.message}));
+  if(!r?.ok) { codeSetStatus(r?.err || 'Folder selection cancelled.', true); return; }
+  codeWorkspace=r.path; codeDir='';
+  await refreshCodeWorkspace();
+  renderCodeContext();
+}
+
+async function refreshCodeWorkspace(nextDir){
+  if (typeof nextDir === 'string') codeDir = nextDir;
+  if(!codeWorkspace) codeWorkspace = await H.get('codeWorkspace').catch(()=> '') || '';
+  const status=document.getElementById('code-workspace-status');
+  const list=document.getElementById('arp-files-list');
+  if(!codeWorkspace){
+    if(status) status.textContent='No workspace selected yet.';
+    if(list) list.innerHTML='<div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">Choose a folder to load files.</div>';
+    renderCodeContext();
+    return;
+  }
+  const abs=codeJoin(codeWorkspace, codeDir);
+  const r=await H.pcListDir(abs).catch(e=>({ok:false,err:e.message}));
+  if(status) status.textContent = r.ok ? abs : (r.err || 'Could not read workspace.');
+  if(!r.ok){ if(list) list.innerHTML='<div class="code-status">Could not read this folder.</div>'; return; }
+  const entries=(r.entries||[]).filter(e=>!['.git','node_modules','dist','build'].includes(e.name)).sort((a,b)=>(b.isDir-a.isDir)||a.name.localeCompare(b.name)).slice(0,80);
+  const up = codeDir ? `<div class="arp-file" onclick="refreshCodeWorkspace('${codeDir.split('/').slice(0,-1).join('/')}')"><span>../</span><span>folder</span></div>` : '';
+  if(list) list.innerHTML = up + entries.map(e=>{
+    const rel=codeRelJoin(codeDir,e.name);
+    const action=e.isDir ? `refreshCodeWorkspace('${rel.replace(/'/g,"\\'")}')` : `openCodeFile('${rel.replace(/'/g,"\\'")}')`;
+    return `<div class="arp-file ${rel===codeCurrentFile?'active':''}" onclick="${action}"><span>${esc(e.name)}</span><span>${e.isDir?'dir':'file'}</span></div>`;
+  }).join('');
+  renderCodeContext();
+}
+
+async function openCodeFile(rel){
+  if(!codeWorkspace) return;
+  const abs=codeJoin(codeWorkspace, rel);
+  const r=await H.pcReadFile(abs).catch(e=>({ok:false,err:e.message}));
+  if(!r.ok){ codeSetStatus(r.err || 'Could not open file.', true); return; }
+  codeCurrentFile=rel;
+  document.getElementById('code-file-path').value=abs;
+  document.getElementById('code-editor').value=r.content||'';
+  codeSetStatus(`Opened ${rel}`);
+  await refreshCodeWorkspace(codeDir);
+}
+
+async function saveCodeFile(){
+  if(!codeWorkspace || !codeCurrentFile){ codeSetStatus('Open a file first.', true); return; }
+  const abs=codeJoin(codeWorkspace, codeCurrentFile);
+  opLog(`permission write ${abs}`, 'run');
+  const r=await safeWriteFile(abs, document.getElementById('code-editor').value);
+  codeSetStatus(r?.ok ? `Saved ${codeCurrentFile}` : (r?.err || 'Save denied or failed.'), !r?.ok);
+}
+
+async function runCodeSelection(){
+  const editor=document.getElementById('code-editor');
+  const code=editor.value.slice(editor.selectionStart, editor.selectionEnd) || editor.value;
+  if(!code.trim()){ codeSetStatus('Nothing to run.', true); return; }
+  const run=opStartRun('code', codeCurrentFile || inferCodeLang(codeCurrentFile));
+  const r=await safeExecCode(code, inferCodeLang(codeCurrentFile));
+  opLog(r?.ok ? (r.out || '(no output)') : (r?.err || 'code failed'), r?.ok?'tool':'error');
+  opEndRun(run, r?.ok?'done':'error');
+}
+
+async function askCodeAi(kind){
+  const editor=document.getElementById('code-editor');
+  const selection=editor.value.slice(editor.selectionStart, editor.selectionEnd) || editor.value;
+  if(!selection.trim()){ codeSetStatus('Open a file or select code first.', true); return; }
+  const prompt = kind === 'refactor'
+    ? `Refactor this code. Return a clear patch-style explanation and improved code.\nFile: ${codeCurrentFile}\n\n${selection}`
+    : `Explain this code clearly and point out risks or bugs.\nFile: ${codeCurrentFile}\n\n${selection}`;
+  const run=opStartRun('ai.code', `${kind} ${codeCurrentFile || ''}`);
+  const res=await H.ai([{role:'user',content:prompt}], prov, null, aiOptsForProvider(prov)).catch(e=>({error:e.message}));
+  if(res.error){ opLog(res.error,'error'); codeSetStatus(res.error,true); opEndRun(run,'error'); return; }
+  addMsg('bot', res.reply, {model:res.model||prov});
+  trackTokens(res.reply,'assistant',prov,res.usage);
+  opLog(`ai.code ${kind} complete`, 'tool');
+  opEndRun(run,'done');
+}
+
+function opStartRun(kind, label){
+  const id='run-'+(++opSeq);
+  operatorStopRequested = false;
+  operatorRuns.set(id,{id,kind,label,status:'running',started:Date.now()});
+  opLog(`${kind} started: ${label || ''}`, 'run');
+  opRefresh();
+  return id;
+}
+function opEndRun(id,status='done'){
+  const r=operatorRuns.get(id); if(!r) return;
+  if(r.status==='stopped') { opLog(`${r.kind} finished after stop request`, 'run'); opRefresh(); return; }
+  r.status=status; r.ended=Date.now();
+  opLog(`${r.kind} ${status} (${Math.round((r.ended-r.started)/1000)}s)`, status==='error'?'error':'run');
+  opRefresh();
+}
+function opRefresh(){
+  const active=[...operatorRuns.values()].filter(r=>r.status==='running').length;
+  const el=document.getElementById('op-active-runs');
+  if(el) el.textContent=`Active Runs: ${active}`;
+  opRender();
+}
+function opClear(){ operatorLogLines=[]; opRender(); }
+async function opCopy(){ try{ await H.copy(document.getElementById('op-log')?.innerText || ''); }catch(_){} }
+function opTab(tab){
+  operatorTab=tab;
+  ['log','tools','runs'].forEach(t=>document.getElementById(`op-tab-${t}`)?.classList.toggle('on', t===tab));
+  opRender();
+}
+function opPause(){
+  operatorPaused=!operatorPaused;
+  opLog(operatorPaused ? 'pause requested' : 'resume requested', 'run');
+}
+function opStep(){
+  operatorPaused=false;
+  opLog('manual step requested', 'run');
+}
+function opStop(){
+  operatorStopRequested=true;
+  for(const r of operatorRuns.values()){
+    if(r.status==='running'){ r.status='stopped'; r.ended=Date.now(); }
+  }
+  opLog('stop requested for active runs', 'error');
+  opRefresh();
+}
+function opRender(){
+  const log=document.getElementById('op-log');
+  if(!log) return;
+  if(operatorTab==='tools'){
+    const rows=[
+      ['provider', prov || provider || 'unset'],
+      ['model', getSelectedModelForProvider(prov || provider) || 'default'],
+      ['workspace', codeWorkspace || 'not selected'],
+      ['permission gate', permissionGateEnabled ? 'enabled' : 'disabled'],
+      ['paused', operatorPaused ? 'yes' : 'no'],
+    ];
+    log.innerHTML=rows.map(([k,v])=>`<div class="op-log-line tool"><b>${esc(k)}</b> · ${esc(String(v))}</div>`).join('');
+    return;
+  }
+  if(operatorTab==='runs'){
+    const rows=[...operatorRuns.values()].reverse();
+    log.innerHTML=rows.length ? rows.map(r=>{
+      const end=r.ended || Date.now();
+      return `<div class="op-log-line run"><b>${esc(r.status)}</b> · ${esc(r.kind)} · ${esc(r.label||'')} · ${Math.round((end-r.started)/1000)}s</div>`;
+    }).join('') : '<div class="op-log-line tool">No runs yet.</div>';
+    return;
+  }
+  log.innerHTML=operatorLogLines.slice(-200).map(l=>`<div class="op-log-line ${l.type}">[${esc(l.time)}] ${esc(l.msg)}</div>`).join('');
+  log.scrollTop=log.scrollHeight;
+}
 
 function toggleCodeMode() {
   codeModeActive = !codeModeActive;
   if (codeModeActive) {
     document.body.classList.add('code-mode-active');
     document.getElementById('code-mode-btn').classList.add('proc');
+    refreshCodeWorkspace().catch(()=>{});
+    renderCodeContext();
   } else {
     document.body.classList.remove('code-mode-active');
     document.getElementById('code-mode-btn').classList.remove('proc');
@@ -5610,19 +5857,15 @@ function toggleOperatorMode() {
   if (operatorModeActive) {
     document.body.classList.add('operator-mode-active');
     document.getElementById('operator-mode-btn').classList.add('proc');
+    opRefresh();
   } else {
     document.body.classList.remove('operator-mode-active');
     document.getElementById('operator-mode-btn').classList.remove('proc');
   }
 }
 function opLog(msg, type='info') {
-  const log = document.getElementById('op-log');
-  if (!log) return;
-  const line = document.createElement('div');
-  line.className = `op-log-line ${type}`;
-  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
+  operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type});
+  opRender();
 }
 const origLog = console.log;
 console.log = function(...args) {

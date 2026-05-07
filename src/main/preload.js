@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('H', {
   pcReadFile:           (p)          => ipcRenderer.invoke('pcReadFile', p),
   pcWriteFile:          (p, c)       => ipcRenderer.invoke('pcWriteFile', p, c),
   pcListDir:            (d)          => ipcRenderer.invoke('pcListDir', d),
+  pcChooseFolder:       ()           => ipcRenderer.invoke('pcChooseFolder'),
   // ── PC Keyboard ──────────────────────────────────────────────────────────────
   pcType:               (t)          => ipcRenderer.invoke('pcType', t),
   pcKeyPress:           (k)          => ipcRenderer.invoke('pcKeyPress', k),
