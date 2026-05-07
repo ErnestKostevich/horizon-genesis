@@ -40,21 +40,46 @@
     }
   }
 
+  // Plans that hold the product itself, not a paid subscription. Their
+  // pill should read OWNER / OFFICIAL / etc. instead of "PRO / owner",
+  // and the click target opens the account / dashboard, not the upgrade
+  // page (they have nothing to upgrade to).
+  const PRIVILEGED = {
+    owner:    'OWNER',
+    official: 'OFFICIAL',
+    admin:    'ADMIN',
+    team:     'TEAM',
+    lifetime: 'LIFETIME',
+  };
+
   function render(state) {
     const host = ensureHost();
     if (!host || !state) return;
 
     const pill = document.createElement('span');
     pill.className = 'license-pill';
+    const planLower = String(state.plan || '').toLowerCase();
+    const privilegedLabel = PRIVILEGED[planLower];
     let label = '';
     let cls = '';
     let title = '';
+    let ctaText = 'UPGRADE';
+    let ctaAction = openUpgrade;
 
-    if (state.reason === 'pro') {
-      label = `PRO / ${state.plan || 'active'}`;
+    if (privilegedLabel) {
+      label = privilegedLabel;
+      title = `${privilegedLabel} access — Horizon is included for this account.`;
+      ctaText = 'ACCOUNT';
+    } else if (state.reason === 'pro') {
+      // Real paid subscriber. Show plan name only when it adds info
+      // (monthly / yearly), drop generic "active" filler.
+      label = planLower === 'monthly' || planLower === 'yearly'
+        ? `PRO / ${planLower}`
+        : 'PRO';
       title = state.expiresAt
         ? `Renews ${new Date(state.expiresAt).toLocaleDateString()}`
         : 'Pro subscription active';
+      ctaText = 'MANAGE';
     } else if (state.reason === 'trial') {
       label = `TRIAL / ${state.trialDaysLeft}d`;
       cls = 'trial';
@@ -71,10 +96,10 @@
     const cta = document.createElement('button');
     cta.type = 'button';
     cta.className = 'lp-cta';
-    cta.textContent = state.reason === 'pro' ? 'MANAGE' : 'UPGRADE';
-    cta.addEventListener('click', (e) => { e.stopPropagation(); openUpgrade(); });
+    cta.textContent = ctaText;
+    cta.addEventListener('click', (e) => { e.stopPropagation(); ctaAction(); });
     pill.appendChild(cta);
-    pill.addEventListener('click', openUpgrade);
+    pill.addEventListener('click', ctaAction);
 
     host.replaceChildren(pill);
   }
