@@ -539,8 +539,18 @@ body.code-mode-active .chat-status-bar, body.code-mode-active .msgs, body.code-m
 /* ═══ OPERATOR MODE ═══ */
 .operator-pane { display:none; position:fixed; bottom:0; left:280px; right:0; height:220px; background:#111111; border-top:1px solid rgba(167,139,250,.3); z-index:50; flex-direction:column; font-family:var(--mono); color:var(--t2); font-size:11px; }
 body.operator-mode-active .operator-pane { display:flex; }
-body.operator-mode-active .msgs { bottom:calc(100px + 220px); }
-body.operator-mode-active .inp-wrap { bottom:220px; }
+/* Reserve real space for the operator-pane by shrinking the body's
+   available height with padding-bottom. The previous rules tried to do
+   this with `bottom:` shifts on relative-positioned .msgs / .inp-wrap,
+   which only translated them visually — the layout slots stayed at the
+   bottom and the operator-pane covered the input row, while the messages
+   list got pushed off the top of the viewport. Net result: chat looked
+   empty whenever Operator was on. */
+body.operator-mode-active { padding-bottom: 220px; }
+/* When Code Mode is also active, the right sidebar takes 360px, so the
+   operator strip should stop at the sidebar edge instead of sliding under
+   it. */
+body.code-mode-active.operator-mode-active .operator-pane { right: 360px; }
 .op-header { padding:6px 12px; background:#1a1a1a; border-bottom:1px solid #333; display:flex; gap:8px; align-items:center; color:#c4b5fd; font-weight:600; text-transform:uppercase; letter-spacing:1px; }
 .op-content { flex:1; overflow-y:auto; padding:8px 12px; line-height:1.6; }
 .op-log-line { margin:2px 0; border-left:2px solid transparent; padding-left:6px; word-break:break-all; }
