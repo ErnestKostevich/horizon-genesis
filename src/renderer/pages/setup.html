@@ -246,17 +246,17 @@ select.sel option{background:#14121a;color:var(--tx-0)}
     <div class="card-head"><div class="ico">✦</div>AI Providers — add at least one<div class="line"></div></div>
 
     <div class="row">
-      <label><span class="dot" id="d-gemini"></span>Gemini 2.5 Flash <span class="tag-free">Free · 1M tok/mo</span><a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get key ↗</a></label>
+      <label><span class="dot" id="d-gemini"></span>Gemini models <span class="tag-free">BYOK</span><a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get key ↗</a></label>
       <div class="field"><input class="pi" type="password" id="s-gemini" placeholder="AIzaSy…"/><button class="btn-save" id="b-gemini" onclick="sk('gemini','s-gemini','b-gemini','d-gemini')">Save</button></div>
     </div>
 
     <div class="row">
-      <label><span class="dot" id="d-groq"></span>Groq — Llama 3.3 70B <span class="tag-free">Free · Fast</span><a onclick="H.openUrl('https://console.groq.com/keys')">Get key ↗</a></label>
+      <label><span class="dot" id="d-groq"></span>Groq models <span class="tag-free">BYOK</span><a onclick="H.openUrl('https://console.groq.com/keys')">Get key ↗</a></label>
       <div class="field"><input class="pi" type="password" id="s-groq" placeholder="gsk_…"/><button class="btn-save" id="b-groq" onclick="sk('groq','s-groq','b-groq','d-groq')">Save</button></div>
     </div>
 
     <div class="row">
-      <label><span class="dot" id="d-deepseek"></span>DeepSeek V3 — cheap (~$0.27/1M)<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label>
+      <label><span class="dot" id="d-deepseek"></span>DeepSeek models<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label>
       <div class="field"><input class="pi" type="password" id="s-deepseek" placeholder="sk-…"/><button class="btn-save" id="b-deepseek" onclick="sk('deepseek','s-deepseek','b-deepseek','d-deepseek')">Save</button></div>
     </div>
 
@@ -290,7 +290,7 @@ select.sel option{background:#14121a;color:var(--tx-0)}
   <div class="card">
     <div class="card-head"><div class="ico">◎</div>Web Search — optional<div class="line"></div></div>
     <div class="row">
-      <label><span class="dot" id="d-tavily"></span>Tavily <span class="tag-free">1,000 free/mo</span><a onclick="H.openUrl('https://app.tavily.com/home')">Get key ↗</a></label>
+      <label><span class="dot" id="d-tavily"></span>Tavily search <span class="tag-free">BYOK</span><a onclick="H.openUrl('https://app.tavily.com/home')">Get key ↗</a></label>
       <div class="field"><input class="pi" type="password" id="s-tavily" placeholder="tvly-…"/><button class="btn-save" id="b-tavily" onclick="sk('tavily','s-tavily','b-tavily','d-tavily')">Save</button></div>
     </div>
   </div>
@@ -302,7 +302,7 @@ select.sel option{background:#14121a;color:var(--tx-0)}
       <label>Speech-to-text provider</label>
       <select class="sel" id="s-vprov">
         <option value="browser">Browser STT — Free, no key needed (basic quality)</option>
-        <option value="groq">Groq Whisper — Free, accurate (uses Groq key)</option>
+        <option value="groq">Groq Whisper — accurate (uses your Groq key)</option>
         <option value="openai">OpenAI Whisper — Best quality (uses OpenAI key)</option>
       </select>
     </div>
