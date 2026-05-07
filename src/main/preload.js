@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('H', {
   settingsDiagnostics:  ()           => ipcRenderer.invoke('settingsDiagnostics'),
   openSettingsFolder:   ()           => ipcRenderer.invoke('openSettingsFolder'),
   localProviderStatus:  (provider)   => ipcRenderer.invoke('localProviderStatus', provider),
+  openrouterListModels: ()           => ipcRenderer.invoke('openrouterListModels'),
   getPort:              ()           => ipcRenderer.invoke('getPort'),
   go:                   (p)          => ipcRenderer.invoke('go', p),
   // ── Window ───────────────────────────────────────────────────────────────────
