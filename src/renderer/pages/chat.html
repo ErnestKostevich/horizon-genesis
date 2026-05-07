@@ -164,6 +164,22 @@ textarea::placeholder{color:var(--t3)}
 .ph-x{-webkit-app-region:no-drag;background:var(--b1);border:1px solid var(--b1);color:var(--t3);font-size:18px;cursor:pointer;width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .ph-x:hover{color:var(--tx);background:var(--b2)}
 .pbody{flex:1;overflow-y:auto;padding:16px}
+/* Tabbed Settings layout: left rail of sections, right scroll area for the
+   active section. Mirrors the Cursor / ChatGPT settings pattern so unrelated
+   things (Connections vs API keys vs Voice vs Models) stop sharing a single
+   scrolling page. */
+.pbody-tabbed{flex:1;display:flex;min-height:0;-webkit-app-region:no-drag}
+.psnav{width:210px;padding:14px 10px;border-right:1px solid var(--b1);display:flex;flex-direction:column;gap:2px;flex-shrink:0;overflow-y:auto;background:rgba(0,0,0,.18)}
+.psnav-tab{background:transparent;border:1px solid transparent;color:var(--t2);padding:9px 12px;border-radius:8px;text-align:left;font-size:12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:10px;font-family:inherit;-webkit-app-region:no-drag}
+.psnav-tab:hover{background:rgba(255,255,255,.04);color:var(--tx)}
+.psnav-tab.on{background:rgba(232,160,80,.12);color:var(--acc);border-color:rgba(232,160,80,.18)}
+.psn-i{font-size:14px;width:20px;text-align:center;flex-shrink:0}
+.psview{flex:1;overflow-y:auto;padding:22px 26px}
+.psview > section{display:none;max-width:760px}
+.psview > section.on{display:block;animation:psFade .15s ease}
+@keyframes psFade{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
+.psview-h{font-size:18px;font-weight:600;color:var(--tx);margin-bottom:4px;font-family:var(--font)}
+.psview-sub{font-size:12px;color:var(--t3);margin-bottom:18px;line-height:1.5}
 .ps{margin-bottom:22px}
 .psl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);margin-bottom:11px;display:flex;align-items:center;gap:8px}
 .psl::after{content:'';flex:1;height:1px;background:var(--b1)}
@@ -173,8 +189,8 @@ textarea::placeholder{color:var(--t3)}
 .pf label a:hover{color:var(--acc)}
 .d2{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.1);flex-shrink:0;transition:background .3s}
 .d2.on{background:var(--green)}
-.pr{display:flex;gap:6px}
-.pi{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--b1);border-radius:8px;padding:8px 11px;color:var(--tx);font-size:12px;font-family:monospace;outline:none;transition:all .2s;-webkit-app-region:no-drag}
+.pr{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pi{flex:1 1 200px;min-width:0;background:rgba(255,255,255,.04);border:1px solid var(--b1);border-radius:8px;padding:8px 11px;color:var(--tx);font-size:12px;font-family:monospace;outline:none;transition:all .2s;-webkit-app-region:no-drag}
 .pi:focus{border-color:rgba(232,160,80,.4)}
 .pi::placeholder{color:var(--t3);font-family:inherit}
 .sel{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--b1);border-radius:8px;padding:8px 11px;color:var(--tx);font-size:12px;outline:none;-webkit-app-region:no-drag}
@@ -197,6 +213,15 @@ textarea::placeholder{color:var(--t3)}
 .info-box{background:var(--acc3);border:1px solid rgba(232,160,80,.18);border-radius:10px;padding:11px 13px;font-size:11px;color:var(--t2);line-height:1.85;margin-top:6px}
 .info-box strong{color:var(--acc)}
 .info-box .kbd{background:rgba(255,255,255,.07);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;font-size:10px;font-family:monospace;color:var(--t2)}
+
+/* Model variant popover (chat header → click model pill) */
+.model-popover{display:none;position:fixed;background:var(--bg2,#14121a);border:1px solid var(--b1);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.55);padding:6px;min-width:300px;max-width:420px;max-height:420px;z-index:300;overflow-y:auto;-webkit-app-region:no-drag}
+.model-popover.show{display:block}
+.model-popover-h{font-size:9px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--t3);padding:8px 10px;border-bottom:1px solid var(--b1);margin-bottom:4px}
+.model-popover-opt{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:11.5px;color:var(--tx);transition:background .12s;line-height:1.4;font-family:var(--mono)}
+.model-popover-opt:hover{background:rgba(255,255,255,.05)}
+.model-popover-opt.on{background:rgba(232,160,80,.12);color:var(--acc)}
+.model-popover-empty{padding:10px;font-size:11px;color:var(--t3);font-style:italic}
 .mic-test-btn{width:100%;padding:10px;background:rgba(255,255,255,.03);border:1px solid rgba(232,160,80,.3);border-radius:9px;color:var(--acc);font-size:12px;cursor:pointer;transition:all .2s;margin-top:4px}
 .mic-test-btn:hover{background:var(--acc3)}
 .mic-st{font-size:10px;color:var(--t3);margin-top:5px;text-align:center}
@@ -619,69 +644,54 @@ body.with-sidebar .chat-status-bar{display:flex}
   </div>
 </aside>
 
-<!-- ═══════════ SETTINGS PANEL ═══════════ -->
+<!-- ═══════════ SETTINGS PANEL ═══════════
+     Tabbed layout: 9 sections in the left rail, scroll area on the right.
+     Inspired by ChatGPT / Cursor settings — group by purpose, not by feature
+     drop-date. Every existing input id stays the same so saveModelSetting,
+     psvk, saveLocalProvider, etc. continue to work without renaming. -->
 <div class="panel" id="panel">
   <div class="ph"><h2>◈ Settings — Horizon AI</h2><button class="ph-x" onclick="closePanel()">×</button></div>
-  <div class="pbody">
+  <div class="pbody-tabbed">
+    <nav class="psnav" id="psnav">
+      <button class="psnav-tab on" onclick="setSettingsTab('account')"  data-tab="account"><span class="psn-i">👤</span><span>Account</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('profile')"  data-tab="profile"><span class="psn-i">📝</span><span>Profile</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('models')"   data-tab="models"><span class="psn-i">🧠</span><span>Models</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('providers')" data-tab="providers"><span class="psn-i">🔑</span><span>Providers</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('connections')" data-tab="connections"><span class="psn-i">🔌</span><span>Connections</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('voice')"    data-tab="voice"><span class="psn-i">🎙</span><span>Voice &amp; Wake</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('features')" data-tab="features"><span class="psn-i">⚡</span><span>Features</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('plugins')"  data-tab="plugins"><span class="psn-i">🧩</span><span>Plugins</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('data')"     data-tab="data"><span class="psn-i">🗑</span><span>Data &amp; Health</span></button>
+    </nav>
+    <div class="psview" id="psview">
 
-    <!-- Connections — unified entry point for OAuth-based services and a
-         clear note about why AI providers need API keys (no OAuth flow
-         exists for their developer APIs, this is a limitation of those
-         platforms, not Horizon). -->
-    <div class="ps">
-      <div class="psl">🔌 Connections</div>
-      <div class="connections-help">
-        Two kinds of connections live in Horizon:
-        <ul style="margin:6px 0 0 18px;padding:0;line-height:1.6">
-          <li><b>OAuth services</b> (Google, GitHub) — click <b>Connect</b> below, sign in in your browser, you're done. No keys to copy.</li>
-          <li><b>AI providers</b> (Claude, OpenAI, Gemini, Groq, etc.) — these don't expose OAuth for their developer APIs, so you have to copy an API key from their dashboard once. Find each "Get key ↗" link in the <b>AI Providers</b> section below.</li>
-        </ul>
-      </div>
-      <div class="pf"><label><span class="d2" id="pd-google-conn"></span>Google Workspace (Gmail / Calendar)</label>
-        <div class="local-status" id="conn-google-status">Not connected. Paste a Google OAuth Client ID + Secret, then click Connect to authorise Gmail and Calendar access.</div>
-        <div class="pr" style="margin-top:6px">
-          <input class="pi" type="text" id="pi-gcid" placeholder="Client ID — xxxx.apps.googleusercontent.com"/>
-          <a class="psv" style="text-decoration:none;text-align:center" onclick="H.openUrl('https://console.cloud.google.com/apis/credentials')">Get credentials ↗</a>
+      <!-- ───────── ACCOUNT ───────── -->
+      <section data-pane="account" class="on">
+        <div class="psview-h">Account</div>
+        <div class="psview-sub">Sign-in state and identity badges. Sign in or out via the 👤 button on the title bar; this section reflects what the marketplace knows about you.</div>
+        <div class="ps">
+          <div id="settings-account-card" class="info-box">
+            Open the 👤 menu in the title bar to sign in. After login your name, badges (Owner / Official / Pro / Verified) and license state appear here automatically.
+          </div>
         </div>
-        <div class="pr" style="margin-top:6px">
-          <input class="pi" type="password" id="pi-gcs" placeholder="Client Secret — GOCSPX-..."/>
-          <button class="psv" id="conn-google-btn" onclick="connectGoogle()">Connect</button>
-          <button class="psv" id="conn-google-disc" onclick="disconnectGoogle()" style="display:none">Disconnect</button>
+      </section>
+
+      <!-- ───────── PROFILE ───────── -->
+      <section data-pane="profile">
+        <div class="psview-h">Profile</div>
+        <div class="psview-sub">Local display preferences. Stored on your device, never sent anywhere.</div>
+        <div class="ps">
+          <div class="pf"><label>Name</label><div class="pr"><input class="pi" type="text" id="pi-name" placeholder="Ernest"/><button class="psv" onclick="savePf()">Save</button></div></div>
+          <div class="pf"><label>Language</label><select class="sel" id="pi-lang" onchange="saveLang()"><option value="ru">🇷🇺 Русский</option><option value="en">🇺🇸 English</option></select></div>
+          <div class="local-status ok" id="settings-save-status">Settings are stored locally and restored on launch.</div>
         </div>
-        <div class="mic-st" id="google-auth-status"></div>
-      </div>
-      <div class="pf"><label><span class="d2" id="pd-github-conn"></span>GitHub <span style="color:var(--t3);font-size:10px">(Personal Access Token)</span></label>
-        <div class="pr">
-          <input class="pi" type="password" id="pi-github-conn" placeholder="github_pat_..." />
-          <button class="psv" onclick="connectGithub()">Save</button>
-          <a class="psv" style="text-decoration:none;text-align:center" onclick="H.openUrl('https://github.com/settings/tokens/new?scopes=repo,read:user&description=Horizon%20AI')">Create token ↗</a>
-        </div>
-        <div class="local-status" id="conn-github-status">Used to attach repos for the agent to read. GitHub doesn't expose a true OAuth flow for repo access in CLIs — token is the canonical path.</div>
-      </div>
-    </div>
+      </section>
 
-    <!-- Profile -->
-    <div class="ps">
-      <div class="psl">👤 Profile</div>
-      <div class="pf"><label>Name</label><div class="pr"><input class="pi" type="text" id="pi-name" placeholder="Ernest"/><button class="psv" onclick="savePf()">Save</button></div></div>
-      <div class="pf"><label>Language</label><select class="sel" id="pi-lang" onchange="saveLang()"><option value="ru">🇷🇺 Русский</option><option value="en">🇺🇸 English</option></select></div>
-      <div class="local-status ok" id="settings-save-status">Settings are stored locally and restored on launch.</div>
-    </div>
-
-    <!-- Settings health -->
-    <div class="ps">
-      <div class="psl">Settings health</div>
-      <div class="local-status" id="settings-health">Checking saved settings...</div>
-      <div class="pr" style="margin-top:10px">
-        <button class="psv" onclick="verifySettingsPersistence()">Verify persistence</button>
-        <button class="psv" onclick="openSettingsFolder()">Open settings folder</button>
-        <button class="psv" onclick="loadSettingsHealth()">Refresh status</button>
-      </div>
-    </div>
-
-    <!-- Model selection -->
-    <div class="ps">
-      <div class="psl">Models — choose which model each provider uses</div>
+      <!-- ───────── MODELS ───────── -->
+      <section data-pane="models">
+        <div class="psview-h">Models</div>
+        <div class="psview-sub">Pick which exact model each provider uses, and how much "thinking" Horizon should do per turn. The model dropdown is also reachable from the chat header — click the model pill above the conversation.</div>
+        <div class="ps">
       <div class="pf"><label>Response Mode</label><div class="pr"><select class="pi ms-sel" id="ms-response-profile" onchange="saveResponseProfile(this.value);updateThinkingHint()">
         <option value="fast">⚡ Fast (Speed)</option>
         <option value="balanced" selected>⚖️ Balanced</option>
@@ -763,14 +773,21 @@ body.with-sidebar .chat-status-bar{display:flex}
         <input class="pi" type="text" id="pi-openrouter-search" placeholder="filter…" oninput="filterOpenRouterModels(this.value)" style="max-width:120px"/>
         <button class="psv" onclick="refreshOpenRouterModels()" title="Pull the latest model catalog from OpenRouter">↻</button>
       </div></div>
-    </div>
+        </div>
+      </section>
 
-    <!-- AI Providers -->
-    <div class="ps">
-      <div class="psl">AI Providers: local + cloud</div>
-      <div class="pf local-provider"><label><span class="d2" id="pd-ollama"></span>Ollama — local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><select class="pi" id="pi-ollama-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('ollama')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('ollama')">Save</button><button class="psv" onclick="testLocalProvider('ollama')">Test</button></div><div class="local-status" id="local-ollama-status">Install Ollama, run a model, then click ↻ to load the model list.</div></div>
-      <div class="pf local-provider"><label><span class="d2" id="pd-lmstudio"></span>LM Studio — local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><select class="pi" id="pi-lmstudio-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('lmstudio')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button><button class="psv" onclick="testLocalProvider('lmstudio')">Test</button></div><div class="local-status" id="local-lmstudio-status">Install LM Studio, start the local server, then click ↻ to load the model list.</div></div>
-      <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini models<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSy…"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
+      <!-- ───────── PROVIDERS ───────── -->
+      <section data-pane="providers">
+        <div class="psview-h">Providers</div>
+        <div class="psview-sub">Add API keys for cloud providers and configure local servers (Ollama, LM Studio). Keys are stored encrypted on your device only — Horizon never sees your prompts. Each "Get key ↗" link opens the relevant dashboard.</div>
+        <div class="ps">
+          <div class="psl">Local servers</div>
+          <div class="pf local-provider"><label><span class="d2" id="pd-ollama"></span>Ollama — local models, no cloud<a onclick="H.openUrl('https://ollama.com')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-ollama-url" placeholder="http://127.0.0.1:11434/v1"/><select class="pi" id="pi-ollama-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('ollama')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('ollama')">Save</button><button class="psv" onclick="testLocalProvider('ollama')">Test</button></div><div class="local-status" id="local-ollama-status">Install Ollama, run a model, then click ↻ to load the model list.</div></div>
+          <div class="pf local-provider"><label><span class="d2" id="pd-lmstudio"></span>LM Studio — local OpenAI-compatible server<a onclick="H.openUrl('https://lmstudio.ai')">Install ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-lmstudio-url" placeholder="http://127.0.0.1:1234/v1"/><select class="pi" id="pi-lmstudio-model"><option value="">(refresh to load models)</option></select><button class="psv" onclick="refreshLocalModels('lmstudio')" title="Pull the latest model list from the local server">↻</button><button class="psv" onclick="saveLocalProvider('lmstudio')">Save</button><button class="psv" onclick="testLocalProvider('lmstudio')">Test</button></div><div class="local-status" id="local-lmstudio-status">Install LM Studio, start the local server, then click ↻ to load the model list.</div></div>
+        </div>
+        <div class="ps">
+          <div class="psl">Cloud API keys</div>
+          <div class="pf"><label><span class="d2" id="pd-gemini"></span>Gemini models<a onclick="H.openUrl('https://aistudio.google.com/apikey')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-gemini" placeholder="AIzaSy…"/><button class="psv" id="pb-gemini" onclick="psvk('gemini','pi-gemini','pb-gemini','pd-gemini')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-groq"></span>Groq models + voice transcription<a onclick="H.openUrl('https://console.groq.com/keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-groq" placeholder="gsk_…"/><button class="psv" id="pb-groq" onclick="psvk('groq','pi-groq','pb-groq','pd-groq')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-deepseek"></span>DeepSeek models<a onclick="H.openUrl('https://platform.deepseek.com/api_keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepseek" placeholder="sk-…"/><button class="psv" id="pb-deepseek" onclick="psvk('deepseek','pi-deepseek','pb-deepseek','pd-deepseek')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-mistral"></span>Mistral Large<a onclick="H.openUrl('https://console.mistral.ai/api-keys/')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-mistral" placeholder="…"/><button class="psv" id="pb-mistral" onclick="psvk('mistral','pi-mistral','pb-mistral','pd-mistral')">Save</button></div></div>
@@ -781,25 +798,54 @@ body.with-sidebar .chat-status-bar{display:flex}
       <div class="pf"><label><span class="d2" id="pd-perplexity"></span>Perplexity (AI Search)<a onclick="H.openUrl('https://www.perplexity.ai/settings/api')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-perplexity" placeholder="pplx-…"/><button class="psv" id="pb-perplexity" onclick="psvk('perplexity','pi-perplexity','pb-perplexity','pd-perplexity')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-cohere"></span>Cohere Command R+<a onclick="H.openUrl('https://dashboard.cohere.com/api-keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-cohere" placeholder="…"/><button class="psv" id="pb-cohere" onclick="psvk('cohere','pi-cohere','pb-cohere','pd-cohere')">Save</button></div></div>
       <div class="pf"><label><span class="d2" id="pd-openrouter"></span>OpenRouter — one key, 200+ models<a onclick="H.openUrl('https://openrouter.ai/keys')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-openrouter" placeholder="sk-or-…"/><button class="psv" id="pb-openrouter" onclick="psvk('openrouter','pi-openrouter','pb-openrouter','pd-openrouter')">Save</button></div></div>
-    </div>
+        </div>
+        <div class="ps">
+          <div class="psl">&#128269; Web Search</div>
+          <div class="pf"><label><span class="d2" id="pd-tavily"></span>Tavily search<a onclick="H.openUrl('https://app.tavily.com/home')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-tavily" placeholder="tvly-…"/><button class="psv" id="pb-tavily" onclick="psvk('tavily','pi-tavily','pb-tavily','pd-tavily')">Save</button></div></div>
+        </div>
+      </section>
 
-    <!-- Web Search -->
-    <div class="ps">
-      <div class="psl">&#128269; Web Search</div>
-      <div class="pf"><label><span class="d2" id="pd-tavily"></span>Tavily search<a onclick="H.openUrl('https://app.tavily.com/home')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-tavily" placeholder="tvly-…"/><button class="psv" id="pb-tavily" onclick="psvk('tavily','pi-tavily','pb-tavily','pd-tavily')">Save</button></div></div>
-    </div>
+      <!-- ───────── CONNECTIONS ───────── -->
+      <section data-pane="connections">
+        <div class="psview-h">Connections</div>
+        <div class="psview-sub">OAuth-based services that don't fit the BYOK pattern. Google Workspace and GitHub each take credentials once and Horizon talks to them on your behalf.</div>
+        <div class="ps">
+          <div class="psl">Google Workspace</div>
+          <div class="pf"><label><span class="d2" id="pd-google-conn"></span>Gmail / Calendar via OAuth</label>
+            <div class="local-status" id="conn-google-status">Not connected. Paste a Google OAuth Client ID + Secret, then click Connect to authorise Gmail and Calendar access.</div>
+            <div class="pr" style="margin-top:6px">
+              <input class="pi" type="text" id="pi-gcid" placeholder="Client ID — xxxx.apps.googleusercontent.com"/>
+              <a class="psv" style="text-decoration:none;text-align:center" onclick="H.openUrl('https://console.cloud.google.com/apis/credentials')">Get credentials ↗</a>
+            </div>
+            <div class="pr" style="margin-top:6px">
+              <input class="pi" type="password" id="pi-gcs" placeholder="Client Secret — GOCSPX-..."/>
+              <button class="psv" id="conn-google-btn" onclick="connectGoogle()">Connect</button>
+              <button class="psv" id="conn-google-disc" onclick="disconnectGoogle()" style="display:none">Disconnect</button>
+            </div>
+            <div class="mic-st" id="google-auth-status"></div>
+          </div>
+        </div>
+        <div class="ps">
+          <div class="psl">GitHub</div>
+          <div class="pf"><label><span class="d2" id="pd-github-conn"></span>Personal Access Token <span style="color:var(--t3);font-size:10px">(repo + read:user)</span></label>
+            <div class="pr">
+              <input class="pi" type="password" id="pi-github-conn" placeholder="github_pat_..." />
+              <button class="psv" onclick="connectGithub()">Save</button>
+              <a class="psv" style="text-decoration:none;text-align:center" onclick="H.openUrl('https://github.com/settings/tokens/new?scopes=repo,read:user&description=Horizon%20AI')">Create token ↗</a>
+            </div>
+            <div class="local-status" id="conn-github-status">GitHub doesn't expose a true OAuth flow for repo access in CLIs — token is the canonical path.</div>
+          </div>
+          <div class="pf"><label>Attach repository</label><div class="pr"><input class="pi" type="text" id="pi-github-repo" placeholder="ErnestKostevich/horizon-genesis"/><button class="psv" onclick="attachGithubRepo()">Attach</button></div></div>
+          <div class="local-status" id="github-status">Public repos work without a token. Private repos use the GitHub connection above.</div>
+          <div id="github-repos" class="local-status" style="margin-top:8px"></div>
+        </div>
+      </section>
 
-    <!-- GitHub repository context -->
-    <div class="ps">
-      <div class="psl">Repository context</div>
-      <div class="pf"><label>Attach repository</label><div class="pr"><input class="pi" type="text" id="pi-github-repo" placeholder="ErnestKostevich/horizon-genesis"/><button class="psv" onclick="attachGithubRepo()">Attach</button></div></div>
-      <div class="local-status" id="github-status">Public repos work without a token. Private repos use the GitHub connection saved above.</div>
-      <div id="github-repos" class="local-status" style="margin-top:8px"></div>
-    </div>
-
-    <!-- Voice — THE CRITICAL SECTION -->
-    <div class="ps">
-      <div class="psl">🎙 Voice & Wake Word</div>
+      <!-- ───────── VOICE & WAKE ───────── -->
+      <section data-pane="voice">
+        <div class="psview-h">Voice &amp; Wake Word</div>
+        <div class="psview-sub">Pick how Horizon listens (STT) and speaks (TTS). The wake word is "Horizon" / "Хорайзон" / "Горизонт" — calibrate sensitivity below.</div>
+        <div class="ps">
       <div class="pf"><label>STT — Speech-to-Text</label>
         <select class="sel" id="pi-vprov" onchange="saveVP()">
           <option value="groq">Groq Whisper — accurate, recommended for Russian</option>
@@ -878,46 +924,64 @@ body.with-sidebar .chat-status-bar{display:flex}
         5. Говори команду → она отправляется автоматически<br><br>
         <strong style="color:var(--red)">Нужен Groq ключ</strong> для wake word + голоса. Бесплатно: console.groq.com
       </div>
+        </div>
+      </section>
+
+      <!-- ───────── FEATURES ───────── -->
+      <section data-pane="features">
+        <div class="psview-h">Features</div>
+        <div class="psview-sub">Toggle-driven capabilities that aren't tied to a specific provider or connection.</div>
+        <div class="ps">
+          <div class="trow"><div class="tinfo">Voice Response (TTS)<small>Horizon speaks answers aloud</small></div><button class="sw on" id="sw-tts" onclick="togSw('tts','sw-tts')"></button></div>
+          <div class="trow"><div class="tinfo">Screen AI<small>Horizon can see your screen</small></div><button class="sw on" id="sw-eye" onclick="togSw('screenWatcher','sw-eye')"></button></div>
+          <div class="trow"><div class="tinfo">Ambient Mode<small>AI proactively suggests help based on screen</small></div><button class="sw" id="sw-ambient" onclick="toggleAmbient()"></button></div>
+          <div class="trow"><div class="tinfo">Smart Notifications<small>Daily briefing: weather, calendar, emails</small></div><button class="sw" id="sw-notifs" onclick="toggleNotifications()"></button></div>
+        </div>
+      </section>
+
+      <!-- ───────── PLUGINS ───────── -->
+      <section data-pane="plugins">
+        <div class="psview-h">Plugins</div>
+        <div class="psview-sub">Installed plugins extend Horizon with extra tools and integrations. Browse the marketplace for more.</div>
+        <div class="ps">
+          <div id="plugin-list" style="margin-bottom:8px"></div>
+          <button class="mic-test-btn" onclick="closePanel();openStore()" style="border-color:rgba(108,140,255,.3);color:var(--acc)">🏪 Open Marketplace</button>
+        </div>
+      </section>
+
+      <!-- ───────── DATA & HEALTH ───────── -->
+      <section data-pane="data">
+        <div class="psview-h">Data &amp; Health</div>
+        <div class="psview-sub">Where your settings live, how to verify they persist, and how to wipe local data if you want to reset.</div>
+        <div class="ps">
+          <div class="psl">Settings storage</div>
+          <div class="local-status" id="settings-health">Checking saved settings...</div>
+          <div class="pr" style="margin-top:10px">
+            <button class="psv" onclick="verifySettingsPersistence()">Verify persistence</button>
+            <button class="psv" onclick="openSettingsFolder()">Open settings folder</button>
+            <button class="psv" onclick="loadSettingsHealth()">Refresh status</button>
+          </div>
+        </div>
+        <div class="ps">
+          <div class="psl">Reset</div>
+          <button class="dbtn" onclick="clearHist()">&#128465; Clear chat history</button>
+          <button class="dbtn" onclick="clearKeys()">⚠️ Delete all API keys</button>
+        </div>
+        <div class="os-footer">
+          <div class="os-footer-row">
+            <span>Horizon Genesis</span>
+            <span class="os-badge">BSL 1.1 source-visible</span>
+          </div>
+          <div class="os-links">
+            <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis')">GitHub ↗</a>
+            <a onclick="H.openUrl('https://horizonaai.dev')">Website ↗</a>
+            <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis/issues')">Report issue ↗</a>
+          </div>
+          <div class="os-ver">v1.0.0 / BYOK / Local-first / Built by Ernest Kostevich</div>
+        </div>
+      </section>
+
     </div>
-
-    <!-- Features -->
-    <div class="ps">
-      <div class="psl">⚡ Features</div>
-      <div class="trow"><div class="tinfo">Voice Response (TTS)<small>Horizon speaks answers aloud</small></div><button class="sw on" id="sw-tts" onclick="togSw('tts','sw-tts')"></button></div>
-      <div class="trow"><div class="tinfo">Screen AI<small>Horizon can see your screen</small></div><button class="sw on" id="sw-eye" onclick="togSw('screenWatcher','sw-eye')"></button></div>
-      <div class="trow"><div class="tinfo">Ambient Mode<small>AI proactively suggests help based on screen</small></div><button class="sw" id="sw-ambient" onclick="toggleAmbient()"></button></div>
-      <div class="trow"><div class="tinfo">Smart Notifications<small>Daily briefing: weather, calendar, emails</small></div><button class="sw" id="sw-notifs" onclick="toggleNotifications()"></button></div>
-    </div>
-
-
-    <!-- Plugins -->
-    <div class="ps">
-      <div class="psl">🧩 Plugins</div>
-      <div id="plugin-list" style="margin-bottom:8px"></div>
-      <button class="mic-test-btn" onclick="closePanel();openStore()" style="border-color:rgba(108,140,255,.3);color:var(--acc)">🏪 Open Marketplace</button>
-    </div>
-
-    <!-- Data -->
-    <div class="ps">
-      <div class="psl">&#128465; Data</div>
-      <button class="dbtn" onclick="clearHist()">&#128465; Clear chat history</button>
-      <button class="dbtn" onclick="clearKeys()">⚠️ Delete all API keys</button>
-    </div>
-
-    <!-- Open-source footer -->
-    <div class="os-footer">
-      <div class="os-footer-row">
-        <span>Horizon Genesis</span>
-        <span class="os-badge">BSL 1.1 source-visible</span>
-      </div>
-      <div class="os-links">
-        <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis')">GitHub ↗</a>
-        <a onclick="H.openUrl('https://horizonaai.dev')">Website ↗</a>
-        <a onclick="H.openUrl('https://github.com/ErnestKostevich/horizon-genesis/issues')">Report issue ↗</a>
-      </div>
-      <div class="os-ver">v1.0.0 / BYOK / Local-first / Built by Ernest Kostevich</div>
-    </div>
-
   </div>
 </div>
 
@@ -1093,12 +1157,18 @@ body.with-sidebar .chat-status-bar{display:flex}
 <!-- ═════ STATUS BAR (above messages) ═════ -->
 <div class="chat-status-bar" id="chat-status-bar">
   <span class="csb-title" id="csb-title">New chat</span>
-  <span class="csb-pill accent csb-clickable" id="csb-provider" onclick="openProviderSettings()" title="Click to switch provider">Gemini</span>
-  <span class="csb-pill csb-clickable" id="csb-model" onclick="openProviderSettings()" title="Click to switch model">2.5-flash</span>
+  <span class="csb-pill accent csb-clickable" id="csb-provider" onclick="openPanel('providers')" title="Click to switch provider">Gemini</span>
+  <span class="csb-pill csb-clickable" id="csb-model" onclick="openModelPicker(event)" title="Click to switch the active provider's model">2.5-flash</span>
   <span class="csb-pill" id="csb-tokens">0 tokens</span>
   <span class="csb-pill csb-clickable" id="csb-license" onclick="onLicensePillClick()" style="display:none"></span>
   <span class="csb-pill csb-byok" id="csb-byok" title="Your API keys live on your machine — calls go directly from your machine to the provider. Horizon never sees prompts.">🔒 BYOK</span>
 </div>
+
+<!-- ═══════════ MODEL VARIANT POPOVER ═══════════
+     Anchored under the csb-model pill. Lists the active provider's model
+     options so you can switch without opening the full Settings panel.
+     Like the model dropdown in ChatGPT / Claude. -->
+<div class="model-popover" id="model-popover"></div>
 
 </div>
 
@@ -2632,17 +2702,82 @@ try {
 
 // ═══ PROVIDER / MODEL CLICK-SWITCH (P1) ═══
 function openProviderSettings(){
-  try {
-    openPanel();
-    setTimeout(()=>{
-      try {
-        const provSection = document.getElementById('panel')?.querySelector('[data-section="providers"]') ||
-                            document.querySelector('#pi-' + prov);
-        if (provSection) provSection.scrollIntoView({behavior:'smooth', block:'center'});
-      } catch(_){}
-    }, 80);
-  } catch(_){}
+  // Legacy entry point — still used by a few buttons. Tabbed Settings means
+  // we just jump straight to the Providers tab.
+  openPanel('providers');
 }
+
+// ═══ MODEL VARIANT POPOVER ═══
+// Click on the model pill in the chat header → small floating popover with
+// the current provider's model dropdown. No need to open Settings for a
+// simple variant switch. Mirrors the ChatGPT / Claude pattern.
+function openModelPicker(ev){
+  try { ev?.stopPropagation(); } catch(_) {}
+  const pop = document.getElementById('model-popover');
+  if (!pop) return;
+  const currentProv = (typeof prov !== 'undefined' ? prov : null) || 'gemini';
+  let html = `<div class="model-popover-h">${currentProv} · model</div>`;
+  // Local providers (ollama, lmstudio, localai) keep their dropdown in
+  // pi-<provider>-model. Cloud providers in ms-<provider>.
+  let localSel = null;
+  if (currentProv === 'ollama' || currentProv === 'lmstudio' || currentProv === 'localai') {
+    localSel = document.getElementById('pi-' + currentProv + '-model');
+  }
+  const cloudSel = document.getElementById('ms-' + currentProv);
+  const sourceSel = localSel || cloudSel;
+  if (!sourceSel || !sourceSel.options || sourceSel.options.length === 0) {
+    html += `<div class="model-popover-empty">No model picker for this provider yet. Configure it in Settings → Models.</div>`;
+  } else {
+    const current = sourceSel.value || '';
+    for (const opt of sourceSel.options) {
+      if (!opt.value) continue;
+      const escVal = opt.value.replace(/'/g, "\\'");
+      const handler = localSel ? `pickLocalModel('${currentProv}','${escVal}')` : `pickModel('${currentProv}','${escVal}')`;
+      const onClass = (opt.value === current) ? ' on' : '';
+      html += `<div class="model-popover-opt${onClass}" onclick="${handler}">${_escHtml(opt.textContent)}</div>`;
+    }
+  }
+  pop.innerHTML = html;
+  // Position the popover under the model pill.
+  const pill = document.getElementById('csb-model');
+  if (pill) {
+    const r = pill.getBoundingClientRect();
+    pop.style.left = Math.max(8, r.left) + 'px';
+    pop.style.top = (r.bottom + 6) + 'px';
+  }
+  pop.classList.add('show');
+}
+
+async function pickModel(provider, model){
+  try { await saveModelSetting(provider, model); } catch(_) {}
+  try { document.getElementById('csb-model').textContent = model; } catch(_) {}
+  closeModelPicker();
+}
+
+async function pickLocalModel(provider, model){
+  try {
+    const sel = document.getElementById('pi-' + provider + '-model');
+    if (sel) sel.value = model;
+    await saveLocalProvider(provider);
+    document.getElementById('csb-model').textContent = model;
+  } catch(_) {}
+  closeModelPicker();
+}
+
+function closeModelPicker(){
+  document.getElementById('model-popover')?.classList.remove('show');
+}
+
+// Outside-click closes the popover. Escape too.
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('model-popover');
+  if (!pop?.classList.contains('show')) return;
+  if (e.target.closest('#model-popover') || e.target.closest('#csb-model')) return;
+  closeModelPicker();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModelPicker();
+});
 
 // ═══ FOCUS TIMER — pomodoro (P1) ═══
 // NOTE: the actual timer state and `startFocusTimer / toggleFocusTimer /
@@ -2884,8 +3019,30 @@ window.addEventListener('DOMContentLoaded', async()=>{
 // ═══════════════════════════════════════════════════════════════
 // SETTINGS PANEL
 // ═══════════════════════════════════════════════════════════════
-function openPanel(){document.getElementById('panel').classList.add('show');}
+async function openPanel(tab){
+  document.getElementById('panel').classList.add('show');
+  if (tab) {
+    setSettingsTab(tab);
+  } else {
+    // Restore the last tab the user was on so the panel doesn't always
+    // snap back to Account.
+    let saved = null;
+    try { saved = await H.get('settingsTab'); } catch(_) {}
+    setSettingsTab(saved || 'account');
+  }
+}
 function closePanel(){document.getElementById('panel').classList.remove('show');}
+
+// Switch the active Settings tab. Updates the left-rail button styling and
+// shows the matching <section data-pane="…">. Persists last tab so the panel
+// reopens where you left it.
+function setSettingsTab(name){
+  if (!name) return;
+  document.querySelectorAll('#psnav .psnav-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  document.querySelectorAll('#psview > section').forEach(s => s.classList.toggle('on', s.dataset.pane === name));
+  try { H.set('settingsTab', name); } catch(_) {}
+  try { document.getElementById('psview').scrollTop = 0; } catch(_) {}
+}
 
 async function loadPanel(){
   // Parallel fetch — fast, no sequential bottleneck

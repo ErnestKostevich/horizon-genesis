@@ -146,6 +146,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'localAiUrl', 'localAiModel',
   'wakeStrictMode', 'wakeVolumeThreshold', 'wakeConfirmBeep',
   'settingsHealthCheckAt', 'googleClientId',
+  'settingsTab',
   'openrouter.modelsCache', 'openrouter.modelsCacheAt',
   'mcp.enabled', 'mcp.servers', 'mcp.toolsCache', 'mcp.toolsCacheAt',
   'codeWorkspace',
