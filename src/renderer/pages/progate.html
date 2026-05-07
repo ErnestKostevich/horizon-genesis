@@ -29,7 +29,12 @@ body{
   font-family:var(--font);font-feature-settings:"ss01","cv11";
   display:flex;align-items:center;justify-content:center;
   padding:30px;position:relative;
-  -webkit-app-region:drag;
+  /* NOTE: do NOT make body draggable. Electron treats every descendant as
+     part of the drag region by default; the card had no-drag but interactive
+     children (buttons, plan tiles, contact links, even Esc-to-quit handling)
+     were swallowed because the drag area on body wins. The header inside the
+     card opts back into drag below — that's the only piece that should move
+     the window. */
 }
 
 /* ─── Fractal shader canvas (deep background) ─── */
@@ -73,7 +78,11 @@ body{
 }
 
 /* ─── Header ─── */
-.hd{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.hd{
+  display:flex;align-items:center;gap:12px;margin-bottom:22px;
+  -webkit-app-region:drag; /* the only draggable strip — moves the window */
+}
+.hd .status-pill{-webkit-app-region:no-drag} /* keep the pill from eating drag clicks too */
 .logo{
   width:44px;height:44px;border-radius:50%;
   background:
