@@ -72,6 +72,16 @@ contextBridge.exposeInMainWorld('H', {
 
   // ── REAL AGENT ────────────────────────────────────────────────────────────────
   agentRun:    (msg, opts)     => ipcRenderer.invoke('agentRun', msg, opts),
+  agentControl:(runId, action) => ipcRenderer.invoke('agentControl', runId, action),
+  agentStep:   (stepId, decision) => ipcRenderer.invoke('agentStep', stepId, decision),
+  agentRuns:   (limit)         => ipcRenderer.invoke('agentRuns', limit),
+  agentRunDetails: (runId)     => ipcRenderer.invoke('agentRunDetails', runId),
+  mcpServersList:  ()          => ipcRenderer.invoke('mcpServersList'),
+  mcpServerUpsert: (config)    => ipcRenderer.invoke('mcpServerUpsert', config),
+  mcpServerRemove: (id)        => ipcRenderer.invoke('mcpServerRemove', id),
+  mcpServerEnable: (id, on)    => ipcRenderer.invoke('mcpServerEnable', id, on),
+  mcpServerTest:   (config)    => ipcRenderer.invoke('mcpServerTest', config),
+  mcpToolsRefresh: ()          => ipcRenderer.invoke('mcpToolsRefresh'),
   agentTool:   (tool, args)    => ipcRenderer.invoke('agentTool', tool, args),
   onAgentStep: (cb)            => ipcRenderer.on('agentStep', (_, step) => cb(step)),
 
