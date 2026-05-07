@@ -2615,10 +2615,18 @@ function _persistChatMessage(role, content, meta){
     _autoNameChat(content);
   }
 }
+// AI auto-name: replace whatever placeholder/stripPreview title the backend
+// stuck on the chat with a 3–6 word AI-generated label. Mirrors how ChatGPT
+// and Cursor name new threads.
+//
+// Earlier code returned early if the chat had ANY non-empty title — but
+// agent.js:748 (chatStore.addMessage) auto-stamps the first 50 chars of the
+// user's message AS the title before this function ever gets called. That
+// made the early-return ALWAYS fire after the first message and AI naming
+// never ran. We trust the call-site gate (sessionMsgs <= 1) instead and
+// always overwrite when we have a real candidate title from the model.
 async function _autoNameChat(userMsg) {
   if (!currentChatId) return;
-  const cur = chatsCache.find(c => c.id === currentChatId);
-  if (cur && cur.title && cur.title.trim() && cur.title !== t('untitledChat')) return; // already named
   try {
     const sys = 'Generate a very short chat title (3-6 words max) for a conversation starting with the following message. Return ONLY the title, no quotes, no explanation.';
     const res = await H.ai([{role:'user', content: userMsg}], prov, sys, aiOptsForProvider(prov));
@@ -2657,6 +2665,23 @@ function aiOptsForProvider(p){
 }
 
 // ═══ LICENSE PILL — show Pro/Trial/Expired status in chat status bar ═══
+// IMPORTANT: H.licenseState() returns the licenseManager.evaluate() shape
+// ({allowed, reason, plan, trialDaysLeft, expiresAt}), NOT the raw
+// /api/license/status payload. Earlier code read state.active and
+// state.in_trial which never exist on this shape, so every render fell
+// through to the EXPIRED branch — even on active trials. That bug is what
+// painted "● EXPIRED" on a 5-day-trial account.
+//
+// We also surface privileged plans (owner/official/admin/team/lifetime)
+// with their own label instead of "PRO · owner" — those accounts hold the
+// product, they're not subscribers.
+const _PRIVILEGED_PILL_LABELS = {
+  owner:    'OWNER',
+  official: 'OFFICIAL',
+  admin:    'ADMIN',
+  team:     'TEAM',
+  lifetime: 'LIFETIME',
+};
 async function refreshLicensePill() {
   const pill = document.getElementById('csb-license');
   if (!pill) return;
@@ -2665,24 +2690,31 @@ async function refreshLicensePill() {
     if (!state) { pill.style.display='none'; return; }
     pill.style.display = 'inline-block';
     pill.classList.remove('accent','warn','danger');
-    if (state.active && !state.in_trial) {
+    const plan = String(state.plan || '').toLowerCase();
+    const privileged = _PRIVILEGED_PILL_LABELS[plan];
+    if (privileged) {
+      pill.textContent = `● ${privileged}`;
+      pill.classList.add('accent');
+      pill.title = `${privileged} access — Horizon is included for this account.`;
+    } else if (state.reason === 'pro') {
       pill.textContent = '● PRO';
       pill.classList.add('accent');
-      const plan = state.plan ? ' · ' + state.plan : '';
-      pill.title = 'Pro active' + plan + (state.expires_at ? ' · expires ' + new Date(state.expires_at).toLocaleDateString() : '');
-    } else if (state.in_trial) {
-      const daysLeft = state.trial_ends_at ? Math.max(0, Math.ceil((new Date(state.trial_ends_at) - new Date()) / 86400000)) : null;
-      pill.textContent = daysLeft != null ? `● TRIAL · ${daysLeft}d` : '● TRIAL';
+      const planSuffix = plan ? ' · ' + plan : '';
+      pill.title = 'Pro active' + planSuffix + (state.expiresAt ? ' · renews ' + new Date(state.expiresAt).toLocaleDateString() : '');
+    } else if (state.reason === 'trial') {
+      const days = (state.trialDaysLeft != null) ? state.trialDaysLeft : null;
+      pill.textContent = days != null ? `● TRIAL · ${days}d` : '● TRIAL';
       pill.classList.add('warn');
-      pill.title = 'Free trial active. Click to upgrade.';
-    } else if (state.payment_pending) {
-      pill.textContent = '● PENDING';
-      pill.classList.add('warn');
-      pill.title = 'Payment confirming on-chain…';
-    } else {
+      pill.title = `Free trial — ${days != null ? days + ' days' : ''} left. Click to upgrade.`;
+    } else if (state.reason === 'trial-expired' || state.reason === 'expired') {
       pill.textContent = '● EXPIRED';
       pill.classList.add('danger');
-      pill.title = 'Subscription expired. Click to renew.';
+      pill.title = state.reason === 'trial-expired'
+        ? 'Trial ended. Click to upgrade.'
+        : 'Subscription expired. Click to renew.';
+    } else {
+      // Unknown reason → hide rather than lie.
+      pill.style.display = 'none';
     }
   } catch(_) { try { pill.style.display='none'; } catch(__){} }
 }
