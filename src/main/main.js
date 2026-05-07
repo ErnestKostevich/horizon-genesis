@@ -82,6 +82,7 @@ const PRO_HANDLERS = new Set([
   'browserOpenUrl', 'browserSearch', 'browserOpenSite',
   // MCP write actions
   'mcpGmailSend', 'mcpCalendarCreate', 'mcpCalendarQuickAdd',
+  'mcpServerUpsert', 'mcpServerRemove', 'mcpServerEnable', 'mcpServerTest', 'mcpToolsRefresh',
   // Workflows / recorder
   'workflowRun',
   'recorderStart', 'recorderStop', 'recorderSave', 'recorderNarrate',
@@ -280,7 +281,7 @@ function toOpenAITools(tools = []) {
     function: {
       name: t.name,
       description: t.desc || t.description || t.name,
-      parameters: toolParamsToJsonSchema(t.params)
+      parameters: t.inputSchema || toolParamsToJsonSchema(t.params)
     }
   }));
 }
@@ -289,7 +290,7 @@ function toAnthropicTools(tools = []) {
   return tools.map(t => ({
     name: t.name,
     description: t.desc || t.description || t.name,
-    input_schema: toolParamsToJsonSchema(t.params)
+    input_schema: t.inputSchema || toolParamsToJsonSchema(t.params)
   }));
 }
 
@@ -1643,6 +1644,7 @@ let personas = null;
 let workflowEngine = null;
 let screenRecorder = null;
 let githubConnector = null;
+let mcpRegistry = null;
 const activeAgentRuns = new Map();
 const pendingAgentSteps = new Map();
 
@@ -1834,6 +1836,15 @@ function loadAgentModules() {
       console.error('MCP servers failed:', e.message);
     }
   }
+  if (!mcpRegistry) {
+    try {
+      const { MCPRegistry } = require('./mcp/mcpRegistry');
+      mcpRegistry = new MCPRegistry(settingsStore);
+      console.log('✓ MCP client registry loaded');
+    } catch(e) {
+      console.error('MCP client registry failed:', e.message);
+    }
+  }
   if (!computerUse) {
     try {
       computerUse = require('./computerUse');
@@ -1911,6 +1922,47 @@ function loadAgentModules() {
 }
 
 // ── AGENT LOOP: autonomous multi-step task execution ─────────────────────────
+ipcMain.handle('mcpServersList', async () => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded', servers: [] };
+  return { ok: true, servers: await mcpRegistry.listServers() };
+});
+
+ipcMain.handle('mcpServerUpsert', async (_, config) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return { ok: true, server: await mcpRegistry.upsertServer(config) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpServerRemove', async (_, id) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { await mcpRegistry.removeServer(id); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpServerEnable', async (_, id, enabled) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return { ok: true, server: await mcpRegistry.setEnabled(id, enabled) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpServerTest', async (_, config) => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return await mcpRegistry.testServer(config); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('mcpToolsRefresh', async () => {
+  loadAgentModules();
+  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
+  try { return { ok: true, tools: await mcpRegistry.refreshTools() }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
 ipcMain.handle('agentControl', async (_, runId, action) => {
   const run = findActiveRun(runId);
   if (!run) return { ok: false, error: 'No active agent run' };
@@ -2101,6 +2153,19 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     } catch { return null; }
   };
 
+  let mcpTools = [];
+  if (mcpRegistry && settingsStore.get('mcp.enabled') !== false) {
+    try { mcpTools = await mcpRegistry.toolsForAgent(); }
+    catch (e) { console.warn('MCP tools unavailable:', e.message); }
+  }
+  const dispatchToolFn = async (tool, args) => {
+    if (mcpRegistry && String(tool || '').includes('__')) {
+      const mcpResult = await mcpRegistry.dispatch(tool, args);
+      if (mcpResult) return mcpResult;
+    }
+    return agentTools.dispatchTool(tool, args);
+  };
+
   // Send step updates to renderer via the event sender
   const onStep = (step) => {
     controller.observe(step);
@@ -2121,7 +2186,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       analyzeScreenFn: screenCapFn,
       runId,
       control: controller,
-      nativeTools: provider === 'claude' || provider === 'openai'
+      nativeTools: provider === 'claude' || provider === 'openai',
+      extraTools: mcpTools,
+      dispatchToolFn
     });
   } catch (e) {
     result = { ok: false, error: e.message, steps: runRecord.steps };
@@ -2151,6 +2218,10 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
 ipcMain.handle('agentTool', async (_, toolName, args) => {
   loadAgentModules();
   if (!agentTools) return { ok: false, err: 'Agent not loaded' };
+  if (mcpRegistry && String(toolName || '').includes('__')) {
+    const mcpResult = await mcpRegistry.dispatch(toolName, args);
+    if (mcpResult) return mcpResult;
+  }
   return agentTools.dispatchTool(toolName, args);
 });
 
