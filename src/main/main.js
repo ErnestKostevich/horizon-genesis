@@ -259,6 +259,130 @@ function firstTextFromAnthropic(d) {
 // into this directory before packaging. When the app is run from a source clone
 // the file doesn't exist — we show a preview window and exit. Source is BSL 1.1 and
 // readable for audit/contribution; runnable builds come from GitHub Releases.
+// Native tool-call conversion helpers for agent mode.
+function toolParamsToJsonSchema(params = {}) {
+  const properties = {};
+  for (const [name, hint] of Object.entries(params || {})) {
+    const text = String(hint || '');
+    let type = 'string';
+    if (/number|integer|float/i.test(text)) type = 'number';
+    else if (/boolean|bool/i.test(text)) type = 'boolean';
+    else if (/array|list/i.test(text)) type = 'array';
+    else if (/object/i.test(text)) type = 'object';
+    properties[name] = { type, description: text || name };
+  }
+  return { type: 'object', properties, additionalProperties: true };
+}
+
+function toOpenAITools(tools = []) {
+  return tools.map(t => ({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.desc || t.description || t.name,
+      parameters: toolParamsToJsonSchema(t.params)
+    }
+  }));
+}
+
+function toAnthropicTools(tools = []) {
+  return tools.map(t => ({
+    name: t.name,
+    description: t.desc || t.description || t.name,
+    input_schema: toolParamsToJsonSchema(t.params)
+  }));
+}
+
+function safeJsonParseArgs(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return {}; }
+}
+
+function toOpenAIChatMessages(messages = [], systemPrompt = '') {
+  const out = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
+  for (const m of messages || []) {
+    if (m.role === 'tool') {
+      out.push({
+        role: 'tool',
+        tool_call_id: m.toolCallId || m.id || m.name || 'tool_call',
+        name: m.name,
+        content: String(m.content || '')
+      });
+      continue;
+    }
+    if (m.role === 'assistant' && Array.isArray(m.toolCalls) && m.toolCalls.length) {
+      out.push({
+        role: 'assistant',
+        content: m.content || null,
+        tool_calls: m.toolCalls.map(call => ({
+          id: call.id || `${call.tool || call.name || 'tool'}_call`,
+          type: 'function',
+          function: { name: call.tool || call.name, arguments: JSON.stringify(call.args || {}) }
+        }))
+      });
+      continue;
+    }
+    out.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') });
+  }
+  return out;
+}
+
+function asAnthropicBlocks(content) {
+  return Array.isArray(content) ? content : [{ type: 'text', text: String(content || '') }];
+}
+
+function appendAnthropicMessage(out, message) {
+  const last = out[out.length - 1];
+  if (last && last.role === message.role) {
+    last.content = [...asAnthropicBlocks(last.content), ...asAnthropicBlocks(message.content)];
+  } else {
+    out.push(message);
+  }
+}
+
+function toAnthropicMessages(messages = []) {
+  const out = [];
+  for (const m of messages || []) {
+    if (m.role === 'tool') {
+      appendAnthropicMessage(out, {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: m.toolCallId || m.id || m.name || 'tool_call', content: String(m.content || '') }]
+      });
+      continue;
+    }
+    if (m.role === 'assistant' && Array.isArray(m.toolCalls) && m.toolCalls.length) {
+      const content = [];
+      if (m.content) content.push({ type: 'text', text: String(m.content) });
+      for (const call of m.toolCalls) {
+        content.push({ type: 'tool_use', id: call.id || `${call.tool || call.name || 'tool'}_call`, name: call.tool || call.name, input: call.args || {} });
+      }
+      appendAnthropicMessage(out, { role: 'assistant', content });
+      continue;
+    }
+    appendAnthropicMessage(out, { role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') });
+  }
+  return out;
+}
+
+function parseAnthropicToolCalls(d) {
+  return (d.content || [])
+    .filter(block => block && block.type === 'tool_use')
+    .map(block => ({ id: block.id, tool: block.name, args: block.input || {}, reason: 'Claude tool_use' }));
+}
+
+function parseOpenAIToolCalls(message = {}) {
+  return (message.tool_calls || [])
+    .filter(call => call?.type === 'function' && call.function?.name)
+    .map(call => ({
+      id: call.id,
+      tool: call.function.name,
+      args: safeJsonParseArgs(call.function.arguments),
+      reason: 'OpenAI tool_call'
+    }));
+}
+
+// Source-preview build check.
 const BUILD_INFO_PATH = path.join(__dirname, 'build-info.json');
 let IS_OFFICIAL_BUILD = false;
 let BUILD_INFO = null;
@@ -1858,7 +1982,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   }
 
   // AI function wrapper
-  const aiFn = async (messages, systemPrompt) => {
+  const aiFn = async (messages, systemPrompt, agentMeta = {}) => {
     const fetch = require('node-fetch');
     const localEp = localOpenAIEndpoint(provider);
     const k = localEp ? (localEp.key || '__local_no_key__') : keysStore.get(`k_${provider}`);
@@ -1896,7 +2020,14 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
 
       if (provider === 'claude') {
         const model = selectedModel('claude', opts);
-        const body = applyReasoningProfile('claude', model, { model, max_tokens:4096, system:systemPrompt, messages });
+        const useNativeTools = Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
+        const body = applyReasoningProfile('claude', model, {
+          model,
+          max_tokens:4096,
+          system:systemPrompt,
+          messages: useNativeTools ? toAnthropicMessages(messages) : messages
+        });
+        if (useNativeTools) body.tools = toAnthropicTools(agentMeta.tools);
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method:'POST',
           headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
@@ -1905,7 +2036,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         const d = await r.json();
         if (d.error) return { error: d.error.message };
         if (!d.content || !d.content[0]) return { error: 'Empty response from Claude' };
-        return { reply: firstTextFromAnthropic(d), model };
+        const toolCalls = parseAnthropicToolCalls(d);
+        const text = (d.content || []).find(b => b && b.type === 'text')?.text || '';
+        return { reply: text || (toolCalls.length ? '' : firstTextFromAnthropic(d)), toolCalls, model };
       }
 
       // OpenAI-compatible (openai, groq, grok, deepseek, mistral, qwen, perplexity, cohere)
@@ -1937,7 +2070,13 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         if (d.message?.error || d.error) return { error: d.message?.error || d.error || 'Cohere error' };
         return { reply: d.message?.content?.[0]?.text || d.text || 'No response', model };
       }
-      const body = applyReasoningProfile(provider, ep.model, { model:ep.model, max_tokens:4096, messages:[{role:'system',content:systemPrompt},...messages] });
+      const useNativeOpenAITools = provider === 'openai' && Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
+      const body = applyReasoningProfile(provider, ep.model, {
+        model:ep.model,
+        max_tokens:4096,
+        messages: useNativeOpenAITools ? toOpenAIChatMessages(messages, systemPrompt) : [{role:'system',content:systemPrompt},...messages]
+      });
+      if (useNativeOpenAITools) body.tools = toOpenAITools(agentMeta.tools);
       const r = await fetch(ep.url, {
         method:'POST',
         headers,
@@ -1946,7 +2085,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       const d = await r.json();
       if (d.error) return { error: d.error.message };
       if (!d.choices || !d.choices[0]) return { error: `Empty response from ${provider}` };
-      return { reply: d.choices[0].message.content, model: ep.model };
+      const message = d.choices[0].message || {};
+      const toolCalls = useNativeOpenAITools ? parseOpenAIToolCalls(message) : [];
+      return { reply: message.content || '', toolCalls, model: ep.model };
 
     } catch(e) { return { error: e.message }; }
   };
@@ -1979,7 +2120,8 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       onStep,
       analyzeScreenFn: screenCapFn,
       runId,
-      control: controller
+      control: controller,
+      nativeTools: provider === 'claude' || provider === 'openai'
     });
   } catch (e) {
     result = { ok: false, error: e.message, steps: runRecord.steps };
