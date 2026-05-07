@@ -417,6 +417,26 @@ ipcMain.handle('openSettingsFolder', async () => {
   const error = await shell.openPath(userDataPath);
   return error ? { ok: false, path: userDataPath, error } : { ok: true, path: userDataPath };
 });
+// Pull the OpenRouter model catalog (200+ entries). Public endpoint — no key
+// required to list. Returns {ok, models:[{id,name,context_length}]}.
+ipcMain.handle('openrouterListModels', async () => {
+  try {
+    const fetch = require('node-fetch');
+    const r = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: { 'HTTP-Referer': 'https://horizonaai.dev', 'X-Title': 'Horizon Genesis' },
+      timeout: 8000,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, error: data.error?.message || `HTTP ${r.status}` };
+    const models = Array.isArray(data.data)
+      ? data.data.map((m) => ({ id: m.id, name: m.name || m.id, context_length: m.context_length })).filter((m) => m.id)
+      : [];
+    return { ok: true, models };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 ipcMain.handle('localProviderStatus', async (_, provider) => {
   const ep = localOpenAIEndpoint(provider);
   if (!ep) return { ok: false, error: 'Unknown local provider' };
@@ -1327,6 +1347,27 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         const d = await r.json(); if (d.message?.error || d.error) return { error: d.message?.error || d.error || 'Cohere error' };
         const text = d.message?.content?.[0]?.text || d.text || 'No response';
         return { reply: text, model: cohereModel, usage: _usage(d,'cohere') };
+      }
+      case 'openrouter': {
+        const k = keysStore.get('k_openrouter');
+        if (!k) return { error: lang==='ru'?'Ключ OpenRouter не задан → openrouter.ai/keys':'OpenRouter key not set → openrouter.ai/keys' };
+        // OpenRouter is a router across 200+ models behind one OpenAI-compatible
+        // endpoint. The HTTP-Referer + X-Title headers are recommended by their
+        // attribution policy and unlock the per-app analytics page.
+        const orModel = opts?.model || settingsStore.get('model.openrouter') || 'openai/gpt-4o-mini';
+        const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${k}`,
+            'HTTP-Referer': 'https://horizonaai.dev',
+            'X-Title': 'Horizon Genesis',
+          },
+          body: JSON.stringify({ model: orModel, max_tokens: 4096, messages: [{role:'system',content:sysMsg},...messages] })
+        });
+        const d = await r.json();
+        if (d.error) return { error: d.error.message || d.error };
+        return { reply: d.choices?.[0]?.message?.content || 'No response', model: orModel, usage: _usage(d,'openrouter') };
       }
       case 'ollama':
       case 'lmstudio':
