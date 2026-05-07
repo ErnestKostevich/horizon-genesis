@@ -854,6 +854,22 @@ body.with-sidebar .chat-status-bar{display:flex}
           <div class="local-status" id="github-status">Public repos work without a token. Private repos use the GitHub connection above.</div>
           <div id="github-repos" class="local-status" style="margin-top:8px"></div>
         </div>
+        <div class="ps">
+          <div class="psl">MCP servers</div>
+          <div class="psview-sub" style="margin-bottom:10px">Add stdio MCP servers. Tools appear in agent mode as <code>server__tool</code> and use the same Operator permission flow.</div>
+          <div class="pf"><label>Server</label>
+            <div class="pr"><input class="pi" id="mcp-name" placeholder="filesystem"/><input class="pi" id="mcp-command" placeholder="npx"/></div>
+            <div class="pr" style="margin-top:6px"><input class="pi" id="mcp-args" placeholder="-y @modelcontextprotocol/server-filesystem D:\\Genesis"/></div>
+            <textarea class="pi" id="mcp-env" placeholder="ENV_KEY=value" style="margin-top:6px;min-height:54px;resize:vertical"></textarea>
+            <div class="pr" style="margin-top:6px">
+              <button class="psv" onclick="testMcpServer()">Test</button>
+              <button class="psv" onclick="saveMcpServer()">Save</button>
+              <button class="psv" onclick="refreshMcpTools()">Refresh tools</button>
+            </div>
+            <div class="local-status" id="mcp-status">No MCP server selected.</div>
+          </div>
+          <div id="mcp-servers" class="local-status" style="margin-top:8px"></div>
+        </div>
       </section>
 
       <!-- ───────── VOICE & WAKE ───────── -->
@@ -3168,6 +3184,7 @@ async function loadPanel(){
       if (inp) inp.placeholder = '••••••••••';
     }
   } catch(_) {}
+  loadMcpServers().catch(()=>{});
   // Profile
   if(nm) document.getElementById('pi-name').value=nm;
   if(lg) document.getElementById('pi-lang').value=lg;
@@ -3626,6 +3643,61 @@ async function removeGithubRepo(fullName){
   await H.githubRemoveRepo(fullName).catch(()=>false);
   await loadGithubRepos();
 }
+function mcpFormConfig(existingId=''){
+  const envText=(document.getElementById('mcp-env')?.value||'').trim();
+  const env={};
+  envText.split(/\r?\n/).forEach(line=>{const idx=line.indexOf('=');if(idx>0)env[line.slice(0,idx).trim()]=line.slice(idx+1).trim();});
+  return {
+    id: existingId || undefined,
+    name:(document.getElementById('mcp-name')?.value||'').trim(),
+    command:(document.getElementById('mcp-command')?.value||'').trim(),
+    args:(document.getElementById('mcp-args')?.value||'').trim().split(/\s+/).filter(Boolean),
+    env,
+    enabled:true
+  };
+}
+function setMcpStatus(text,bad=false){
+  const el=document.getElementById('mcp-status');
+  if(el){el.textContent=text;el.classList.toggle('bad',!!bad);el.classList.toggle('ok',!bad);}
+}
+async function loadMcpServers(){
+  const box=document.getElementById('mcp-servers');
+  if(!box || !H.mcpServersList) return;
+  const r=await H.mcpServersList().catch(e=>({ok:false,error:e.message,servers:[]}));
+  if(!r.ok){box.textContent=r.error||'Could not load MCP servers.';return;}
+  const servers=r.servers||[];
+  if(!servers.length){box.textContent='No MCP servers yet. Example: npx -y @modelcontextprotocol/server-filesystem D:\\Genesis';return;}
+  box.innerHTML=servers.map(s=>`
+    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin:7px 0">
+      <span><b>${esc(s.name)}</b> <small>${s.enabled?'enabled':'disabled'} - ${s.toolCount||0} tools</small><br><small>${esc(s.command)} ${esc((s.args||[]).join(' '))}${s.lastError?` - ${esc(s.lastError).slice(0,140)}`:''}</small></span>
+      <span style="display:flex;gap:6px">
+        <button class="psv" onclick="toggleMcpServer('${esc(s.id)}',${!s.enabled})">${s.enabled?'Disable':'Enable'}</button>
+        <button class="psv" onclick="removeMcpServer('${esc(s.id)}')">Remove</button>
+      </span>
+    </div>`).join('');
+}
+async function testMcpServer(){
+  const cfg=mcpFormConfig();
+  if(!cfg.name || !cfg.command){setMcpStatus('Name and command are required.',true);return;}
+  setMcpStatus('Testing MCP server...');
+  const r=await H.mcpServerTest(cfg).catch(e=>({ok:false,error:e.message}));
+  setMcpStatus(r.ok?`Connected. ${r.count||0} tools: ${(r.tools||[]).slice(0,5).map(t=>t.name).join(', ')}`:(r.error||'MCP test failed'),!r.ok);
+}
+async function saveMcpServer(){
+  const cfg=mcpFormConfig();
+  if(!cfg.name || !cfg.command){setMcpStatus('Name and command are required.',true);return;}
+  const r=await H.mcpServerUpsert(cfg).catch(e=>({ok:false,error:e.message}));
+  setMcpStatus(r.ok?'MCP server saved. Refreshing tools...':(r.error||'Save failed'),!r.ok);
+  if(r.ok){await refreshMcpTools();await loadMcpServers();}
+}
+async function refreshMcpTools(){
+  setMcpStatus('Refreshing MCP tools...');
+  const r=await H.mcpToolsRefresh().catch(e=>({ok:false,error:e.message}));
+  setMcpStatus(r.ok?`Loaded ${(r.tools||[]).length} MCP tools.`:(r.error||'Refresh failed'),!r.ok);
+  await loadMcpServers();
+}
+async function toggleMcpServer(id,on){await H.mcpServerEnable(id,on).catch(()=>null);await refreshMcpTools();}
+async function removeMcpServer(id){await H.mcpServerRemove(id).catch(()=>null);await loadMcpServers();}
 function togSw(key,id){
   const el=document.getElementById(id);
   const on=el.classList.toggle('on');
