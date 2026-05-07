@@ -449,13 +449,20 @@ h1 .acc{
 /* ════════════════════════════════════════════════════════════════════════════
    App logic: license state → plan selection → payment → polling.
    ════════════════════════════════════════════════════════════════════════════ */
-const H = window.H || {};
+// Do NOT declare `const H = window.H || {};` here. preload.js calls
+// contextBridge.exposeInMainWorld('H', {...}) which adds H to the renderer's
+// globalThis as a NON-configurable property. V8 then refuses any further
+// `const H` / `let H` declaration in script scope with
+//     Uncaught SyntaxError: Identifier 'H' has already been declared
+// — a parse-time error that aborts the whole script before a single
+// addEventListener fires, which is exactly why every button on this page
+// was dead. Just reference window.H directly through optional chaining.
 let selectedPlan = 'monthly';
 let pollTimer = null;
 const WEB_BASE = 'https://horizonaai.dev';
 
 function bridgeReady(name) {
-  return typeof H[name] === 'function';
+  return typeof window.H?.[name] === 'function';
 }
 
 function safeQuit() {
