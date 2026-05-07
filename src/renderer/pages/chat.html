@@ -416,6 +416,7 @@ textarea::placeholder{color:var(--t3)}
 .acct-email{font-size:10px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .acct-badge{display:inline-block;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:4px;background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25)}
 .acct-badge.admin{background:rgba(251,191,36,.12);color:var(--amber);border-color:rgba(251,191,36,.25)}
+.acct-badge.pro{background:rgba(108,140,255,.12);color:var(--acc);border-color:rgba(108,140,255,.3)}
 
 /* -- Agent execution panel -- */
 .agent-panel{background:var(--bg3);border:1px solid var(--b2);border-radius:12px;padding:12px 14px;margin:6px 0;font-size:11px;max-width:96%;backdrop-filter:blur(10px)}
@@ -622,11 +623,17 @@ body.with-sidebar .chat-status-bar{display:flex}
         </ul>
       </div>
       <div class="pf"><label><span class="d2" id="pd-google-conn"></span>Google Workspace (Gmail / Calendar)</label>
-        <div class="pr">
-          <button class="psv" id="conn-google-btn" onclick="connectGoogle()">Connect Google</button>
+        <div class="local-status" id="conn-google-status">Not connected. Paste a Google OAuth Client ID + Secret, then click Connect to authorise Gmail and Calendar access.</div>
+        <div class="pr" style="margin-top:6px">
+          <input class="pi" type="text" id="pi-gcid" placeholder="Client ID — xxxx.apps.googleusercontent.com"/>
+          <a class="psv" style="text-decoration:none;text-align:center" onclick="H.openUrl('https://console.cloud.google.com/apis/credentials')">Get credentials ↗</a>
+        </div>
+        <div class="pr" style="margin-top:6px">
+          <input class="pi" type="password" id="pi-gcs" placeholder="Client Secret — GOCSPX-..."/>
+          <button class="psv" id="conn-google-btn" onclick="connectGoogle()">Connect</button>
           <button class="psv" id="conn-google-disc" onclick="disconnectGoogle()" style="display:none">Disconnect</button>
         </div>
-        <div class="local-status" id="conn-google-status">Not connected. Connect to let the agent read Gmail and your calendar with your permission.</div>
+        <div class="mic-st" id="google-auth-status"></div>
       </div>
       <div class="pf"><label><span class="d2" id="pd-github-conn"></span>GitHub <span style="color:var(--t3);font-size:10px">(Personal Access Token)</span></label>
         <div class="pr">
@@ -856,15 +863,6 @@ body.with-sidebar .chat-status-bar{display:flex}
     </div>
 
 
-    <!-- Google OAuth -->
-    <div class="ps">
-      <div class="psl">&#128274; Google OAuth (Gmail & Calendar)</div>
-      <div class="pf"><label>Client ID <a onclick="H.openUrl('https://console.cloud.google.com/apis/credentials')" style="color:var(--acc);font-size:10px;cursor:pointer">Get from Google Cloud ↗</a></label><div class="pr"><input class="pi" type="text" id="pi-gcid" placeholder="xxxx.apps.googleusercontent.com"/></div></div>
-      <div class="pf"><label>Client Secret</label><div class="pr"><input class="pi" type="password" id="pi-gcs" placeholder="GOCSPX-..."/></div></div>
-      <button class="mic-test-btn" id="btn-google-auth" onclick="connectGoogle()" style="border-color:rgba(52,211,153,.3);color:var(--green)">&#128279; Connect Google Account</button>
-      <div class="mic-st" id="google-auth-status"></div>
-    </div>
-
     <!-- Plugins -->
     <div class="ps">
       <div class="psl">🧩 Plugins</div>
@@ -1076,66 +1074,42 @@ body.with-sidebar .chat-status-bar{display:flex}
 
 </div>
 
-<!-- ═══════════ APEX RIGHT SIDEBAR ═══════════ -->
+<!-- ═══════════ APEX RIGHT SIDEBAR ═══════════
+     NOTE: this sidebar is the Code-Mode "active context" view. The Persona /
+     Tools / Files panels are placeholders until the full agentic IDE (PR3)
+     ships and can populate them with real workspace state. Until then we
+     show a "no workspace selected" hint instead of fake hardcoded files —
+     fake state was actively misleading. -->
 <div id="apex-right-pane" class="apex-right-pane">
   <div class="arp-section">
     <div class="arp-head">ACTIVE PERSONA</div>
-    <div class="arp-card">
-      <div style="font-size:24px">👨‍💻</div>
+    <div class="arp-card" id="arp-persona">
+      <div style="font-size:24px">🪐</div>
       <div>
-        <div style="font-weight:600;color:var(--tx);font-size:14px">Senior Engineer</div>
-        <div style="color:var(--t3);font-size:11px;margin-top:2px;font-family:var(--mono)">Code • Tests • Docs</div>
+        <div style="font-weight:600;color:var(--tx);font-size:14px">Default</div>
+        <div style="color:var(--t3);font-size:11px;margin-top:2px;font-family:var(--mono)">Switch personas in Settings → Personas</div>
       </div>
-    </div>
-  </div>
-  
-  <div class="arp-section">
-    <div class="arp-head">TOOLS ENABLED • 4</div>
-    <div class="arp-tool">
-      <div class="arp-t-info">
-        <div class="arp-t-name">fs.read_file</div>
-        <div class="arp-t-desc">Scope: src/**</div>
-      </div>
-      <div class="arp-t-switch on"></div>
-    </div>
-    <div class="arp-tool">
-      <div class="arp-t-info">
-        <div class="arp-t-name">fs.write_file</div>
-        <div class="arp-t-desc">Scope: src/**</div>
-      </div>
-      <div class="arp-t-switch on"></div>
-    </div>
-    <div class="arp-tool">
-      <div class="arp-t-info">
-        <div class="arp-t-name">shell.exec</div>
-        <div class="arp-t-desc">Scope: npm test</div>
-      </div>
-      <div class="arp-t-switch"></div>
-    </div>
-    <div class="arp-tool">
-      <div class="arp-t-info">
-        <div class="arp-t-name">browser.navigate</div>
-        <div class="arp-t-desc">Scope: localhost</div>
-      </div>
-      <div class="arp-t-switch on"></div>
     </div>
   </div>
 
-  <div class="arp-section">
-    <div class="arp-head">FILES IN CONTEXT • 2</div>
-    <div class="arp-file">
-      <span>src/main/auth.ts</span>
-      <span>248 L</span>
-    </div>
-    <div class="arp-file">
-      <span>src/main/auth.test.ts</span>
-      <span>156 L</span>
+  <div class="arp-section" id="arp-tools-section" style="display:none">
+    <div class="arp-head" id="arp-tools-head">TOOLS ENABLED</div>
+    <div id="arp-tools-list"></div>
+  </div>
+
+  <div class="arp-section" id="arp-files-section">
+    <div class="arp-head" id="arp-files-head">WORKSPACE</div>
+    <div id="arp-files-list">
+      <div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">
+        No workspace selected.<br/>
+        Open a folder once the agentic IDE ships to surface live tools and files in context here.
+      </div>
     </div>
   </div>
-  
+
   <div style="flex:1"></div>
   <div class="arp-footer">
-    <span style="color:var(--acc)">BYOK active:</span> Calls go directly from your machine to Anthropic. Horizon never sees your prompts.
+    <span style="color:var(--acc)">BYOK active:</span> Calls go directly from your machine to the provider you picked. Horizon never sees your prompts.
   </div>
 </div>
 
@@ -2591,7 +2565,15 @@ function onLicensePillClick() {
   try { H.licenseOpenUpgradePage && H.licenseOpenUpgradePage(); } catch(_){}
 }
 // Update license pill when desktop pushes a license-state event.
-try { H.onLicenseChange && H.onLicenseChange(() => refreshLicensePill()); } catch(_){}
+// The account panel reads the same state for the Pro badge, so refresh it
+// here too when it's open — otherwise the badge lags behind by up to an hour
+// (the license refresh interval).
+try {
+  H.onLicenseChange && H.onLicenseChange(() => {
+    refreshLicensePill();
+    if (document.getElementById('acct-panel')?.classList.contains('show')) renderAcctBody();
+  });
+} catch(_){}
 
 // ═══ PROVIDER / MODEL CLICK-SWITCH (P1) ═══
 function openProviderSettings(){
@@ -4519,15 +4501,36 @@ function acctTab(tab) {
   renderAcctBody();
 }
 
-function renderAcctBody() {
+// Plans that already include the desktop agent — they should NOT additionally
+// surface a "Pro" badge, otherwise an admin/owner sees "Owner Pro" which is
+// noisy and slightly misleading. Mirrors the marketplace web app
+// (PRIVILEGED_LICENSE_PLANS in Pricing.jsx / Dashboard.jsx).
+const _PRIVILEGED_LICENSE_PLANS = new Set(['owner','official','admin','team','lifetime']);
+
+async function _getLicenseStateSafe(){
+  try { return (typeof H !== 'undefined' && H.licenseState) ? await H.licenseState() : null; }
+  catch(_) { return null; }
+}
+
+async function renderAcctBody() {
   const body = document.getElementById('acct-body');
   if (currentUser) {
     const initials = (currentUser.display_name || currentUser.email || '?').slice(0, 1).toUpperCase();
+    // Pull license state alongside the user so the Pro badge reflects the
+    // server-truth from /api/license/status, not stale UI state.
+    const license = await _getLicenseStateSafe();
+    const plan = String(license?.plan || '').toLowerCase();
+    const isPrivilegedPlan = _PRIVILEGED_LICENSE_PLANS.has(plan);
     const badges = [];
-    // Only show Admin/Official badges to users who actually have them
-    // Regular users just see their Pro status or nothing
-    if (currentUser.is_admin && currentUser.is_official) badges.push(`<span class="acct-badge admin">Official</span>`);
-    else if (currentUser.is_admin) badges.push(`<span class="acct-badge admin">Admin</span>`);
+    // Owner — reserved for the project itself (admin AND official).
+    // Official — affiliated accounts that aren't the admin (e.g. team).
+    // Both are project-side identity badges — never inferred from license alone.
+    if (currentUser.is_admin && currentUser.is_official) badges.push(`<span class="acct-badge admin">Owner</span>`);
+    else if (currentUser.is_official) badges.push(`<span class="acct-badge admin">Official</span>`);
+    // Pro — earned via active subscription. Skip when the user already holds a
+    // privileged plan (owner/official/admin/team/lifetime), since the desktop
+    // is included for them; no need for the "Pro" decoration.
+    if (license?.active && !isPrivilegedPlan) badges.push(`<span class="acct-badge pro">Pro</span>`);
     if (currentUser.is_verified) badges.push(`<span class="acct-badge">Verified</span>`);
     body.innerHTML = `
       <div class="acct-card">
