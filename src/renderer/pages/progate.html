@@ -78,11 +78,13 @@ body{
 }
 
 /* ─── Header ─── */
-.hd{
-  display:flex;align-items:center;gap:12px;margin-bottom:22px;
-  -webkit-app-region:drag; /* the only draggable strip — moves the window */
-}
-.hd .status-pill{-webkit-app-region:no-drag} /* keep the pill from eating drag clicks too */
+/* No drag region anywhere on this page — frameless+transparent windows on
+   Windows occasionally lose click events when nested drag regions exist
+   (body had drag, .card had no-drag, .hd opted back into drag — that
+   ladder is exactly the shape that breaks). The progate is a short modal
+   gate; the user clicks one button and either upgrades or quits. They do
+   not need to drag the window. */
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:22px}
 .logo{
   width:44px;height:44px;border-radius:50%;
   background:
