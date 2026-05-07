@@ -1151,12 +1151,24 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         // Default: Sonnet 4.6 — best speed/intelligence balance per Anthropic.
         // User can override via settingsStore.get('model.claude') or opts.model.
         const claudeModel = opts?.model || settingsStore.get('model.claude') || 'claude-sonnet-4-6';
+        const respProfile = settingsStore.get('responseProfile') || 'balanced';
+        const claudeBody = { model: claudeModel, max_tokens: 4096, system: sysMsg, messages };
+        // Deep → enable extended thinking. Need headroom on max_tokens because
+        // the budget is debited from it. Anthropic also requires temperature
+        // to be unset (which it already is) when thinking is on.
+        if (respProfile === 'deep') {
+          claudeBody.thinking = { type: 'enabled', budget_tokens: 8000 };
+          claudeBody.max_tokens = 16000;
+        }
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method:'POST', headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
-          body:JSON.stringify({ model:claudeModel, max_tokens:4096, system:sysMsg, messages })
+          body:JSON.stringify(claudeBody)
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.content?.[0]?.text || 'No response', model: claudeModel, usage: _usage(d,'claude') };
+        // With thinking enabled the first content block is `{type:'thinking'}`
+        // and the user-visible reply is the first `{type:'text'}` block.
+        const textBlock = (d.content || []).find(b => b && b.type === 'text');
+        return { reply: textBlock?.text || d.content?.[0]?.text || 'No response', model: claudeModel, usage: _usage(d,'claude') };
       }
       case 'openai': {
         const k = keysStore.get('k_openai');
@@ -1164,9 +1176,19 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         // Default: gpt-4o (broadly available + cheap). gpt-5 / gpt-5-mini are
         // available but not every account has access on first key issue.
         const openaiModel = opts?.model || settingsStore.get('model.openai') || 'gpt-4o';
+        const respProfile = settingsStore.get('responseProfile') || 'balanced';
+        // reasoning_effort is only honoured by reasoning models (o-series and
+        // the *-thinking SKUs of gpt-5). Sending it to gpt-4o is a 400.
+        const isReasoningModel = /^o[134]/.test(openaiModel) || /thinking|reasoning/.test(openaiModel);
+        const openaiBody = { model: openaiModel, max_tokens: 4096, messages: [{role:'system',content:sysMsg},...messages] };
+        if (isReasoningModel) {
+          if (respProfile === 'deep') openaiBody.reasoning_effort = 'high';
+          else if (respProfile === 'fast') openaiBody.reasoning_effort = 'low';
+          // balanced: leave unset → provider default (medium)
+        }
         const r = await fetch('https://api.openai.com/v1/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:openaiModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
+          body:JSON.stringify(openaiBody)
         });
         const d = await r.json(); if (d.error) return { error: d.error.message };
         return { reply: d.choices?.[0]?.message?.content || 'No response', model: openaiModel, usage: _usage(d,'openai') };
@@ -1195,9 +1217,18 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         if (!contents.length) contents.push({ role:'user', parts:[{text: messages[messages.length-1]?.content || '...'}] });
         if (contents[contents.length-1].role !== 'user') contents.push({ role:'user', parts:[{text:'...'}] });
 
+        const respProfile = settingsStore.get('responseProfile') || 'balanced';
+        const generationConfig = { maxOutputTokens:4096, temperature:0.7 };
+        // Gemini 2.5+ exposes a `thinkingConfig`. budget = -1 → dynamic (model
+        // decides). budget = 0 → no thinking, fastest path. Older 2.0 / 1.x
+        // models don't support the field at all.
+        if (/^gemini-(2\.5|3)/.test(model)) {
+          if (respProfile === 'deep') generationConfig.thinkingConfig = { thinkingBudget: -1 };
+          else if (respProfile === 'fast') generationConfig.thinkingConfig = { thinkingBudget: 0 };
+        }
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ system_instruction:{parts:[{text:sysMsg}]}, contents, generationConfig:{maxOutputTokens:4096,temperature:0.7} })
+          body:JSON.stringify({ system_instruction:{parts:[{text:sysMsg}]}, contents, generationConfig })
         });
         const d = await r.json();
         if (d.error) return { error: d.error.message };
