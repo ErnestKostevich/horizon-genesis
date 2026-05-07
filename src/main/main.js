@@ -388,6 +388,28 @@ function createWindow(page = 'chat') {
 
   win.loadURL(url);
 
+  // F12 / Ctrl+Shift+I open DevTools. Electron does not bind these by default
+  // for production builds; without this binding, debugging a frameless +
+  // transparent window is impossible because there's no menu either.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const isF12 = input.key === 'F12';
+    const isCtrlShiftI = input.control && input.shift && input.key === 'I';
+    if (isF12 || isCtrlShiftI) {
+      win.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
+  // In dev mode (run via `npm start`, app.isPackaged === false) auto-open
+  // DevTools so any console error is immediately visible. Skipped for
+  // packaged installs.
+  if (!app.isPackaged) {
+    win.webContents.once('did-finish-load', () => {
+      try { win.webContents.openDevTools({ mode: 'detach' }); } catch (_) {}
+    });
+  }
+
   // On laptop-class displays open maximized so all toolbar/sidebar
   // controls (Wake button, persona dropdown, every provider chip,
   // every mode chip, title-bar icons) are visible from the start.
