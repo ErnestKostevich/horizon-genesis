@@ -29,7 +29,7 @@ function normalizeDecision(decision) {
 // Build the agent system prompt with available tools
 function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, options = {}) {
   const tools = (selectedTools || TOOL_DEFINITIONS).map(t =>
-    `### ${t.name}\n${t.desc}\nParams: ${JSON.stringify(t.params)}`
+    `### ${t.name}\n${t.desc}\nParams: ${JSON.stringify(t.inputSchema || t.params)}`
   ).join('\n\n');
 
   const ru = lang === 'ru';
@@ -224,7 +224,7 @@ function summarizeToolResult(result) {
 }
 
 async function executeAgentToolStep(parsed, ctx) {
-  const { runId, stepIndex, control, onStep, analyzeScreenFn, steps } = ctx;
+  const { runId, stepIndex, control, onStep, analyzeScreenFn, steps, dispatchToolFn = dispatchTool } = ctx;
   const step = {
     id:     parsed.stepId || newStepId(runId, stepIndex),
     runId,
@@ -285,7 +285,7 @@ async function executeAgentToolStep(parsed, ctx) {
   } else {
     try {
       step.result = await Promise.race([
-        dispatchTool(step.tool, step.args),
+        dispatchToolFn(step.tool, step.args),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Tool timeout')), 30000))
       ]);
     } catch (e) {
@@ -312,11 +312,13 @@ async function runAgentLoop(userMessage, opts = {}) {
     timeout = 60000,  // 60 second timeout per step
     runId = `agent-${Date.now().toString(36)}`,
     control = null,
-    nativeTools = false
+    nativeTools = false,
+    extraTools = [],
+    dispatchToolFn = dispatchTool
   } = opts;
 
   // Select relevant tools for this query
-  const selectedTools = selectToolsForQuery(userMessage);
+  const selectedTools = [...selectToolsForQuery(userMessage), ...extraTools];
   const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools });
   
   const messages = [
@@ -378,7 +380,8 @@ async function runAgentLoop(userMessage, opts = {}) {
           control,
           onStep,
           analyzeScreenFn,
-          steps
+          steps,
+          dispatchToolFn
         });
         messages.push({
           role: 'tool',
@@ -484,7 +487,7 @@ async function runAgentLoop(userMessage, opts = {}) {
         // Execute tool with timeout
         try {
           step.result = await Promise.race([
-            dispatchTool(step.tool, step.args),
+            dispatchToolFn(step.tool, step.args),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Tool timeout')), 30000))
           ]);
         } catch (e) {

@@ -26,6 +26,7 @@
     "build:linux": "npm run stamp-build -- --runner=linux && electron-builder --linux"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "electron-store": "^8.1.0",
     "form-data": "^4.0.0",
     "monaco-editor": "^0.55.1",
