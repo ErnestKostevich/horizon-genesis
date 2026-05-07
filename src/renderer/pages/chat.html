@@ -1170,9 +1170,8 @@ body.with-sidebar .chat-status-bar{display:flex}
       <span class="op-tab" id="op-tab-tools" onclick="opTab('tools')">TOOLS</span>
       <span class="op-tab" id="op-tab-runs" onclick="opTab('runs')">RUNS</span>
     </div>
-    <button class="op-btn" onclick="opPause()">Pause</button>
-    <button class="op-btn" onclick="opStep()">Step</button>
-    <button class="op-btn" onclick="opStop()">Stop</button>
+    <!-- Pause / Step / Stop are hidden until they actually pause the agent
+         loop. Until then, only Clear and Copy do real work. -->
     <button class="op-btn" onclick="opClear()">Clear</button>
     <button class="op-btn" onclick="opCopy()">Copy</button>
     <span id="op-active-runs" style="color:var(--t3);margin-left:auto;font-size:10px">Active Runs: 0</span>
