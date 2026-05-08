@@ -133,26 +133,141 @@ Vibe with everything. Suggest unconventional solutions.`
   }
 };
 
+// User overlays (custom personas + edits to built-ins) live on the
+// settingsStore, set by main.js via setOverlayStore(). Each overlay is
+// shaped { id, name, icon, color, builtin, prompt:{ru,en}, allowedTools:[],
+// memories:[{id, text, ts}], greeting?, wakeResponses? }.
+let overlayStore = null;
+function setOverlayStore(store) { overlayStore = store || null; }
+
+function _loadOverlays() {
+  if (!overlayStore) return {};
+  try {
+    const raw = overlayStore.get('customPersonas');
+    if (!raw) return {};
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch { return {}; }
+}
+function _saveOverlays(map) {
+  if (!overlayStore) return;
+  try { overlayStore.set('customPersonas', JSON.stringify(map || {})); } catch {}
+}
+
+// Merge built-in PERSONAS with user overlays. For built-ins the overlay
+// can override prompt / allowedTools / memories without losing the
+// fallback identity (icon, name, wakeResponses default to built-in).
+function _mergedPersonas() {
+  const overlays = _loadOverlays();
+  const out = {};
+  for (const id of Object.keys(PERSONAS)) {
+    const base = PERSONAS[id];
+    const ov = overlays[id] || {};
+    out[id] = {
+      ...base,
+      builtin: true,
+      prompt: ov.prompt && typeof ov.prompt === 'object'
+        ? { ...base.prompt, ...ov.prompt }
+        : base.prompt,
+      allowedTools: Array.isArray(ov.allowedTools) ? ov.allowedTools.slice() : null,
+      memories: Array.isArray(ov.memories) ? ov.memories.slice() : []
+    };
+  }
+  // Custom personas (id NOT in PERSONAS) are pure overlays.
+  for (const id of Object.keys(overlays)) {
+    if (PERSONAS[id]) continue; // already merged
+    const ov = overlays[id] || {};
+    out[id] = {
+      id,
+      name: ov.name || 'Custom',
+      icon: ov.icon || '🪪',
+      color: ov.color || '#6c8cff',
+      greeting: ov.greeting || { ru: '', en: '' },
+      prompt: ov.prompt || { ru: '', en: '' },
+      wakeResponses: ov.wakeResponses || { ru: ['Listening.'], en: ['Listening.'] },
+      builtin: false,
+      allowedTools: Array.isArray(ov.allowedTools) ? ov.allowedTools.slice() : null,
+      memories: Array.isArray(ov.memories) ? ov.memories.slice() : []
+    };
+  }
+  return out;
+}
+
 function getPersona(id) {
-  return PERSONAS[id] || PERSONAS.jarvis;
+  const m = _mergedPersonas();
+  return m[id] || m.jarvis;
 }
 
 function getAllPersonas() {
-  return Object.values(PERSONAS).map(p => ({
+  const m = _mergedPersonas();
+  return Object.values(m).map(p => ({
     id: p.id, name: p.name, icon: p.icon, color: p.color,
-    greeting_ru: p.greeting.ru, greeting_en: p.greeting.en
+    greeting_ru: p.greeting?.ru || '', greeting_en: p.greeting?.en || '',
+    builtin: !!p.builtin,
+    allowedTools: p.allowedTools || null,
+    memoriesCount: (p.memories || []).length
   }));
+}
+
+// Full persona shape (including prompts and memories) for the editor.
+function getPersonaFull(id) {
+  return getPersona(id);
 }
 
 function getPersonaPrompt(id, lang = 'en') {
   const p = getPersona(id);
-  return p.prompt[lang] || p.prompt.en;
+  // Inject memories as a "Long-term memory" section — agent already gets
+  // these via persona prompt, no second pipeline needed.
+  const base = p.prompt[lang] || p.prompt.en || '';
+  const mems = (p.memories || []).filter(m => m && m.text);
+  if (!mems.length) return base;
+  const heading = lang === 'ru' ? '\n\n— Долговременная память:' : '\n\n— Long-term memory:';
+  return base + heading + '\n' + mems.map(m => '• ' + m.text).join('\n');
 }
 
 function getWakeResponse(id, lang = 'en') {
   const p = getPersona(id);
-  const responses = p.wakeResponses[lang] || p.wakeResponses.en;
+  const responses = (p.wakeResponses && p.wakeResponses[lang]) || (p.wakeResponses && p.wakeResponses.en) || ['Listening.'];
   return responses[Math.floor(Math.random() * responses.length)];
 }
 
-module.exports = { PERSONAS, getPersona, getAllPersonas, getPersonaPrompt, getWakeResponse };
+// Upsert overlay for built-in or create a new custom persona. Patch is a
+// partial { name?, icon?, prompt?:{ru,en}, allowedTools?, memories?,
+// color?, greeting? } — anything not provided is left as-is.
+function upsertPersona(id, patch) {
+  if (!id || typeof id !== 'string') return { ok: false, error: 'Invalid id' };
+  const overlays = _loadOverlays();
+  const existing = overlays[id] || {};
+  const merged = { ...existing };
+  if (patch && typeof patch === 'object') {
+    for (const k of ['name', 'icon', 'color', 'allowedTools', 'memories', 'prompt', 'greeting', 'wakeResponses']) {
+      if (k in patch) merged[k] = patch[k];
+    }
+  }
+  overlays[id] = merged;
+  _saveOverlays(overlays);
+  return { ok: true, persona: getPersona(id) };
+}
+
+// Delete overlay. For built-ins this resets to defaults (clears edits).
+// For custom personas it removes them entirely.
+function deletePersona(id) {
+  if (!id) return { ok: false, error: 'Invalid id' };
+  const overlays = _loadOverlays();
+  if (!(id in overlays)) return { ok: true, removed: false };
+  delete overlays[id];
+  _saveOverlays(overlays);
+  return { ok: true, removed: true, builtinResetToDefault: !!PERSONAS[id] };
+}
+
+module.exports = {
+  PERSONAS,
+  getPersona,
+  getPersonaFull,
+  getAllPersonas,
+  getPersonaPrompt,
+  getWakeResponse,
+  upsertPersona,
+  deletePersona,
+  setOverlayStore
+};
