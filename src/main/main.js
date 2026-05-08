@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const os     = require('os');
 const fs     = require('fs');
 const http   = require('http');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const Store  = require('electron-store');
 
 const IS_WIN = process.platform === 'win32';
@@ -76,6 +76,7 @@ const PRO_HANDLERS = new Set([
   'pcType', 'pcKeyPress', 'pcVolume',
   'pcReadFile', 'pcWriteFile', 'pcListDir', 'pcChooseFolder',
   'wsChooseFolder', 'wsGetWorkspace', 'wsList', 'wsRead', 'wsWrite', 'wsSearch', 'wsShell',
+  'terminalCreate', 'terminalWrite', 'terminalResize', 'terminalKill',
   'pcMouseMove', 'pcMouseClick', 'pcMouseDoubleClick',
   'pcMouseScroll', 'pcMouseDrag',
   'smartClick', 'findUIElements',
@@ -473,6 +474,27 @@ function startServer() {
             '.css': 'text/css; charset=utf-8',
             '.ttf': 'font/ttf',
             '.json': 'application/json; charset=utf-8',
+          }[ext] || 'application/octet-stream';
+          rsp.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
+          rsp.end(data);
+        });
+        return;
+      }
+      if (p.startsWith('/vendor/xterm/')) {
+        const xtermRoot = path.join(__dirname, '../../node_modules/@xterm/xterm');
+        const rel = p.replace(/^\/vendor\/xterm\//, '');
+        const full = path.resolve(xtermRoot, rel);
+        const rootCmp = path.resolve(xtermRoot).toLowerCase();
+        if (full.toLowerCase() !== rootCmp && !full.toLowerCase().startsWith(rootCmp + path.sep)) {
+          rsp.writeHead(403); rsp.end('Forbidden'); return;
+        }
+        fs.readFile(full, (err, data) => {
+          if (err) { rsp.writeHead(404); rsp.end('Not found'); return; }
+          const ext = path.extname(full);
+          const mime = {
+            '.js': 'application/javascript; charset=utf-8',
+            '.css': 'text/css; charset=utf-8',
+            '.map': 'application/json; charset=utf-8',
           }[ext] || 'application/octet-stream';
           rsp.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
           rsp.end(data);
@@ -1305,6 +1327,72 @@ ipcMain.handle('wsShell', async (_, cmd) => {
     const root = currentWorkspaceRoot();
     return await runShell(String(cmd || ''), 30000, { cwd: root });
   } catch(e) { return { ok:false, err:e.message }; }
+});
+
+const terminalSessions = new Map();
+
+function terminalShell() {
+  if (IS_WIN) return process.env.ComSpec || 'cmd.exe';
+  return process.env.SHELL || '/bin/bash';
+}
+
+function terminalArgs() {
+  if (!IS_WIN) return ['-l'];
+  return [];
+}
+
+ipcMain.handle('terminalCreate', async (event, id, rel = '') => {
+  try {
+    const { target } = resolveWorkspacePath(rel || '.');
+    const cwd = fs.statSync(target).isDirectory() ? target : path.dirname(target);
+    const termId = String(id || `term-${Date.now().toString(36)}`);
+    if (terminalSessions.has(termId)) {
+      try { terminalSessions.get(termId).kill(); } catch (_) {}
+      terminalSessions.delete(termId);
+    }
+    const term = spawn(terminalShell(), terminalArgs(), {
+      cwd,
+      env: process.env,
+      shell: false,
+      windowsHide: true,
+    });
+    terminalSessions.set(termId, term);
+    const send = data => {
+      const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data || '');
+      try { event.sender.send('terminalData', { id: termId, data: text.replace(/\n/g, '\r\n') }); } catch (_) {}
+    };
+    term.stdout?.on?.('data', send);
+    term.stderr?.on?.('data', send);
+    term.on('error', err => send(`\r\n[terminal error: ${err.message}]\r\n`));
+    term.on('exit', (exitCode, signal) => {
+      terminalSessions.delete(termId);
+      try { event.sender.send('terminalData', { id: termId, data: `\r\n[process exited ${exitCode}${signal ? ` ${signal}` : ''}]\r\n`, exitCode, signal }); } catch (_) {}
+    });
+    return { ok:true, id:termId, cwd, shell:terminalShell() };
+  } catch(e) {
+    return { ok:false, err:e.message };
+  }
+});
+
+ipcMain.handle('terminalWrite', (_, id, data) => {
+  const term = terminalSessions.get(String(id || ''));
+  if (!term) return { ok:false, err:'Terminal session not found' };
+  term.stdin?.write?.(String(data ?? '').replace(/\r/g, '\n'));
+  return { ok:true };
+});
+
+ipcMain.handle('terminalResize', (_, id, cols, rows) => {
+  const term = terminalSessions.get(String(id || ''));
+  if (!term) return { ok:false, err:'Terminal session not found' };
+  return { ok:true, note:'resize is ignored by the pipe-backed terminal transport' };
+});
+
+ipcMain.handle('terminalKill', (_, id) => {
+  const term = terminalSessions.get(String(id || ''));
+  if (!term) return { ok:true };
+  try { term.kill(); } catch (_) {}
+  terminalSessions.delete(String(id || ''));
+  return { ok:true };
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
