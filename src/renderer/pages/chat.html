@@ -536,6 +536,7 @@ body.code-mode-active .chat-status-bar, body.code-mode-active .msgs, body.code-m
 .code-editor{width:100%;min-height:240px;resize:vertical;background:#05070c;border:1px solid #242936;color:#e8ecf4;border-radius:8px;padding:10px;font:11px/1.5 var(--mono);outline:none;box-sizing:border-box}
 .code-monaco{height:320px;border:1px solid #242936;border-radius:8px;overflow:hidden;background:#05070c}
 .code-terminal{background:#05070c;border:1px solid #242936;border-radius:8px;min-height:96px;max-height:180px;overflow:auto;padding:8px;color:#b9f6ca;font:10px/1.5 var(--mono);white-space:pre-wrap}
+.code-xterm{height:220px;background:#05070c;border:1px solid #242936;border-radius:8px;overflow:hidden;padding:4px}
 .code-terminal-row{display:flex;gap:6px;margin-top:8px}
 .code-terminal-row .code-input{flex:1}
 .code-status{font:10px/1.45 var(--mono);color:#8d96ab;margin-top:8px;word-break:break-word}
@@ -648,6 +649,7 @@ body.with-sidebar .chat-status-bar{display:flex}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
+<link rel="stylesheet" href="/vendor/xterm/css/xterm.css"/>
 </head>
 <body>
 <canvas id="fractalBg" aria-hidden="true"></canvas>
@@ -1277,12 +1279,14 @@ body.with-sidebar .chat-status-bar{display:flex}
 
   <div class="arp-section">
     <div class="arp-head">TERMINAL</div>
+    <div class="code-xterm" id="code-xterm"></div>
     <div class="code-terminal" id="code-terminal-output">Workspace shell is idle.</div>
     <div class="code-terminal-row">
       <input class="code-input" id="code-terminal-command" placeholder="npm test" onkeydown="if(event.key==='Enter') runWorkspaceCommand()"/>
       <button class="code-btn primary" onclick="runWorkspaceCommand()">Run</button>
+      <button class="code-btn" onclick="restartWorkspaceTerminal()">Restart</button>
     </div>
-    <div class="code-status">Commands run inside the selected workspace after approval.</div>
+    <div class="code-status">Interactive workspace terminal v1. Uses a persistent shell transport; one-shot commands remain as fallback.</div>
   </div>
 
   <div style="flex:1"></div>
@@ -1342,6 +1346,7 @@ body.with-sidebar .chat-status-bar{display:flex}
 </div>
 
 <script src="/vendor/monaco/loader.js"></script>
+<script src="/vendor/xterm/lib/xterm.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 // STATE
@@ -6015,6 +6020,9 @@ let activeMessageRun = null;
 let codeEditor = null;
 let codeEditorReady = null;
 let codeLastAiPatch = null;
+let codeTerminal = null;
+let codeTerminalId = '';
+let codeTerminalListenerInstalled = false;
 
 function initCodeEditor(){
   if(codeEditorReady) return codeEditorReady;
@@ -6142,6 +6150,65 @@ function buildDiffPreview(before, after, maxLines=80){
 
 function sleepMs(ms){ return new Promise(r => setTimeout(r, ms)); }
 
+function appendTerminalFallback(text){
+  const out=document.getElementById('code-terminal-output');
+  if(out) {
+    out.textContent += String(text || '');
+    out.scrollTop = out.scrollHeight;
+  }
+}
+
+async function initWorkspaceTerminal(force=false){
+  if(!codeWorkspace) return { ok:false, err:'Choose a workspace first.' };
+  const host=document.getElementById('code-xterm');
+  if(!host || typeof window.Terminal !== 'function') {
+    document.getElementById('code-xterm')?.style.setProperty('display','none');
+    document.getElementById('code-terminal-output')?.style.setProperty('display','block');
+    return { ok:false, err:'xterm unavailable; fallback command runner active.' };
+  }
+  document.getElementById('code-terminal-output')?.style.setProperty('display','none');
+  host.style.display='block';
+  if(force && codeTerminalId) {
+    await H.terminalKill?.(codeTerminalId).catch(()=>null);
+    codeTerminalId='';
+  }
+  if(!codeTerminal){
+    codeTerminal = new Terminal({
+      cursorBlink:true,
+      fontFamily:'JetBrains Mono, Consolas, monospace',
+      fontSize:11,
+      theme:{ background:'#05070c', foreground:'#d8deea', cursor:'#f3b250' },
+      convertEol:true,
+      scrollback:3000,
+    });
+    codeTerminal.open(host);
+    codeTerminal.onData(data => {
+      if(codeTerminalId) H.terminalWrite?.(codeTerminalId, data).catch(()=>null);
+    });
+  }
+  if(!codeTerminalListenerInstalled && H.onTerminalData){
+    H.onTerminalData(payload => {
+      if(!payload || payload.id !== codeTerminalId) return;
+      try { codeTerminal?.write(payload.data || ''); } catch(_) { appendTerminalFallback(payload.data || ''); }
+    });
+    codeTerminalListenerInstalled = true;
+  }
+  if(!codeTerminalId){
+    const r=await H.terminalCreate?.(`code-${Date.now().toString(36)}`, codeDir || '').catch(e=>({ok:false,err:e.message}));
+    if(!r?.ok){ appendTerminalFallback(`\nTerminal failed: ${r?.err || 'unknown'}\n`); return r; }
+    codeTerminalId=r.id;
+    codeTerminal.write(`Horizon workspace terminal\r\n${r.cwd}\r\n\r\n`);
+  }
+  setTimeout(()=>{ try { codeTerminal?.focus(); } catch(_){} }, 50);
+  return { ok:true, id:codeTerminalId };
+}
+
+async function restartWorkspaceTerminal(){
+  if(codeTerminal){ try { codeTerminal.clear(); } catch(_){} }
+  codeTerminalId='';
+  await initWorkspaceTerminal(true);
+}
+
 async function requestDiffPermission({ title='Review changes', description='', before='', after='', language='plaintext' } = {}){
   await initCodeEditor().catch(()=>false);
   if(!window.monaco){
@@ -6236,6 +6303,7 @@ async function chooseCodeWorkspace(){
   codeWorkspace=r.path; codeDir='';
   await refreshCodeWorkspace();
   renderCodeContext();
+  await initWorkspaceTerminal(true).catch(()=>{});
 }
 
 async function refreshCodeWorkspace(nextDir){
@@ -6264,6 +6332,7 @@ async function refreshCodeWorkspace(nextDir){
     return `<div class="arp-file ${rel===codeCurrentFile?'active':''}" onclick="${action}"><span>${esc(e.name)}</span><span>${e.isDir?'dir':'file'}</span></div>`;
   }).join('');
   renderCodeContext();
+  initWorkspaceTerminal(false).catch(()=>{});
 }
 
 async function searchCodeWorkspace(){
@@ -6363,6 +6432,11 @@ async function runWorkspaceCommand(){
   const cmd=(input?.value||'').trim();
   if(!cmd){ codeSetStatus('Enter a command first.', true); return; }
   if(!codeWorkspace){ codeSetStatus('Choose a workspace first.', true); return; }
+  if(codeTerminalId && codeTerminal){
+    await H.terminalWrite?.(codeTerminalId, `${cmd}\r`).catch(e=>appendTerminalFallback(`\n${e.message}\n`));
+    if(input) input.value='';
+    return;
+  }
   const run=opStartRun('workspace.shell', cmd);
   if(out) out.textContent += `\n$ ${cmd}\n`;
   const r=await safeWorkspaceShell(cmd);
@@ -6619,6 +6693,7 @@ function toggleCodeMode() {
     document.getElementById('code-mode-btn').classList.add('proc');
     initCodeEditor().catch(()=>{});
     refreshCodeWorkspace().catch(()=>{});
+    initWorkspaceTerminal(false).catch(()=>{});
     renderCodeContext();
   } else {
     document.body.classList.remove('code-mode-active');
