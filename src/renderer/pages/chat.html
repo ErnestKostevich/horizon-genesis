@@ -638,6 +638,13 @@ body.with-sidebar .chat-status-bar{display:flex}
 .perm-btn.allow{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border-color:rgba(108,140,255,.6)}
 .perm-btn.allow:hover{filter:brightness(1.1);transform:translateY(-1px)}
 .perm-hint{font-family:var(--mono);font-size:9.5px;color:var(--t3);margin-top:10px;text-align:right}
+.diff-overlay{position:fixed;inset:0;background:rgba(0,0,0,.66);backdrop-filter:blur(8px);z-index:230;display:flex;align-items:center;justify-content:center;padding:28px}
+.diff-card{width:min(1100px,94vw);height:min(760px,88vh);background:#0b0e16;border:1px solid rgba(243,178,80,.35);border-radius:12px;box-shadow:0 28px 90px rgba(0,0,0,.65);display:flex;flex-direction:column;overflow:hidden}
+.diff-head{padding:12px 14px;border-bottom:1px solid #242936;display:flex;align-items:center;gap:10px;color:#e8ecf4;font:12px var(--mono)}
+.diff-title{font-weight:700;color:#f8d28c}
+.diff-desc{color:#8d96ab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diff-host{flex:1;min-height:0;background:#05070c}
+.diff-actions{padding:10px 14px;border-top:1px solid #242936;display:flex;justify-content:flex-end;gap:8px}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
@@ -865,6 +872,7 @@ body.with-sidebar .chat-status-bar{display:flex}
           <div class="pf"><label>Server</label>
             <div class="pr"><input class="pi" id="mcp-name" placeholder="filesystem"/><input class="pi" id="mcp-command" placeholder="npx"/></div>
             <div class="pr" style="margin-top:6px"><input class="pi" id="mcp-args" placeholder="-y @modelcontextprotocol/server-filesystem D:\\Genesis"/></div>
+            <div class="pr" style="margin-top:6px"><input class="pi" id="mcp-cwd" placeholder="Working directory (optional)"/><input class="pi" id="mcp-timeout" placeholder="Timeout ms (20000)"/></div>
             <textarea class="pi" id="mcp-env" placeholder="ENV_KEY=value" style="margin-top:6px;min-height:54px;resize:vertical"></textarea>
             <div class="pr" style="margin-top:6px">
               <button class="psv" onclick="testMcpServer()">Test</button>
@@ -3089,12 +3097,12 @@ async function safeWriteFile(filePath, content){
   return await H.pcWriteFile(filePath, content);
 }
 async function safeWriteWorkspaceFile(relPath, content, before=''){
-  const diff = buildDiffPreview(before, content);
-  const ok = await _gateDestructive('write_workspace_file', {
-    eyebrow: 'Write workspace file',
+  const ok = await requestDiffPermission({
     title: relPath,
-    description: `Horizon will write inside the selected workspace only (${(content||'').length} chars).`,
-    detail: diff
+    description: `Write inside selected workspace (${(content||'').length} chars).`,
+    before,
+    after: content,
+    language: inferCodeLang(relPath)
   });
   if (!ok) return { ok:false, err:'denied by user' };
   return await H.wsWrite(relPath, content);
@@ -3702,6 +3710,8 @@ function mcpFormConfig(existingId=''){
     command:(document.getElementById('mcp-command')?.value||'').trim(),
     args:(document.getElementById('mcp-args')?.value||'').trim().split(/\s+/).filter(Boolean),
     env,
+    cwd:(document.getElementById('mcp-cwd')?.value||'').trim(),
+    timeoutMs:Number((document.getElementById('mcp-timeout')?.value||'').trim())||20000,
     enabled:true
   };
 }
@@ -6036,6 +6046,19 @@ function initCodeEditor(){
           wordWrap: 'on',
         });
         codeEditor.onDidChangeModelContent(() => { if(ta) ta.value = codeEditor.getValue(); });
+        for (const [id, label, kind] of [
+          ['horizonExplainSelection', 'Horizon: Explain Selection', 'explain'],
+          ['horizonRefactorSelection', 'Horizon: Refactor Selection', 'refactor'],
+          ['horizonFixSelection', 'Horizon: Fix Selection', 'fix'],
+        ]) {
+          codeEditor.addAction({
+            id,
+            label,
+            contextMenuGroupId: 'navigation',
+            contextMenuOrder: kind === 'explain' ? 1 : kind === 'refactor' ? 2 : 3,
+            run: () => askCodeAi(kind)
+          });
+        }
         window.addEventListener('resize', () => { try { codeEditor.layout(); } catch(_){} });
         resolve(true);
       }, fallback);
@@ -6118,6 +6141,58 @@ function buildDiffPreview(before, after, maxLines=80){
 }
 
 function sleepMs(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function requestDiffPermission({ title='Review changes', description='', before='', after='', language='plaintext' } = {}){
+  await initCodeEditor().catch(()=>false);
+  if(!window.monaco){
+    return await requestPermission({
+      eyebrow:'Review diff',
+      title,
+      description,
+      detail:buildDiffPreview(before, after)
+    });
+  }
+  return await new Promise(resolve => {
+    const overlay=document.createElement('div');
+    overlay.className='diff-overlay';
+    overlay.innerHTML=`
+      <div class="diff-card">
+        <div class="diff-head"><span class="diff-title">${esc(title)}</span><span class="diff-desc">${esc(description)}</span></div>
+        <div class="diff-host"></div>
+        <div class="diff-actions">
+          <button class="perm-btn deny" data-act="deny">Reject</button>
+          <button class="perm-btn allow" data-act="allow">Approve</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    let diff = null;
+    const cleanup = (value) => {
+      try { diff?.dispose?.(); } catch(_){}
+      try { overlay.remove(); } catch(_){}
+      resolve(value);
+    };
+    try {
+      const host=overlay.querySelector('.diff-host');
+      const original=monaco.editor.createModel(String(before ?? ''), language);
+      const modified=monaco.editor.createModel(String(after ?? ''), language);
+      diff=monaco.editor.createDiffEditor(host,{
+        theme:'vs-dark',
+        automaticLayout:true,
+        renderSideBySide:true,
+        minimap:{enabled:false},
+        scrollBeyondLastLine:false,
+        readOnly:true,
+      });
+      diff.setModel({ original, modified });
+      const oldDispose=diff.dispose.bind(diff);
+      diff.dispose=()=>{ try{original.dispose();modified.dispose();}catch(_){} oldDispose(); };
+    } catch(_) {
+      overlay.querySelector('.diff-host').innerHTML=`<pre class="perm-detail" style="max-height:none;height:100%;box-sizing:border-box">${esc(buildDiffPreview(before,after,160))}</pre>`;
+    }
+    overlay.querySelector('[data-act="deny"]').onclick=()=>cleanup(false);
+    overlay.querySelector('[data-act="allow"]').onclick=()=>cleanup(true);
+  });
+}
 
 function codeJoin(root, rel=''){
   const sep = root.includes('\\') ? '\\' : '/';
@@ -6270,14 +6345,12 @@ async function applyLastCodeAi(){
   const after = codeLastAiPatch.snapshot?.hasSelection
     ? before
     : codeLastAiPatch.replacement;
-  const detail = codeLastAiPatch.snapshot?.hasSelection
-    ? `Apply AI ${codeLastAiPatch.kind} to the selected range in ${codeLastAiPatch.file || 'current buffer'}.\n\n${codeLastAiPatch.replacement.slice(0,2000)}`
-    : buildDiffPreview(before, after);
-  const ok = await _gateDestructive('apply_ai_patch', {
-    eyebrow: 'Apply AI edit',
+  const ok = await requestDiffPermission({
     title: codeLastAiPatch.file || 'current buffer',
     description: 'This updates the editor buffer only. Use Save to write the file.',
-    detail
+    before,
+    after: codeLastAiPatch.snapshot?.hasSelection ? `${before}\n\n/* Selected range will be replaced with: */\n${codeLastAiPatch.replacement}` : after,
+    language: inferCodeLang(codeLastAiPatch.file || codeCurrentFile)
   });
   if(!ok){ codeSetStatus('AI patch not applied.', true); return; }
   codeReplaceSnapshot(codeLastAiPatch.snapshot, codeLastAiPatch.replacement);
@@ -6320,6 +6393,19 @@ function handleOperatorAgentStep(step){
     operatorStopRequested = false;
     opLog(`agent run started ${step.runId || ''} (${step.provider || ''}/${step.model || 'default'})`, 'run');
     opLoadRuns().catch(()=>{});
+    opRefresh();
+    return;
+  }
+  if(step.type === 'control'){
+    operatorCurrentAgentRunId = step.runId || operatorCurrentAgentRunId;
+    operatorPaused = step.action === 'pause' || step.status === 'paused' || step.action === 'step';
+    if(step.action === 'resume') operatorPaused = false;
+    if(step.action === 'stop'){
+      operatorPaused = false;
+      operatorWaitingStepId = '';
+    }
+    if(step.currentStepId) operatorWaitingStepId = step.currentStepId;
+    opLog(`control ${step.action || ''} ${step.status || ''}`, step.action === 'stop' ? 'error' : 'run');
     opRefresh();
     return;
   }
@@ -6503,8 +6589,9 @@ function opRender(){
       const started=r.started || (r.startedAt ? Date.parse(r.startedAt) : Date.now());
       const ended=r.ended || (r.endedAt ? Date.parse(r.endedAt) : Date.now());
       const label=r.label || r.prompt || r.model || '';
+      const stepInfo=r.currentTool ? ` - waiting ${r.currentTool}` : (r.stepCount ? ` - ${r.stepCount} steps` : '');
       const click=r.source==='agent' ? ` onclick="opShowRunJson('${String(r.id).replace(/'/g,"\\'")}')"` : '';
-      return `<div class="op-log-line run"${click} style="${r.source==='agent'?'cursor:pointer':''}"><b>${esc(r.status||'unknown')}</b> - ${esc(r.source)} - ${esc(r.kind||r.provider||'agent')} - ${esc(String(label).slice(0,90))} - ${Math.max(0,Math.round((ended-started)/1000))}s</div>`;
+      return `<div class="op-log-line run"${click} style="${r.source==='agent'?'cursor:pointer':''}"><b>${esc(r.status||'unknown')}</b> - ${esc(r.source)} - ${esc(r.kind||r.provider||'agent')} - ${esc(String(label).slice(0,90))}${esc(stepInfo)} - ${Math.max(0,Math.round((ended-started)/1000))}s</div>`;
     }).join('') : '<div class="op-log-line tool">No runs yet.</div>';
     return;
   }

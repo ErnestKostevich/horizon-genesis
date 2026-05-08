@@ -318,7 +318,8 @@ async function runAgentLoop(userMessage, opts = {}) {
   } = opts;
 
   // Select relevant tools for this query
-  const selectedTools = [...selectToolsForQuery(userMessage), ...extraTools];
+  const selectedTools = [...selectToolsForQuery(userMessage), ...extraTools]
+    .filter((tool, index, arr) => tool?.name && arr.findIndex(t => t?.name === tool.name) === index);
   const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools });
   
   const messages = [
@@ -422,93 +423,26 @@ async function runAgentLoop(userMessage, opts = {}) {
         sameToolCount = 1;
       }
 
-      const step = {
-        id:     newStepId(runId, i + 1),
+      const executed = await executeAgentToolStep({
+        ...parsed,
+        stepId: newStepId(runId, i + 1)
+      }, {
         runId,
-        index:  i + 1,
-        tool:   parsed.tool,
-        args:   parsed.args || {},
-        reason: parsed.reason || '',
-        result: null
-      };
-
-      const waitingPayload = {
-        type: 'waiting',
-        runId,
-        stepId: step.id,
-        step: i + 1,
-        tool: step.tool,
-        args: step.args,
-        reason: step.reason,
-        paused: Boolean(control?.isPaused?.())
-      };
-      agentEvents.emit('pre-tool-dispatch', waitingPayload);
-      if (onStep) onStep(waitingPayload);
-
-      let decision = { decision: 'allow' };
-      try {
-        decision = normalizeDecision(await control?.beforeTool?.(waitingPayload));
-      } catch (e) {
-        decision = { decision: 'deny', reason: e.message };
-      }
-
-      if (decision.args && typeof decision.args === 'object') {
-        step.args = decision.args;
-      }
-      if (decision.decision === 'stop') {
-        step.result = { ok: false, err: decision.reason || 'Stopped by operator' };
-        steps.push(step);
-        if (onStep) onStep({ type: 'stopped', runId, stepId: step.id, step: i + 1, tool: step.tool, result: step.result });
-        return { ok: false, stopped: true, error: step.result.err, steps };
-      }
-      if (decision.decision === 'deny') {
-        step.result = { ok: false, err: decision.reason || 'Denied by operator' };
-        steps.push(step);
-        if (onStep) onStep({ type: 'denied', runId, stepId: step.id, step: i + 1, tool: step.tool, result: step.result });
-        messages.push({ role: 'assistant', content: aiResult.reply });
-        messages.push({ role: 'user', content: `Tool result for ${step.tool}:\nError: ${step.result.err}` });
-        continue;
-      }
-
-      // Notify caller of progress
-      if (onStep) onStep({ type: 'executing', runId, stepId: step.id, step: i+1, tool: step.tool, args: step.args, reason: step.reason });
-
-      // Special: if AI wants screenshot, use our screen capture
-      if (parsed.tool === 'screenshot' || parsed.tool === 'capture_screen') {
-        if (analyzeScreenFn) {
-          const ss = await analyzeScreenFn();
-          step.result = ss?.ok
-            ? { ok: true, out: 'Screenshot captured. Analyzing...', base64: ss.base64 }
-            : { ok: false, err: 'Screenshot failed' };
-        } else {
-          step.result = { ok: false, err: 'Screenshot not available' };
-        }
-      } else {
-        // Execute tool with timeout
-        try {
-          step.result = await Promise.race([
-            dispatchToolFn(step.tool, step.args),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Tool timeout')), 30000))
-          ]);
-        } catch (e) {
-          step.result = { ok: false, err: `Tool error: ${e.message}` };
-        }
-      }
-
-      steps.push(step);
-
-      // Add tool result to conversation
-      const resultSummary = step.result.ok
-        ? (step.result.out || step.result.content || 'Done').slice(0, 3000)
-        : `Error: ${step.result.err || 'Failed'}`;
+        stepIndex: steps.length + 1,
+        control,
+        onStep,
+        analyzeScreenFn,
+        steps,
+        dispatchToolFn
+      });
 
       messages.push({ role: 'assistant', content: aiResult.reply });
       messages.push({
         role: 'user',
-        content: `Tool result for ${step.tool}:\n${resultSummary}`
+        content: `Tool result for ${executed.step.tool}:\n${executed.resultSummary}`
       });
 
-      if (onStep) onStep({ type: 'result', runId, stepId: step.id, step: i+1, tool: step.tool, result: step.result });
+      if (executed.stopped) return { ok: false, stopped: true, error: executed.step.result.err, steps };
     } else {
       // Unknown response type - treat as answer
       finalAnswer = aiResult.reply;
