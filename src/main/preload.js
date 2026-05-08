@@ -60,6 +60,11 @@ contextBridge.exposeInMainWorld('H', {
   wsWrite:              (rel, c)     => ipcRenderer.invoke('wsWrite', rel, c),
   wsSearch:             (q, rel)     => ipcRenderer.invoke('wsSearch', q, rel),
   wsShell:              (cmd)        => ipcRenderer.invoke('wsShell', cmd),
+  terminalCreate:       (id, rel)    => ipcRenderer.invoke('terminalCreate', id, rel),
+  terminalWrite:        (id, data)   => ipcRenderer.invoke('terminalWrite', id, data),
+  terminalResize:       (id, c, r)   => ipcRenderer.invoke('terminalResize', id, c, r),
+  terminalKill:         (id)         => ipcRenderer.invoke('terminalKill', id),
+  onTerminalData:       (cb)         => ipcRenderer.on('terminalData', (_, payload) => cb(payload)),
   // ── PC Keyboard ──────────────────────────────────────────────────────────────
   pcType:               (t)          => ipcRenderer.invoke('pcType', t),
   pcKeyPress:           (k)          => ipcRenderer.invoke('pcKeyPress', k),
