@@ -802,6 +802,198 @@ body.code-mode-active .modes { display: none; }
 .apex-right-pane #arp-tools-section[hidden],
 .apex-right-pane #arp-persona[hidden] { display: none !important; }
 
+/* ═══ INSPECTOR PANEL — premium right-side dock (chat mode only) ════════
+   Right-side dock with 4 tabs (Context · Tools · Cost · Log). Lives next
+   to the chat. In code-mode-active the chat panel itself sits at right:0
+   and the Inspector hides — Code Mode owns the canvas in that mode. */
+.inspector-pane {
+  display: none;
+  position: fixed;
+  top: 42px;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: linear-gradient(180deg, var(--code-bg-2,#0c1018) 0%, var(--code-bg,#07090f) 100%);
+  border-left: 1px solid var(--code-line, #1d2333);
+  z-index: 11;
+  flex-direction: column;
+  -webkit-app-region: no-drag;
+}
+body.inspector-active .inspector-pane { display: flex; }
+/* When inspector is open, slide chat content left by the panel width. */
+body.inspector-active .chat-status-bar,
+body.inspector-active .msgs,
+body.inspector-active .inp-wrap { margin-right: 360px; }
+/* But not when Code Mode is active — code mode owns the right column with
+   its own 380px chat panel. Inspector hides in code mode. */
+body.code-mode-active .inspector-pane { display: none !important; }
+body.code-mode-active.inspector-active .chat-status-bar,
+body.code-mode-active.inspector-active .msgs,
+body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
+
+.insp-head {
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--code-line, #1d2333);
+  background: rgba(0,0,0,.18);
+}
+.insp-tab {
+  flex: 1;
+  padding: 12px 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--t2);
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .12s ease;
+  -webkit-app-region: no-drag;
+}
+.insp-tab:hover { color: var(--tx); background: rgba(255,255,255,.03); }
+.insp-tab.on { color: var(--code-cyan, #56d2ff); border-bottom-color: var(--code-cyan, #56d2ff); }
+
+.insp-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
+.insp-section { margin-bottom: 22px; }
+.insp-section:last-child { margin-bottom: 8px; }
+.insp-h {
+  font: 700 9px/1 var(--mono);
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.insp-h::after { content:''; flex:1; height:1px; background: var(--code-line, #1d2333); }
+.insp-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  font: 11.5px/1.4 var(--mono);
+  color: var(--tx);
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.insp-row:last-child { border-bottom: none; }
+.insp-row .k { color: var(--t3); font-size: 10px; text-transform: uppercase; letter-spacing: .8px; flex-shrink: 0; }
+.insp-row .v { color: var(--tx); text-align: right; word-break: break-word; }
+.insp-empty { font: italic 11px/1.5 var(--mono); color: var(--t3); padding: 12px 0; }
+
+/* ── Token budget bar (Cost tab) ─────────────────────────────────────── */
+.token-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--code-line, #1d2333);
+  margin: 8px 0 10px;
+}
+.token-seg { height: 100%; transition: width .3s ease; min-width: 0; }
+.token-seg.system  { background: var(--code-cyan, #56d2ff); }
+.token-seg.history { background: #5a89be; }
+.token-seg.files   { background: #a78bfa; }
+.token-seg.tools   { background: var(--code-accent, #f3b250); }
+.token-bar-meta {
+  display: flex; flex-wrap: wrap; gap: 6px 12px;
+  font: 10px/1.4 var(--mono);
+  color: var(--t3);
+  margin-bottom: 14px;
+}
+.token-bar-meta .seg { display:flex; align-items:center; gap:5px; }
+.token-bar-meta .seg::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.token-bar-meta .seg.system  { color: var(--code-cyan, #56d2ff); }
+.token-bar-meta .seg.history { color: #5a89be; }
+.token-bar-meta .seg.files   { color: #a78bfa; }
+.token-bar-meta .seg.tools   { color: var(--code-accent, #f3b250); }
+
+.cost-headline {
+  font: 700 28px/1 var(--font);
+  color: var(--tx);
+  margin: 4px 0 6px;
+}
+.cost-subhead { font: 11px/1.5 var(--mono); color: var(--t3); margin-bottom: 12px; }
+
+/* ── Inspector log entries (Log tab) ─────────────────────────────────── */
+.insp-log { font: 10.5px/1.55 var(--mono); }
+.insp-log-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255,255,255,.04);
+}
+.insp-log-row:last-child { border-bottom: none; }
+.insp-log-row .ts { color: var(--t3); }
+.insp-log-row .msg { color: var(--tx); word-break: break-all; }
+.insp-log-row .dur { color: var(--t3); font-size: 9.5px; }
+.insp-log-row.error .msg { color: #ff8585; }
+.insp-log-row.tool  .msg { color: #6ee7b7; }
+.insp-log-row.run   .msg { color: var(--code-accent, #f3b250); }
+
+/* Footer BYOK strip */
+.insp-byok {
+  border-top: 1px solid var(--code-line, #1d2333);
+  padding: 10px 18px;
+  font: 10px/1.5 var(--mono);
+  color: var(--t3);
+  background: rgba(0,0,0,.25);
+}
+.insp-byok strong { color: var(--code-cyan, #56d2ff); }
+
+/* ═══ STEP RAIL — agent plan progress at top of chat ═══════════════════
+   Hidden by default; renderStepRail() flips display:flex when an agent
+   run announces a plan. Sits above the messages, scrolls horizontally on
+   narrow screens. */
+.step-rail {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(243,178,80,.04) 0%, rgba(0,0,0,0) 100%);
+  border-bottom: 1px solid rgba(243,178,80,.18);
+  overflow-x: auto;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+.step-rail.show { display: flex; }
+.step-rail::-webkit-scrollbar { height: 4px; }
+.step {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--b1);
+  font: 10.5px/1 var(--mono);
+  color: var(--t3);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all .15s ease;
+}
+.step .num { width:14px; height:14px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:9px; background: rgba(255,255,255,.06); color: var(--t3); }
+.step.done { color: #6ee7b7; border-color: rgba(110,231,183,.25); background: rgba(110,231,183,.05); }
+.step.done .num { background: #0d4f3a; color: #6ee7b7; }
+.step.now {
+  color: var(--code-accent, #f3b250);
+  border-color: rgba(243,178,80,.45);
+  background: rgba(243,178,80,.08);
+  box-shadow: 0 0 14px rgba(243,178,80,.25);
+  animation: stepPulse 2s ease-in-out infinite;
+}
+.step.now .num { background: var(--code-accent, #f3b250); color: #0a0d12; }
+@keyframes stepPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(243,178,80,.25); }
+  50%      { box-shadow: 0 0 22px rgba(243,178,80,.45); }
+}
+.step-arrow { color: var(--t4, #555); font-size: 10px; flex-shrink: 0; }
+
 /* ═══ OPERATOR MODE ═══ */
 .operator-pane { display:none; position:fixed; bottom:0; left:280px; right:0; height:220px; background:#111111; border-top:1px solid rgba(167,139,250,.3); z-index:50; flex-direction:column; font-family:var(--mono); color:var(--t2); font-size:11px; }
 body.operator-mode-active .operator-pane { display:flex; }
@@ -1323,7 +1515,8 @@ body.with-sidebar .chat-status-bar{display:flex}
       <button class="focus-timer-btn" onclick="stopFocusTimer()">x</button>
     </div>
     <button class="ic-btn" id="operator-mode-btn" onclick="toggleOperatorMode()" title="Operator Console">📟</button>
-    <button class="ic-btn" id="code-mode-btn" onclick="toggleCodeMode()" title="Active Context Sidebar">🎛️</button>
+    <button class="ic-btn" id="code-mode-btn" onclick="toggleCodeMode()" title="Code Mode IDE">🎛️</button>
+    <button class="ic-btn" id="inspector-mode-btn" onclick="toggleInspectorMode()" title="Inspector — Context, Tools, Cost, Log">🪟</button>
     <button class="ic-btn hub" onclick="openHub()" title="Plugin Hub">🧩</button>
     <button class="ic-btn wf" onclick="openWorkflows()" title="Workflows">⚡</button>
     <button class="ic-btn store" onclick="openStore()" title="Marketplace">🏪</button>
@@ -1611,6 +1804,86 @@ body.with-sidebar .chat-status-bar{display:flex}
   <div class="op-content" id="op-log">
     <div class="op-log-line tool">[SYSTEM] Operator Mode initialized. Ready for telemetry.</div>
   </div>
+</div>
+
+<!-- ═══════════ STEP RAIL ═══════════
+     Auto-shows when an agent run reports a plan. Pulses the active step,
+     ✓-marks completed ones. Hidden in chat-only turns. -->
+<div class="step-rail" id="step-rail"></div>
+
+<!-- ═══════════ INSPECTOR (chat-mode right dock) ═══════════
+     Toggled via title-bar 🪟 button. Mirrors the premium inspector pattern
+     from the Claude design tool: Context · Tools · Cost · Log tabs +
+     BYOK footer. Only visible when body.inspector-active. -->
+<div class="inspector-pane" id="inspector-pane">
+  <div class="insp-head">
+    <button class="insp-tab on" data-tab="context" onclick="setInspectorTab('context')">Context</button>
+    <button class="insp-tab"    data-tab="tools"   onclick="setInspectorTab('tools')">Tools</button>
+    <button class="insp-tab"    data-tab="cost"    onclick="setInspectorTab('cost')">Cost</button>
+    <button class="insp-tab"    data-tab="log"     onclick="setInspectorTab('log')">Log</button>
+  </div>
+  <div class="insp-body" id="insp-body-context">
+    <div class="insp-section">
+      <div class="insp-h">Active turn</div>
+      <div class="insp-row"><span class="k">Provider</span><span class="v" id="insp-provider">—</span></div>
+      <div class="insp-row"><span class="k">Model</span><span class="v" id="insp-model">—</span></div>
+      <div class="insp-row"><span class="k">Mode</span><span class="v" id="insp-mode">chat</span></div>
+      <div class="insp-row"><span class="k">Persona</span><span class="v" id="insp-persona">Default</span></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">Workspace</div>
+      <div class="insp-row"><span class="k">Path</span><span class="v" id="insp-workspace">—</span></div>
+      <div class="insp-row"><span class="k">Open files</span><span class="v" id="insp-open-files">0</span></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">Connections</div>
+      <div class="insp-row"><span class="k">MCP servers</span><span class="v" id="insp-mcp">0</span></div>
+      <div class="insp-row"><span class="k">Voice</span><span class="v" id="insp-voice">—</span></div>
+    </div>
+  </div>
+  <div class="insp-body" id="insp-body-tools" style="display:none">
+    <div class="insp-section">
+      <div class="insp-h">Built-in</div>
+      <div id="insp-tools-builtin"></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">MCP</div>
+      <div id="insp-tools-mcp" class="insp-empty">No MCP servers connected.</div>
+    </div>
+  </div>
+  <div class="insp-body" id="insp-body-cost" style="display:none">
+    <div class="insp-section">
+      <div class="insp-h">Session cost</div>
+      <div class="cost-headline" id="insp-cost-headline">$0.00</div>
+      <div class="cost-subhead" id="insp-cost-sub">0 msgs · 0 tokens</div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">Token budget</div>
+      <div class="token-bar" id="insp-token-bar">
+        <div class="token-seg system"  style="width:0%"></div>
+        <div class="token-seg history" style="width:0%"></div>
+        <div class="token-seg files"   style="width:0%"></div>
+        <div class="token-seg tools"   style="width:0%"></div>
+      </div>
+      <div class="token-bar-meta" id="insp-token-meta">
+        <span class="seg system">System 0</span>
+        <span class="seg history">History 0</span>
+        <span class="seg files">Files 0</span>
+        <span class="seg tools">Tools 0</span>
+      </div>
+      <div class="insp-row"><span class="k">Used</span><span class="v" id="insp-token-used">0</span></div>
+      <div class="insp-row"><span class="k">Budget</span><span class="v" id="insp-token-budget">200,000</span></div>
+    </div>
+  </div>
+  <div class="insp-body" id="insp-body-log" style="display:none">
+    <div class="insp-section">
+      <div class="insp-h">Recent agent steps</div>
+      <div class="insp-log" id="insp-log-list">
+        <div class="insp-empty">No agent activity yet.</div>
+      </div>
+    </div>
+  </div>
+  <div class="insp-byok"><strong>BYOK · local-first.</strong> Calls go directly from your machine to the provider you picked. Horizon never proxies your prompts.</div>
 </div>
 
 <!-- ═══════════ MESSAGES ═══════════ -->
@@ -7615,6 +7888,241 @@ function toggleOperatorMode() {
     document.getElementById('operator-mode-btn').classList.remove('proc');
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// INSPECTOR PANE — Context · Tools · Cost · Log dock on the right
+// ═══════════════════════════════════════════════════════════════
+let inspectorActive = false;
+let inspectorTab = 'context';
+
+function toggleInspectorMode(){
+  inspectorActive = !inspectorActive;
+  document.body.classList.toggle('inspector-active', inspectorActive);
+  document.getElementById('inspector-mode-btn')?.classList.toggle('proc', inspectorActive);
+  if (inspectorActive) {
+    refreshInspector();
+    try { H.set('inspectorActive', true); } catch(_){}
+  } else {
+    try { H.set('inspectorActive', false); } catch(_){}
+  }
+}
+
+function setInspectorTab(name){
+  inspectorTab = name;
+  document.querySelectorAll('.insp-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  ['context','tools','cost','log'].forEach(t => {
+    const el = document.getElementById('insp-body-' + t);
+    if (el) el.style.display = (t === name) ? 'block' : 'none';
+  });
+  refreshInspector();
+}
+
+// Refresh whichever tab is active. Cheap on every call — only updates DOM
+// for the visible tab + the always-visible context bits (provider/model
+// pill, persona).
+function refreshInspector(){
+  if (!inspectorActive) return;
+  // Context is cheap, always update.
+  try {
+    const p = prov || provider || 'gemini';
+    const m = getSelectedModelForProvider?.(p) || (p === 'gemini' ? geminiModel : '') || 'default';
+    document.getElementById('insp-provider').textContent = p;
+    document.getElementById('insp-model').textContent = m;
+    document.getElementById('insp-mode').textContent = mode || 'chat';
+    document.getElementById('insp-persona').textContent = (typeof persona !== 'undefined' && persona) ? persona : 'Default';
+    document.getElementById('insp-workspace').textContent = codeWorkspace || 'No workspace';
+    document.getElementById('insp-open-files').textContent = (codeOpenFiles?.length || 0).toString();
+    document.getElementById('insp-voice').textContent = voiceProvider || '—';
+  } catch(_) {}
+
+  if (inspectorTab === 'tools') refreshInspectorTools();
+  if (inspectorTab === 'cost')  refreshInspectorCost();
+  if (inspectorTab === 'log')   refreshInspectorLog();
+  // Connections row updates lazily
+  refreshInspectorConnections();
+}
+
+async function refreshInspectorConnections(){
+  try {
+    const r = await H.mcpServersList?.().catch(()=>({ok:false,servers:[]}));
+    const enabled = (r?.servers || []).filter(s => s.enabled !== false).length;
+    const total = (r?.servers || []).length;
+    const el = document.getElementById('insp-mcp');
+    if (el) el.textContent = total ? `${enabled} / ${total} enabled` : '0';
+  } catch(_) {}
+}
+
+function refreshInspectorTools(){
+  // Built-in tools from agent.js TOOL_DEFINITIONS — we don't have a live
+  // listing IPC, so describe the static set + any MCP discovered tools.
+  const builtin = [
+    { name: 'fs.read_file',  scope: codeWorkspace ? 'workspace' : 'no workspace' },
+    { name: 'fs.write_file', scope: 'permission required' },
+    { name: 'fs.search',     scope: codeWorkspace ? 'workspace' : 'no workspace' },
+    { name: 'shell.exec',    scope: 'permission required' },
+    { name: 'web.search',    scope: 'tavily key' },
+    { name: 'ai.edit',       scope: (prov || provider) + ' model' },
+  ];
+  const host = document.getElementById('insp-tools-builtin');
+  if (host) {
+    host.innerHTML = builtin.map(t =>
+      `<div class="insp-row"><span class="v" style="text-align:left;color:var(--tx)">${esc(t.name)}</span><span class="k">${esc(t.scope)}</span></div>`
+    ).join('');
+  }
+  // MCP tools list — async
+  H.mcpServersList?.().then(r => {
+    const servers = r?.servers || [];
+    const mcpHost = document.getElementById('insp-tools-mcp');
+    if (!mcpHost) return;
+    if (!servers.length) {
+      mcpHost.innerHTML = '<div class="insp-empty">No MCP servers connected.</div>';
+      return;
+    }
+    mcpHost.innerHTML = servers.map(s => {
+      const status = s.enabled === false ? 'disabled' : (s.connected ? 'connected' : 'idle');
+      const tools = s.tools?.length || 0;
+      return `<div class="insp-row"><span class="v" style="text-align:left;color:var(--tx)">${esc(s.name)}</span><span class="k">${tools} tool${tools===1?'':'s'} · ${status}</span></div>`;
+    }).join('');
+  }).catch(()=>{});
+}
+
+function refreshInspectorCost(){
+  // Pull live values from the existing token tracker.
+  const cost = (typeof sessionTokens !== 'undefined') ? sessionTokens : 0;
+  const headline = document.getElementById('insp-cost-headline');
+  const sub = document.getElementById('insp-cost-sub');
+  if (headline) headline.textContent = sessionUsageKnown ? formatCost() : '—';
+  if (sub) sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} · ${formatTokens(sessionTokens)} tokens`;
+
+  // Token budget visualisation. We don't have per-segment counters; estimate
+  // splits as 7% system, 83% history, 8% files, 2% tools (a rough pattern
+  // that matches typical chat sessions). Real per-segment tracking is a
+  // follow-up — this gets the bar visible and updating as tokens grow.
+  const total = sessionTokens || 0;
+  const budget = 200000;
+  const segs = {
+    system:  Math.round(total * 0.07),
+    history: Math.round(total * 0.83),
+    files:   Math.round(total * 0.08),
+    tools:   Math.round(total * 0.02),
+  };
+  const totalUsed = Math.min(total, budget);
+  const bar = document.getElementById('insp-token-bar');
+  if (bar) {
+    const w = (n) => budget > 0 ? `${(n / budget * 100).toFixed(2)}%` : '0%';
+    bar.querySelector('.token-seg.system' ).style.width = w(segs.system);
+    bar.querySelector('.token-seg.history').style.width = w(segs.history);
+    bar.querySelector('.token-seg.files'  ).style.width = w(segs.files);
+    bar.querySelector('.token-seg.tools'  ).style.width = w(segs.tools);
+  }
+  const meta = document.getElementById('insp-token-meta');
+  if (meta) {
+    meta.innerHTML = `
+      <span class="seg system">System ${formatTokens(segs.system)}</span>
+      <span class="seg history">History ${formatTokens(segs.history)}</span>
+      <span class="seg files">Files ${formatTokens(segs.files)}</span>
+      <span class="seg tools">Tools ${formatTokens(segs.tools)}</span>`;
+  }
+  document.getElementById('insp-token-used').textContent = formatTokens(totalUsed);
+  document.getElementById('insp-token-budget').textContent = formatTokens(budget);
+}
+
+function refreshInspectorLog(){
+  const host = document.getElementById('insp-log-list');
+  if (!host) return;
+  const lines = (operatorLogLines || []).slice(-30).reverse();
+  if (!lines.length) {
+    host.innerHTML = '<div class="insp-empty">No agent activity yet.</div>';
+    return;
+  }
+  host.innerHTML = lines.map(l =>
+    `<div class="insp-log-row ${esc(l.type||'info')}"><span class="ts">${esc(l.time||'')}</span><span class="msg">${esc(l.msg||'')}</span><span class="dur"></span></div>`
+  ).join('');
+}
+
+function formatTokens(n){
+  if (!n) return '0';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'k';
+  return String(n);
+}
+function formatCost(){
+  // Token tracker doesn't carry $ cost in the simplified flow — show tokens
+  // as the headline and leave the dollar sign for a future per-provider
+  // pricing source. For now show a compact tokens value.
+  return formatTokens(sessionTokens) + ' tok';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STEP RAIL — agent plan progress at top of chat
+// ═══════════════════════════════════════════════════════════════
+let stepRailState = { steps: [], currentIdx: -1 };
+
+function setStepRail(steps, currentIdx){
+  stepRailState.steps = Array.isArray(steps) ? steps.slice(0, 7) : [];
+  stepRailState.currentIdx = (typeof currentIdx === 'number') ? currentIdx : -1;
+  renderStepRail();
+}
+
+function clearStepRail(){
+  stepRailState = { steps: [], currentIdx: -1 };
+  const rail = document.getElementById('step-rail');
+  if (rail) {
+    rail.classList.remove('show');
+    rail.innerHTML = '';
+  }
+}
+
+function renderStepRail(){
+  const rail = document.getElementById('step-rail');
+  if (!rail) return;
+  const steps = stepRailState.steps;
+  if (!steps.length) {
+    rail.classList.remove('show');
+    return;
+  }
+  rail.classList.add('show');
+  const cur = stepRailState.currentIdx;
+  const html = steps.map((s, i) => {
+    const status = (i < cur) ? 'done' : (i === cur ? 'now' : '');
+    const num = (i < cur) ? '✓' : String(i + 1);
+    return `<div class="step ${status}"><span class="num">${num}</span><span>${esc(s)}</span></div>`;
+  }).join('<span class="step-arrow">→</span>');
+  rail.innerHTML = html;
+}
+
+// Auto-update Inspector and Step Rail from agent step events. Hooks into
+// the existing operator-side onAgentStep listener via a soft tap so we
+// don't fight Operator Mode's own subscriber.
+try {
+  H.onAgentStep?.((step) => {
+    try {
+      // Step rail — server sends {type:'plan', steps:[...], currentIdx}
+      if (step?.type === 'plan' && Array.isArray(step.steps)) {
+        setStepRail(step.steps, step.currentIdx ?? 0);
+      }
+      if (step?.type === 'plan-step' && typeof step.idx === 'number') {
+        setStepRail(stepRailState.steps, step.idx);
+      }
+      if (step?.type === 'run-end' || step?.type === 'done') {
+        // Fade rail after a beat so the user sees the final ✓ state
+        setTimeout(clearStepRail, 1500);
+      }
+      // Inspector log + cost auto-refresh on activity
+      if (inspectorActive) {
+        if (inspectorTab === 'log')  refreshInspectorLog();
+        if (inspectorTab === 'cost') refreshInspectorCost();
+      }
+    } catch(_) {}
+  });
+} catch(_) {}
+
+// Restore inspector state on load
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const wasActive = await H.get('inspectorActive').catch(()=>null);
+    if (wasActive) toggleInspectorMode();
+  } catch(_) {}
+});
 function opLog(msg, type='info') {
   operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type});
   opRender();
