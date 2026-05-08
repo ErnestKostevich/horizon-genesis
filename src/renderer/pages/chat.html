@@ -509,38 +509,282 @@ body.with-sidebar > .chat-status-bar{margin-left:280px}
 .cs-list{flex:1;overflow-y:auto;padding:4px 8px 12px 8px}
 .cs-list::-webkit-scrollbar-thumb{background:rgba(108,140,255,.15);border-radius:4px}
 
-/* ═══ APEX RIGHT SIDEBAR ═══ */
-.apex-right-pane { position:fixed; top:42px; right:-360px; bottom:0; width:360px; background:#0b0e16; border-left:1px solid #1a1d27; z-index:10; display:flex; flex-direction:column; padding:16px 0; overflow-y:auto; transition:right .2s; }
-body.code-mode-active .apex-right-pane { right:0; }
-body.code-mode-active .chat-status-bar, body.code-mode-active .msgs, body.code-mode-active .inp-wrap { margin-right:360px; }
-.arp-section { margin-bottom:24px; padding:0 16px; }
-.arp-head { font-size:10px; font-weight:700; color:#4a5568; letter-spacing:1px; margin-bottom:12px; font-family:var(--mono); text-transform:uppercase; }
-.arp-card { display:flex; gap:12px; align-items:center; background:#161921; padding:12px; border-radius:12px; border:1px solid #1a1d27; }
-.arp-tool { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-.arp-t-name { font-size:12px; font-weight:600; color:#e8ecf4; font-family:var(--mono); }
-.arp-t-desc { font-size:10px; color:#4a5568; font-family:var(--mono); margin-top:2px; }
-.arp-t-switch { width:32px; height:18px; border-radius:9px; background:#1a1d27; position:relative; cursor:pointer; border:1px solid #2d3748; }
-.arp-t-switch::after { content:''; position:absolute; left:2px; top:2px; width:12px; height:12px; border-radius:50%; background:#4a5568; transition:all .2s; }
-.arp-t-switch.on { background:var(--amber); border-color:var(--amber); }
-.arp-t-switch.on::after { background:#08090c; left:16px; }
-.arp-file { display:flex; justify-content:space-between; font-size:11px; color:#60a5fa; font-family:var(--mono); padding:6px 8px; background:rgba(96,165,250,.05); border-radius:6px; margin-bottom:6px; cursor:pointer; transition:all .2s; border:1px solid transparent; }
-.arp-file:hover { background:rgba(96,165,250,.1); border-color:rgba(96,165,250,.2); }
-.arp-footer { padding:0 16px; font-size:10px; color:#4a5568; line-height:1.6; }
-.code-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px}
-.code-actions.wide{grid-template-columns:repeat(3,minmax(0,1fr))}
-.code-btn{background:#161921;border:1px solid #242936;color:#d8deea;border-radius:7px;padding:7px 8px;font:11px var(--mono);cursor:pointer}
-.code-btn.primary{background:linear-gradient(135deg,#f3b250,#ffcf7a);color:#090b10;border-color:#f3b250;font-weight:700}
-.code-btn:hover{border-color:#f3b250;color:#fff}
-.code-btn.primary:hover{color:#090b10}
-.code-input{width:100%;box-sizing:border-box;background:#080b12;border:1px solid #242936;color:#e8ecf4;border-radius:7px;padding:8px;font:11px var(--mono);outline:none}
-.code-editor{width:100%;min-height:240px;resize:vertical;background:#05070c;border:1px solid #242936;color:#e8ecf4;border-radius:8px;padding:10px;font:11px/1.5 var(--mono);outline:none;box-sizing:border-box}
-.code-monaco{height:320px;border:1px solid #242936;border-radius:8px;overflow:hidden;background:#05070c}
-.code-terminal{background:#05070c;border:1px solid #242936;border-radius:8px;min-height:96px;max-height:180px;overflow:auto;padding:8px;color:#b9f6ca;font:10px/1.5 var(--mono);white-space:pre-wrap}
-.code-xterm{height:220px;background:#05070c;border:1px solid #242936;border-radius:8px;overflow:hidden;padding:4px}
-.code-terminal-row{display:flex;gap:6px;margin-top:8px}
-.code-terminal-row .code-input{flex:1}
-.code-status{font:10px/1.45 var(--mono);color:#8d96ab;margin-top:8px;word-break:break-word}
-.arp-file.active{background:rgba(243,178,80,.12);border-color:rgba(243,178,80,.35);color:#f8d28c}
+/* ═══ CODE MODE — full IDE shell ═══════════════════════════════════════════
+   Hidden by default. When body.code-mode-active is on, the .apex-right-pane
+   element (kept for backward-compat IDs) becomes a 4-zone grid covering the
+   area between the chat list (left, 280px) and a compact chat panel (right,
+   380px). Layout:
+
+      ┌─────────────────────────────────────┐
+      │ TOPBAR — workspace + model + tools  │
+      ├──────────┬──────────────────────────┤
+      │          │  TABS                    │
+      │  FILES   ├──────────────────────────┤
+      │   tree   │  Monaco editor           │
+      │ (260px)  ├──────────────────────────┤
+      │          │  Toolbar (Save / AI…)    │
+      ├──────────┴──────────────────────────┤
+      │ TERMINAL (collapsible, 240px)       │
+      └─────────────────────────────────────┘
+*/
+:root {
+  --code-bg: #07090f;
+  --code-bg-2: #0c1018;
+  --code-bg-3: #131826;
+  --code-line: #1d2333;
+  --code-line-2: #2a3042;
+  --code-text: #d8deea;
+  --code-mute: #6a7388;
+  --code-accent: #f3b250;
+  --code-cyan: #56d2ff;
+}
+
+/* Hidden by default — slides in via body.code-mode-active state. */
+.apex-right-pane.code-shell {
+  display: none;
+  position: fixed;
+  top: 42px;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--code-bg);
+  border-left: 1px solid var(--code-line);
+  z-index: 12;
+  overflow: hidden;
+  padding: 0;
+  transition: none;
+}
+
+/* Active state: take over most of the viewport, leave 280px chat list on the
+   left and a 380px compact chat panel on the right. */
+body.code-mode-active .apex-right-pane.code-shell {
+  display: grid;
+  left: 280px;
+  right: 380px;
+  width: auto;
+  grid-template-rows: 44px minmax(0, 1fr) auto;
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-areas:
+    "topbar    topbar"
+    "files     editor"
+    "terminal  terminal";
+}
+
+/* When the terminal is collapsed the bottom row disappears entirely. */
+body.code-mode-active.code-terminal-collapsed .apex-right-pane.code-shell {
+  grid-template-rows: 44px minmax(0, 1fr) 0;
+}
+body.code-mode-active.code-terminal-collapsed .code-terminal-pane { display: none; }
+
+/* Chat panel (status bar + messages + input) compresses into a 380px column
+   anchored to the right edge of the viewport. */
+body.code-mode-active .chat-status-bar,
+body.code-mode-active .msgs,
+body.code-mode-active .inp-wrap {
+  margin-right: 0;
+}
+body.code-mode-active .chat-status-bar {
+  position: fixed;
+  top: 42px;
+  right: 0;
+  width: 380px;
+  border-left: 1px solid var(--code-line);
+  z-index: 13;
+}
+body.code-mode-active .msgs {
+  position: fixed;
+  top: 80px;
+  right: 0;
+  width: 380px;
+  bottom: 92px;
+  border-left: 1px solid var(--code-line);
+  z-index: 13;
+  background: var(--bg);
+}
+body.code-mode-active .inp-wrap {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 380px;
+  border-left: 1px solid var(--code-line);
+  z-index: 13;
+}
+/* When operator pane is also active, leave room for it on the right column. */
+body.code-mode-active.operator-mode-active .msgs { bottom: calc(92px + 220px); }
+body.code-mode-active.operator-mode-active .inp-wrap { bottom: 220px; }
+
+/* Mode chips bar gets hidden — code mode owns the canvas. */
+body.code-mode-active .modes { display: none; }
+
+/* On narrower windows (< 1280px) collapse the chat panel: code mode goes
+   full-bleed. The user can still toggle code-mode off to reach the chat. */
+@media (max-width: 1279px) {
+  body.code-mode-active .apex-right-pane.code-shell { right: 0; }
+  body.code-mode-active .chat-status-bar,
+  body.code-mode-active .msgs,
+  body.code-mode-active .inp-wrap { display: none; }
+}
+
+/* ── Top bar ────────────────────────────────────────────── */
+.code-topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, var(--code-bg-3) 0%, var(--code-bg-2) 100%);
+  border-bottom: 1px solid var(--code-line);
+  -webkit-app-region: drag;
+}
+.code-topbar-l, .code-topbar-r { display: flex; align-items: center; gap: 8px; -webkit-app-region: no-drag; }
+.code-brand { display:flex; align-items:center; gap:8px; padding-right:8px; border-right:1px solid var(--code-line); height:24px; }
+.code-brand-dot { width:8px; height:8px; border-radius:50%; background: var(--code-cyan); box-shadow: 0 0 10px var(--code-cyan); }
+.code-brand-name { font: 700 10px/1 var(--mono); letter-spacing: 1.4px; color: var(--code-text); text-transform: uppercase; }
+.code-breadcrumb { font:11px/1 var(--mono); color: var(--code-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 600px; }
+.code-tag { font:9px/1 var(--mono); color: var(--code-mute); border:1px solid var(--code-line-2); padding:5px 9px; border-radius:999px; text-transform:uppercase; letter-spacing:1.2px; white-space:nowrap; }
+
+/* ── File tree panel ─────────────────────────────────────── */
+.code-files {
+  grid-area: files;
+  background: var(--code-bg-2);
+  border-right: 1px solid var(--code-line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.code-files-head { display:flex; gap:6px; padding:10px 10px 8px; border-bottom:1px solid var(--code-line); }
+.code-files-head .code-input { flex:1 1 auto; min-width: 0; }
+.code-files-status { padding: 6px 12px; font:9.5px/1.4 var(--mono); color: var(--code-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--code-line); }
+.code-files-list { flex:1; overflow:auto; padding: 6px 8px 12px; }
+
+/* ── Editor pane ─────────────────────────────────────────── */
+.code-editor-pane {
+  grid-area: editor;
+  display: grid;
+  grid-template-rows: 36px minmax(0, 1fr) 44px;
+  background: var(--code-bg);
+  min-width: 0;
+  min-height: 0;
+}
+.code-tabs {
+  display:flex; align-items:flex-end; gap:2px;
+  padding: 0 8px;
+  background: var(--code-bg-2);
+  border-bottom:1px solid var(--code-line);
+  overflow-x: auto;
+}
+.code-tabs::-webkit-scrollbar { height: 4px; }
+.code-tab {
+  display: inline-flex; align-items:center; gap:8px;
+  height: 30px;
+  margin-top:6px;
+  padding: 0 14px;
+  font: 11.5px/1 var(--mono);
+  color: var(--code-mute);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.code-tab.on { color: var(--code-text); background: var(--code-bg); border-color: var(--code-line); border-bottom: 1px solid var(--code-bg); margin-bottom:-1px; }
+.code-tab-meta { color: var(--code-mute); font-size:10px; }
+
+.code-monaco {
+  width: 100%;
+  height: 100%;
+  background: var(--code-bg);
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+}
+.code-editor { /* textarea fallback when Monaco unavailable */
+  width: 100%; height: 100%;
+  background: var(--code-bg);
+  color: var(--code-text);
+  font: 12.5px/1.55 var(--mono);
+  padding: 14px 16px;
+  border: none;
+  outline: none;
+  resize: none;
+  box-sizing: border-box;
+}
+.code-toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 12px;
+  background: var(--code-bg-2);
+  border-top: 1px solid var(--code-line);
+  overflow-x: auto;
+}
+.code-toolbar::-webkit-scrollbar { height: 4px; }
+.code-toolbar-sep { width:1px; height:18px; background: var(--code-line); margin: 0 4px; flex-shrink: 0; }
+.code-toolbar-status { font:10px/1 var(--mono); color: var(--code-mute); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+
+/* ── Terminal pane ───────────────────────────────────────── */
+.code-terminal-pane {
+  grid-area: terminal;
+  display: flex; flex-direction: column;
+  min-height: 240px; max-height: 320px;
+  background: #03050a;
+  border-top: 1px solid var(--code-line);
+}
+.code-terminal-head {
+  display:flex; align-items:center; gap:8px;
+  padding:6px 12px;
+  background: var(--code-bg-2);
+  border-bottom:1px solid var(--code-line);
+}
+.code-terminal-title { font:600 10.5px/1 var(--mono); color: var(--code-mute); letter-spacing:1px; text-transform: uppercase; }
+.code-xterm { flex:1; min-height: 0; padding:6px 8px; overflow:hidden; }
+.code-terminal-fallback { flex:1; padding:8px 12px; font:10.5px/1.55 var(--mono); color:#b9f6ca; white-space:pre-wrap; overflow:auto; }
+.code-terminal-row { display:flex; gap:6px; padding: 6px 10px 8px; border-top: 1px solid var(--code-line); }
+.code-terminal-row .code-input { flex: 1; }
+
+/* ── Buttons / inputs (unified premium look) ─────────────── */
+.code-btn{
+  background: var(--code-bg-3);
+  border: 1px solid var(--code-line-2);
+  color: var(--code-text);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font: 600 11px/1 var(--mono);
+  cursor: pointer;
+  transition: all .15s ease;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+.code-btn:hover { border-color: var(--code-accent); color: #fff; background: #1a1f2e; }
+.code-btn.primary{
+  background: linear-gradient(135deg, var(--code-accent), #ffcf7a);
+  color: #090b10;
+  border-color: var(--code-accent);
+  font-weight: 700;
+}
+.code-btn.primary:hover { color: #000; filter: brightness(1.05); }
+.code-input{
+  background: #03050a;
+  border: 1px solid var(--code-line-2);
+  color: var(--code-text);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font: 11px/1.4 var(--mono);
+  outline: none;
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
+}
+.code-input:focus { border-color: var(--code-accent); }
+
+/* File tree entries — inherit pre-existing arp-file styling but tighter. */
+.arp-file { display:flex; justify-content:space-between; gap:10px; font:11px var(--mono); color:#8aacd1; padding:5px 8px; border-radius:5px; cursor:pointer; transition:background .12s; }
+.arp-file:hover { background: rgba(86, 210, 255, .08); color: var(--code-cyan); }
+.arp-file.active { background: rgba(243, 178, 80, .14); color: var(--code-accent); }
+.arp-file > :last-child { color: var(--code-mute); font-size: 10px; flex-shrink: 0; }
+
+/* Hidden helpers (kept in DOM for IDs, never visible). */
+.apex-right-pane #arp-tools-section[hidden],
+.apex-right-pane #arp-persona[hidden] { display: none !important; }
 
 /* ═══ OPERATOR MODE ═══ */
 .operator-pane { display:none; position:fixed; bottom:0; left:280px; right:0; height:220px; background:#111111; border-top:1px solid rgba(167,139,250,.3); z-index:50; flex-direction:column; font-family:var(--mono); color:var(--t2); font-size:11px; }
@@ -1224,75 +1468,87 @@ body.with-sidebar .chat-status-bar{display:flex}
      ships and can populate them with real workspace state. Until then we
      show a "no workspace selected" hint instead of fake hardcoded files —
      fake state was actively misleading. -->
-<div id="apex-right-pane" class="apex-right-pane">
-  <div class="arp-section">
-    <div class="arp-head">ACTIVE CONTEXT</div>
-    <div class="arp-card" id="arp-persona">
-      <div style="font-size:24px">🪐</div>
-      <div>
-        <div style="font-weight:600;color:var(--tx);font-size:14px" id="code-context-title">Horizon Code Mode</div>
-        <div style="color:var(--t3);font-size:11px;margin-top:2px;font-family:var(--mono)" id="code-context-meta">provider / model / workspace</div>
+<!-- ═══════════ CODE MODE — full IDE shell ═══════════
+     Renders as a compact-default panel and explodes into a Cursor-style
+     workspace (files | editor | terminal | right chat) when
+     body.code-mode-active is on. All existing IDs (code-monaco,
+     arp-files-list, code-editor, code-xterm, code-file-path,
+     code-terminal-output, code-terminal-command, etc.) are preserved so
+     the existing IDE JavaScript keeps working — only the visual
+     scaffolding around them changed. -->
+<div id="apex-right-pane" class="apex-right-pane code-shell">
+
+  <!-- Top bar: workspace breadcrumb + active model + global controls -->
+  <div class="code-topbar">
+    <div class="code-topbar-l">
+      <div class="code-brand"><span class="code-brand-dot"></span><span class="code-brand-name">CODE MODE</span></div>
+      <div class="code-breadcrumb" id="code-context-meta" title="Active workspace path">No workspace</div>
+    </div>
+    <div class="code-topbar-r">
+      <span class="code-tag" id="code-context-title">Horizon Code Mode</span>
+      <button class="code-btn" onclick="chooseCodeWorkspace()" title="Open a folder as the workspace">📂 Open</button>
+      <button class="code-btn" onclick="refreshCodeWorkspace()" title="Reload file tree from disk">↻</button>
+      <button class="code-btn" onclick="toggleCodeTerminal()" id="code-terminal-toggle" title="Show / hide the terminal panel">⌨ Terminal</button>
+      <button class="code-btn" onclick="toggleCodeMode()" title="Close Code Mode">✕</button>
+    </div>
+  </div>
+
+  <!-- Files panel: search + tree -->
+  <aside class="code-files">
+    <div class="code-files-head">
+      <input class="code-input" id="code-file-search" placeholder="Search files…" onkeydown="if(event.key==='Enter') searchCodeWorkspace()"/>
+      <button class="code-btn" onclick="searchCodeWorkspace()" title="Run search">⌕</button>
+      <button class="code-btn" onclick="refreshCodeWorkspace('')" title="Jump to workspace root">⌂</button>
+    </div>
+    <div class="code-files-status" id="code-workspace-status">No workspace selected.</div>
+    <div id="arp-files-list" class="code-files-list">
+      <div style="color:var(--t3);font-size:11px;line-height:1.6;padding:10px 12px">Open a folder to load files.</div>
+    </div>
+  </aside>
+
+  <!-- Editor: file tabs above, Monaco below, action toolbar at the bottom -->
+  <main class="code-editor-pane">
+    <div class="code-tabs" id="code-tabs">
+      <div class="code-tab on" id="code-current-tab">
+        <span class="code-tab-name" id="code-tab-name">No file open</span>
+        <span class="code-tab-meta" id="code-file-meta"></span>
       </div>
     </div>
-    <div class="code-actions">
-      <button class="code-btn primary" onclick="chooseCodeWorkspace()">Open folder</button>
-      <button class="code-btn" onclick="refreshCodeWorkspace()">Refresh</button>
-    </div>
-    <div class="code-status" id="code-workspace-status">No workspace selected yet.</div>
-  </div>
-
-  <div class="arp-section" id="arp-tools-section">
-    <div class="arp-head" id="arp-tools-head">TOOLS ENABLED</div>
-    <div id="arp-tools-list"></div>
-  </div>
-
-  <div class="arp-section" id="arp-files-section">
-    <div class="arp-head" id="arp-files-head">WORKSPACE</div>
-    <input class="code-input" id="code-file-search" placeholder="Search files..." onkeydown="if(event.key==='Enter') searchCodeWorkspace()"/>
-    <div class="code-actions">
-      <button class="code-btn" onclick="searchCodeWorkspace()">Search</button>
-      <button class="code-btn" onclick="refreshCodeWorkspace('')">Root</button>
-    </div>
-    <div id="arp-files-list">
-      <div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">
-        No workspace selected.<br/>
-        Choose a folder to surface live files in context here.
-      </div>
-    </div>
-  </div>
-
-  <div class="arp-section">
-    <div class="arp-head">EDITOR</div>
-    <input class="code-input" id="code-file-path" placeholder="No file open" readonly />
+    <input id="code-file-path" type="hidden" />
     <div class="code-monaco" id="code-monaco"></div>
     <textarea class="code-editor" id="code-editor" spellcheck="false" placeholder="Open a file from the workspace." style="display:none"></textarea>
-    <div class="code-actions wide">
-      <button class="code-btn primary" onclick="saveCodeFile()">Save</button>
-      <button class="code-btn" onclick="runCodeSelection()">Run selection</button>
+    <div class="code-toolbar">
+      <button class="code-btn primary" onclick="saveCodeFile()" title="Save current file (asks for permission)">💾 Save</button>
+      <button class="code-btn" onclick="runCodeSelection()">▶ Run selection</button>
+      <span class="code-toolbar-sep"></span>
       <button class="code-btn" onclick="askCodeAi('explain')">Explain</button>
       <button class="code-btn" onclick="askCodeAi('refactor')">Refactor</button>
       <button class="code-btn" onclick="askCodeAi('fix')">Fix</button>
       <button class="code-btn primary" onclick="applyLastCodeAi()">Apply AI</button>
+      <span class="code-toolbar-sep"></span>
+      <span class="code-toolbar-status" id="code-editor-status">Workspace edits ask for permission before writing.</span>
     </div>
-    <div class="code-status" id="code-editor-status">Workspace edits ask for permission before writing.</div>
-  </div>
+  </main>
 
-  <div class="arp-section">
-    <div class="arp-head">TERMINAL</div>
+  <!-- Terminal: collapsed by default, toggles via top bar Terminal button -->
+  <section class="code-terminal-pane" id="code-terminal-pane">
+    <div class="code-terminal-head">
+      <span class="code-terminal-title">⌨ Workspace terminal</span>
+      <span style="flex:1"></span>
+      <button class="code-btn" onclick="restartWorkspaceTerminal()" title="Restart shell">↻ restart</button>
+      <button class="code-btn" onclick="toggleCodeTerminal()" title="Hide terminal">−</button>
+    </div>
     <div class="code-xterm" id="code-xterm"></div>
-    <div class="code-terminal" id="code-terminal-output">Workspace shell is idle.</div>
+    <div class="code-terminal-fallback" id="code-terminal-output" hidden>Workspace shell is idle.</div>
     <div class="code-terminal-row">
       <input class="code-input" id="code-terminal-command" placeholder="npm test" onkeydown="if(event.key==='Enter') runWorkspaceCommand()"/>
       <button class="code-btn primary" onclick="runWorkspaceCommand()">Run</button>
-      <button class="code-btn" onclick="restartWorkspaceTerminal()">Restart</button>
     </div>
-    <div class="code-status">Interactive workspace terminal v1. Uses a persistent shell transport; one-shot commands remain as fallback.</div>
-  </div>
+  </section>
 
-  <div style="flex:1"></div>
-  <div class="arp-footer">
-    <span style="color:var(--acc)">BYOK active:</span> Calls go directly from your machine to the provider you picked. Horizon never sees your prompts.
-  </div>
+  <!-- Hidden helpers retained for compatibility with existing JS -->
+  <div id="arp-tools-section" hidden><div id="arp-tools-list"></div></div>
+  <div id="arp-persona" hidden></div>
 </div>
 
 </div>
@@ -6297,19 +6553,48 @@ function inferCodeLang(file){
 }
 
 function renderCodeContext(){
-  const meta=document.getElementById('code-context-meta');
-  if(meta) meta.textContent = `${prov || provider} / ${getSelectedModelForProvider(prov || provider) || 'default'} / ${codeWorkspace || 'no workspace'}`;
-  const tools=document.getElementById('arp-tools-list');
-  if(tools){
-    const rows=[
-      ['fs.read_file', codeWorkspace ? 'workspace scope' : 'no workspace'],
-      ['fs.write_file', 'permission required'],
-      ['fs.search', codeWorkspace ? 'workspace scope' : 'no workspace'],
-      ['shell.exec', 'permission required'],
-      ['ai.edit', `${prov || provider} model`],
-    ];
-    tools.innerHTML=rows.map(([name,desc])=>`<div class="arp-tool"><div><div class="arp-t-name">${name}</div><div class="arp-t-desc">${desc}</div></div><div class="arp-t-switch on"></div></div>`).join('');
+  const meta = document.getElementById('code-context-meta');
+  if (meta) meta.textContent = codeWorkspace || 'No workspace';
+  const title = document.getElementById('code-context-title');
+  if (title) {
+    const p = prov || provider || 'gemini';
+    const m = getSelectedModelForProvider(p) || 'default';
+    title.textContent = `${p} · ${m}`;
   }
+  // Tools list is hidden in the redesigned IDE shell — keep the data
+  // synced anyway so anything reading from #arp-tools-list still sees
+  // the current state.
+  const tools = document.getElementById('arp-tools-list');
+  if (tools) {
+    const rows = [
+      ['fs.read_file',  codeWorkspace ? 'workspace scope' : 'no workspace'],
+      ['fs.write_file', 'permission required'],
+      ['fs.search',     codeWorkspace ? 'workspace scope' : 'no workspace'],
+      ['shell.exec',    'permission required'],
+      ['ai.edit',       `${prov || provider} model`],
+    ];
+    tools.innerHTML = rows.map(([name, desc]) =>
+      `<div class="arp-tool"><div><div class="arp-t-name">${name}</div><div class="arp-t-desc">${desc}</div></div><div class="arp-t-switch on"></div></div>`
+    ).join('');
+  }
+}
+
+// Toggle the bottom terminal pane. Body class controls grid template so the
+// editor reclaims the bottom space when the terminal is hidden. Terminal
+// stays uninitialised until the user opens it, then initialises lazily.
+function toggleCodeTerminal(){
+  const wasCollapsed = document.body.classList.contains('code-terminal-collapsed');
+  document.body.classList.toggle('code-terminal-collapsed');
+  if (wasCollapsed) {
+    // We just opened it — make sure the persistent shell is alive.
+    initWorkspaceTerminal(false).catch(()=>{});
+  }
+  // Force Monaco / xterm to re-measure their container after grid resize.
+  setTimeout(() => {
+    try { codeEditor?.layout?.(); } catch(_){}
+    try { window.codeXTermFit?.fit?.(); } catch(_){}
+    try { codeTerminal?.fit?.(); } catch(_){}
+  }, 80);
 }
 
 async function chooseCodeWorkspace(){
@@ -6372,6 +6657,14 @@ async function openCodeFile(rel){
   if(!r.ok){ codeSetStatus(r.err || 'Could not open file.', true); return; }
   codeCurrentFile=rel;
   document.getElementById('code-file-path').value=abs;
+  // Update file tab + breadcrumb so the editor surface reflects the open file.
+  const tabName = document.getElementById('code-tab-name');
+  if (tabName) tabName.textContent = rel.split('/').pop();
+  const fileMeta = document.getElementById('code-file-meta');
+  if (fileMeta) {
+    const lines = (r.content || '').split('\n').length;
+    fileMeta.textContent = `${lines} L · ${inferCodeLang(rel)}`;
+  }
   await initCodeEditor();
   codeSetValue(r.content||'', inferCodeLang(rel));
   codeSetStatus(`Opened ${rel}`);
@@ -6705,13 +6998,21 @@ function toggleCodeMode() {
   codeModeActive = !codeModeActive;
   if (codeModeActive) {
     document.body.classList.add('code-mode-active');
+    // Start with the bottom terminal collapsed — the editor wants the room
+    // and most users open the terminal on demand. They can open it via the
+    // ⌨ Terminal button in the top bar.
+    document.body.classList.add('code-terminal-collapsed');
     document.getElementById('code-mode-btn').classList.add('proc');
-    initCodeEditor().catch(()=>{});
+    initCodeEditor().then(() => {
+      // Monaco needs a layout pass after its container resizes from the
+      // grid expansion, otherwise it draws at the old 360px width.
+      try { codeEditor?.layout?.(); } catch(_){}
+    }).catch(()=>{});
     refreshCodeWorkspace().catch(()=>{});
-    initWorkspaceTerminal(false).catch(()=>{});
     renderCodeContext();
   } else {
     document.body.classList.remove('code-mode-active');
+    document.body.classList.remove('code-terminal-collapsed');
     document.getElementById('code-mode-btn').classList.remove('proc');
   }
 }
