@@ -6023,6 +6023,7 @@ let codeLastAiPatch = null;
 let codeTerminal = null;
 let codeTerminalId = '';
 let codeTerminalListenerInstalled = false;
+let codeTerminalResizeInstalled = false;
 
 function initCodeEditor(){
   if(codeEditorReady) return codeEditorReady;
@@ -6185,6 +6186,12 @@ async function initWorkspaceTerminal(force=false){
     codeTerminal.onData(data => {
       if(codeTerminalId) H.terminalWrite?.(codeTerminalId, data).catch(()=>null);
     });
+    if(!codeTerminalResizeInstalled && codeTerminal.onResize){
+      codeTerminal.onResize(size => {
+        if(codeTerminalId) H.terminalResize?.(codeTerminalId, size.cols, size.rows).catch(()=>null);
+      });
+      codeTerminalResizeInstalled = true;
+    }
   }
   if(!codeTerminalListenerInstalled && H.onTerminalData){
     H.onTerminalData(payload => {
@@ -6194,10 +6201,18 @@ async function initWorkspaceTerminal(force=false){
     codeTerminalListenerInstalled = true;
   }
   if(!codeTerminalId){
-    const r=await H.terminalCreate?.(`code-${Date.now().toString(36)}`, codeDir || '').catch(e=>({ok:false,err:e.message}));
+    const r=await H.terminalCreate?.(
+      `code-${Date.now().toString(36)}`,
+      codeDir || '',
+      codeTerminal?.cols || 100,
+      codeTerminal?.rows || 30
+    ).catch(e=>({ok:false,err:e.message}));
     if(!r?.ok){ appendTerminalFallback(`\nTerminal failed: ${r?.err || 'unknown'}\n`); return r; }
     codeTerminalId=r.id;
-    codeTerminal.write(`Horizon workspace terminal\r\n${r.cwd}\r\n\r\n`);
+    const backend = r.nativePty ? 'native PTY' : 'fallback shell pipe';
+    codeTerminal.write(`Horizon workspace terminal (${backend})\r\n${r.cwd}\r\n\r\n`);
+    if(!r.nativePty && r.nativeError) codeTerminal.write(`Native PTY unavailable: ${r.nativeError}\r\n\r\n`);
+    await H.terminalResize?.(codeTerminalId, codeTerminal?.cols || 100, codeTerminal?.rows || 30).catch(()=>null);
   }
   setTimeout(()=>{ try { codeTerminal?.focus(); } catch(_){} }, 50);
   return { ok:true, id:codeTerminalId };

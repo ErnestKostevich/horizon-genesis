@@ -1330,6 +1330,7 @@ ipcMain.handle('wsShell', async (_, cmd) => {
 });
 
 const terminalSessions = new Map();
+let nodePtyState = { tried: false, mod: null, error: null };
 
 function terminalShell() {
   if (IS_WIN) return process.env.ComSpec || 'cmd.exe';
@@ -1341,7 +1342,86 @@ function terminalArgs() {
   return [];
 }
 
-ipcMain.handle('terminalCreate', async (event, id, rel = '') => {
+function terminalEnv() {
+  return {
+    ...process.env,
+    TERM: process.env.TERM || 'xterm-256color',
+    COLORTERM: process.env.COLORTERM || 'truecolor',
+    FORCE_COLOR: process.env.FORCE_COLOR || '1',
+  };
+}
+
+function loadNodePty() {
+  if (nodePtyState.tried) return nodePtyState;
+  nodePtyState.tried = true;
+  try {
+    // Optional native dependency. If it is not rebuilt for this Electron ABI,
+    // Horizon falls back to the pipe-backed shell instead of breaking startup.
+    const mod = require('node-pty');
+    if (!mod || typeof mod.spawn !== 'function') throw new Error('node-pty did not expose spawn()');
+    nodePtyState.mod = mod;
+  } catch (e) {
+    nodePtyState.error = e;
+  }
+  return nodePtyState;
+}
+
+function createPtyTerminal({ termId, cwd, cols, rows, send, onExit }) {
+  const state = loadNodePty();
+  if (!state.mod) return null;
+  const term = state.mod.spawn(terminalShell(), terminalArgs(), {
+    name: 'xterm-256color',
+    cols: Number(cols) || 100,
+    rows: Number(rows) || 30,
+    cwd,
+    env: terminalEnv(),
+  });
+  if (typeof term.onData === 'function') term.onData(send);
+  else if (typeof term.on === 'function') term.on('data', send);
+  if (typeof term.onExit === 'function') {
+    term.onExit(({ exitCode, signal }) => onExit(exitCode, signal));
+  } else if (typeof term.on === 'function') {
+    term.on('exit', onExit);
+  }
+  return {
+    id: termId,
+    backend: 'pty',
+    shell: terminalShell(),
+    cwd,
+    write(data) { term.write(String(data ?? '')); },
+    resize(nextCols, nextRows) {
+      const c = Number(nextCols) || 100;
+      const r = Number(nextRows) || 30;
+      if (typeof term.resize === 'function') term.resize(c, r);
+    },
+    kill() { term.kill(); },
+  };
+}
+
+function createPipeTerminal({ termId, cwd, send, onExit }) {
+  const term = spawn(terminalShell(), terminalArgs(), {
+    cwd,
+    env: terminalEnv(),
+    shell: false,
+    windowsHide: true,
+  });
+  term.stdout?.on?.('data', send);
+  term.stderr?.on?.('data', send);
+  term.on('error', err => send(`\r\n[terminal error: ${err.message}]\r\n`));
+  term.on('exit', onExit);
+  return {
+    id: termId,
+    backend: 'pipe',
+    shell: terminalShell(),
+    cwd,
+    nativeError: nodePtyState.error?.message || '',
+    write(data) { term.stdin?.write?.(String(data ?? '').replace(/\r/g, '\n')); },
+    resize() {},
+    kill() { term.kill(); },
+  };
+}
+
+ipcMain.handle('terminalCreate', async (event, id, rel = '', cols = 100, rows = 30) => {
   try {
     const { target } = resolveWorkspacePath(rel || '.');
     const cwd = fs.statSync(target).isDirectory() ? target : path.dirname(target);
@@ -1350,25 +1430,26 @@ ipcMain.handle('terminalCreate', async (event, id, rel = '') => {
       try { terminalSessions.get(termId).kill(); } catch (_) {}
       terminalSessions.delete(termId);
     }
-    const term = spawn(terminalShell(), terminalArgs(), {
-      cwd,
-      env: process.env,
-      shell: false,
-      windowsHide: true,
-    });
-    terminalSessions.set(termId, term);
     const send = data => {
       const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data || '');
       try { event.sender.send('terminalData', { id: termId, data: text.replace(/\n/g, '\r\n') }); } catch (_) {}
     };
-    term.stdout?.on?.('data', send);
-    term.stderr?.on?.('data', send);
-    term.on('error', err => send(`\r\n[terminal error: ${err.message}]\r\n`));
-    term.on('exit', (exitCode, signal) => {
+    const onExit = (exitCode, signal) => {
       terminalSessions.delete(termId);
       try { event.sender.send('terminalData', { id: termId, data: `\r\n[process exited ${exitCode}${signal ? ` ${signal}` : ''}]\r\n`, exitCode, signal }); } catch (_) {}
-    });
-    return { ok:true, id:termId, cwd, shell:terminalShell() };
+    };
+    const term = createPtyTerminal({ termId, cwd, cols, rows, send, onExit })
+      || createPipeTerminal({ termId, cwd, send, onExit });
+    terminalSessions.set(termId, term);
+    return {
+      ok:true,
+      id:termId,
+      cwd,
+      shell:term.shell,
+      backend:term.backend,
+      nativePty:term.backend === 'pty',
+      nativeError:term.nativeError || '',
+    };
   } catch(e) {
     return { ok:false, err:e.message };
   }
@@ -1377,14 +1458,19 @@ ipcMain.handle('terminalCreate', async (event, id, rel = '') => {
 ipcMain.handle('terminalWrite', (_, id, data) => {
   const term = terminalSessions.get(String(id || ''));
   if (!term) return { ok:false, err:'Terminal session not found' };
-  term.stdin?.write?.(String(data ?? '').replace(/\r/g, '\n'));
+  term.write(String(data ?? ''));
   return { ok:true };
 });
 
 ipcMain.handle('terminalResize', (_, id, cols, rows) => {
   const term = terminalSessions.get(String(id || ''));
   if (!term) return { ok:false, err:'Terminal session not found' };
-  return { ok:true, note:'resize is ignored by the pipe-backed terminal transport' };
+  term.resize(cols, rows);
+  return {
+    ok:true,
+    backend:term.backend,
+    note:term.backend === 'pty' ? 'resized native PTY' : 'resize is ignored by the pipe-backed terminal transport',
+  };
 });
 
 ipcMain.handle('terminalKill', (_, id) => {
