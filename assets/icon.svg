@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Horizon Genesis brand mark — cyan glowing fractal disk.
+  Mirrors the .horizon-fractal-logo treatment on the marketplace site
+  (HorizonWebMarketplace/marketplace-frontend/src/index.css). Designed to
+  read clearly at every Windows tray / taskbar size from 16px to 256px.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="geometricPrecision">
+  <defs>
+    <!-- Outer dark backdrop with cyan glow bleeding out from centre -->
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#aaf7ff" stop-opacity="0.85"/>
+      <stop offset="14%"  stop-color="#56b9ff" stop-opacity="0.55"/>
+      <stop offset="55%"  stop-color="#0a121e" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#040813" stop-opacity="1"/>
+    </radialGradient>
+
+    <!-- White-cyan core -->
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="35%"  stop-color="#aaf7ff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#56d2ff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Bright cyan ray gradient (centre→edge) -->
+    <linearGradient id="ray-bright" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%"   stop-color="#aaf7ff" stop-opacity="0.0"/>
+      <stop offset="35%"  stop-color="#aaf7ff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#5cc7ff" stop-opacity="0.65"/>
+    </linearGradient>
+
+    <!-- Dimmer blue ray gradient -->
+    <linearGradient id="ray-dim" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%"   stop-color="#4993ff" stop-opacity="0.0"/>
+      <stop offset="40%"  stop-color="#4993ff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#2a5cb8" stop-opacity="0.4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background disk -->
+  <circle cx="256" cy="256" r="248" fill="url(#bg)"/>
+
+  <!-- 20 fractal rays — alternating bright cyan / dim blue.
+       Each ray is a thin triangular wedge from centre to edge. -->
+  <g transform="translate(256 256)">
+    <!-- Ray template: a thin triangle pointing UP, rotated. width=14 at base. -->
+    <!-- Generated as 20 entries at 18° spacing. -->
+    <g transform="rotate(0)"  ><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(18)" ><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(36)" ><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(54)" ><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(72)" ><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(90)" ><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(108)"><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(126)"><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(144)"><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(162)"><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(180)"><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(198)"><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(216)"><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(234)"><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(252)"><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(270)"><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(288)"><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(306)"><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+    <g transform="rotate(324)"><polygon points="-7,-30 7,-30 4,-240 -4,-240" fill="url(#ray-bright)" opacity="0.95"/></g>
+    <g transform="rotate(342)"><polygon points="-6,-30 6,-30 3,-240 -3,-240" fill="url(#ray-dim)"    opacity="0.7"/></g>
+  </g>
+
+  <!-- Tilted orbital ring -->
+  <g transform="translate(256 256) rotate(18) skewX(-5)">
+    <ellipse cx="0" cy="0" rx="135" ry="118" fill="none"
+             stroke="#d7fbff" stroke-opacity="0.55" stroke-width="3"/>
+  </g>
+
+  <!-- Bright white-cyan core -->
+  <circle cx="256" cy="256" r="78" fill="url(#core)"/>
+  <circle cx="256" cy="256" r="26" fill="#effdff"/>
+
+  <!-- Outer thin ring for definition -->
+  <circle cx="256" cy="256" r="248" fill="none"
+          stroke="#a9f6ff" stroke-opacity="0.45" stroke-width="3"/>
+</svg>

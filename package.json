@@ -20,6 +20,7 @@
     "start": "electron .",
     "stamp-build": "node scripts/stamp-build-info.js",
     "rebuild:native": "electron-rebuild -f -w node-pty",
+    "icon:generate": "node scripts/generate-icon.js",
     "build:win": "npm run stamp-build -- --runner=windows && electron-builder --win",
     "build:win:portable": "npm run stamp-build -- --runner=windows-portable && electron-builder --win portable",
     "build:mac": "npm run stamp-build -- --runner=mac && electron-builder --mac",
@@ -37,7 +38,9 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "electron": "^28.0.0",
-    "electron-builder": "^24.9.0"
+    "electron-builder": "^24.9.0",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.33.5"
   },
   "build": {
     "appId": "com.horizonai.app",
