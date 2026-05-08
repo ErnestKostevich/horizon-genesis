@@ -157,7 +157,7 @@ textarea::placeholder{color:var(--t3)}
 .hint{font-size:9px;color:var(--t3);text-align:center;margin-top:4px;opacity:.45}
 
 /* ═══ SETTINGS PANEL ═══ */
-.panel{display:none;position:absolute;inset:0;background:rgba(8,9,12,.98);z-index:200;flex-direction:column;-webkit-app-region:no-drag;backdrop-filter:blur(40px)}
+.panel{display:none;position:fixed;inset:0;background:rgba(8,9,12,.98);z-index:200;flex-direction:column;-webkit-app-region:no-drag;backdrop-filter:blur(40px)}
 .panel.show{display:flex}
 .ph{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--b1);flex-shrink:0;-webkit-app-region:drag}
 .ph h2{font-size:13px;font-weight:700;color:var(--tx);-webkit-app-region:no-drag;font-family:var(--font)}
@@ -245,6 +245,27 @@ textarea::placeholder{color:var(--t3)}
 /* ═══ FULL-SCREEN PANELS (Hub, Store, Workflows, Recorder) ═══ */
 .fpanel{display:none;position:fixed;inset:0;background:var(--bg);z-index:250;flex-direction:column;-webkit-app-region:no-drag;overflow:hidden}
 .fpanel.show{display:flex}
+.surface-active > .tb,
+.surface-active > .chatside,
+.surface-active > .wake-bar,
+.surface-active > .sb,
+.surface-active > .modes,
+.surface-active > .chat-status-bar,
+.surface-active > .msgs,
+.surface-active > .inp-wrap,
+.surface-active > .inspector-pane{display:none!important}
+.surface-active:not(.surface-code) > .apex-right-pane,
+.surface-active:not(.surface-code) > .operator-pane{display:none!important}
+.surface-active > .panel,
+.surface-active > .fpanel,
+.surface-active > #fractalBg{margin-left:0!important;margin-right:0!important}
+.surface-active > .panel.show,
+.surface-active > .fpanel.show{left:0!important;right:0!important;width:100vw!important;max-width:none!important}
+.surface-active > #fractalBg{opacity:.25}
+.surface-active .fpanel.show,
+.surface-active #panel.show{z-index:720}
+.surface-active #cmd-palette,
+.surface-active #quickopen-palette{z-index:1000}
 .fph{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--b1);flex-shrink:0;background:rgba(8,9,12,.98);backdrop-filter:blur(40px);-webkit-app-region:drag}
 .fph h2{font-size:14px;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:9px;-webkit-app-region:no-drag}
 .fph-r{display:flex;gap:8px;align-items:center;-webkit-app-region:no-drag}
@@ -321,6 +342,480 @@ textarea::placeholder{color:var(--t3)}
 .wf-examples{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .wf-example{background:var(--b1);border:1px solid var(--b1);border-radius:20px;padding:4px 12px;font-size:10px;color:var(--t2);cursor:pointer;transition:all .18s}
 .wf-example:hover{border-color:rgba(108,140,255,.3);color:var(--acc)}
+
+/* ═══ WORKFLOWS PREMIUM (Overview tab) ═══════════════════════════════════
+   Modeled on the Claude Design Tool mockup the owner attached: KPI strip,
+   live-run graph view, and an all-workflows table with success-rate bars.
+   Class prefix `.wfp-` so styles don't collide with the legacy `.wf-`
+   list/card layout still used by the Create / Scheduled tabs. */
+.wfp-shell { display:flex; flex-direction:column; gap:22px; }
+
+.wfp-kpis { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
+.wfp-kpi {
+  position:relative;
+  padding:14px 16px;
+  background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+  border:1px solid var(--b1);
+  border-radius:14px;
+  overflow:hidden;
+}
+.wfp-kpi::before {
+  content:'';
+  position:absolute; inset:auto -20px -20px auto;
+  width:90px; height:90px;
+  background:radial-gradient(circle, rgba(108,140,255,.18), transparent 70%);
+  pointer-events:none;
+}
+.wfp-kpi-label { font:600 9.5px/1 var(--mono); letter-spacing:1.4px; color:var(--t3); text-transform:uppercase; }
+.wfp-kpi-value { margin-top:8px; font:700 26px/1.1 var(--font); color:var(--tx); display:flex; align-items:baseline; gap:6px; }
+.wfp-kpi-unit { font:600 11px/1 var(--mono); color:var(--t3); letter-spacing:1px; }
+.wfp-kpi-trend { margin-top:6px; font:600 10.5px/1 var(--mono); display:inline-flex; align-items:center; gap:4px; }
+.wfp-kpi-trend.up   { color:#34d399; }
+.wfp-kpi-trend.down { color:#f87171; }
+.wfp-kpi-trend.flat { color:var(--t3); }
+
+/* Live-run section */
+.wfp-live {
+  background:linear-gradient(180deg, rgba(86,210,255,.05), rgba(86,210,255,.01));
+  border:1px solid rgba(86,210,255,.18);
+  border-radius:16px;
+  padding:18px 20px 22px;
+  position:relative;
+}
+.wfp-live.idle {
+  background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+  border-color:var(--b1);
+}
+.wfp-live-h {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:14px;
+}
+.wfp-live-title { font:700 13px/1 var(--font); color:var(--tx); display:flex; align-items:center; gap:10px; }
+.wfp-live-eyebrow { font:600 9px/1 var(--mono); letter-spacing:1.4px; text-transform:uppercase; color:#56d2ff; padding:4px 9px; border:1px solid rgba(86,210,255,.35); border-radius:999px; background:rgba(86,210,255,.06); }
+.wfp-live.idle .wfp-live-eyebrow { color:var(--t3); border-color:var(--b1); background:transparent; }
+.wfp-live-meta { font:11px/1 var(--mono); color:var(--t3); display:flex; align-items:center; gap:8px; }
+
+/* Graph: horizontal flow of nodes with connecting lines */
+.wfp-graph {
+  display:flex;
+  align-items:stretch;
+  gap:0;
+  padding:14px 4px 8px;
+  overflow-x:auto;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(108,140,255,.3) transparent;
+}
+.wfp-graph::-webkit-scrollbar { height:6px; }
+.wfp-graph::-webkit-scrollbar-thumb { background:rgba(108,140,255,.3); border-radius:4px; }
+
+.wfp-node {
+  flex:0 0 auto;
+  min-width:120px;
+  padding:12px 14px;
+  border-radius:14px;
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--b1);
+  display:flex; flex-direction:column; align-items:center;
+  gap:6px;
+  transition:all .25s ease;
+  position:relative;
+}
+.wfp-node-icon { font-size:22px; line-height:1; }
+.wfp-node-label { font:600 10px/1.2 var(--mono); letter-spacing:.6px; color:var(--t2); text-transform:uppercase; text-align:center; max-width:100px; }
+.wfp-node-sub   { font:600 9px/1 var(--mono); letter-spacing:1.2px; color:var(--t3); text-transform:uppercase; }
+
+.wfp-node.done {
+  background:rgba(52,211,153,.06);
+  border-color:rgba(52,211,153,.3);
+}
+.wfp-node.done .wfp-node-label { color:#9ce4c5; }
+.wfp-node.done::after {
+  content:'\2713';
+  position:absolute; top:6px; right:8px;
+  font:700 10px/1 var(--mono); color:#34d399;
+}
+.wfp-node.failed {
+  background:rgba(248,113,113,.06);
+  border-color:rgba(248,113,113,.35);
+}
+.wfp-node.failed .wfp-node-label { color:#fca5a5; }
+.wfp-node.failed::after {
+  content:'\2716';
+  position:absolute; top:6px; right:8px;
+  font:700 11px/1 var(--mono); color:#f87171;
+}
+.wfp-node.running {
+  background:linear-gradient(180deg, rgba(86,210,255,.18), rgba(86,210,255,.04));
+  border-color:rgba(86,210,255,.55);
+  box-shadow:0 0 0 1px rgba(86,210,255,.18), 0 8px 26px -10px rgba(86,210,255,.7);
+  animation: wfpNodePulse 2.2s ease-in-out infinite;
+}
+.wfp-node.running .wfp-node-label { color:#dff7ff; }
+
+@keyframes wfpNodePulse {
+  0%, 100% { transform:translateY(0); box-shadow:0 0 0 1px rgba(86,210,255,.18), 0 6px 22px -10px rgba(86,210,255,.55); }
+  50%      { transform:translateY(-2px); box-shadow:0 0 0 1px rgba(86,210,255,.42), 0 14px 32px -8px rgba(86,210,255,.85); }
+}
+
+/* Connector line between nodes — flows left to right with a subtle glow on
+   the segments leading into the active node. */
+.wfp-edge {
+  flex:0 0 auto;
+  align-self:center;
+  width:34px; height:2px;
+  background:linear-gradient(90deg, var(--b1), var(--b2));
+  position:relative;
+  margin:0 -2px;
+}
+.wfp-edge::after {
+  content:''; position:absolute; right:-4px; top:50%; transform:translateY(-50%);
+  border:5px solid transparent; border-left-color:var(--b2);
+}
+.wfp-edge.done {
+  background:linear-gradient(90deg, rgba(52,211,153,.55), rgba(52,211,153,.55));
+}
+.wfp-edge.done::after { border-left-color:rgba(52,211,153,.55); }
+.wfp-edge.active {
+  background:linear-gradient(90deg, rgba(52,211,153,.55), rgba(86,210,255,.85));
+  animation: wfpEdgeFlow 1.6s ease-in-out infinite;
+}
+.wfp-edge.active::after { border-left-color:rgba(86,210,255,.85); }
+@keyframes wfpEdgeFlow {
+  0%, 100% { opacity:.6; }
+  50%      { opacity:1; }
+}
+
+/* All-workflows table */
+.wfp-table {
+  border:1px solid var(--b1);
+  border-radius:14px;
+  overflow:hidden;
+  background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.005));
+}
+.wfp-table-h {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 18px;
+  border-bottom:1px solid var(--b1);
+  background:rgba(8,9,12,.4);
+}
+.wfp-table-h h3 { font:700 12px/1 var(--font); color:var(--tx); display:flex; align-items:center; gap:8px; margin:0; }
+.wfp-table-h .wfp-count { font:600 10px/1 var(--mono); color:var(--t3); letter-spacing:1.2px; }
+.wfp-table-row {
+  display:grid;
+  grid-template-columns: minmax(0, 1.5fr) 110px minmax(120px, 1.2fr) 90px 110px;
+  gap:14px;
+  align-items:center;
+  padding:12px 18px;
+  border-bottom:1px solid var(--b1);
+  transition:background .18s ease;
+}
+.wfp-table-row:hover { background:rgba(108,140,255,.04); }
+.wfp-table-row:last-child { border-bottom:none; }
+.wfp-table-name {
+  display:flex; align-items:center; gap:10px;
+  min-width:0;
+}
+.wfp-table-name .wfp-rname { font:600 12.5px/1.2 var(--font); color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wfp-table-name .wfp-rdesc { font:11px/1.3 var(--font); color:var(--t3); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wfp-table-name .wfp-ricon {
+  width:32px; height:32px; flex-shrink:0; border-radius:9px;
+  background:linear-gradient(135deg, rgba(108,140,255,.15), rgba(167,139,250,.08));
+  border:1px solid rgba(108,140,255,.18);
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px;
+}
+.wfp-trigger-pill {
+  font:600 9px/1 var(--mono); letter-spacing:1.3px; text-transform:uppercase;
+  padding:4px 9px; border-radius:999px;
+  border:1px solid var(--b1); background:rgba(255,255,255,.03);
+  color:var(--t2);
+  white-space:nowrap; text-align:center;
+}
+.wfp-trigger-pill.cron     { color:#fbbf24; border-color:rgba(251,191,36,.3); background:rgba(251,191,36,.05); }
+.wfp-trigger-pill.interval { color:#a78bfa; border-color:rgba(167,139,250,.3); background:rgba(167,139,250,.05); }
+.wfp-trigger-pill.startup  { color:#34d399; border-color:rgba(52,211,153,.3); background:rgba(52,211,153,.05); }
+
+.wfp-rate { display:flex; flex-direction:column; gap:5px; }
+.wfp-rate-bar {
+  height:6px; border-radius:999px;
+  background:rgba(255,255,255,.05);
+  overflow:hidden;
+  position:relative;
+}
+.wfp-rate-fill {
+  height:100%;
+  background:linear-gradient(90deg, #34d399, #6cf6c8);
+  border-radius:999px;
+  transition:width .6s ease;
+}
+.wfp-rate-fill.warn { background:linear-gradient(90deg, #fbbf24, #fde68a); }
+.wfp-rate-fill.fail { background:linear-gradient(90deg, #f87171, #fca5a5); }
+.wfp-rate-meta { font:10px/1 var(--mono); color:var(--t3); display:flex; justify-content:space-between; }
+
+.wfp-last { font:11px/1.3 var(--mono); color:var(--t2); }
+.wfp-last .wfp-last-mute { color:var(--t3); }
+
+.wfp-row-actions { display:flex; gap:6px; justify-content:flex-end; }
+.wfp-row-actions .wfp-btn {
+  padding:5px 11px; border-radius:8px;
+  border:1px solid var(--b1);
+  background:rgba(255,255,255,.04);
+  color:var(--t2);
+  font:600 10px/1 var(--mono); letter-spacing:.6px; cursor:pointer;
+  transition:all .18s ease;
+}
+.wfp-row-actions .wfp-btn:hover { border-color:rgba(108,140,255,.4); color:var(--acc); }
+.wfp-row-actions .wfp-btn.run {
+  background:linear-gradient(135deg, rgba(86,210,255,.18), rgba(108,140,255,.14));
+  border-color:rgba(86,210,255,.35);
+  color:#aef0ff;
+}
+.wfp-row-actions .wfp-btn.run:hover {
+  background:linear-gradient(135deg, #56d2ff, #6c8cff);
+  border-color:transparent; color:#fff;
+}
+.wfp-row-actions .wfp-btn.del:hover { border-color:rgba(248,113,113,.35); color:#fca5a5; }
+
+/* ═══ PERSONAS PREMIUM EDITOR ═════════════════════════════════════════════
+   Two-column layout used inside the Personas tab of the Settings panel:
+   left rail = list of personas, right = detail editor (system prompt,
+   memories, allowed tools). Class prefix `.pe-` (persona-editor). */
+.pe-shell { display:grid; grid-template-columns:280px minmax(0, 1fr); gap:0; min-height:480px; border:1px solid var(--b1); border-radius:14px; overflow:hidden; background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.005)); }
+.pe-list { border-right:1px solid var(--b1); display:flex; flex-direction:column; min-height:0; }
+.pe-list-h { padding:14px 14px 10px; border-bottom:1px solid var(--b1); display:flex; align-items:center; justify-content:space-between; }
+.pe-list-h-t { font:600 10px/1 var(--mono); letter-spacing:1.6px; color:var(--t3); text-transform:uppercase; }
+.pe-list-add { background:rgba(108,140,255,.1); border:1px solid rgba(108,140,255,.3); color:var(--acc); font:600 10px/1 var(--mono); letter-spacing:.6px; padding:4px 10px; border-radius:7px; cursor:pointer; transition:all .18s; }
+.pe-list-add:hover { background:linear-gradient(135deg, var(--acc2), var(--acc)); border-color:transparent; color:#fff; }
+.pe-list-body { flex:1; overflow-y:auto; padding:8px 6px; }
+.pe-item { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:10px; cursor:pointer; transition:background .18s; border:1px solid transparent; }
+.pe-item:hover { background:rgba(255,255,255,.03); }
+.pe-item.on { background:linear-gradient(135deg, rgba(108,140,255,.14), rgba(86,210,255,.06)); border-color:rgba(108,140,255,.3); }
+.pe-item-icon { width:30px; height:30px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; background:rgba(255,255,255,.04); border:1px solid var(--b1); }
+.pe-item-name { flex:1; font:600 12.5px/1.2 var(--font); color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pe-item-tag  { font:600 9px/1 var(--mono); letter-spacing:1.2px; color:var(--t3); text-transform:uppercase; }
+.pe-item.on .pe-item-tag { color:#56d2ff; }
+
+.pe-detail { padding:18px 22px 24px; overflow-y:auto; min-height:0; }
+.pe-detail-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.pe-detail-h-t { font:700 14px/1.2 var(--font); color:var(--tx); display:flex; align-items:center; gap:10px; }
+.pe-detail-h-actions { display:flex; gap:8px; }
+.pe-section-h { font:600 9.5px/1 var(--mono); letter-spacing:1.4px; color:var(--t3); text-transform:uppercase; margin:18px 0 8px; }
+
+.pe-prompt {
+  width:100%; min-height:180px;
+  background:rgba(0,0,0,.25);
+  border:1px solid var(--b1);
+  border-radius:10px;
+  padding:14px;
+  color:#dff7ff;
+  font:13px/1.55 var(--mono);
+  letter-spacing:.2px;
+  resize:vertical;
+  outline:none;
+  transition:border-color .18s ease;
+}
+.pe-prompt:focus { border-color:rgba(86,210,255,.5); }
+.pe-prompt:disabled { color:var(--t3); cursor:not-allowed; }
+
+.pe-tools { display:flex; flex-wrap:wrap; gap:6px; }
+.pe-tool {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 10px; border-radius:999px;
+  border:1px solid var(--b1); background:rgba(255,255,255,.03);
+  font:600 10.5px/1 var(--mono); letter-spacing:.6px; color:var(--t2);
+  cursor:pointer; transition:all .18s;
+}
+.pe-tool:hover { border-color:rgba(108,140,255,.3); color:var(--acc); }
+.pe-tool.on   { background:linear-gradient(135deg, rgba(86,210,255,.18), rgba(108,140,255,.1)); border-color:rgba(86,210,255,.35); color:#aef0ff; }
+.pe-tool.on.write { background:linear-gradient(135deg, rgba(251,191,36,.18), rgba(251,146,60,.1)); border-color:rgba(251,191,36,.4); color:#fcd97a; }
+
+.pe-mems { display:flex; flex-direction:column; gap:8px; }
+.pe-mem {
+  display:flex; align-items:flex-start; gap:10px;
+  padding:10px 12px;
+  background:rgba(255,255,255,.02);
+  border:1px solid var(--b1);
+  border-radius:10px;
+}
+.pe-mem-icon { font-size:14px; line-height:1.4; flex-shrink:0; opacity:.65; }
+.pe-mem-text { flex:1; font:12.5px/1.45 var(--font); color:var(--tx); }
+.pe-mem-x {
+  background:none; border:none; color:var(--t3); cursor:pointer;
+  font:13px/1 var(--mono); padding:2px 6px; border-radius:6px;
+  transition:all .15s;
+}
+.pe-mem-x:hover { color:#f87171; background:rgba(248,113,113,.08); }
+.pe-mem-add { display:flex; gap:8px; margin-top:6px; }
+.pe-mem-input {
+  flex:1; background:rgba(255,255,255,.03);
+  border:1px solid var(--b1); border-radius:9px;
+  padding:8px 12px; color:var(--tx);
+  font:12.5px/1.4 var(--font); outline:none; transition:border-color .18s;
+}
+.pe-mem-input:focus { border-color:rgba(108,140,255,.4); }
+
+.pe-detail-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; text-align:center; color:var(--t3); gap:10px; }
+.pe-detail-empty-icon { font-size:36px; opacity:.5; }
+.pe-detail-empty-text { font:13px/1.5 var(--font); max-width:320px; }
+
+.pe-readonly-banner {
+  display:flex; align-items:center; gap:10px;
+  padding:8px 12px; margin-bottom:10px;
+  background:rgba(251,191,36,.06);
+  border:1px solid rgba(251,191,36,.2);
+  border-radius:9px;
+  font:11.5px/1.4 var(--font); color:#fde68a;
+}
+.pe-readonly-banner .pe-rb-i { font-size:13px; }
+
+/* ═══ PLUGIN HUB DISCOVERY (premium redesign) ═════════════════════════════
+   Big featured "Editor's Pick" card on top, category chip strip, then a
+   responsive grid of plugin cards with verified badges. Class prefix
+   `.phd-` (plugin-hub-discovery). Existing hub HTML keeps working — these
+   styles only apply to the new structure rendered by renderHubBody(). */
+.phd-shell { display:flex; flex-direction:column; gap:18px; }
+
+.phd-search {
+  display:flex; align-items:center; gap:10px;
+  padding:11px 14px;
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--b1);
+  border-radius:12px;
+  transition:border-color .18s;
+}
+.phd-search:focus-within { border-color:rgba(108,140,255,.4); }
+.phd-search input {
+  flex:1; background:none; border:none; outline:none;
+  color:var(--tx); font:13px/1 var(--font);
+}
+.phd-search input::placeholder { color:var(--t3); }
+.phd-search-icon { color:var(--t3); font-size:14px; }
+
+.phd-featured {
+  position:relative;
+  padding:22px 26px;
+  background:linear-gradient(135deg, rgba(108,140,255,.18), rgba(167,139,250,.1) 60%, rgba(86,210,255,.08));
+  border:1px solid rgba(108,140,255,.3);
+  border-radius:16px;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+  gap:18px;
+  align-items:center;
+}
+.phd-featured::before {
+  content:'';
+  position:absolute; inset:auto -50px -50px auto;
+  width:240px; height:240px;
+  background:radial-gradient(circle, rgba(86,210,255,.25), transparent 70%);
+  pointer-events:none;
+}
+.phd-featured-eyebrow {
+  position:absolute; top:14px; left:22px;
+  font:700 9px/1 var(--mono); letter-spacing:2px; text-transform:uppercase;
+  color:#aef0ff; padding:4px 9px;
+  background:rgba(86,210,255,.18); border:1px solid rgba(86,210,255,.4); border-radius:999px;
+}
+.phd-featured-icon {
+  width:80px; height:80px; border-radius:18px;
+  background:linear-gradient(135deg, var(--acc2), var(--acc));
+  display:flex; align-items:center; justify-content:center;
+  font-size:38px;
+  box-shadow:0 12px 30px -8px rgba(108,140,255,.45);
+}
+.phd-featured-info { padding-top:8px; }
+.phd-featured-name { font:700 18px/1.2 var(--font); color:var(--tx); display:flex; align-items:center; gap:8px; }
+.phd-featured-author { margin-top:4px; font:600 11px/1 var(--mono); letter-spacing:.6px; color:var(--t2); }
+.phd-featured-desc { margin-top:10px; font:13px/1.55 var(--font); color:var(--t1); max-width:560px; }
+.phd-featured-meta { margin-top:10px; display:flex; gap:14px; font:11px/1 var(--mono); color:var(--t3); flex-wrap:wrap; }
+.phd-featured-meta span { display:inline-flex; align-items:center; gap:4px; }
+.phd-featured-cta {
+  position:relative; z-index:1;
+  padding:11px 22px;
+  border-radius:11px;
+  background:linear-gradient(135deg, var(--acc2), var(--acc));
+  border:none;
+  color:#fff;
+  font:700 12px/1 var(--font); letter-spacing:.4px;
+  cursor:pointer;
+  transition:transform .15s ease, box-shadow .15s ease;
+  white-space:nowrap;
+}
+.phd-featured-cta:hover { transform:translateY(-1px); box-shadow:0 10px 24px -8px rgba(108,140,255,.6); }
+
+.phd-cats {
+  display:flex; flex-wrap:wrap; gap:6px;
+}
+.phd-cat {
+  padding:6px 13px; border-radius:999px;
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--b1);
+  color:var(--t2);
+  font:600 11px/1 var(--font);
+  cursor:pointer;
+  transition:all .18s;
+}
+.phd-cat:hover { border-color:rgba(108,140,255,.3); color:var(--acc); }
+.phd-cat.on   { background:linear-gradient(135deg, var(--acc2), var(--acc)); border-color:transparent; color:#fff; }
+
+.phd-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+  gap:12px;
+}
+.phd-card {
+  position:relative;
+  padding:16px 16px 14px;
+  border:1px solid var(--b1);
+  border-radius:14px;
+  background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+  transition:all .2s ease;
+  cursor:pointer;
+}
+.phd-card:hover {
+  border-color:rgba(108,140,255,.35);
+  transform:translateY(-2px);
+  box-shadow:0 14px 30px -16px rgba(108,140,255,.4);
+}
+.phd-card-h { display:flex; align-items:flex-start; gap:10px; }
+.phd-card-icon {
+  width:40px; height:40px; flex-shrink:0; border-radius:11px;
+  background:linear-gradient(135deg, rgba(108,140,255,.18), rgba(167,139,250,.08));
+  border:1px solid rgba(108,140,255,.2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px;
+}
+.phd-card-info { flex:1; min-width:0; }
+.phd-card-name { font:700 13px/1.2 var(--font); color:var(--tx); display:inline-flex; align-items:center; gap:5px; }
+.phd-card-author { margin-top:2px; font:11px/1.2 var(--mono); color:var(--t3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.phd-card-desc { margin:10px 0 12px; font:11.5px/1.5 var(--font); color:var(--t2); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.phd-card-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.phd-card-meta { font:10px/1 var(--mono); color:var(--t3); display:flex; gap:10px; }
+.phd-card-cta {
+  padding:5px 12px; border-radius:8px;
+  background:rgba(108,140,255,.1);
+  border:1px solid rgba(108,140,255,.3);
+  color:var(--acc);
+  font:600 10.5px/1 var(--mono); letter-spacing:.6px;
+  cursor:pointer; transition:all .18s;
+}
+.phd-card-cta:hover { background:linear-gradient(135deg, var(--acc2), var(--acc)); border-color:transparent; color:#fff; }
+.phd-card-cta.on   { background:rgba(52,211,153,.1); border-color:rgba(52,211,153,.35); color:#86efac; }
+
+.phd-verified {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:14px; height:14px; flex-shrink:0;
+  border-radius:50%;
+  background:linear-gradient(135deg, #56d2ff, #6c8cff);
+  color:#fff;
+  font:700 9px/1 var(--mono);
+}
+.phd-verified::after { content:'\2713'; }
+
+.phd-empty {
+  text-align:center; padding:50px 20px; color:var(--t3);
+  font:13px/1.5 var(--font);
+}
 
 /* Screen Recorder */
 .rec-panel{display:flex;flex-direction:column;align-items:center;padding:30px 20px;gap:20px}
@@ -558,6 +1053,15 @@ body.with-sidebar > .chat-status-bar{margin-left:280px}
   transition: none;
 }
 
+body.surface-code .apex-right-pane.code-shell {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  z-index: 720;
+}
+
 /* Active state: full-bleed across the canvas with a 380px chat panel on the
    right. The chat-list sidebar (.chatside) is hidden in code-mode so the
    IDE owns the full left edge — keeping it added a third 280px column that
@@ -574,6 +1078,9 @@ body.code-mode-active .apex-right-pane.code-shell {
     "topbar    topbar"
     "files     editor"
     "terminal  terminal";
+}
+body.surface-code.code-mode-active .apex-right-pane.code-shell {
+  right: 0;
 }
 
 /* Code Mode owns the canvas — hide chat list sidebar entirely and reset
@@ -627,6 +1134,12 @@ body.code-mode-active .inp-wrap {
 /* When operator pane is also active, leave room for it on the right column. */
 body.code-mode-active.operator-mode-active .msgs { bottom: calc(92px + 220px); }
 body.code-mode-active.operator-mode-active .inp-wrap { bottom: 220px; }
+body.surface-code.operator-mode-active .apex-right-pane.code-shell { bottom: 220px; }
+body.surface-code.operator-mode-active .operator-pane {
+  left: 0;
+  right: 0;
+  z-index: 760;
+}
 
 /* Mode chips bar gets hidden — code mode owns the canvas. */
 body.code-mode-active .modes { display: none; }
@@ -833,15 +1346,18 @@ body.code-mode-active .modes { display: none; }
 .inspector-pane {
   display: none;
   position: fixed;
-  top: 52px;
-  right: 0;
-  bottom: 0;
-  width: 360px;
+  top: 64px;
+  right: 12px;
+  bottom: 12px;
+  width: 340px;
   background: linear-gradient(180deg, var(--code-bg-2,#0c1018) 0%, var(--code-bg,#07090f) 100%);
-  border-left: 1px solid var(--code-line, #1d2333);
-  z-index: 11;
+  border: 1px solid var(--code-line, #1d2333);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  z-index: 85;
   flex-direction: column;
   -webkit-app-region: no-drag;
+  overflow: hidden;
 }
 body.inspector-active .inspector-pane { display: flex; }
 /* When inspector is open, slide chat content left by the panel width. The
@@ -849,11 +1365,12 @@ body.inspector-active .inspector-pane { display: flex; }
    here — without them they would extend under the Inspector and visually
    "leak" behind the panel's left border (chips chopped mid-button). */
 body.inspector-active .chat-status-bar,
+body.inspector-active .tb,
 body.inspector-active .modes,
 body.inspector-active .wake-bar,
 body.inspector-active .sb,
 body.inspector-active .msgs,
-body.inspector-active .inp-wrap { margin-right: 360px; }
+body.inspector-active .inp-wrap { margin-right: 364px; }
 /* But not when Code Mode is active — code mode owns the right column with
    its own 380px chat panel. Inspector hides in code mode. */
 body.code-mode-active .inspector-pane { display: none !important; }
@@ -867,17 +1384,19 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
 .insp-head {
   display: flex; align-items: center;
   border-bottom: 1px solid var(--code-line, #1d2333);
-  background: rgba(0,0,0,.18);
+  background: rgba(0,0,0,.28);
+  min-height: 42px;
 }
 .insp-tab {
   flex: 1;
-  padding: 12px 8px;
+  min-width: 0;
+  padding: 12px 5px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--t2);
-  font: 600 10px/1 var(--mono);
-  letter-spacing: 1.4px;
+  font: 700 9.5px/1 var(--mono);
+  letter-spacing: .8px;
   text-transform: uppercase;
   cursor: pointer;
   transition: all .12s ease;
@@ -1110,7 +1629,7 @@ body.with-sidebar .chat-status-bar{display:flex}
 .action-card-btn.skip{background:transparent;color:var(--t3)}
 .action-card-btn.skip:hover{color:var(--tx);border-color:var(--t3)}
 /* ═══ PERMISSION CARD (P3) — gate destructive actions ═══ */
-.perm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:200;display:flex;align-items:center;justify-content:center;animation:fade-in .2s ease-out}
+.perm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:1100;display:flex;align-items:center;justify-content:center;animation:fade-in .2s ease-out}
 .perm-card{max-width:520px;width:90%;background:linear-gradient(180deg,rgba(15,18,28,.98),rgba(11,14,22,.98));border:1px solid rgba(108,140,255,.3);border-radius:12px;padding:24px;box-shadow:0 25px 80px rgba(0,0,0,.6);animation:perm-enter .25s ease-out}
 @keyframes perm-enter{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 .perm-eyebrow{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#fbbf24;font-weight:600}
@@ -1123,6 +1642,10 @@ body.with-sidebar .chat-status-bar{display:flex}
 .perm-btn.deny:hover{color:#fca5a5;border-color:rgba(248,113,113,.4)}
 .perm-btn.allow{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border-color:rgba(108,140,255,.6)}
 .perm-btn.allow:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.perm-btn.once{background:rgba(108,140,255,.14);color:#dbeafe;border-color:rgba(108,140,255,.45)}
+.perm-btn.once:hover{background:rgba(108,140,255,.22);transform:translateY(-1px)}
+.perm-btn.always{background:linear-gradient(135deg,var(--acc),#ffcf7a);color:#080a10;border-color:rgba(232,160,80,.75)}
+.perm-btn.always:hover{filter:brightness(1.06);transform:translateY(-1px)}
 .perm-hint{font-family:var(--mono);font-size:9.5px;color:var(--t3);margin-top:10px;text-align:right}
 .diff-overlay{position:fixed;inset:0;background:rgba(0,0,0,.66);backdrop-filter:blur(8px);z-index:230;display:flex;align-items:center;justify-content:center;padding:28px}
 .diff-card{width:min(1100px,94vw);height:min(760px,88vh);background:#0b0e16;border:1px solid rgba(243,178,80,.35);border-radius:12px;box-shadow:0 28px 90px rgba(0,0,0,.65);display:flex;flex-direction:column;overflow:hidden}
@@ -1174,6 +1697,7 @@ body.with-sidebar .chat-status-bar{display:flex}
       <button class="psnav-tab"    onclick="setSettingsTab('connections')" data-tab="connections"><span class="psn-i">🔌</span><span>Connections</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('voice')"    data-tab="voice"><span class="psn-i">🎙</span><span>Voice &amp; Wake</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('features')" data-tab="features"><span class="psn-i">⚡</span><span>Features</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('personas')" data-tab="personas"><span class="psn-i">🎭</span><span>Personas</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('plugins')"  data-tab="plugins"><span class="psn-i">🧩</span><span>Plugins</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('data')"     data-tab="data"><span class="psn-i">🗑</span><span>Data &amp; Health</span></button>
     </nav>
@@ -1483,7 +2007,25 @@ body.with-sidebar .chat-status-bar{display:flex}
           <div class="trow"><div class="tinfo">Screen AI<small>Horizon can see your screen</small></div><button class="sw on" id="sw-eye" onclick="togSw('screenWatcher','sw-eye')"></button></div>
           <div class="trow"><div class="tinfo">Ambient Mode<small>AI proactively suggests help based on screen</small></div><button class="sw" id="sw-ambient" onclick="toggleAmbient()"></button></div>
           <div class="trow"><div class="tinfo">Smart Notifications<small>Daily briefing: weather, calendar, emails</small></div><button class="sw" id="sw-notifs" onclick="toggleNotifications()"></button></div>
+          <div class="psl" style="margin-top:14px">Tool approvals</div>
+          <div class="local-status" id="permission-allowlist">Loading saved approvals...</div>
+          <button class="psv" onclick="refreshPermissionAllowlist()" style="margin-top:8px">Refresh approvals</button>
         </div>
+      </section>
+
+      <!-- ───────── PERSONAS ───────── -->
+      <!-- Premium editor for AI personas: 6 built-in (Jarvis / Friday /
+           Alfred / Sage / Pixel + any custom) on the left rail, detail
+           pane on the right with Monaco-style system-prompt textarea,
+           allowed-tools toggles (write tools wear an amber warning
+           badge), and editable long-term memories. Edits to built-ins
+           are stored as overlays under settingsStore.customPersonas, so
+           "Reset to default" wipes the overlay without losing the
+           original prompt. -->
+      <section data-pane="personas">
+        <div class="psview-h">Personas</div>
+        <div class="psview-sub">Define how Horizon talks. System prompt, allowed tools, and long-term memories per persona. Built-ins reset cleanly — your edits live as overlays.</div>
+        <div id="pe-mount" style="margin-top:14px"></div>
       </section>
 
       <!-- ───────── PLUGINS ───────── -->
@@ -1637,7 +2179,8 @@ body.with-sidebar .chat-status-bar{display:flex}
     </div>
   </div>
   <div class="ftabs">
-    <button class="ftab on" id="wf-tab-list" onclick="wfTab('list')">My Workflows</button>
+    <button class="ftab on" id="wf-tab-overview" onclick="wfTab('overview')">Overview</button>
+    <button class="ftab" id="wf-tab-list" onclick="wfTab('list')">My Workflows</button>
     <button class="ftab" id="wf-tab-create" onclick="wfTab('create')">Create</button>
     <button class="ftab" id="wf-tab-scheduled" onclick="wfTab('scheduled')">Scheduled</button>
   </div>
@@ -1962,6 +2505,63 @@ let elevenLabsVoice='pNInz6obpgDQGcFmaJgB', openaiTtsVoice='onyx';
 let isRecording=false, isProcessing=false;
 let audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 let history=[];
+
+const SURFACE_NAMES = ['chat','code','workflows','plugins','personas','settings','account','recorder'];
+const SURFACE_PANEL_IDS = ['hub-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
+let activeSurface = 'chat';
+
+function _surfaceClasses(){
+  return ['surface-active'].concat(SURFACE_NAMES.map(s => 'surface-' + s));
+}
+function _clearSurfacePanels(keepIds=[]){
+  const keep = new Set(keepIds || []);
+  SURFACE_PANEL_IDS.forEach(id => {
+    if (!keep.has(id)) document.getElementById(id)?.classList.remove('show');
+  });
+}
+function _setInspectorVisible(on){
+  try {
+    if (typeof inspectorActive !== 'undefined') inspectorActive = Boolean(on);
+    document.body.classList.toggle('inspector-active', Boolean(on));
+    document.getElementById('inspector-mode-btn')?.classList.toggle('proc', Boolean(on));
+    H.set?.('inspectorActive', Boolean(on));
+  } catch(_) {}
+}
+function _setCodeSurfaceVisible(on){
+  try {
+    if (typeof codeModeActive !== 'undefined') codeModeActive = Boolean(on);
+    document.body.classList.toggle('code-mode-active', Boolean(on));
+    document.body.classList.toggle('code-terminal-collapsed', Boolean(on));
+    document.getElementById('code-mode-btn')?.classList.toggle('proc', Boolean(on));
+  } catch(_) {}
+}
+function setActiveSurface(surface='chat', opts={}){
+  const next = SURFACE_NAMES.includes(surface) ? surface : 'chat';
+  const keepPanels = opts.keepPanels || [];
+  _clearSurfacePanels(keepPanels);
+  document.body.classList.remove(..._surfaceClasses());
+  activeSurface = next;
+  if (next !== 'chat') document.body.classList.add('surface-active', 'surface-' + next);
+  if (next !== 'code') _setCodeSurfaceVisible(false);
+  if (next !== 'chat' && next !== 'code') {
+    if (typeof operatorModeActive !== 'undefined' && operatorModeActive) {
+      operatorModeActive = false;
+      document.body.classList.remove('operator-mode-active');
+      document.getElementById('operator-mode-btn')?.classList.remove('proc');
+    }
+  }
+  if (next !== 'chat') _setInspectorVisible(false);
+  return activeSurface;
+}
+function closeActiveSurface(){
+  _clearSurfacePanels([]);
+  _setCodeSurfaceVisible(false);
+  document.body.classList.remove(..._surfaceClasses());
+  activeSurface = 'chat';
+}
+function isSurfaceActive(surface){
+  return activeSurface === surface;
+}
 
 // ═══ MULTI-CHAT STATE ═══
 let currentChatId = null;
@@ -3681,6 +4281,102 @@ function requestPermission(opts){
     } catch(_) { resolve(false); }
   });
 }
+function requestPermission(opts){
+  return new Promise(resolve => {
+    try {
+      const returnDecision = Boolean(opts?.returnDecision);
+      const overlay = document.createElement('div');
+      overlay.className = 'perm-overlay';
+      const card = document.createElement('div');
+      card.className = 'perm-card';
+      const title = opts?.title || 'Action';
+      const eyebrow = opts?.eyebrow || (lang === 'ru' ? 'Нужно разрешение' : 'Permission required');
+      const desc = opts?.description || '';
+      card.innerHTML =
+        '<div class="perm-eyebrow">'+_escHtml(eyebrow)+'</div>'+
+        '<div class="perm-title">'+_escHtml(title)+'</div>'+
+        '<div class="perm-desc">'+_escHtml(desc)+'</div>'+
+        (opts?.detail ? '<pre class="perm-detail">'+_escHtml(opts.detail)+'</pre>' : '')+
+        '<div class="perm-actions">'+
+          '<button class="perm-btn deny" data-act="deny">'+_escHtml(lang === 'ru' ? 'Отклонить' : 'Deny')+'</button>'+
+          '<button class="perm-btn once" data-act="allow_once">'+_escHtml(lang === 'ru' ? 'Разрешить 1 раз' : 'Allow once')+' ⏎</button>'+
+          '<button class="perm-btn always" data-act="always_allow">'+_escHtml(lang === 'ru' ? 'Всегда разрешать' : 'Always allow')+'</button>'+
+        '</div>'+
+        '<div class="perm-hint">'+_escHtml(lang === 'ru' ? 'Esc - отказ, Enter - разрешить один раз' : 'Esc to deny, Enter to allow once')+'</div>';
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      const cleanup = (decision) => {
+        try { document.removeEventListener('keydown', onKey); } catch(_){}
+        try { overlay.remove(); } catch(_){}
+        resolve(returnDecision ? decision : decision !== 'deny');
+      };
+      const onKey = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); cleanup('deny'); }
+        else if (e.key === 'Enter') { e.preventDefault(); cleanup('allow_once'); }
+      };
+      document.addEventListener('keydown', onKey);
+      card.querySelectorAll('[data-act]').forEach(btn => {
+        btn.onclick = () => cleanup(btn.dataset.act || 'deny');
+      });
+      setTimeout(()=>{ try { card.querySelector('[data-act="allow_once"]').focus(); } catch(_){} }, 30);
+    } catch(_) {
+      resolve(opts?.returnDecision ? 'deny' : false);
+    }
+  });
+}
+const agentPermissionPrompts = new Set();
+async function handleAgentPermissionGate(step){
+  try {
+    if (!step || step.type !== 'waiting' || !step.stepId) return;
+    const perm = step.permission || {};
+    if (!perm.required || perm.allowed) return;
+    if (agentPermissionPrompts.has(step.stepId)) return;
+    agentPermissionPrompts.add(step.stepId);
+    const detail = perm.detail || (step.args ? JSON.stringify(step.args, null, 2).slice(0, 1200) : '');
+    const decision = await requestPermission({
+      returnDecision: true,
+      eyebrow: 'Human-in-the-loop approval',
+      title: perm.title || `${step.tool || 'tool'} requires approval`,
+      description: perm.description || perm.reason || 'This action can affect files, the shell, network, browser, or external tools.',
+      detail
+    });
+    const mapped = decision === 'always_allow' ? 'always_allow' : (decision === 'allow_once' ? 'allow_once' : 'deny');
+    await H.agentStep?.(step.stepId, { decision: mapped, reason: 'permission gate' });
+  } catch(e) {
+    try { await H.agentStep?.(step?.stepId, { decision:'deny', reason:e.message || 'permission gate failed' }); } catch(_) {}
+  } finally {
+    if (step?.stepId) agentPermissionPrompts.delete(step.stepId);
+  }
+}
+try { H.onAgentStep && H.onAgentStep((step) => handleAgentPermissionGate(step)); } catch(_){}
+async function refreshPermissionAllowlist(){
+  const host = document.getElementById('permission-allowlist');
+  if (!host) return;
+  try {
+    const r = await H.permissionAllowlistList?.();
+    const entries = Array.isArray(r?.entries) ? r.entries : [];
+    if (!entries.length) {
+      host.innerHTML = 'No saved approvals. Side-effect tools will ask first.';
+      return;
+    }
+    host.innerHTML = entries.map(e => `
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b1)">
+        <div style="min-width:0">
+          <div style="color:var(--tx);font-size:11px;font-weight:700">${_escHtml(e.tool || e.id || 'tool')}</div>
+          <div style="color:var(--t3);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_escHtml([e.persona,e.workspace,e.operation,e.scope].filter(Boolean).join(' · '))}</div>
+        </div>
+        <button class="psv" onclick="revokePermissionEntry('${_escHtml(String(e.id || ''))}')">Revoke</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    host.innerHTML = 'Could not load approvals: ' + _escHtml(e.message || 'unknown error');
+  }
+}
+async function revokePermissionEntry(id){
+  if (!id) return;
+  await H.permissionAllowlistRevoke?.(id);
+  refreshPermissionAllowlist();
+}
 // User-facing toggle so power users can disable the gate (off by default).
 let permissionGateEnabled = true;
 async function _gateDestructive(intent, opts) {
@@ -3796,6 +4492,7 @@ window.addEventListener('DOMContentLoaded', async()=>{
 // SETTINGS PANEL
 // ═══════════════════════════════════════════════════════════════
 async function openPanel(tab){
+  setActiveSurface(tab === 'personas' ? 'personas' : 'settings', { keepPanels:['panel'] });
   document.getElementById('panel').classList.add('show');
   if (tab) {
     setSettingsTab(tab);
@@ -3807,7 +4504,10 @@ async function openPanel(tab){
     setSettingsTab(saved || 'account');
   }
 }
-function closePanel(){document.getElementById('panel').classList.remove('show');}
+function closePanel(){
+  document.getElementById('panel').classList.remove('show');
+  if (isSurfaceActive('settings') || isSurfaceActive('personas')) closeActiveSurface();
+}
 
 // Switch the active Settings tab. Updates the left-rail button styling and
 // shows the matching <section data-pane="…">. Persists last tab via two
@@ -3825,6 +4525,7 @@ function setSettingsTab(name){
       history.replaceState(null, '', '#settings/' + name);
     }
   } catch(_) {}
+  if (name === 'features') refreshPermissionAllowlist().catch(()=>{});
 }
 
 // On reload, if the URL hash points to a Settings tab, open the panel and
@@ -5514,11 +6215,13 @@ async function checkGoogleAuth() {
 let hubCurrentTab = 'installed';
 
 function openHub() {
+  setActiveSurface('plugins', { keepPanels:['hub-panel'] });
   document.getElementById('hub-panel').classList.add('show');
   hubTab('installed');
 }
 function closeHub() {
   document.getElementById('hub-panel').classList.remove('show');
+  if (isSurfaceActive('plugins')) closeActiveSurface();
 }
 function hubTab(tab) {
   hubCurrentTab = tab;
@@ -5789,11 +6492,13 @@ async function refreshAccount() {
 }
 
 function openAccount() {
+  setActiveSurface('account', { keepPanels:['acct-panel'] });
   document.getElementById('acct-panel').classList.add('show');
   acctTab(currentUser ? 'profile' : 'login');
 }
 function closeAccount() {
   document.getElementById('acct-panel').classList.remove('show');
+  if (isSurfaceActive('account')) closeActiveSurface();
 }
 function acctTab(tab) {
   acctCurrentTab = tab;
@@ -5963,11 +6668,13 @@ async function openMarketplaceWeb() {
 }
 
 function openStore() {
+  setActiveSurface('plugins', { keepPanels:['store-panel'] });
   document.getElementById('store-panel').classList.add('show');
   storeTab('plugins');
 }
 function closeStore() {
   document.getElementById('store-panel').classList.remove('show');
+  if (isSurfaceActive('plugins')) closeActiveSurface();
 }
 function storeTab(tab) {
   storeCurrentTab = tab;
@@ -6007,14 +6714,14 @@ async function renderStoreBody() {
     const url = await H.marketGetWebUrl();
     body.innerHTML = `
       <div class="publish-cta">
-        <div class="publish-cta-icon">🚀</div>
+        <div class="publish-cta-icon">&#128640;</div>
         <div class="publish-cta-text">
           <h3>Publishing happens on the web</h3>
           <p>The full 5-step publisher, moderation queue, reviews and creator analytics live on the marketplace site. Open the dashboard to submit a plugin.</p>
         </div>
         <button class="publish-cta-btn" onclick="H.openUrl('${url}/publish')">Open publisher</button>
       </div>
-      <div class="empty-state"><div class="es-icon">в"№пёЏ</div><h3>Why not in the app?</h3>
+      <div class="empty-state"><div class="es-icon">&#9889;</div><h3>Why not in the app?</h3>
       <p>Publishing needs: account identity, human moderation, screenshots, pricing review. That's a web surface — the desktop app only runs plugins.</p>
       <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">
         <button class="sc-btn primary" onclick="H.openUrl('${url}/publish')">Publish a plugin</button>
@@ -6151,21 +6858,72 @@ async function publishPlugin() {
 // ═══════════════════════════════════════════════════════════════
 // WORKFLOWS PANEL
 // ═══════════════════════════════════════════════════════════════
-let wfCurrentTab = 'list';
+let wfCurrentTab = 'overview';
 
 function openWorkflows() {
+  setActiveSurface('workflows', { keepPanels:['wf-panel'] });
   document.getElementById('wf-panel').classList.add('show');
-  wfTab('list');
+  wfTab('overview');
 }
 function closeWorkflows() {
   document.getElementById('wf-panel').classList.remove('show');
+  if (isSurfaceActive('workflows')) closeActiveSurface();
 }
 function wfTab(tab) {
   wfCurrentTab = tab;
-  ['list','create','scheduled'].forEach(t => {
+  ['overview','list','create','scheduled'].forEach(t => {
     document.getElementById(`wf-tab-${t}`)?.classList.toggle('on', t === tab);
   });
   renderWfBody();
+}
+
+// ── Workflow live-run state ─────────────────────────────────────────────
+// Keeps a snapshot of the most-recently-running workflow so the Overview
+// tab can paint the active node + done/pending nodes in the graph view.
+// Updated by IPC events `workflow:running:start|step|end`. When idle,
+// falls back to the most recent finished run (via lastRun on stored wfs).
+let wfActiveRun = null;
+function _wfStepLabel(action) {
+  const map = {
+    open_url: 'Open URL', open_site: 'Open Site', open_app: 'Open App',
+    close_url: 'Close URL', close_app: 'Close App',
+    type_text: 'Type Text', press_key: 'Press Key',
+    run_code: 'Run Code', shell: 'Shell', wait: 'Wait',
+    notify: 'Notify', speak: 'Speak', send_message: 'Send Message',
+    screenshot: 'Screenshot', clipboard_read: 'Read Clipboard',
+    clipboard_write: 'Write Clipboard', plugin: 'Plugin'
+  };
+  return map[action] || (action || 'Step').replace(/_/g, ' ');
+}
+function _wfStepKind(action) {
+  if (action === 'send_message' || action === 'speak') return 'LLM';
+  if (action === 'wait') return 'WAIT';
+  if (action === 'notify') return 'NOTIFY';
+  if (action === 'open_url' || action === 'open_app' || action === 'open_site') return 'TRIGGER';
+  return 'ACTION';
+}
+function _wfFmtTime(ms) {
+  if (!ms) return '—';
+  if (ms < 1000) return ms + 'ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+  return Math.floor(ms / 60000) + 'm ' + Math.floor((ms % 60000) / 1000) + 's';
+}
+function _wfFmtRel(iso) {
+  if (!iso) return 'never';
+  const dt = Date.now() - new Date(iso).getTime();
+  if (dt < 60000) return 'just now';
+  if (dt < 3600000) return Math.floor(dt / 60000) + 'm ago';
+  if (dt < 86400000) return Math.floor(dt / 3600000) + 'h ago';
+  return Math.floor(dt / 86400000) + 'd ago';
+}
+function _wfTriggerKind(t) {
+  if (!t || t === 'manual') return { label: 'Manual', cls: '' };
+  if (t === 'startup') return { label: 'Startup', cls: 'startup' };
+  if (t.startsWith('cron:')) return { label: 'Cron · ' + t.slice(5), cls: 'cron' };
+  if (t.startsWith('schedule:')) return { label: 'Daily · ' + t.slice(9), cls: 'cron' };
+  if (t.startsWith('interval:')) return { label: 'Every ' + t.slice(9) + 'm', cls: 'interval' };
+  if (t.startsWith('wake:')) return { label: 'Wake · ' + t.slice(5), cls: 'interval' };
+  return { label: t, cls: '' };
 }
 
 const STEP_ICONS = {
@@ -6235,8 +6993,236 @@ function workflowIcon(wf) {
   return '⚡';
 }
 
+// Build the premium Overview tab — KPI cards strip, currently-running
+// graph (or last-run preview if idle), and the all-workflows table with
+// success-rate bars + run buttons. Pulled out of renderWfBody so the
+// live-event handlers below can refresh JUST this tab without rerunning
+// expensive list/scheduled paths when the active run mutates.
+async function renderWfOverview(body) {
+  // Gather both legacy local workflows and engine-tracked ones.
+  const allWfs = [...workflows];
+  let activeRuns = [];
+  try {
+    const engineWfs = await H.workflowList();
+    for (const ew of engineWfs) {
+      if (!allWfs.find(w => w.id === ew.id)) allWfs.push(ew);
+    }
+  } catch (_) { /* engine optional */ }
+  try {
+    activeRuns = await H.workflowActiveRuns();
+  } catch (_) { /* not running */ }
+
+  // KPI: total / success rate / avg duration / running count.
+  const totalRuns = allWfs.reduce((a, w) => a + (w.runCount || 0), 0);
+  const totalSuccess = allWfs.reduce((a, w) => a + (w.successCount || (w.runCount || 0)), 0);
+  const successRate = totalRuns ? Math.round((totalSuccess / totalRuns) * 100) : 100;
+  const avgDur = (() => {
+    const wfsWithRuns = allWfs.filter(w => (w.runCount || 0) > 0 && (w.avgDuration || 0) > 0);
+    if (!wfsWithRuns.length) return 0;
+    return Math.round(wfsWithRuns.reduce((a, w) => a + (w.avgDuration || 0), 0) / wfsWithRuns.length);
+  })();
+  const lastRunIso = allWfs
+    .map(w => w.lastRun)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const runningCount = activeRuns.length;
+
+  // Pick run/wf to show in graph: prefer active, fall back to most-recent.
+  let graphRun = activeRuns[0] || wfActiveRun || null;
+  let graphWf = null;
+  if (graphRun) {
+    graphWf = allWfs.find(w => w.id === graphRun.workflowId);
+  } else if (lastRunIso) {
+    const lastWf = allWfs
+      .filter(w => w.lastRun)
+      .sort((a, b) => (a.lastRun > b.lastRun ? -1 : 1))[0];
+    graphWf = lastWf;
+    if (lastWf) {
+      graphRun = {
+        runId: 'last_' + lastWf.id,
+        workflowId: lastWf.id,
+        name: lastWf.name,
+        startedAt: new Date(lastWf.lastRun).getTime(),
+        currentStep: -1,
+        totalSteps: (lastWf.steps || []).length,
+        steps: (lastWf.steps || []).map(s => ({
+          action: s.action || s.type || 'step',
+          status: lastWf.lastRunOk === false ? 'pending' : 'done',
+          startedAt: null, endedAt: null, error: null
+        }))
+      };
+    }
+  }
+
+  const isLive = activeRuns.length > 0;
+  const graphStarted = graphRun && graphRun.startedAt
+    ? Math.floor((Date.now() - graphRun.startedAt) / 1000)
+    : null;
+
+  body.innerHTML = `
+    <div class="wfp-shell">
+      <!-- KPI strip -->
+      <div class="wfp-kpis">
+        <div class="wfp-kpi">
+          <div class="wfp-kpi-label">Active runs</div>
+          <div class="wfp-kpi-value">${runningCount}<span class="wfp-kpi-unit">${runningCount === 1 ? 'workflow' : 'workflows'}</span></div>
+          <div class="wfp-kpi-trend ${runningCount > 0 ? 'up' : 'flat'}">${runningCount > 0 ? '● live' : '— idle'}</div>
+        </div>
+        <div class="wfp-kpi">
+          <div class="wfp-kpi-label">Success rate</div>
+          <div class="wfp-kpi-value">${successRate}<span class="wfp-kpi-unit">%</span></div>
+          <div class="wfp-kpi-trend ${successRate >= 90 ? 'up' : successRate >= 60 ? 'flat' : 'down'}">${totalRuns} ${totalRuns === 1 ? 'run' : 'runs'} total</div>
+        </div>
+        <div class="wfp-kpi">
+          <div class="wfp-kpi-label">Avg duration</div>
+          <div class="wfp-kpi-value">${avgDur ? _wfFmtTime(avgDur).split(/(\d+)/).slice(1).join('') ? _wfFmtTime(avgDur) : '—' : '—'}</div>
+          <div class="wfp-kpi-trend flat">across stored runs</div>
+        </div>
+        <div class="wfp-kpi">
+          <div class="wfp-kpi-label">Last run</div>
+          <div class="wfp-kpi-value" style="font-size:18px">${_wfFmtRel(lastRunIso)}</div>
+          <div class="wfp-kpi-trend flat">${allWfs.length} ${allWfs.length === 1 ? 'workflow' : 'workflows'} stored</div>
+        </div>
+      </div>
+
+      <!-- Live-run graph -->
+      <div class="wfp-live ${isLive ? '' : 'idle'}" id="wfp-live">
+        <div class="wfp-live-h">
+          <div class="wfp-live-title">
+            <span class="wfp-live-eyebrow">${isLive ? 'Currently running' : 'Last run'}</span>
+            ${graphWf ? '<span>' + (graphWf.name || 'Workflow') + '</span>' : '<span style="color:var(--t3)">No runs yet</span>'}
+          </div>
+          <div class="wfp-live-meta">
+            ${graphRun ? `<span>step ${Math.max(0, graphRun.currentStep + 1)}/${graphRun.totalSteps || 1}</span>` : ''}
+            ${graphStarted !== null && isLive ? `<span>· ${graphStarted}s elapsed</span>` : ''}
+          </div>
+        </div>
+        <div class="wfp-graph">
+          ${graphRun ? renderWfGraph(graphRun) : '<div style="color:var(--t3); font:12px var(--font); padding:30px 0; text-align:center; width:100%">Run a workflow to see its graph here.</div>'}
+        </div>
+      </div>
+
+      <!-- All-workflows table -->
+      <div class="wfp-table">
+        <div class="wfp-table-h">
+          <h3>⚡ All workflows</h3>
+          <span class="wfp-count">${allWfs.length} TOTAL</span>
+        </div>
+        ${allWfs.length === 0
+          ? '<div style="padding:40px 20px; text-align:center; color:var(--t3); font:12px var(--font)">No workflows yet — head to <a onclick="wfTab(\'create\')" style="color:var(--acc); cursor:pointer">Create</a> to build your first one.</div>'
+          : allWfs.map(wf => renderWfRow(wf)).join('')
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderWfGraph(run) {
+  const steps = run.steps || [];
+  if (!steps.length) return '<div style="color:var(--t3); padding:20px">Workflow has no steps.</div>';
+  return steps.map((s, i) => {
+    const cls = s.status === 'running' ? 'running'
+              : s.status === 'done'    ? 'done'
+              : s.status === 'failed'  ? 'failed'
+              : '';
+    const node = `<div class="wfp-node ${cls}">
+      <div class="wfp-node-icon">${STEP_ICONS[s.action] || '▶️'}</div>
+      <div class="wfp-node-label">${_wfStepLabel(s.action)}</div>
+      <div class="wfp-node-sub">${_wfStepKind(s.action)}</div>
+    </div>`;
+    if (i === steps.length - 1) return node;
+    const nextStatus = (steps[i + 1] || {}).status;
+    let edgeCls = '';
+    if (s.status === 'done' && (nextStatus === 'pending' || nextStatus === 'running')) edgeCls = 'active';
+    else if (s.status === 'done') edgeCls = 'done';
+    return node + `<div class="wfp-edge ${edgeCls}"></div>`;
+  }).join('');
+}
+
+function renderWfRow(wf) {
+  const runs = wf.runCount || 0;
+  const successCt = wf.successCount != null ? wf.successCount : runs;
+  const rate = runs ? Math.round((successCt / runs) * 100) : (runs === 0 ? null : 100);
+  const rateCls = rate == null ? 'flat' : (rate >= 90 ? 'ok' : rate >= 60 ? 'warn' : 'fail');
+  const trig = _wfTriggerKind(wf.trigger);
+  const wfId = (wf.id || '').replace(/'/g, "\\'");
+  return `
+    <div class="wfp-table-row">
+      <div class="wfp-table-name">
+        <div class="wfp-ricon">${workflowIcon(wf)}</div>
+        <div style="min-width:0">
+          <div class="wfp-rname">${(wf.name || 'Untitled').replace(/[<>]/g,'')}</div>
+          <div class="wfp-rdesc">${(wf.description || (wf.steps?.length || 0) + ' steps').replace(/[<>]/g,'')}</div>
+        </div>
+      </div>
+      <span class="wfp-trigger-pill ${trig.cls}">${trig.label}</span>
+      <div class="wfp-rate">
+        ${rate == null
+          ? '<div class="wfp-rate-meta"><span style="color:var(--t3)">no runs yet</span></div>'
+          : `<div class="wfp-rate-bar"><div class="wfp-rate-fill ${rateCls === 'fail' ? 'fail' : rateCls === 'warn' ? 'warn' : ''}" style="width:${rate}%"></div></div>
+             <div class="wfp-rate-meta"><span>${rate}% success</span><span>${runs} ${runs === 1 ? 'run' : 'runs'}</span></div>`
+        }
+      </div>
+      <div class="wfp-last">
+        ${wf.lastRun
+          ? `<span>${_wfFmtRel(wf.lastRun)}</span>${wf.avgDuration ? `<br/><span class="wfp-last-mute">${_wfFmtTime(wf.avgDuration)} avg</span>` : ''}`
+          : '<span class="wfp-last-mute">never</span>'
+        }
+      </div>
+      <div class="wfp-row-actions">
+        <button class="wfp-btn run" onclick="runWorkflowById('${wfId}')" title="Run now">▶ Run</button>
+        <button class="wfp-btn del" onclick="deleteWorkflowById('${wfId}')" title="Delete">×</button>
+      </div>
+    </div>
+  `;
+}
+
+// Subscribe to live-run events once. The handlers update wfActiveRun and
+// re-render JUST the Overview tab if the user is looking at it.
+(function _bindWfLiveEvents() {
+  if (typeof H === 'undefined') return;
+  if (typeof H.onWorkflowRunningStart === 'function') {
+    H.onWorkflowRunningStart((p) => {
+      wfActiveRun = p;
+      if (wfCurrentTab === 'overview' && document.getElementById('wf-panel')?.classList.contains('show')) {
+        renderWfBody().catch(() => {});
+      }
+    });
+  }
+  if (typeof H.onWorkflowRunningStep === 'function') {
+    H.onWorkflowRunningStep((p) => {
+      if (wfActiveRun && wfActiveRun.runId === p.runId && wfActiveRun.steps?.[p.stepIndex]) {
+        wfActiveRun.steps[p.stepIndex].status = p.status;
+        wfActiveRun.currentStep = p.stepIndex;
+        // Cheap targeted refresh of the graph node — no full body rerender.
+        if (wfCurrentTab === 'overview' && document.getElementById('wf-panel')?.classList.contains('show')) {
+          const live = document.getElementById('wfp-live');
+          if (live) {
+            const graph = live.querySelector('.wfp-graph');
+            if (graph) graph.innerHTML = renderWfGraph(wfActiveRun);
+          }
+        }
+      }
+    });
+  }
+  if (typeof H.onWorkflowRunningEnd === 'function') {
+    H.onWorkflowRunningEnd((p) => {
+      // Mark last run done; trigger one full refresh so KPIs update.
+      wfActiveRun = null;
+      if (wfCurrentTab === 'overview' && document.getElementById('wf-panel')?.classList.contains('show')) {
+        renderWfBody().catch(() => {});
+      }
+    });
+  }
+})();
+
 async function renderWfBody() {
   const body = document.getElementById('wf-body');
+  if (wfCurrentTab === 'overview') {
+    await renderWfOverview(body);
+    return;
+  }
   if (wfCurrentTab === 'list') {
     // Use both local and engine workflows
     const allWfs = [...workflows];
@@ -6447,11 +7433,13 @@ let screenRecSeconds = 0;
 let screenRecordings = [];
 
 function openRecorder() {
+  setActiveSurface('recorder', { keepPanels:['recorder-panel'] });
   document.getElementById('recorder-panel').classList.add('show');
   renderRecorderBody();
 }
 function closeRecorder() {
   document.getElementById('recorder-panel').classList.remove('show');
+  if (isSurfaceActive('recorder')) closeActiveSurface();
 }
 
 function renderRecorderBody() {
@@ -7511,7 +8499,9 @@ function handleOperatorAgentStep(step){
     operatorCurrentAgentRunId = step.runId || operatorCurrentAgentRunId;
     operatorWaitingStepId = step.stepId || '';
     operatorPaused = Boolean(step.paused || operatorPaused);
-    opLog(`waiting before ${step.tool || 'tool'} ${step.stepId || ''}`, 'run');
+    const perm = step.permission || {};
+    const label = perm.required && !perm.allowed ? 'permission required' : 'waiting';
+    opLog(`${label} before ${step.tool || 'tool'} ${step.stepId || ''}${perm.operation ? ' · ' + perm.operation : ''}`, perm.required && !perm.allowed ? 'error' : 'run');
     opRefresh();
     return;
   }
@@ -7633,7 +8623,7 @@ async function opPause(){
 }
 async function opStep(){
   if(operatorWaitingStepId){
-    const r=await H.agentStep?.(operatorWaitingStepId,{decision:'allow',reason:'operator step'}).catch(e=>({ok:false,error:e.message}));
+    const r=await H.agentStep?.(operatorWaitingStepId,{decision:'allow_once',reason:'operator step'}).catch(e=>({ok:false,error:e.message}));
     if(!r?.ok){ opLog(r?.error || 'step failed', 'error'); return; }
     opLog(`step allowed ${operatorWaitingStepId}`, 'run');
     operatorWaitingStepId='';
@@ -7740,8 +8730,10 @@ function opRender(){
 }
 
 function toggleCodeMode() {
-  codeModeActive = !codeModeActive;
-  if (codeModeActive) {
+  const next = !codeModeActive;
+  if (next) {
+    setActiveSurface('code');
+    codeModeActive = true;
     document.body.classList.add('code-mode-active');
     // Start with the bottom terminal collapsed — the editor wants the room
     // and most users open the terminal on demand. They can open it via the
@@ -7762,9 +8754,7 @@ function toggleCodeMode() {
     }).catch(()=>{});
     renderCodeContext();
   } else {
-    document.body.classList.remove('code-mode-active');
-    document.body.classList.remove('code-terminal-collapsed');
-    document.getElementById('code-mode-btn').classList.remove('proc');
+    closeActiveSurface();
   }
 }
 
