@@ -16,6 +16,30 @@ class WorkflowEngine {
     this.pluginManager = pluginManager;
     this.scheduledJobs = new Map(); // workflowId -> interval/timeout handle
     this.running = false;
+    // Active-runs ledger so the renderer can render the Workflows graph view.
+    // Each entry: { runId, workflowId, name, startedAt, currentStep, totalSteps,
+    //               steps: [{action, status:'pending|running|done|failed', startedAt, endedAt, error}] }
+    this.activeRuns = new Map();
+    // Optional listeners — set by main.js via setEventBridge() so we can
+    // forward workflow:running:start / step / end events to the renderer
+    // without holding a hard dependency on Electron's webContents here.
+    this.eventBridge = null;
+  }
+
+  // main.js calls this once after constructing the engine.
+  setEventBridge(fn) {
+    this.eventBridge = typeof fn === 'function' ? fn : null;
+  }
+
+  emit(event, payload) {
+    if (this.eventBridge) {
+      try { this.eventBridge(event, payload); } catch (_) {}
+    }
+  }
+
+  // Snapshot of currently-running runs (for `workflowActiveRuns` IPC).
+  getActiveRuns() {
+    return Array.from(this.activeRuns.values()).map((r) => ({ ...r, steps: [...r.steps] }));
   }
 
   // Загрузить все workflows из хранилища
@@ -155,10 +179,44 @@ class WorkflowEngine {
     const results = [];
     let success = true;
 
-    for (const step of (wf.steps || [])) {
+    // Live run-state object — pushed to renderer as the graph mutates.
+    const runId = 'run_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const startedAt = Date.now();
+    const stepsState = (wf.steps || []).map((s) => ({
+      action: s.action || s.type || 'shell',
+      status: 'pending',
+      startedAt: null,
+      endedAt: null,
+      error: null
+    }));
+    const liveRun = {
+      runId,
+      workflowId: id,
+      name: wf.name,
+      startedAt,
+      currentStep: -1,
+      totalSteps: stepsState.length,
+      steps: stepsState
+    };
+    this.activeRuns.set(runId, liveRun);
+    this.emit('workflow:running:start', { ...liveRun });
+
+    for (let i = 0; i < (wf.steps || []).length; i++) {
+      const step = wf.steps[i];
+      liveRun.currentStep = i;
+      liveRun.steps[i].status = 'running';
+      liveRun.steps[i].startedAt = Date.now();
+      this.emit('workflow:running:step', { runId, stepIndex: i, status: 'running' });
+
       try {
         const result = await this.executeStep(step, onStep);
-        results.push({ step: step.action || step.type, result, ok: result.ok !== false });
+        const stepOk = result.ok !== false;
+        results.push({ step: step.action || step.type, result, ok: stepOk });
+        liveRun.steps[i].status = stepOk ? 'done' : 'failed';
+        liveRun.steps[i].endedAt = Date.now();
+        if (!stepOk) liveRun.steps[i].error = result.error || 'failed';
+        this.emit('workflow:running:step', { runId, stepIndex: i, status: liveRun.steps[i].status });
+
         if (onStep) onStep({ step: step.action || step.type, result });
         if (result.ok === false && step.stopOnError) {
           success = false;
@@ -168,17 +226,35 @@ class WorkflowEngine {
         await new Promise(r => setTimeout(r, 500));
       } catch (e) {
         results.push({ step: step.action || step.type, error: e.message, ok: false });
+        liveRun.steps[i].status = 'failed';
+        liveRun.steps[i].endedAt = Date.now();
+        liveRun.steps[i].error = e.message;
+        this.emit('workflow:running:step', { runId, stepIndex: i, status: 'failed' });
         if (step.stopOnError) { success = false; break; }
       }
     }
 
-    // Update last run
+    const endedAt = Date.now();
+    const duration = endedAt - startedAt;
+
+    // Update lastRun + runCount + success/fail counters + rolling avg duration.
     const idx = workflows.findIndex(w => w.id === id);
     if (idx !== -1) {
-      workflows[idx].lastRun = new Date().toISOString();
-      workflows[idx].runCount = (workflows[idx].runCount || 0) + 1;
+      const prevRun = workflows[idx].runCount || 0;
+      const prevAvg = workflows[idx].avgDuration || 0;
+      workflows[idx].lastRun = new Date(endedAt).toISOString();
+      workflows[idx].lastRunDuration = duration;
+      workflows[idx].lastRunOk = success;
+      workflows[idx].runCount = prevRun + 1;
+      workflows[idx].successCount = (workflows[idx].successCount || 0) + (success ? 1 : 0);
+      workflows[idx].failCount = (workflows[idx].failCount || 0) + (success ? 0 : 1);
+      // Cumulative-moving-average duration. Cheap, no per-run history bloat.
+      workflows[idx].avgDuration = Math.round(((prevAvg * prevRun) + duration) / (prevRun + 1));
       this.saveAll(workflows);
     }
+
+    this.activeRuns.delete(runId);
+    this.emit('workflow:running:end', { runId, workflowId: id, ok: success, duration });
 
     // Notification
     try {
@@ -188,7 +264,7 @@ class WorkflowEngine {
       }).show();
     } catch {}
 
-    return { ok: success, workflowName: wf.name, results };
+    return { ok: success, workflowName: wf.name, results, duration };
   }
 
   // Выполнить один шаг workflow

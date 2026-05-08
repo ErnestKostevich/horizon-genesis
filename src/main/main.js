@@ -154,6 +154,8 @@ const ALLOWED_SETTING_KEYS = new Set([
   'mcp.enabled', 'mcp.servers', 'mcp.toolsCache', 'mcp.toolsCacheAt',
   'codeWorkspace', 'codeOpenFiles', 'codeActiveTabIdx', 'wsListIgnore',
   'inspectorActive',
+  'customPersonas',
+  'permissionAllowlist',
 ]);
 
 const DEFAULT_PROVIDER_MODELS = {
@@ -2092,6 +2094,128 @@ function findActiveRun(id) {
   return [...activeAgentRuns.values()].at(-1) || null;
 }
 
+function getPermissionAllowlist() {
+  const raw = settingsStore.get('permissionAllowlist', []);
+  if (Array.isArray(raw)) return raw.filter(Boolean);
+  if (raw && typeof raw === 'object') return Object.values(raw).filter(Boolean);
+  return [];
+}
+
+function setPermissionAllowlist(entries) {
+  settingsStore.set('permissionAllowlist', (entries || []).filter(Boolean).slice(-300));
+}
+
+function permissionContext() {
+  return {
+    workspace: String(settingsStore.get('codeWorkspace') || settingsStore.get('workspace') || '*'),
+    persona: String(settingsStore.get('persona') || settingsStore.get('activePersona') || 'default'),
+  };
+}
+
+function permissionEntryId(entry) {
+  const stable = {
+    workspace: entry.workspace || '*',
+    persona: entry.persona || 'default',
+    tool: entry.tool || '',
+    operation: entry.operation || '',
+    scope: entry.scope || '*',
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 24);
+}
+
+function addPermissionAllowlist(permission) {
+  const now = new Date().toISOString();
+  const entry = {
+    id: permission.id,
+    workspace: permission.workspace || '*',
+    persona: permission.persona || 'default',
+    tool: permission.tool || '',
+    operation: permission.operation || '',
+    scope: permission.scope || '*',
+    title: permission.title || permission.tool || 'tool',
+    createdAt: now,
+  };
+  entry.id = entry.id || permissionEntryId(entry);
+  const entries = getPermissionAllowlist().filter(e => e.id !== entry.id);
+  entries.push(entry);
+  setPermissionAllowlist(entries);
+  return entry;
+}
+
+function revokePermissionAllowlist(id) {
+  const before = getPermissionAllowlist();
+  const next = before.filter(e => e.id !== id);
+  setPermissionAllowlist(next);
+  return before.length !== next.length;
+}
+
+function looksSafeReadOnlyShell(command) {
+  const cmd = String(command || '').trim();
+  if (!cmd) return false;
+  if (/[;&|`>$]/.test(cmd)) return false;
+  return /^(pwd|whoami|hostname|date|dir|ls(\s|$)|rg(\s|$)|findstr(\s|$)|type\s+|Get-ChildItem(\s|$)|Get-Content(\s|$)|Select-String(\s|$)|git\s+(status|diff|log|show|branch|rev-parse)(\s|$)|node\s+(-v|--version)|npm\s+(-v|--version)|pnpm\s+(-v|--version))/.test(cmd);
+}
+
+function permissionScopeFor(tool, args = {}) {
+  const candidates = [
+    args.path, args.file, args.filePath, args.relPath, args.target,
+    args.url, args.href, args.repo, args.repository,
+    args.command, args.cmd, args.query,
+  ];
+  const scope = candidates.find(v => typeof v === 'string' && v.trim());
+  if (scope) return String(scope).slice(0, 240);
+  if (args.code) return String(args.code).slice(0, 160);
+  return String(tool || '*');
+}
+
+function classifyToolOperation(tool, args = {}) {
+  const name = String(tool || '').toLowerCase();
+  const base = name.includes('__') ? name.split('__').pop() : name;
+  if (base === 'shell_command') return looksSafeReadOnlyShell(args.command || args.cmd) ? 'read_shell' : 'shell';
+  if (/^(read|get|list|search|find|query|describe|status|inspect|recall|wikipedia|weather|calendar_list|gmail_search|github_read)/.test(base)) return 'read';
+  if (/(write|create|delete|remove|update|move|rename|patch|commit|push|exec|shell|run|kill|type|press|click|mouse|scroll|open|browser|fetch|http|post|put|send|email|calendar|remember|set_fact|log_meal|clipboard|screenshot|capture)/.test(base)) return base.includes('fetch') || base.includes('http') ? 'network' : 'side_effect';
+  if (name.includes('__')) return 'mcp_tool';
+  return 'read';
+}
+
+function permissionRequiresApproval(operation) {
+  return !['read', 'read_shell'].includes(operation);
+}
+
+function classifyAgentPermission(payload) {
+  const args = payload?.args || {};
+  const tool = String(payload?.tool || '');
+  const operation = classifyToolOperation(tool, args);
+  const required = permissionRequiresApproval(operation);
+  const ctx = permissionContext();
+  const scope = permissionScopeFor(tool, args);
+  const basePermission = {
+    required,
+    allowed: !required,
+    tool,
+    operation,
+    scope,
+    workspace: ctx.workspace,
+    persona: ctx.persona,
+    risk: required ? 'side-effect' : 'read-only',
+    title: `${tool || 'tool'} approval`,
+    description: required
+      ? 'This tool can affect files, shell, network, browser, external services, or MCP state.'
+      : 'Read-only tool allowed automatically.',
+    detail: (() => {
+      try { return JSON.stringify(args, null, 2).slice(0, 1600); }
+      catch (_) { return String(args).slice(0, 1600); }
+    })(),
+  };
+  basePermission.id = permissionEntryId(basePermission);
+  if (!required) return basePermission;
+  const match = getPermissionAllowlist().find(e => e.id === basePermission.id);
+  if (match) {
+    return { ...basePermission, allowed: true, allowlistId: match.id, description: 'Allowed by saved workspace/persona/tool approval.' };
+  }
+  return basePermission;
+}
+
 class AgentRunController {
   constructor(record) {
     this.record = record;
@@ -2104,6 +2228,10 @@ class AgentRunController {
   isPaused() { return this.paused; }
   isStopped() { return this.stopped; }
 
+  classifyTool(payload) {
+    return classifyAgentPermission(payload);
+  }
+
   observe(step) {
     this.record.events.push({ ...scrubRunValue(step), at: new Date().toISOString() });
     if (step?.type === 'waiting') {
@@ -2114,7 +2242,8 @@ class AgentRunController {
         tool: step.tool,
         args: scrubRunValue(step.args || {}),
         reason: step.reason || '',
-        status: 'waiting',
+        permission: scrubRunValue(step.permission || null),
+        status: step.permission?.required && !step.permission?.allowed ? 'waiting_permission' : 'waiting',
         startedAt: new Date().toISOString(),
       });
     }
@@ -2140,13 +2269,19 @@ class AgentRunController {
   resume() {
     this.paused = false;
     this.record.status = 'running';
-    if (this.pending) this.resolveStep(this.pending.stepId, { decision: 'allow', reason: 'operator resume' });
+    if (this.pending) {
+      const permission = this.pending.permission;
+      if (permission?.required && !permission?.allowed) {
+        return { ok: false, id: this.record.id, status: 'waiting_permission', error: 'Step is waiting for permission approval' };
+      }
+      this.resolveStep(this.pending.stepId, { decision: 'allow', reason: 'operator resume' });
+    }
     return { ok: true, id: this.record.id, status: 'running' };
   }
 
   step() {
     this.paused = true;
-    if (this.pending) return this.resolveStep(this.pending.stepId, { decision: 'allow', reason: 'operator step' });
+    if (this.pending) return this.resolveStep(this.pending.stepId, { decision: 'allow_once', reason: 'operator step' });
     this.stepNext = true;
     return { ok: true, id: this.record.id, status: 'step-armed' };
   }
@@ -2161,13 +2296,21 @@ class AgentRunController {
 
   beforeTool(payload) {
     if (this.stopped) return { decision: 'stop', reason: 'operator stop' };
+    const permission = payload.permission || this.classifyTool(payload);
+    if (permission.required && !permission.allowed) {
+      return this.waitForStep(payload, permission);
+    }
     if (this.stepNext) {
       this.stepNext = false;
       return { decision: 'allow', reason: 'operator step' };
     }
     if (!this.paused) return { decision: 'allow' };
+    return this.waitForStep(payload, permission);
+  }
+
+  waitForStep(payload, permission = null) {
     return new Promise(resolve => {
-      this.pending = { stepId: payload.stepId, resolve };
+      this.pending = { stepId: payload.stepId, resolve, permission };
       pendingAgentSteps.set(payload.stepId, this);
     });
   }
@@ -2175,7 +2318,13 @@ class AgentRunController {
   resolveStep(stepId, decision) {
     if (!this.pending || this.pending.stepId !== stepId) return { ok: false, error: 'Step is not waiting' };
     const normalized = typeof decision === 'string' ? { decision } : (decision || { decision: 'allow' });
-    const next = normalized.decision === 'step' ? { decision: 'allow', reason: 'operator step' } : normalized;
+    let next = normalized.decision === 'step' ? { decision: 'allow_once', reason: 'operator step' } : normalized;
+    if (next.decision === 'always_allow') {
+      if (this.pending.permission) addPermissionAllowlist(this.pending.permission);
+      next = { ...next, decision: 'allow', reason: next.reason || 'permission always allow' };
+    } else if (next.decision === 'allow_once') {
+      next = { ...next, decision: 'allow', reason: next.reason || 'permission allow once' };
+    }
     const resolve = this.pending.resolve;
     this.pending = null;
     pendingAgentSteps.delete(stepId);
@@ -2283,6 +2432,12 @@ function loadAgentModules() {
   if (!personas) {
     try {
       personas = require('./personas');
+      // Wire up the user-overlay store so the editor can persist edits
+      // to built-in personas + add custom personas. All overlays live on
+      // settingsStore under the 'customPersonas' key.
+      if (typeof personas.setOverlayStore === 'function') {
+        personas.setOverlayStore(settingsStore);
+      }
       console.log('✓ Personas loaded');
     } catch(e) {
       console.error('Personas failed:', e.message);
@@ -2292,6 +2447,20 @@ function loadAgentModules() {
     try {
       const { WorkflowEngine } = require('./workflowEngine');
       workflowEngine = new WorkflowEngine(settingsStore, pluginManager);
+      // Bridge workflow run events to the renderer so the Workflows panel
+      // can animate the active run's graph in real time. We forward to the
+      // first available BrowserWindow — the panel only listens while open.
+      workflowEngine.setEventBridge((channel, payload) => {
+        try {
+          const { BrowserWindow } = require('electron');
+          const wins = BrowserWindow.getAllWindows();
+          for (const w of wins) {
+            if (w && !w.isDestroyed() && w.webContents) {
+              w.webContents.send(channel, payload);
+            }
+          }
+        } catch (_) { /* best-effort */ }
+      });
       workflowEngine.startAll();
       console.log('✓ Workflow Engine loaded');
     } catch(e) {
@@ -2380,6 +2549,17 @@ ipcMain.handle('agentStep', async (_, stepId, decision) => {
   if (!run) return { ok: false, error: 'No waiting step for this id' };
   return run.resolveStep(stepId, decision);
 });
+
+ipcMain.handle('permissionAllowlistList', async () => ({
+  ok: true,
+  entries: getPermissionAllowlist(),
+}));
+
+ipcMain.handle('permissionAllowlistRevoke', async (_, id) => ({
+  ok: true,
+  revoked: revokePermissionAllowlist(String(id || '')),
+  entries: getPermissionAllowlist(),
+}));
 
 ipcMain.handle('agentRuns', async (_, limit = 50) => {
   const active = [...activeAgentRuns.values()].map(r => compactAgentRun(r.record)).reverse();
@@ -2994,6 +3174,32 @@ ipcMain.handle('getPersonaPrompt', (_, id, lang) => {
   return personas.getPersonaPrompt(id, lang);
 });
 
+// Full persona shape (with prompts, memories, allowed tools) — used by
+// the Personas editor in the renderer.
+ipcMain.handle('getPersonaFull', (_, id) => {
+  loadAgentModules();
+  if (!personas || typeof personas.getPersonaFull !== 'function') return null;
+  return personas.getPersonaFull(id);
+});
+
+// Upsert overlay (built-in edit OR new custom persona). Patch is partial.
+ipcMain.handle('personaUpsert', (_, id, patch) => {
+  loadAgentModules();
+  if (!personas || typeof personas.upsertPersona !== 'function') {
+    return { ok: false, error: 'Personas module unavailable' };
+  }
+  return personas.upsertPersona(id, patch || {});
+});
+
+// Delete overlay (resets built-in OR removes custom).
+ipcMain.handle('personaDelete', (_, id) => {
+  loadAgentModules();
+  if (!personas || typeof personas.deletePersona !== 'function') {
+    return { ok: false, error: 'Personas module unavailable' };
+  }
+  return personas.deletePersona(id);
+});
+
 ipcMain.handle('getWakeResponse', (_, id, lang) => {
   loadAgentModules();
   if (!personas) return 'Ready.';
@@ -3092,6 +3298,15 @@ ipcMain.handle('workflowRun', async (event, id) => {
   if (!workflowEngine) return { ok: false, error: 'Workflow engine not loaded' };
   const onStep = (step) => { try { event.sender.send('workflowStep', step); } catch {} };
   return workflowEngine.run(id, onStep);
+});
+
+// Snapshot of currently-running workflows for the premium Workflows panel
+// (animated graph view of the live run). Renderer also listens for the
+// workflow:running:start / step / end events emitted by the engine bridge.
+ipcMain.handle('workflowActiveRuns', () => {
+  loadAgentModules();
+  if (!workflowEngine) return [];
+  return workflowEngine.getActiveRuns();
 });
 
 ipcMain.handle('workflowExamples', () => {

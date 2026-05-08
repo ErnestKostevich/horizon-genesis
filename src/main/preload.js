@@ -88,6 +88,8 @@ contextBridge.exposeInMainWorld('H', {
   agentStep:   (stepId, decision) => ipcRenderer.invoke('agentStep', stepId, decision),
   agentRuns:   (limit)         => ipcRenderer.invoke('agentRuns', limit),
   agentRunDetails: (runId)     => ipcRenderer.invoke('agentRunDetails', runId),
+  permissionAllowlistList:   () => ipcRenderer.invoke('permissionAllowlistList'),
+  permissionAllowlistRevoke: (id) => ipcRenderer.invoke('permissionAllowlistRevoke', id),
   mcpServersList:  ()          => ipcRenderer.invoke('mcpServersList'),
   mcpServerUpsert: (config)    => ipcRenderer.invoke('mcpServerUpsert', config),
   mcpServerRemove: (id)        => ipcRenderer.invoke('mcpServerRemove', id),
@@ -164,8 +166,11 @@ contextBridge.exposeInMainWorld('H', {
   // ── PERSONAS ──────────────────────────────────────────────────────────────────
   getPersonas:      ()                => ipcRenderer.invoke('getPersonas'),
   getPersona:       (id)              => ipcRenderer.invoke('getPersona', id),
+  getPersonaFull:   (id)              => ipcRenderer.invoke('getPersonaFull', id),
   getPersonaPrompt: (id, lang)        => ipcRenderer.invoke('getPersonaPrompt', id, lang),
   getWakeResponse:  (id, lang)        => ipcRenderer.invoke('getWakeResponse', id, lang),
+  personaUpsert:    (id, patch)       => ipcRenderer.invoke('personaUpsert', id, patch),
+  personaDelete:    (id)              => ipcRenderer.invoke('personaDelete', id),
 
   // ── PLUGIN MANAGER ────────────────────────────────────────────────────────────
   pluginList:           ()            => ipcRenderer.invoke('pluginList'),
@@ -186,7 +191,13 @@ contextBridge.exposeInMainWorld('H', {
   workflowDelete:       (id)          => ipcRenderer.invoke('workflowDelete', id),
   workflowRun:          (id)          => ipcRenderer.invoke('workflowRun', id),
   workflowExamples:     ()            => ipcRenderer.invoke('workflowExamples'),
+  workflowActiveRuns:   ()            => ipcRenderer.invoke('workflowActiveRuns'),
   onWorkflowStep:       (cb)          => ipcRenderer.on('workflowStep', (_, step) => cb(step)),
+  // Live run-state events emitted by WorkflowEngine.run() — the premium
+  // Workflows panel uses these to animate the graph nodes in real time.
+  onWorkflowRunningStart: (cb)        => ipcRenderer.on('workflow:running:start', (_, p) => cb(p)),
+  onWorkflowRunningStep:  (cb)        => ipcRenderer.on('workflow:running:step',  (_, p) => cb(p)),
+  onWorkflowRunningEnd:   (cb)        => ipcRenderer.on('workflow:running:end',   (_, p) => cb(p)),
 
   // ── SCREEN RECORDER + AI NARRATOR ────────────────────────────────────────────
   recorderGetSources:   ()            => ipcRenderer.invoke('recorderGetSources'),
