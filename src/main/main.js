@@ -75,6 +75,7 @@ const PRO_HANDLERS = new Set([
   'pcShell', 'pcKillProc', 'pcOpen',
   'pcType', 'pcKeyPress', 'pcVolume',
   'pcReadFile', 'pcWriteFile', 'pcListDir', 'pcChooseFolder',
+  'wsChooseFolder', 'wsGetWorkspace', 'wsList', 'wsRead', 'wsWrite', 'wsSearch', 'wsShell',
   'pcMouseMove', 'pcMouseClick', 'pcMouseDoubleClick',
   'pcMouseScroll', 'pcMouseDrag',
   'smartClick', 'findUIElements',
@@ -422,6 +423,28 @@ function startServer() {
       if (req.method === 'OPTIONS') { rsp.writeHead(204); rsp.end(); return; }
       // Static pages
       let p = req.url.split('?')[0];
+      if (p.startsWith('/vendor/monaco/')) {
+        const monacoRoot = path.join(__dirname, '../../node_modules/monaco-editor/min/vs');
+        const rel = p.replace(/^\/vendor\/monaco\//, '');
+        const full = path.resolve(monacoRoot, rel);
+        const rootCmp = path.resolve(monacoRoot).toLowerCase();
+        if (full.toLowerCase() !== rootCmp && !full.toLowerCase().startsWith(rootCmp + path.sep)) {
+          rsp.writeHead(403); rsp.end('Forbidden'); return;
+        }
+        fs.readFile(full, (err, data) => {
+          if (err) { rsp.writeHead(404); rsp.end('Not found'); return; }
+          const ext = path.extname(full);
+          const mime = {
+            '.js': 'application/javascript; charset=utf-8',
+            '.css': 'text/css; charset=utf-8',
+            '.ttf': 'font/ttf',
+            '.json': 'application/json; charset=utf-8',
+          }[ext] || 'application/octet-stream';
+          rsp.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
+          rsp.end(data);
+        });
+        return;
+      }
       if (p === '/') p = '/chat.html';
       const full = path.join(PAGES, p);
       fs.readFile(full, (err, data) => {
@@ -845,12 +868,97 @@ ipcMain.handle('analyzeScreen', async (_, question) => {
 });
 
 // ── Shell helper ──────────────────────────────────────────────────────────────
-function runShell(cmd, timeout = 12000) {
+function runShell(cmd, timeout = 12000, options = {}) {
   return new Promise(resolve => {
-    exec(cmd, { timeout, encoding: 'utf8', shell: true }, (err, stdout, stderr) => {
+    exec(cmd, { timeout, encoding: 'utf8', shell: true, cwd: options.cwd }, (err, stdout, stderr) => {
       resolve({ ok: !err, out: (stdout || stderr || '').trim().slice(0, 3000), err: err?.message });
     });
   });
+}
+
+function comparePath(p) {
+  return path.resolve(String(p || '')).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function currentWorkspaceRoot() {
+  const root = settingsStore.get('codeWorkspace') || '';
+  if (!root) throw new Error('No workspace selected');
+  const abs = path.resolve(root);
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new Error('Workspace folder does not exist');
+  return abs;
+}
+
+function resolveWorkspacePath(rel = '') {
+  const root = currentWorkspaceRoot();
+  const input = String(rel || '').trim();
+  if (path.isAbsolute(input)) throw new Error('Use workspace-relative paths');
+  const target = path.resolve(root, input || '.');
+  const rootCmp = comparePath(root);
+  const targetCmp = comparePath(target);
+  if (targetCmp !== rootCmp && !targetCmp.startsWith(rootCmp + path.sep)) {
+    throw new Error('Path escapes workspace');
+  }
+  return { root, target, rel: path.relative(root, target).replace(/\\/g, '/') };
+}
+
+function safeDirEntries(target) {
+  const ignored = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out']);
+  return fs.readdirSync(target, { withFileTypes: true })
+    .filter(e => !ignored.has(e.name))
+    .map(e => {
+      const full = path.join(target, e.name);
+      let stat = null;
+      try { stat = fs.statSync(full); } catch (_) {}
+      return {
+        name: e.name,
+        isDir: e.isDirectory(),
+        size: stat?.size || 0,
+        mtime: stat?.mtime?.toISOString?.() || null,
+      };
+    });
+}
+
+function searchWorkspaceFiles(root, startDir, query) {
+  const q = String(query || '').toLowerCase();
+  const ignored = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'out']);
+  const results = [];
+  let visited = 0;
+  const textExt = new Set(['.js','.jsx','.ts','.tsx','.json','.md','.txt','.css','.html','.py','.ps1','.sh','.yml','.yaml','.xml','.sql']);
+  function walk(dir) {
+    if (results.length >= 100 || visited >= 1200) return;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes:true }); } catch (_) { return; }
+    for (const entry of entries) {
+      if (results.length >= 100 || visited >= 1200) return;
+      if (ignored.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      const rel = path.relative(root, full).replace(/\\/g, '/');
+      visited++;
+      if (entry.isDirectory()) {
+        if (entry.name.toLowerCase().includes(q)) results.push({ rel, name:entry.name, isDir:true, match:'name' });
+        walk(full);
+        continue;
+      }
+      let matched = entry.name.toLowerCase().includes(q);
+      let match = matched ? 'name' : '';
+      if (!matched && textExt.has(path.extname(entry.name).toLowerCase())) {
+        try {
+          const stat = fs.statSync(full);
+          if (stat.size <= 256 * 1024) {
+            const content = fs.readFileSync(full, 'utf8');
+            const idx = content.toLowerCase().indexOf(q);
+            if (idx >= 0) {
+              matched = true;
+              match = content.slice(Math.max(0, idx - 40), Math.min(content.length, idx + q.length + 80)).replace(/\s+/g, ' ');
+            }
+          }
+        } catch (_) {}
+      }
+      if (matched) results.push({ rel, name:entry.name, isDir:false, match });
+    }
+  }
+  walk(startDir);
+  return results;
 }
 
 // ── PC Control ────────────────────────────────────────────────────────────────
@@ -1096,6 +1204,72 @@ ipcMain.handle('pcChooseFolder', async () => {
     if (r.canceled || !r.filePaths?.[0]) return { ok:false, canceled:true };
     settingsStore.set('codeWorkspace', r.filePaths[0]);
     return { ok:true, path:r.filePaths[0] };
+  } catch(e) { return { ok:false, err:e.message }; }
+});
+
+ipcMain.handle('wsChooseFolder', async () => {
+  try {
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Choose Horizon code workspace',
+      properties: ['openDirectory'],
+    });
+    if (r.canceled || !r.filePaths?.[0]) return { ok:false, canceled:true };
+    const root = path.resolve(r.filePaths[0]);
+    settingsStore.set('codeWorkspace', root);
+    return { ok:true, path:root };
+  } catch(e) { return { ok:false, err:e.message }; }
+});
+
+ipcMain.handle('wsGetWorkspace', () => {
+  try {
+    const root = currentWorkspaceRoot();
+    return { ok:true, path:root };
+  } catch(e) {
+    return { ok:false, err:e.message, path:settingsStore.get('codeWorkspace') || '' };
+  }
+});
+
+ipcMain.handle('wsList', (_, rel = '') => {
+  try {
+    const { root, target } = resolveWorkspacePath(rel);
+    if (!fs.statSync(target).isDirectory()) return { ok:false, err:'Not a directory' };
+    return { ok:true, root, rel:String(rel || '').replace(/\\/g, '/'), entries:safeDirEntries(target) };
+  } catch(e) { return { ok:false, err:e.message }; }
+});
+
+ipcMain.handle('wsRead', (_, rel = '') => {
+  try {
+    const { root, target, rel: safeRel } = resolveWorkspacePath(rel);
+    const stat = fs.statSync(target);
+    if (!stat.isFile()) return { ok:false, err:'Not a file' };
+    if (stat.size > 2 * 1024 * 1024) return { ok:false, err:'File is larger than 2MB' };
+    return { ok:true, root, rel:safeRel, content:fs.readFileSync(target, 'utf8'), size:stat.size };
+  } catch(e) { return { ok:false, err:e.message }; }
+});
+
+ipcMain.handle('wsWrite', (_, rel = '', content = '') => {
+  try {
+    const { root, target, rel: safeRel } = resolveWorkspacePath(rel);
+    fs.mkdirSync(path.dirname(target), { recursive:true });
+    fs.writeFileSync(target, String(content ?? ''), 'utf8');
+    return { ok:true, root, rel:safeRel, bytes:Buffer.byteLength(String(content ?? ''), 'utf8') };
+  } catch(e) { return { ok:false, err:e.message }; }
+});
+
+ipcMain.handle('wsSearch', (_, query = '', rel = '') => {
+  try {
+    const q = String(query || '').trim();
+    if (!q) return { ok:true, results:[] };
+    const { root, target } = resolveWorkspacePath(rel);
+    const start = fs.existsSync(target) && fs.statSync(target).isDirectory() ? target : root;
+    return { ok:true, root, query:q, results:searchWorkspaceFiles(root, start, q) };
+  } catch(e) { return { ok:false, err:e.message }; }
+});
+
+ipcMain.handle('wsShell', async (_, cmd) => {
+  try {
+    const root = currentWorkspaceRoot();
+    return await runShell(String(cmd || ''), 30000, { cwd: root });
   } catch(e) { return { ok:false, err:e.message }; }
 });
 

@@ -53,6 +53,13 @@ contextBridge.exposeInMainWorld('H', {
   pcWriteFile:          (p, c)       => ipcRenderer.invoke('pcWriteFile', p, c),
   pcListDir:            (d)          => ipcRenderer.invoke('pcListDir', d),
   pcChooseFolder:       ()           => ipcRenderer.invoke('pcChooseFolder'),
+  wsChooseFolder:       ()           => ipcRenderer.invoke('wsChooseFolder'),
+  wsGetWorkspace:       ()           => ipcRenderer.invoke('wsGetWorkspace'),
+  wsList:               (rel)        => ipcRenderer.invoke('wsList', rel),
+  wsRead:               (rel)        => ipcRenderer.invoke('wsRead', rel),
+  wsWrite:              (rel, c)     => ipcRenderer.invoke('wsWrite', rel, c),
+  wsSearch:             (q, rel)     => ipcRenderer.invoke('wsSearch', q, rel),
+  wsShell:              (cmd)        => ipcRenderer.invoke('wsShell', cmd),
   // ── PC Keyboard ──────────────────────────────────────────────────────────────
   pcType:               (t)          => ipcRenderer.invoke('pcType', t),
   pcKeyPress:           (k)          => ipcRenderer.invoke('pcKeyPress', k),
