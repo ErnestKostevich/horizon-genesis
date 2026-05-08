@@ -576,24 +576,19 @@ body.code-mode-active.code-terminal-collapsed .apex-right-pane.code-shell {
 }
 body.code-mode-active.code-terminal-collapsed .code-terminal-pane { display: none; }
 
-/* Chat panel (status bar + messages + input) compresses into a 380px column
-   anchored to the right edge of the viewport. */
-body.code-mode-active .chat-status-bar,
+/* Chat panel (messages + input) compresses into a 380px column anchored to
+   the right edge of the viewport. The chat-status-bar is HIDDEN in code
+   mode — its model / token / OWNER / BYOK pills duplicate info already in
+   the code-topbar (provider · model pill) and the cramped 380px column
+   made the bars on left and right misalign vertically. Less is more. */
+body.code-mode-active .chat-status-bar { display: none; }
 body.code-mode-active .msgs,
 body.code-mode-active .inp-wrap {
   margin-right: 0;
 }
-body.code-mode-active .chat-status-bar {
-  position: fixed;
-  top: 42px;
-  right: 0;
-  width: 380px;
-  border-left: 1px solid var(--code-line);
-  z-index: 13;
-}
 body.code-mode-active .msgs {
   position: fixed;
-  top: 80px;
+  top: 42px;       /* was 80px when status bar showed */
   right: 0;
   width: 380px;
   bottom: 92px;
@@ -2976,6 +2971,19 @@ async function bootCurrentChat(){
     refreshLicensePill();
   } catch (e) { console.warn('bootCurrentChat failed:', e?.message); }
 }
+// Debounced sidebar refresh — persistChatMessage fires 2-4 times per turn
+// (user msg + assistant msg + tool / agent step messages). Coalesce them
+// into a single loadChatList() call after the burst settles, otherwise the
+// sidebar wastes IPC and re-renders mid-stream.
+let _chatListRefreshTimer = null;
+function _scheduleChatListRefresh(){
+  if (_chatListRefreshTimer) clearTimeout(_chatListRefreshTimer);
+  _chatListRefreshTimer = setTimeout(() => {
+    _chatListRefreshTimer = null;
+    try { loadChatList?.(); } catch(_){}
+  }, 350);
+}
+
 function _persistChatMessage(role, content, meta){
   if (!currentChatId) {
     console.warn('[chat] _persistChatMessage skipped — no currentChatId');
@@ -2988,6 +2996,10 @@ function _persistChatMessage(role, content, meta){
   Promise.resolve(H.chatAddMessage(currentChatId, role, content, meta || {}))
     .then(r => {
       if (r && r.ok === false) console.warn('[chat] chatAddMessage rejected:', r.error || r);
+      // Refresh the sidebar so msg count + last-modified timestamp + the
+      // backend's stripPreview title (used as a fallback when AI auto-name
+      // hasn't fired yet) reflect on screen.
+      _scheduleChatListRefresh();
     })
     .catch(e => console.warn('[chat] chatAddMessage threw:', e?.message || e));
   // After the first user message, trigger AI auto-naming. Use === 0
