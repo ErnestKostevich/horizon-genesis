@@ -276,6 +276,32 @@ function toolParamsToJsonSchema(params = {}) {
   return { type: 'object', properties, additionalProperties: true };
 }
 
+function nativeToolName(rawName, used = new Set()) {
+  const base = String(rawName || 'tool')
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/^_+/, '')
+    .slice(0, 58) || 'tool';
+  let name = /^[a-zA-Z_]/.test(base) ? base : `tool_${base}`;
+  let idx = 2;
+  while (used.has(name)) {
+    const suffix = `_${idx++}`;
+    name = `${base.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+  }
+  used.add(name);
+  return name;
+}
+
+function nativeToolPack(tools = []) {
+  const used = new Set();
+  const map = {};
+  const native = (tools || []).map(t => {
+    const safeName = nativeToolName(t.name, used);
+    map[safeName] = t.name;
+    return { ...t, nativeName: safeName, name: safeName, originalName: t.name };
+  });
+  return { tools: native, map };
+}
+
 function toOpenAITools(tools = []) {
   return tools.map(t => ({
     type: 'function',
@@ -318,9 +344,9 @@ function toOpenAIChatMessages(messages = [], systemPrompt = '') {
         role: 'assistant',
         content: m.content || null,
         tool_calls: m.toolCalls.map(call => ({
-          id: call.id || `${call.tool || call.name || 'tool'}_call`,
+          id: call.id || `${call.providerTool || call.tool || call.name || 'tool'}_call`,
           type: 'function',
-          function: { name: call.tool || call.name, arguments: JSON.stringify(call.args || {}) }
+          function: { name: call.providerTool || call.tool || call.name, arguments: JSON.stringify(call.args || {}) }
         }))
       });
       continue;
@@ -357,7 +383,7 @@ function toAnthropicMessages(messages = []) {
       const content = [];
       if (m.content) content.push({ type: 'text', text: String(m.content) });
       for (const call of m.toolCalls) {
-        content.push({ type: 'tool_use', id: call.id || `${call.tool || call.name || 'tool'}_call`, name: call.tool || call.name, input: call.args || {} });
+        content.push({ type: 'tool_use', id: call.id || `${call.providerTool || call.tool || call.name || 'tool'}_call`, name: call.providerTool || call.tool || call.name, input: call.args || {} });
       }
       appendAnthropicMessage(out, { role: 'assistant', content });
       continue;
@@ -382,6 +408,14 @@ function parseOpenAIToolCalls(message = {}) {
       args: safeJsonParseArgs(call.function.arguments),
       reason: 'OpenAI tool_call'
     }));
+}
+
+function mapNativeToolCalls(toolCalls = [], nameMap = {}) {
+  return (toolCalls || []).map(call => ({
+    ...call,
+    providerTool: call.tool,
+    tool: nameMap[call.tool] || call.tool
+  }));
 }
 
 // Source-preview build check.
@@ -1869,9 +1903,12 @@ function compactAgentRun(record) {
     provider: record.provider,
     model: record.model,
     status: record.status,
+    currentStepId: record.currentStepId || null,
+    currentTool: record.steps?.find?.(s => s.id === record.currentStepId)?.tool || null,
     startedAt: record.startedAt,
     endedAt: record.endedAt,
     stepCount: record.steps?.length || 0,
+    eventCount: record.events?.length || 0,
   };
 }
 
@@ -1969,6 +2006,17 @@ class AgentRunController {
     pendingAgentSteps.delete(stepId);
     resolve(next);
     return { ok: true, id: this.record.id, stepId, decision: next.decision };
+  }
+}
+
+function sendAgentStepTo(target, step) {
+  try { target?.send?.('agentStep', step); } catch (_) {}
+}
+
+function broadcastAgentStep(step, sender = null) {
+  sendAgentStepTo(sender, step);
+  if (win && !win.isDestroyed() && win.webContents !== sender) {
+    sendAgentStepTo(win.webContents, step);
   }
 }
 
@@ -2137,14 +2185,19 @@ ipcMain.handle('mcpToolsRefresh', async () => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('agentControl', async (_, runId, action) => {
+ipcMain.handle('agentControl', async (event, runId, action) => {
   const run = findActiveRun(runId);
   if (!run) return { ok: false, error: 'No active agent run' };
-  if (action === 'pause') return run.pause();
-  if (action === 'resume') return run.resume();
-  if (action === 'step') return run.step();
-  if (action === 'stop') return run.stop();
-  return { ok: false, error: `Unknown agent control: ${action}` };
+  let result;
+  if (action === 'pause') result = run.pause();
+  else if (action === 'resume') result = run.resume();
+  else if (action === 'step') result = run.step();
+  else if (action === 'stop') result = run.stop();
+  else return { ok: false, error: `Unknown agent control: ${action}` };
+  const payload = { type: 'control', runId: run.record.id, action, status: run.record.status, currentStepId: run.record.currentStepId || null };
+  run.observe(payload);
+  broadcastAgentStep(payload, event.sender);
+  return result;
 });
 
 ipcMain.handle('agentStep', async (_, stepId, decision) => {
@@ -2247,13 +2300,14 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       if (provider === 'claude') {
         const model = selectedModel('claude', opts);
         const useNativeTools = Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
+        const toolPack = useNativeTools ? nativeToolPack(agentMeta.tools) : { tools: [], map: {} };
         const body = applyReasoningProfile('claude', model, {
           model,
           max_tokens:4096,
           system:systemPrompt,
           messages: useNativeTools ? toAnthropicMessages(messages) : messages
         });
-        if (useNativeTools) body.tools = toAnthropicTools(agentMeta.tools);
+        if (useNativeTools) body.tools = toAnthropicTools(toolPack.tools);
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method:'POST',
           headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
@@ -2262,7 +2316,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         const d = await r.json();
         if (d.error) return { error: d.error.message };
         if (!d.content || !d.content[0]) return { error: 'Empty response from Claude' };
-        const toolCalls = parseAnthropicToolCalls(d);
+        const toolCalls = mapNativeToolCalls(parseAnthropicToolCalls(d), toolPack.map);
         const text = (d.content || []).find(b => b && b.type === 'text')?.text || '';
         return { reply: text || (toolCalls.length ? '' : firstTextFromAnthropic(d)), toolCalls, model };
       }
@@ -2297,12 +2351,13 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         return { reply: d.message?.content?.[0]?.text || d.text || 'No response', model };
       }
       const useNativeOpenAITools = provider === 'openai' && Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
+      const toolPack = useNativeOpenAITools ? nativeToolPack(agentMeta.tools) : { tools: [], map: {} };
       const body = applyReasoningProfile(provider, ep.model, {
         model:ep.model,
         max_tokens:4096,
         messages: useNativeOpenAITools ? toOpenAIChatMessages(messages, systemPrompt) : [{role:'system',content:systemPrompt},...messages]
       });
-      if (useNativeOpenAITools) body.tools = toOpenAITools(agentMeta.tools);
+      if (useNativeOpenAITools) body.tools = toOpenAITools(toolPack.tools);
       const r = await fetch(ep.url, {
         method:'POST',
         headers,
@@ -2312,7 +2367,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       if (d.error) return { error: d.error.message };
       if (!d.choices || !d.choices[0]) return { error: `Empty response from ${provider}` };
       const message = d.choices[0].message || {};
-      const toolCalls = useNativeOpenAITools ? parseOpenAIToolCalls(message) : [];
+      const toolCalls = useNativeOpenAITools ? mapNativeToolCalls(parseOpenAIToolCalls(message), toolPack.map) : [];
       return { reply: message.content || '', toolCalls, model: ep.model };
 
     } catch(e) { return { error: e.message }; }
@@ -2343,12 +2398,14 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   // Send step updates to renderer via the event sender
   const onStep = (step) => {
     controller.observe(step);
-    try { event.sender.send('agentStep', step); } catch {}
+    broadcastAgentStep(step, event.sender);
   };
 
   let result;
   try {
-    try { event.sender.send('agentStep', { type: 'run-start', runId, provider, model: runRecord.model, prompt: runRecord.prompt }); } catch {}
+    const startStep = { type: 'run-start', runId, provider, model: runRecord.model, prompt: runRecord.prompt };
+    controller.observe(startStep);
+    broadcastAgentStep(startStep, event.sender);
     result = await agentLoop.runAgentLoop(userMessage, {
       aiFn,
       sysInfo,
@@ -2373,8 +2430,10 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     runRecord.error = result?.error || null;
     activeAgentRuns.delete(runId);
     if (controller.pending) pendingAgentSteps.delete(controller.pending.stepId);
+    const endStep = { type: 'run-end', runId, status: runRecord.status, result: scrubRunValue(result) };
+    controller.observe(endStep);
     appendAgentRun(runRecord);
-    try { event.sender.send('agentStep', { type: 'run-end', runId, status: runRecord.status, result: scrubRunValue(result) }); } catch {}
+    broadcastAgentStep(endStep, event.sender);
   }
 
   // Save to memory

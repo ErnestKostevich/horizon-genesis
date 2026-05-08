@@ -32,6 +32,7 @@ function normalizeServerConfig(input = {}) {
     args,
     env: env && typeof env === 'object' ? env : {},
     cwd: input.cwd ? String(input.cwd) : '',
+    timeoutMs: Math.min(Math.max(Number(input.timeoutMs) || 20000, 3000), 120000),
     enabled: input.enabled !== false,
   };
 }
@@ -136,6 +137,7 @@ class MCPRegistry {
 
   async refreshTools() {
     const tools = [];
+    const errors = [];
     for (const server of this.getServers().filter(s => s.enabled)) {
       const client = this.getClient(server);
       try {
@@ -153,6 +155,7 @@ class MCPRegistry {
         }
       } catch (e) {
         client.lastError = e.message;
+        errors.push({ serverId: server.id, serverName: server.name, error: e.message });
       }
     }
     this.toolCache = tools;
@@ -160,11 +163,24 @@ class MCPRegistry {
       serverId: t.serverId, serverName: t.serverName, name: t.name, originalName: t.originalName, desc: t.desc, inputSchema: t.inputSchema
     })));
     this.settingsStore.set('mcp.toolsCacheAt', new Date().toISOString());
+    this.settingsStore.set('mcp.lastErrors', errors);
     return tools;
   }
 
   async toolsForAgent() {
-    if (!this.toolCache.length) await this.refreshTools();
+    if (!this.toolCache.length) {
+      try {
+        await this.refreshTools();
+      } catch (_) {}
+      if (!this.toolCache.length) {
+        const cached = this.settingsStore.get('mcp.toolsCache') || [];
+        if (Array.isArray(cached)) this.toolCache = cached.map(t => ({
+          ...t,
+          params: t.inputSchema || {},
+          inputSchema: t.inputSchema || { type: 'object', properties: {}, additionalProperties: true },
+        }));
+      }
+    }
     return this.toolCache;
   }
 
