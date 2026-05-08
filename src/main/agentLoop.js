@@ -247,6 +247,20 @@ async function executeAgentToolStep(parsed, ctx) {
     toolCallId: step.toolCallId,
     paused: Boolean(control?.isPaused?.())
   };
+  try {
+    if (typeof control?.classifyTool === 'function') {
+      waitingPayload.permission = control.classifyTool(waitingPayload);
+    }
+  } catch (e) {
+    waitingPayload.permission = {
+      required: true,
+      allowed: false,
+      tool: step.tool,
+      operation: 'unknown',
+      title: `${step.tool || 'tool'} approval`,
+      description: e.message || 'Could not classify tool risk.',
+    };
+  }
   agentEvents.emit('pre-tool-dispatch', waitingPayload);
   if (onStep) onStep(waitingPayload);
 
@@ -261,13 +275,13 @@ async function executeAgentToolStep(parsed, ctx) {
   if (decision.decision === 'stop') {
     step.result = { ok: false, err: decision.reason || 'Stopped by operator' };
     steps.push(step);
-    if (onStep) onStep({ type: 'stopped', runId, stepId: step.id, step: stepIndex, tool: step.tool, result: step.result });
+    if (onStep) onStep({ type: 'stopped', runId, stepId: step.id, step: stepIndex, tool: step.tool, reason: decision.reason || '', permission: waitingPayload.permission || null, result: step.result });
     return { stopped: true, step, resultSummary: summarizeToolResult(step.result) };
   }
   if (decision.decision === 'deny') {
     step.result = { ok: false, err: decision.reason || 'Denied by operator' };
     steps.push(step);
-    if (onStep) onStep({ type: 'denied', runId, stepId: step.id, step: stepIndex, tool: step.tool, result: step.result });
+    if (onStep) onStep({ type: 'denied', runId, stepId: step.id, step: stepIndex, tool: step.tool, reason: decision.reason || '', permission: waitingPayload.permission || null, result: step.result });
     return { denied: true, step, resultSummary: summarizeToolResult(step.result) };
   }
 
