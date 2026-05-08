@@ -25,6 +25,13 @@ function contentToText(content) {
   }).filter(Boolean).join('\n');
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms))
+  ]);
+}
+
 class MCPServerClient {
   constructor(config) {
     this.config = config;
@@ -33,6 +40,7 @@ class MCPServerClient {
     this.tools = [];
     this.lastError = null;
     this.connectedAt = null;
+    this.requestTimeoutMs = Number(config?.timeoutMs) || 20000;
   }
 
   async connect() {
@@ -64,7 +72,7 @@ class MCPServerClient {
     };
 
     try {
-      await client.connect(transport);
+      await withTimeout(client.connect(transport), this.requestTimeoutMs, 'MCP connect');
       this.client = client;
       this.transport = transport;
       this.connectedAt = new Date().toISOString();
@@ -87,19 +95,25 @@ class MCPServerClient {
     }
   }
 
-  async listTools() {
+  async request(method, params, schema) {
     const client = await this.connect();
-    const result = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema);
+    try {
+      return await withTimeout(client.request({ method, params }, schema), this.requestTimeoutMs, `MCP ${method}`);
+    } catch (e) {
+      this.lastError = e.message;
+      await this.close();
+      throw e;
+    }
+  }
+
+  async listTools() {
+    const result = await this.request('tools/list', {}, ListToolsResultSchema);
     this.tools = Array.isArray(result.tools) ? result.tools : [];
     return this.tools;
   }
 
   async callTool(name, args = {}) {
-    const client = await this.connect();
-    const result = await client.request({
-      method: 'tools/call',
-      params: { name, arguments: args || {} }
-    }, CallToolResultSchema);
+    const result = await this.request('tools/call', { name, arguments: args || {} }, CallToolResultSchema);
     const out = contentToText(result.content);
     return {
       ok: !result.isError,
