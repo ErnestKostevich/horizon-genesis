@@ -152,7 +152,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'settingsTab',
   'openrouter.modelsCache', 'openrouter.modelsCacheAt',
   'mcp.enabled', 'mcp.servers', 'mcp.toolsCache', 'mcp.toolsCacheAt',
-  'codeWorkspace',
+  'codeWorkspace', 'codeOpenFiles', 'codeActiveTabIdx', 'wsListIgnore',
 ]);
 
 const DEFAULT_PROVIDER_MODELS = {
