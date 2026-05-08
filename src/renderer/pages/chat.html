@@ -526,13 +526,18 @@ body.code-mode-active .chat-status-bar, body.code-mode-active .msgs, body.code-m
 .arp-file { display:flex; justify-content:space-between; font-size:11px; color:#60a5fa; font-family:var(--mono); padding:6px 8px; background:rgba(96,165,250,.05); border-radius:6px; margin-bottom:6px; cursor:pointer; transition:all .2s; border:1px solid transparent; }
 .arp-file:hover { background:rgba(96,165,250,.1); border-color:rgba(96,165,250,.2); }
 .arp-footer { padding:0 16px; font-size:10px; color:#4a5568; line-height:1.6; }
-.code-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.code-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px}
+.code-actions.wide{grid-template-columns:repeat(3,minmax(0,1fr))}
 .code-btn{background:#161921;border:1px solid #242936;color:#d8deea;border-radius:7px;padding:7px 8px;font:11px var(--mono);cursor:pointer}
 .code-btn.primary{background:linear-gradient(135deg,#f3b250,#ffcf7a);color:#090b10;border-color:#f3b250;font-weight:700}
 .code-btn:hover{border-color:#f3b250;color:#fff}
 .code-btn.primary:hover{color:#090b10}
 .code-input{width:100%;box-sizing:border-box;background:#080b12;border:1px solid #242936;color:#e8ecf4;border-radius:7px;padding:8px;font:11px var(--mono);outline:none}
 .code-editor{width:100%;min-height:240px;resize:vertical;background:#05070c;border:1px solid #242936;color:#e8ecf4;border-radius:8px;padding:10px;font:11px/1.5 var(--mono);outline:none;box-sizing:border-box}
+.code-monaco{height:320px;border:1px solid #242936;border-radius:8px;overflow:hidden;background:#05070c}
+.code-terminal{background:#05070c;border:1px solid #242936;border-radius:8px;min-height:96px;max-height:180px;overflow:auto;padding:8px;color:#b9f6ca;font:10px/1.5 var(--mono);white-space:pre-wrap}
+.code-terminal-row{display:flex;gap:6px;margin-top:8px}
+.code-terminal-row .code-input{flex:1}
 .code-status{font:10px/1.45 var(--mono);color:#8d96ab;margin-top:8px;word-break:break-word}
 .arp-file.active{background:rgba(243,178,80,.12);border-color:rgba(243,178,80,.35);color:#f8d28c}
 
@@ -1233,6 +1238,11 @@ body.with-sidebar .chat-status-bar{display:flex}
 
   <div class="arp-section" id="arp-files-section">
     <div class="arp-head" id="arp-files-head">WORKSPACE</div>
+    <input class="code-input" id="code-file-search" placeholder="Search files..." onkeydown="if(event.key==='Enter') searchCodeWorkspace()"/>
+    <div class="code-actions">
+      <button class="code-btn" onclick="searchCodeWorkspace()">Search</button>
+      <button class="code-btn" onclick="refreshCodeWorkspace('')">Root</button>
+    </div>
     <div id="arp-files-list">
       <div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">
         No workspace selected.<br/>
@@ -1244,14 +1254,27 @@ body.with-sidebar .chat-status-bar{display:flex}
   <div class="arp-section">
     <div class="arp-head">EDITOR</div>
     <input class="code-input" id="code-file-path" placeholder="No file open" readonly />
-    <textarea class="code-editor" id="code-editor" spellcheck="false" placeholder="Open a file from the workspace."></textarea>
-    <div class="code-actions">
+    <div class="code-monaco" id="code-monaco"></div>
+    <textarea class="code-editor" id="code-editor" spellcheck="false" placeholder="Open a file from the workspace." style="display:none"></textarea>
+    <div class="code-actions wide">
       <button class="code-btn primary" onclick="saveCodeFile()">Save</button>
       <button class="code-btn" onclick="runCodeSelection()">Run selection</button>
       <button class="code-btn" onclick="askCodeAi('explain')">Explain</button>
       <button class="code-btn" onclick="askCodeAi('refactor')">Refactor</button>
+      <button class="code-btn" onclick="askCodeAi('fix')">Fix</button>
+      <button class="code-btn primary" onclick="applyLastCodeAi()">Apply AI</button>
     </div>
     <div class="code-status" id="code-editor-status">Workspace edits ask for permission before writing.</div>
+  </div>
+
+  <div class="arp-section">
+    <div class="arp-head">TERMINAL</div>
+    <div class="code-terminal" id="code-terminal-output">Workspace shell is idle.</div>
+    <div class="code-terminal-row">
+      <input class="code-input" id="code-terminal-command" placeholder="npm test" onkeydown="if(event.key==='Enter') runWorkspaceCommand()"/>
+      <button class="code-btn primary" onclick="runWorkspaceCommand()">Run</button>
+    </div>
+    <div class="code-status">Commands run inside the selected workspace after approval.</div>
   </div>
 
   <div style="flex:1"></div>
@@ -1310,6 +1333,7 @@ body.with-sidebar .chat-status-bar{display:flex}
   <div class="hint">Enter · Shift+Enter · 🎤 голос · ✋ диктовка · 📎 файл · 🌅 Wake</div>
 </div>
 
+<script src="/vendor/monaco/loader.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 // STATE
@@ -3040,6 +3064,8 @@ async function safeExecCode(code, langCode){
     detail: code
   });
   if (!ok) return { ok:false, err:'denied by user' };
+  codeSetStatus('Execution approved. Running in 5 seconds...');
+  await sleepMs(5000);
   return await H.execCode(code, langCode);
 }
 async function safeShell(cmd){
@@ -3061,6 +3087,29 @@ async function safeWriteFile(filePath, content){
   });
   if (!ok) return { ok:false, err:'denied by user' };
   return await H.pcWriteFile(filePath, content);
+}
+async function safeWriteWorkspaceFile(relPath, content, before=''){
+  const diff = buildDiffPreview(before, content);
+  const ok = await _gateDestructive('write_workspace_file', {
+    eyebrow: 'Write workspace file',
+    title: relPath,
+    description: `Horizon will write inside the selected workspace only (${(content||'').length} chars).`,
+    detail: diff
+  });
+  if (!ok) return { ok:false, err:'denied by user' };
+  return await H.wsWrite(relPath, content);
+}
+async function safeWorkspaceShell(cmd){
+  const ok = await _gateDestructive('workspace_shell', {
+    eyebrow: 'Run workspace command',
+    title: 'workspace shell',
+    description: 'This command will run in the selected workspace after a 5 second delay.',
+    detail: cmd
+  });
+  if (!ok) return { ok:false, err:'denied by user' };
+  codeSetStatus('Command approved. Running in 5 seconds...');
+  await sleepMs(5000);
+  return await H.wsShell(cmd);
 }
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
 function applyLang(){
@@ -5953,6 +6002,122 @@ let activeAgentPanelSteps = null;
 let activeAgentPanelRef = null;
 let opSeq = 0;
 let activeMessageRun = null;
+let codeEditor = null;
+let codeEditorReady = null;
+let codeLastAiPatch = null;
+
+function initCodeEditor(){
+  if(codeEditorReady) return codeEditorReady;
+  codeEditorReady = new Promise(resolve => {
+    const fallback = () => {
+      const ta = document.getElementById('code-editor');
+      const host = document.getElementById('code-monaco');
+      if(host) host.style.display = 'none';
+      if(ta) ta.style.display = 'block';
+      resolve(false);
+    };
+    try {
+      if(typeof window.require !== 'function' || !window.monaco && !document.querySelector('script[src*="monaco"]')) return fallback();
+      window.require.config({ paths: { vs: '/vendor/monaco' } });
+      window.require(['vs/editor/editor.main'], () => {
+        const host = document.getElementById('code-monaco');
+        const ta = document.getElementById('code-editor');
+        if(!host) return fallback();
+        if(ta) ta.style.display = 'none';
+        codeEditor = monaco.editor.create(host, {
+          value: ta?.value || '',
+          language: 'javascript',
+          theme: 'vs-dark',
+          minimap: { enabled:false },
+          fontSize: 12,
+          lineNumbers: 'on',
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          wordWrap: 'on',
+        });
+        codeEditor.onDidChangeModelContent(() => { if(ta) ta.value = codeEditor.getValue(); });
+        window.addEventListener('resize', () => { try { codeEditor.layout(); } catch(_){} });
+        resolve(true);
+      }, fallback);
+    } catch(_) { fallback(); }
+  });
+  return codeEditorReady;
+}
+
+function codeGetValue(){
+  return codeEditor ? codeEditor.getValue() : (document.getElementById('code-editor')?.value || '');
+}
+
+function codeSetValue(value, langName){
+  const text = String(value ?? '');
+  const ta = document.getElementById('code-editor');
+  if(ta) ta.value = text;
+  if(codeEditor){
+    const model = codeEditor.getModel();
+    codeEditor.setValue(text);
+    if(model && langName) monaco.editor.setModelLanguage(model, langName);
+  }
+}
+
+function codeSelectionSnapshot(){
+  if(codeEditor){
+    const model = codeEditor.getModel();
+    const sel = codeEditor.getSelection();
+    const selected = model && sel ? model.getValueInRange(sel) : '';
+    const full = codeEditor.getValue();
+    return { type:'monaco', range:sel, selected, full, hasSelection:!!selected };
+  }
+  const editor=document.getElementById('code-editor');
+  const start=editor?.selectionStart || 0;
+  const end=editor?.selectionEnd || 0;
+  const full=editor?.value || '';
+  return { type:'textarea', start, end, selected:full.slice(start,end), full, hasSelection:end>start };
+}
+
+function codeReplaceSnapshot(snapshot, replacement){
+  const text = String(replacement ?? '');
+  if(codeEditor && snapshot?.type === 'monaco'){
+    const model = codeEditor.getModel();
+    const range = snapshot.hasSelection && snapshot.range ? snapshot.range : model.getFullModelRange();
+    codeEditor.executeEdits('horizon-ai', [{ range, text, forceMoveMarkers:true }]);
+    codeEditor.focus();
+    return;
+  }
+  const editor=document.getElementById('code-editor');
+  if(!editor) return;
+  if(snapshot?.hasSelection){
+    editor.value = editor.value.slice(0, snapshot.start) + text + editor.value.slice(snapshot.end);
+    editor.selectionStart = snapshot.start;
+    editor.selectionEnd = snapshot.start + text.length;
+  } else {
+    editor.value = text;
+  }
+}
+
+function extractCodeFence(text){
+  const raw = String(text || '');
+  const matches = [...raw.matchAll(/```[a-zA-Z0-9_-]*\s*\n([\s\S]*?)```/g)];
+  if(!matches.length) return '';
+  return matches[matches.length - 1][1].replace(/\n$/,'');
+}
+
+function buildDiffPreview(before, after, maxLines=80){
+  const a = String(before ?? '').split(/\r?\n/);
+  const b = String(after ?? '').split(/\r?\n/);
+  let start = 0;
+  while(start < a.length && start < b.length && a[start] === b[start]) start++;
+  let endA = a.length - 1, endB = b.length - 1;
+  while(endA >= start && endB >= start && a[endA] === b[endB]) { endA--; endB--; }
+  const removed = a.slice(start, endA + 1);
+  const added = b.slice(start, endB + 1);
+  const lines = [`@@ line ${start + 1} @@`];
+  removed.slice(0, maxLines/2).forEach(line => lines.push(`- ${line}`));
+  added.slice(0, maxLines/2).forEach(line => lines.push(`+ ${line}`));
+  if(removed.length + added.length > maxLines) lines.push('... diff truncated ...');
+  return lines.join('\n') || 'No text changes.';
+}
+
+function sleepMs(ms){ return new Promise(r => setTimeout(r, ms)); }
 
 function codeJoin(root, rel=''){
   const sep = root.includes('\\') ? '\\' : '/';
@@ -5982,6 +6147,7 @@ function renderCodeContext(){
     const rows=[
       ['fs.read_file', codeWorkspace ? 'workspace scope' : 'no workspace'],
       ['fs.write_file', 'permission required'],
+      ['fs.search', codeWorkspace ? 'workspace scope' : 'no workspace'],
       ['shell.exec', 'permission required'],
       ['ai.edit', `${prov || provider} model`],
     ];
@@ -5990,7 +6156,7 @@ function renderCodeContext(){
 }
 
 async function chooseCodeWorkspace(){
-  const r=await H.pcChooseFolder?.().catch(e=>({ok:false,err:e.message}));
+  const r=await H.wsChooseFolder?.().catch(e=>({ok:false,err:e.message}));
   if(!r?.ok) { codeSetStatus(r?.err || 'Folder selection cancelled.', true); return; }
   codeWorkspace=r.path; codeDir='';
   await refreshCodeWorkspace();
@@ -6003,14 +6169,17 @@ async function refreshCodeWorkspace(nextDir){
   const status=document.getElementById('code-workspace-status');
   const list=document.getElementById('arp-files-list');
   if(!codeWorkspace){
-    if(status) status.textContent='No workspace selected yet.';
-    if(list) list.innerHTML='<div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">Choose a folder to load files.</div>';
-    renderCodeContext();
-    return;
+    const saved = await H.wsGetWorkspace?.().catch(()=>({ok:false,path:''}));
+    if(saved?.ok) codeWorkspace = saved.path;
+    if(!codeWorkspace){
+      if(status) status.textContent='No workspace selected yet.';
+      if(list) list.innerHTML='<div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">Choose a folder to load files.</div>';
+      renderCodeContext();
+      return;
+    }
   }
-  const abs=codeJoin(codeWorkspace, codeDir);
-  const r=await H.pcListDir(abs).catch(e=>({ok:false,err:e.message}));
-  if(status) status.textContent = r.ok ? abs : (r.err || 'Could not read workspace.');
+  const r=await H.wsList(codeDir).catch(e=>({ok:false,err:e.message}));
+  if(status) status.textContent = r.ok ? codeJoin(codeWorkspace, codeDir) : (r.err || 'Could not read workspace.');
   if(!r.ok){ if(list) list.innerHTML='<div class="code-status">Could not read this folder.</div>'; return; }
   const entries=(r.entries||[]).filter(e=>!['.git','node_modules','dist','build'].includes(e.name)).sort((a,b)=>(b.isDir-a.isDir)||a.name.localeCompare(b.name)).slice(0,80);
   const up = codeDir ? `<div class="arp-file" onclick="refreshCodeWorkspace('${codeDir.split('/').slice(0,-1).join('/')}')"><span>../</span><span>folder</span></div>` : '';
@@ -6022,29 +6191,45 @@ async function refreshCodeWorkspace(nextDir){
   renderCodeContext();
 }
 
+async function searchCodeWorkspace(){
+  if(!codeWorkspace){ codeSetStatus('Choose a workspace first.', true); return; }
+  const query=(document.getElementById('code-file-search')?.value||'').trim();
+  if(!query){ await refreshCodeWorkspace(codeDir); return; }
+  const list=document.getElementById('arp-files-list');
+  const r=await H.wsSearch(query, codeDir).catch(e=>({ok:false,err:e.message,results:[]}));
+  if(!r.ok){ codeSetStatus(r.err || 'Search failed.', true); return; }
+  const rows=r.results||[];
+  if(list) list.innerHTML = rows.length ? rows.map(item=>{
+    const action=item.isDir ? `refreshCodeWorkspace('${item.rel.replace(/'/g,"\\'")}')` : `openCodeFile('${item.rel.replace(/'/g,"\\'")}')`;
+    return `<div class="arp-file" onclick="${action}"><span>${esc(item.rel)}</span><span>${esc(item.match || (item.isDir?'dir':'file'))}</span></div>`;
+  }).join('') : '<div class="code-status">No matches.</div>';
+  codeSetStatus(`Search found ${rows.length} result(s).`);
+}
+
 async function openCodeFile(rel){
   if(!codeWorkspace) return;
   const abs=codeJoin(codeWorkspace, rel);
-  const r=await H.pcReadFile(abs).catch(e=>({ok:false,err:e.message}));
+  const r=await H.wsRead(rel).catch(e=>({ok:false,err:e.message}));
   if(!r.ok){ codeSetStatus(r.err || 'Could not open file.', true); return; }
   codeCurrentFile=rel;
   document.getElementById('code-file-path').value=abs;
-  document.getElementById('code-editor').value=r.content||'';
+  await initCodeEditor();
+  codeSetValue(r.content||'', inferCodeLang(rel));
   codeSetStatus(`Opened ${rel}`);
   await refreshCodeWorkspace(codeDir);
 }
 
 async function saveCodeFile(){
   if(!codeWorkspace || !codeCurrentFile){ codeSetStatus('Open a file first.', true); return; }
-  const abs=codeJoin(codeWorkspace, codeCurrentFile);
-  opLog(`permission write ${abs}`, 'run');
-  const r=await safeWriteFile(abs, document.getElementById('code-editor').value);
+  const before=await H.wsRead(codeCurrentFile).catch(()=>({ok:false,content:''}));
+  opLog(`permission write ${codeCurrentFile}`, 'run');
+  const r=await safeWriteWorkspaceFile(codeCurrentFile, codeGetValue(), before?.content || '');
   codeSetStatus(r?.ok ? `Saved ${codeCurrentFile}` : (r?.err || 'Save denied or failed.'), !r?.ok);
 }
 
 async function runCodeSelection(){
-  const editor=document.getElementById('code-editor');
-  const code=editor.value.slice(editor.selectionStart, editor.selectionEnd) || editor.value;
+  const snap=codeSelectionSnapshot();
+  const code=snap.selected || snap.full;
   if(!code.trim()){ codeSetStatus('Nothing to run.', true); return; }
   const run=opStartRun('code', codeCurrentFile || inferCodeLang(codeCurrentFile));
   const r=await safeExecCode(code, inferCodeLang(codeCurrentFile));
@@ -6053,19 +6238,64 @@ async function runCodeSelection(){
 }
 
 async function askCodeAi(kind){
-  const editor=document.getElementById('code-editor');
-  const selection=editor.value.slice(editor.selectionStart, editor.selectionEnd) || editor.value;
+  const snap=codeSelectionSnapshot();
+  const selection=snap.selected || snap.full;
   if(!selection.trim()){ codeSetStatus('Open a file or select code first.', true); return; }
   const prompt = kind === 'refactor'
     ? `Refactor this code. Return a clear patch-style explanation and improved code.\nFile: ${codeCurrentFile}\n\n${selection}`
+    : kind === 'fix'
+      ? `Fix bugs in this code. Return a short explanation and one complete corrected code block.\nFile: ${codeCurrentFile}\n\n${selection}`
     : `Explain this code clearly and point out risks or bugs.\nFile: ${codeCurrentFile}\n\n${selection}`;
   const run=opStartRun('ai.code', `${kind} ${codeCurrentFile || ''}`);
   const res=await H.ai([{role:'user',content:prompt}], prov, null, aiOptsForProvider(prov)).catch(e=>({error:e.message}));
   if(res.error){ opLog(res.error,'error'); codeSetStatus(res.error,true); opEndRun(run,'error'); return; }
   addMsg('bot', res.reply, {model:res.model||prov});
   trackTokens(res.reply,'assistant',prov,res.usage);
+  if(kind !== 'explain'){
+    const replacement = extractCodeFence(res.reply);
+    if(replacement){
+      codeLastAiPatch = { replacement, snapshot:snap, file:codeCurrentFile, kind };
+      codeSetStatus(`AI ${kind} ready. Use Apply AI to edit the buffer, then Save to write.`);
+    } else {
+      codeSetStatus(`AI ${kind} finished, but no code block was found to apply.`, true);
+    }
+  }
   opLog(`ai.code ${kind} complete`, 'tool');
   opEndRun(run,'done');
+}
+
+async function applyLastCodeAi(){
+  if(!codeLastAiPatch?.replacement){ codeSetStatus('No AI patch ready.', true); return; }
+  const before = codeGetValue();
+  const after = codeLastAiPatch.snapshot?.hasSelection
+    ? before
+    : codeLastAiPatch.replacement;
+  const detail = codeLastAiPatch.snapshot?.hasSelection
+    ? `Apply AI ${codeLastAiPatch.kind} to the selected range in ${codeLastAiPatch.file || 'current buffer'}.\n\n${codeLastAiPatch.replacement.slice(0,2000)}`
+    : buildDiffPreview(before, after);
+  const ok = await _gateDestructive('apply_ai_patch', {
+    eyebrow: 'Apply AI edit',
+    title: codeLastAiPatch.file || 'current buffer',
+    description: 'This updates the editor buffer only. Use Save to write the file.',
+    detail
+  });
+  if(!ok){ codeSetStatus('AI patch not applied.', true); return; }
+  codeReplaceSnapshot(codeLastAiPatch.snapshot, codeLastAiPatch.replacement);
+  codeSetStatus('AI patch applied to editor buffer. Review, then Save.');
+}
+
+async function runWorkspaceCommand(){
+  const input=document.getElementById('code-terminal-command');
+  const out=document.getElementById('code-terminal-output');
+  const cmd=(input?.value||'').trim();
+  if(!cmd){ codeSetStatus('Enter a command first.', true); return; }
+  if(!codeWorkspace){ codeSetStatus('Choose a workspace first.', true); return; }
+  const run=opStartRun('workspace.shell', cmd);
+  if(out) out.textContent += `\n$ ${cmd}\n`;
+  const r=await safeWorkspaceShell(cmd);
+  if(out) out.textContent += (r?.ok ? (r.out || '(no output)') : (r?.err || 'command failed')) + '\n';
+  opLog(r?.ok ? `workspace command ok: ${cmd}` : `workspace command failed: ${cmd}`, r?.ok?'tool':'error');
+  opEndRun(run, r?.ok?'done':'error');
 }
 
 function updateOperatorStepPanel(step){
@@ -6300,6 +6530,7 @@ function toggleCodeMode() {
   if (codeModeActive) {
     document.body.classList.add('code-mode-active');
     document.getElementById('code-mode-btn').classList.add('proc');
+    initCodeEditor().catch(()=>{});
     refreshCodeWorkspace().catch(()=>{});
     renderCodeContext();
   } else {
