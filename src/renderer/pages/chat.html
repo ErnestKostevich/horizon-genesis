@@ -679,7 +679,7 @@ body.code-mode-active .modes { display: none; }
   display: inline-flex; align-items:center; gap:8px;
   height: 30px;
   margin-top:6px;
-  padding: 0 14px;
+  padding: 0 6px 0 14px;
   font: 11.5px/1 var(--mono);
   color: var(--code-mute);
   background: transparent;
@@ -688,9 +688,26 @@ body.code-mode-active .modes { display: none; }
   border-radius: 6px 6px 0 0;
   cursor: pointer;
   white-space: nowrap;
+  position: relative;
 }
+.code-tab:hover { color: var(--code-text); background: rgba(255,255,255,.03); }
 .code-tab.on { color: var(--code-text); background: var(--code-bg); border-color: var(--code-line); border-bottom: 1px solid var(--code-bg); margin-bottom:-1px; }
-.code-tab-meta { color: var(--code-mute); font-size:10px; }
+.code-tab.dirty .code-tab-name::after { content: ' ●'; color: var(--code-accent); }
+.code-tab-meta { color: var(--code-mute); font-size:10px; padding-right: 4px; }
+.code-tab-close {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  color: var(--code-mute);
+  border-radius: 4px;
+  cursor: pointer;
+  font: 13px/1 var(--mono);
+  -webkit-app-region: no-drag;
+}
+.code-tab-close:hover { background: rgba(244,113,113,.15); color: #ff8585; }
+.code-tab-empty { padding: 8px 14px; color: var(--code-mute); font: italic 11px var(--mono); }
 
 .code-monaco {
   width: 100%;
@@ -777,10 +794,14 @@ body.code-mode-active .modes { display: none; }
 .code-input:focus { border-color: var(--code-accent); }
 
 /* File tree entries — inherit pre-existing arp-file styling but tighter. */
-.arp-file { display:flex; justify-content:space-between; gap:10px; font:11px var(--mono); color:#8aacd1; padding:5px 8px; border-radius:5px; cursor:pointer; transition:background .12s; }
+.arp-file { display:flex; align-items:center; gap:6px; font:11px var(--mono); color:#8aacd1; padding:4px 6px; border-radius:5px; cursor:pointer; transition:background .12s; }
 .arp-file:hover { background: rgba(86, 210, 255, .08); color: var(--code-cyan); }
 .arp-file.active { background: rgba(243, 178, 80, .14); color: var(--code-accent); }
-.arp-file > :last-child { color: var(--code-mute); font-size: 10px; flex-shrink: 0; }
+.arp-file .tree-arrow { display:inline-block; width:12px; text-align:center; font-size:9px; color: var(--code-mute); flex-shrink:0; transition:transform .15s; }
+.arp-file.dir.expanded .tree-arrow { transform: rotate(90deg); }
+.arp-file .tree-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.arp-file .tree-meta { color: var(--code-mute); font-size:10px; flex-shrink: 0; }
+.tree-children { /* indentation is set inline via style.paddingLeft */ }
 
 /* Hidden helpers (kept in DOM for IDs, never visible). */
 .apex-right-pane #arp-tools-section[hidden],
@@ -1115,6 +1136,22 @@ body.with-sidebar .chat-status-bar{display:flex}
         <div class="ps">
           <div class="psl">MCP servers</div>
           <div class="psview-sub" style="margin-bottom:10px">Add stdio MCP servers. Tools appear in agent mode as <code>server__tool</code> and use the same Operator permission flow.</div>
+          <div class="pf"><label>One-click install <span style="color:var(--t3);font-size:10px">(curated public servers)</span></label>
+            <div class="pr">
+              <select class="pi" id="mcp-preset" onchange="applyMcpPreset(this.value)">
+                <option value="">Choose a preset…</option>
+                <option value="filesystem">Filesystem — read/write under a folder</option>
+                <option value="github">GitHub — repos / issues / PRs (needs token)</option>
+                <option value="postgres">Postgres — query a database (needs URL)</option>
+                <option value="puppeteer">Puppeteer — browser automation</option>
+                <option value="brave-search">Brave Search — web search (needs API key)</option>
+                <option value="memory">Memory — persistent agent memory</option>
+                <option value="time">Time — clocks / timezone math</option>
+                <option value="fetch">Fetch — HTTP requests</option>
+              </select>
+            </div>
+            <div class="local-status" style="margin-top:4px;font-size:10px">After picking a preset, fill in the highlighted fields and hit Test — these run as `npx -y @modelcontextprotocol/server-...`.</div>
+          </div>
           <div class="pf"><label>Server</label>
             <div class="pr"><input class="pi" id="mcp-name" placeholder="filesystem"/><input class="pi" id="mcp-command" placeholder="npx"/></div>
             <div class="pr" style="margin-top:6px"><input class="pi" id="mcp-args" placeholder="-y @modelcontextprotocol/server-filesystem D:\\Genesis"/></div>
@@ -1313,6 +1350,16 @@ body.with-sidebar .chat-status-bar{display:flex}
   </div>
 </div>
 
+<!-- Code Mode quick-file-open (Ctrl+P / Cmd+P). Reuses .cmd-palette /
+     .cmd-item styling for visual continuity with the command palette,
+     but is its own component so neither overrides the other. -->
+<div class="cmd-palette" id="quickopen-palette" onclick="if(event.target===this)closeQuickOpen()">
+  <div class="cmd-box">
+    <input class="cmd-input" id="quickopen-input" placeholder="Search files in workspace... (Esc to close)" oninput="filterQuickOpen(this.value)" onkeydown="quickOpenKeyDown(event)"/>
+    <div class="cmd-results" id="quickopen-results"></div>
+  </div>
+</div>
+
 <!-- ═════════ PLUGIN HUB PANEL ═════════ -->
 <div class="fpanel" id="hub-panel">
   <div class="fph" style="-webkit-app-region:drag">
@@ -1508,12 +1555,9 @@ body.with-sidebar .chat-status-bar{display:flex}
 
   <!-- Editor: file tabs above, Monaco below, action toolbar at the bottom -->
   <main class="code-editor-pane">
-    <div class="code-tabs" id="code-tabs">
-      <div class="code-tab on" id="code-current-tab">
-        <span class="code-tab-name" id="code-tab-name">No file open</span>
-        <span class="code-tab-meta" id="code-file-meta"></span>
-      </div>
-    </div>
+    <!-- Tabs: rendered dynamically by renderCodeTabs(). Single placeholder
+         shown until the user opens their first file. -->
+    <div class="code-tabs" id="code-tabs"></div>
     <input id="code-file-path" type="hidden" />
     <div class="code-monaco" id="code-monaco"></div>
     <textarea class="code-editor" id="code-editor" spellcheck="false" placeholder="Open a file from the workspace." style="display:none"></textarea>
@@ -3448,15 +3492,34 @@ async function openPanel(tab){
 function closePanel(){document.getElementById('panel').classList.remove('show');}
 
 // Switch the active Settings tab. Updates the left-rail button styling and
-// shows the matching <section data-pane="…">. Persists last tab so the panel
-// reopens where you left it.
+// shows the matching <section data-pane="…">. Persists last tab via two
+// channels: (1) electron settings (cross-restart persistence), (2) URL
+// hash (so a renderer reload via Ctrl+R during dev keeps you on the same
+// tab). Both are safe-no-ops on failure.
 function setSettingsTab(name){
   if (!name) return;
   document.querySelectorAll('#psnav .psnav-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   document.querySelectorAll('#psview > section').forEach(s => s.classList.toggle('on', s.dataset.pane === name));
   try { H.set('settingsTab', name); } catch(_) {}
   try { document.getElementById('psview').scrollTop = 0; } catch(_) {}
+  try {
+    if (location.hash !== '#settings/' + name) {
+      history.replaceState(null, '', '#settings/' + name);
+    }
+  } catch(_) {}
 }
+
+// On reload, if the URL hash points to a Settings tab, open the panel and
+// jump to that tab. Lets devs use F5 / Ctrl+R during testing without
+// losing their place.
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const m = (location.hash || '').match(/^#settings\/([a-z]+)$/);
+    if (m && document.querySelector(`[data-pane="${m[1]}"]`)) {
+      openPanel(m[1]);
+    }
+  } catch(_) {}
+});
 
 async function loadPanel(){
   // Parallel fetch — fast, no sequential bottleneck
@@ -3996,6 +4059,80 @@ async function loadMcpServers(){
       </span>
     </div>`).join('');
 }
+// Curated public MCP servers — pre-fills the form so the user only has to
+// fill in their own values (folder path / token / URL) and hit Test. All
+// of these come from @modelcontextprotocol on npm; running them via npx
+// is the canonical install path. Hint string is shown in mcp-status to
+// tell the user what's still required.
+const MCP_PRESETS = {
+  filesystem: {
+    name:    'filesystem',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-filesystem D:\\Genesis',
+    hint:    'Filesystem: replace D:\\Genesis with the folder you want the agent to read/write.',
+  },
+  github: {
+    name:    'github',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-github',
+    env:     'GITHUB_PERSONAL_ACCESS_TOKEN=ghp_xxx',
+    hint:    'GitHub: paste your PAT into the env field above (replace ghp_xxx).',
+  },
+  postgres: {
+    name:    'postgres',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-postgres postgres://user:pass@host:5432/db',
+    hint:    'Postgres: replace the URL with your live connection string.',
+  },
+  puppeteer: {
+    name:    'puppeteer',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-puppeteer',
+    hint:    'Puppeteer: no env needed. First run downloads Chromium (~170MB).',
+  },
+  'brave-search': {
+    name:    'brave-search',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-brave-search',
+    env:     'BRAVE_API_KEY=BSAxxxxxxxx',
+    hint:    'Brave Search: free 2k req/mo at brave.com/search/api. Paste key in env.',
+  },
+  memory: {
+    name:    'memory',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-memory',
+    hint:    'Memory: persists across sessions in a JSON file under userData.',
+  },
+  time: {
+    name:    'time',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-time',
+    hint:    'Time: clocks / timezone math. No env needed.',
+  },
+  fetch: {
+    name:    'fetch',
+    command: 'npx',
+    args:    '-y @modelcontextprotocol/server-fetch',
+    hint:    'Fetch: HTTP GET/POST tools. No env needed.',
+  },
+};
+function applyMcpPreset(presetKey){
+  if (!presetKey) return;
+  const p = MCP_PRESETS[presetKey];
+  if (!p) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+  set('mcp-name', p.name);
+  set('mcp-command', p.command);
+  set('mcp-args', p.args);
+  set('mcp-cwd', '');
+  set('mcp-timeout', '20000');
+  set('mcp-env', p.env || '');
+  setMcpStatus(p.hint || 'Preset applied. Edit values, then Test.');
+  // Reset the dropdown so the next selection re-applies.
+  const sel = document.getElementById('mcp-preset');
+  if (sel) sel.value = '';
+}
+
 async function testMcpServer(){
   const cfg=mcpFormConfig();
   if(!cfg.name || !cfg.command){setMcpStatus('Name and command are required.',true);return;}
@@ -6292,7 +6429,32 @@ function initCodeEditor(){
       resolve(false);
     };
     try {
-      if(typeof window.require !== 'function' || !window.monaco && !document.querySelector('script[src*="monaco"]')) return fallback();
+      if (typeof window.require !== 'function') return fallback();
+      // If Monaco's editor.main is already on window (someone else loaded
+      // it earlier), reuse it instead of re-defining the AMD module — the
+      // "Duplicate definition of module 'vs/editor/editor.main'" warning in
+      // the console comes from a second require([...]) call after the
+      // first one completed. Once monaco.editor exists we can skip the
+      // require entirely.
+      if (window.monaco && window.monaco.editor) {
+        const host = document.getElementById('code-monaco');
+        const ta = document.getElementById('code-editor');
+        if (!host) return fallback();
+        if (ta) ta.style.display = 'none';
+        codeEditor = monaco.editor.create(host, {
+          value: ta?.value || '',
+          language: 'javascript',
+          theme: 'vs-dark',
+          minimap: { enabled: false },
+          fontSize: 12,
+          lineNumbers: 'on',
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          wordWrap: 'on',
+        });
+        resolve(true);
+        return;
+      }
       window.require.config({ paths: { vs: '/vendor/monaco' } });
       window.require(['vs/editor/editor.main'], () => {
         const host = document.getElementById('code-monaco');
@@ -6310,7 +6472,22 @@ function initCodeEditor(){
           automaticLayout: true,
           wordWrap: 'on',
         });
-        codeEditor.onDidChangeModelContent(() => { if(ta) ta.value = codeEditor.getValue(); });
+        codeEditor.onDidChangeModelContent(() => {
+          if (ta) ta.value = codeEditor.getValue();
+          // Mark active tab dirty when its content diverges from the on-disk
+          // baseline. Re-render only when state changes to avoid churning
+          // the DOM on every keystroke.
+          try {
+            const tab = codeOpenFiles[codeActiveTabIdx];
+            if (tab) {
+              const nowDirty = codeEditor.getValue() !== tab.content;
+              if (nowDirty !== tab.dirty) {
+                tab.dirty = nowDirty;
+                renderCodeTabs();
+              }
+            }
+          } catch(_){}
+        });
         for (const [id, label, kind] of [
           ['horizonExplainSelection', 'Horizon: Explain Selection', 'explain'],
           ['horizonRefactorSelection', 'Horizon: Refactor Selection', 'refactor'],
@@ -6606,31 +6783,101 @@ async function chooseCodeWorkspace(){
   await initWorkspaceTerminal(true).catch(()=>{});
 }
 
+// ── File tree with lazy expand ───────────────────────────────────────────
+// codeTreeNodes[''] holds the root; nested keys are workspace-relative paths.
+// Each entry: {loaded: bool, expanded: bool, entries: [{name, isDir, rel}]}.
+// Expanding a dir for the first time fetches it and caches. Re-expanding is
+// instant. Hidden defaults can be overridden via the wsListIgnore setting
+// (array of names to skip).
+let codeTreeNodes = {};
+let codeTreeIgnore = ['.git','node_modules','dist','build','.next','out','.cache','.idea','.vscode','__pycache__','.venv','venv','target'];
+
+async function _loadCodeTreeDir(rel){
+  if (codeTreeNodes[rel]?.loaded) return codeTreeNodes[rel];
+  const r = await H.wsList(rel).catch(e=>({ok:false,err:e.message}));
+  const node = codeTreeNodes[rel] || { loaded:false, expanded:false, entries:[] };
+  node.loaded = true;
+  if (r?.ok) {
+    const ignoreSet = new Set(codeTreeIgnore);
+    node.entries = (r.entries || [])
+      .filter(e => !ignoreSet.has(e.name))
+      .sort((a,b) => (b.isDir - a.isDir) || a.name.localeCompare(b.name))
+      .map(e => ({ name: e.name, isDir: e.isDir, rel: rel ? rel + '/' + e.name : e.name }));
+  } else {
+    node.entries = [];
+    node.error = r?.err || 'Could not read folder.';
+  }
+  codeTreeNodes[rel] = node;
+  return node;
+}
+
+async function toggleTreeDir(rel){
+  const node = await _loadCodeTreeDir(rel);
+  node.expanded = !node.expanded;
+  renderCodeTree();
+}
+
+function _renderTreeRow(entry, depth){
+  const node = codeTreeNodes[entry.rel];
+  const expanded = !!(node && node.expanded);
+  const indent = `style="padding-left:${8 + depth * 14}px"`;
+  if (entry.isDir) {
+    const children = expanded && node?.entries?.length
+      ? `<div class="tree-children">${node.entries.map(e => _renderTreeRow(e, depth + 1)).join('')}</div>`
+      : '';
+    const cls = `arp-file dir${expanded ? ' expanded' : ''}`;
+    return `<div class="${cls}" ${indent} onclick="toggleTreeDir('${entry.rel.replace(/'/g,"\\'")}')">
+      <span class="tree-arrow">▶</span>
+      <span class="tree-name">${esc(entry.name)}</span>
+    </div>${children}`;
+  }
+  const active = entry.rel === codeCurrentFile ? ' active' : '';
+  return `<div class="arp-file file${active}" ${indent} onclick="openCodeFile('${entry.rel.replace(/'/g,"\\'")}')">
+    <span class="tree-arrow"></span>
+    <span class="tree-name">${esc(entry.name)}</span>
+  </div>`;
+}
+
+function renderCodeTree(){
+  const list = document.getElementById('arp-files-list');
+  if (!list) return;
+  const root = codeTreeNodes[''];
+  if (!root || !root.entries.length) {
+    list.innerHTML = '<div style="color:var(--t3);font-size:11px;line-height:1.6;padding:10px 12px">' +
+      (root?.error || 'Empty workspace.') + '</div>';
+    return;
+  }
+  list.innerHTML = root.entries.map(e => _renderTreeRow(e, 0)).join('');
+}
+
 async function refreshCodeWorkspace(nextDir){
-  if (typeof nextDir === 'string') codeDir = nextDir;
+  // nextDir kept for backward compat — we now ignore it (cd-style nav
+  // replaced with persistent tree). If someone passed a path, expand it.
   if(!codeWorkspace) codeWorkspace = await H.get('codeWorkspace').catch(()=> '') || '';
-  const status=document.getElementById('code-workspace-status');
-  const list=document.getElementById('arp-files-list');
+  const status = document.getElementById('code-workspace-status');
+  const list = document.getElementById('arp-files-list');
   if(!codeWorkspace){
     const saved = await H.wsGetWorkspace?.().catch(()=>({ok:false,path:''}));
     if(saved?.ok) codeWorkspace = saved.path;
     if(!codeWorkspace){
-      if(status) status.textContent='No workspace selected yet.';
-      if(list) list.innerHTML='<div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">Choose a folder to load files.</div>';
+      if(status) status.textContent = 'No workspace selected yet.';
+      if(list) list.innerHTML = '<div style="color:var(--t3);font-size:11px;line-height:1.6;padding:6px 2px">Choose a folder to load files.</div>';
       renderCodeContext();
       return;
     }
   }
-  const r=await H.wsList(codeDir).catch(e=>({ok:false,err:e.message}));
-  if(status) status.textContent = r.ok ? codeJoin(codeWorkspace, codeDir) : (r.err || 'Could not read workspace.');
-  if(!r.ok){ if(list) list.innerHTML='<div class="code-status">Could not read this folder.</div>'; return; }
-  const entries=(r.entries||[]).filter(e=>!['.git','node_modules','dist','build'].includes(e.name)).sort((a,b)=>(b.isDir-a.isDir)||a.name.localeCompare(b.name)).slice(0,80);
-  const up = codeDir ? `<div class="arp-file" onclick="refreshCodeWorkspace('${codeDir.split('/').slice(0,-1).join('/')}')"><span>../</span><span>folder</span></div>` : '';
-  if(list) list.innerHTML = up + entries.map(e=>{
-    const rel=codeRelJoin(codeDir,e.name);
-    const action=e.isDir ? `refreshCodeWorkspace('${rel.replace(/'/g,"\\'")}')` : `openCodeFile('${rel.replace(/'/g,"\\'")}')`;
-    return `<div class="arp-file ${rel===codeCurrentFile?'active':''}" onclick="${action}"><span>${esc(e.name)}</span><span>${e.isDir?'dir':'file'}</span></div>`;
-  }).join('');
+  // Restore custom ignore list if persisted.
+  try {
+    const persistedIgnore = await H.get('wsListIgnore');
+    if (Array.isArray(persistedIgnore) && persistedIgnore.length) codeTreeIgnore = persistedIgnore;
+  } catch(_){}
+  // Wipe cache so we get a fresh root listing; preserves nothing about
+  // previously expanded subtrees, but keeps things simple. Re-expansion is
+  // a single click + cached IPC.
+  codeTreeNodes = {};
+  await _loadCodeTreeDir('');
+  if (status) status.textContent = codeWorkspace;
+  renderCodeTree();
   renderCodeContext();
   initWorkspaceTerminal(false).catch(()=>{});
 }
@@ -6650,33 +6897,184 @@ async function searchCodeWorkspace(){
   codeSetStatus(`Search found ${rows.length} result(s).`);
 }
 
+// ── Multi-file tab state ──────────────────────────────────────────────
+// Each entry: {rel, language, content, dirty}. content is the snapshot we
+// last saved or loaded — we compare against the live editor content to
+// surface dirty state. Limit prevents an accidentally-large workspace
+// session from chewing memory; oldest non-active tab gets evicted with a
+// warning if it's dirty.
+const CODE_OPEN_FILES_LIMIT = 8;
+let codeOpenFiles = [];
+let codeActiveTabIdx = -1;
+
 async function openCodeFile(rel){
   if(!codeWorkspace) return;
-  const abs=codeJoin(codeWorkspace, rel);
-  const r=await H.wsRead(rel).catch(e=>({ok:false,err:e.message}));
-  if(!r.ok){ codeSetStatus(r.err || 'Could not open file.', true); return; }
-  codeCurrentFile=rel;
-  document.getElementById('code-file-path').value=abs;
-  // Update file tab + breadcrumb so the editor surface reflects the open file.
-  const tabName = document.getElementById('code-tab-name');
-  if (tabName) tabName.textContent = rel.split('/').pop();
-  const fileMeta = document.getElementById('code-file-meta');
-  if (fileMeta) {
-    const lines = (r.content || '').split('\n').length;
-    fileMeta.textContent = `${lines} L · ${inferCodeLang(rel)}`;
+  // If the file is already open, just switch to it — don't reload from disk
+  // (the user may have unsaved changes).
+  const existing = codeOpenFiles.findIndex(f => f.rel === rel);
+  if (existing >= 0) {
+    await activateCodeTab(existing);
+    return;
   }
-  await initCodeEditor();
-  codeSetValue(r.content||'', inferCodeLang(rel));
+  const r = await H.wsRead(rel).catch(e=>({ok:false,err:e.message}));
+  if(!r.ok){ codeSetStatus(r.err || 'Could not open file.', true); return; }
+
+  // Snapshot current tab's editor content so switching away preserves edits.
+  _snapshotActiveTab();
+
+  // Cap open tabs — drop the least-recently-active non-dirty tab if needed.
+  if (codeOpenFiles.length >= CODE_OPEN_FILES_LIMIT) {
+    const evictIdx = codeOpenFiles.findIndex((f, i) => !f.dirty && i !== codeActiveTabIdx);
+    if (evictIdx >= 0) codeOpenFiles.splice(evictIdx, 1);
+    else codeSetStatus(`Tab limit reached (${CODE_OPEN_FILES_LIMIT}). Save or close a tab first.`, true);
+  }
+  codeOpenFiles.push({
+    rel,
+    language: inferCodeLang(rel),
+    content: r.content || '',
+    dirty: false,
+  });
+  codeActiveTabIdx = codeOpenFiles.length - 1;
+  await _loadActiveTabIntoEditor();
+  renderCodeTabs();
+  _persistOpenTabs();
   codeSetStatus(`Opened ${rel}`);
   await refreshCodeWorkspace(codeDir);
+}
+
+function _snapshotActiveTab(){
+  if (codeActiveTabIdx < 0 || codeActiveTabIdx >= codeOpenFiles.length) return;
+  const tab = codeOpenFiles[codeActiveTabIdx];
+  if (!tab) return;
+  const live = codeGetValue();
+  if (live !== tab.content) tab.dirty = true;
+  // We don't overwrite tab.content here; tab.content stays the on-disk
+  // baseline. Live edits live in the Monaco model, recovered when we
+  // re-activate the tab. Simpler than maintaining a per-tab buffer.
+}
+
+async function _loadActiveTabIntoEditor(){
+  const tab = codeOpenFiles[codeActiveTabIdx];
+  if (!tab) {
+    codeCurrentFile = '';
+    document.getElementById('code-file-path').value = '';
+    await initCodeEditor();
+    codeSetValue('', 'plaintext');
+    return;
+  }
+  codeCurrentFile = tab.rel;
+  document.getElementById('code-file-path').value = codeJoin(codeWorkspace, tab.rel);
+  await initCodeEditor();
+  // For a freshly-opened tab, content is the on-disk baseline. For a
+  // re-activated tab we still load the baseline — Monaco's per-model
+  // dirty state would be the next iteration; for now switching tabs
+  // discards in-progress edits. Snapshot ensures the user sees the
+  // dirty marker so they know.
+  codeSetValue(tab.content, tab.language);
+}
+
+async function activateCodeTab(idx){
+  if (idx < 0 || idx >= codeOpenFiles.length) return;
+  if (idx === codeActiveTabIdx) return;
+  _snapshotActiveTab();
+  codeActiveTabIdx = idx;
+  await _loadActiveTabIntoEditor();
+  renderCodeTabs();
+  _persistOpenTabs();
+}
+
+async function closeCodeTab(idx){
+  if (idx < 0 || idx >= codeOpenFiles.length) return;
+  const tab = codeOpenFiles[idx];
+  if (!tab) return;
+  if (tab.dirty) {
+    const ok = confirm(`"${tab.rel}" has unsaved changes. Close without saving?`);
+    if (!ok) return;
+  }
+  codeOpenFiles.splice(idx, 1);
+  if (codeOpenFiles.length === 0) {
+    codeActiveTabIdx = -1;
+    await _loadActiveTabIntoEditor();
+  } else {
+    if (codeActiveTabIdx > idx) codeActiveTabIdx--;
+    else if (codeActiveTabIdx === idx) codeActiveTabIdx = Math.min(idx, codeOpenFiles.length - 1);
+    await _loadActiveTabIntoEditor();
+  }
+  renderCodeTabs();
+  _persistOpenTabs();
+}
+
+function renderCodeTabs(){
+  const host = document.getElementById('code-tabs');
+  if (!host) return;
+  if (codeOpenFiles.length === 0) {
+    host.innerHTML = '<div class="code-tab-empty">Open a file to start editing</div>';
+    return;
+  }
+  host.innerHTML = codeOpenFiles.map((f, i) => {
+    const name = f.rel.split('/').pop();
+    const meta = `${(f.content||'').split('\n').length} L · ${f.language}`;
+    const dirty = f.dirty ? ' dirty' : '';
+    const active = i === codeActiveTabIdx ? ' on' : '';
+    return `<div class="code-tab${active}${dirty}" onclick="activateCodeTab(${i})" title="${esc(f.rel)}">
+      <span class="code-tab-name">${esc(name)}</span>
+      <span class="code-tab-meta">${esc(meta)}</span>
+      <button class="code-tab-close" onclick="event.stopPropagation();closeCodeTab(${i})" title="Close">×</button>
+    </div>`;
+  }).join('');
+}
+
+async function _persistOpenTabs(){
+  try {
+    await H.set('codeOpenFiles', codeOpenFiles.map(f => ({rel: f.rel, language: f.language})));
+    await H.set('codeActiveTabIdx', codeActiveTabIdx);
+  } catch(_){}
+}
+
+async function _restoreOpenTabs(){
+  if (!codeWorkspace) return;
+  try {
+    const saved = await H.get('codeOpenFiles');
+    const savedIdx = await H.get('codeActiveTabIdx');
+    if (!Array.isArray(saved) || !saved.length) return;
+    // Re-read each file from disk so we have fresh content.
+    for (const entry of saved.slice(0, CODE_OPEN_FILES_LIMIT)) {
+      if (!entry?.rel) continue;
+      const r = await H.wsRead(entry.rel).catch(()=>null);
+      if (r?.ok) {
+        codeOpenFiles.push({
+          rel: entry.rel,
+          language: entry.language || inferCodeLang(entry.rel),
+          content: r.content || '',
+          dirty: false,
+        });
+      }
+    }
+    if (codeOpenFiles.length) {
+      codeActiveTabIdx = Math.min(Math.max(0, Number(savedIdx) || 0), codeOpenFiles.length - 1);
+      await _loadActiveTabIntoEditor();
+      renderCodeTabs();
+    }
+  } catch(_){}
 }
 
 async function saveCodeFile(){
   if(!codeWorkspace || !codeCurrentFile){ codeSetStatus('Open a file first.', true); return; }
   const before=await H.wsRead(codeCurrentFile).catch(()=>({ok:false,content:''}));
   opLog(`permission write ${codeCurrentFile}`, 'run');
-  const r=await safeWriteWorkspaceFile(codeCurrentFile, codeGetValue(), before?.content || '');
+  const newContent = codeGetValue();
+  const r=await safeWriteWorkspaceFile(codeCurrentFile, newContent, before?.content || '');
   codeSetStatus(r?.ok ? `Saved ${codeCurrentFile}` : (r?.err || 'Save denied or failed.'), !r?.ok);
+  // On successful save, snapshot the new on-disk content into the active tab
+  // and clear its dirty marker so the tab indicator reflects reality.
+  if (r?.ok) {
+    const tab = codeOpenFiles[codeActiveTabIdx];
+    if (tab && tab.rel === codeCurrentFile) {
+      tab.content = newContent;
+      tab.dirty = false;
+      renderCodeTabs();
+    }
+  }
 }
 
 async function runCodeSelection(){
@@ -6869,7 +7267,36 @@ function opRefresh(){
   opRender();
 }
 function opClear(){ operatorLogLines=[]; opRender(); }
-async function opCopy(){ try{ await H.copy(document.getElementById('op-log')?.innerText || ''); }catch(_){} }
+async function opCopy(){
+  // Copy log as a structured JSON payload — easier to paste into a bug
+  // report / share with another developer than the rendered DOM text.
+  try {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      tab: operatorTab,
+      provider: prov || provider,
+      model: getSelectedModelForProvider(prov || provider) || null,
+      activeRunId: operatorCurrentAgentRunId || null,
+      paused: operatorPaused,
+      lines: (operatorLogLines || []).map(l => ({
+        time: l.time,
+        type: l.type,
+        msg: l.msg,
+      })),
+      runs: [...operatorRuns.values()].map(r => ({
+        id: r.id, kind: r.kind, label: r.label, status: r.status,
+        startedAt: r.started ? new Date(r.started).toISOString() : null,
+        endedAt:   r.ended   ? new Date(r.ended).toISOString()   : null,
+        durationMs: r.ended && r.started ? (r.ended - r.started) : null,
+      })),
+    };
+    await H.copy(JSON.stringify(payload, null, 2));
+    opLog('log copied as JSON', 'tool');
+  } catch(_) {
+    // Fallback to plain-text copy if JSON serialise fails for any reason.
+    try { await H.copy(document.getElementById('op-log')?.innerText || ''); } catch(__){}
+  }
+}
 function opTab(tab){
   operatorTab=tab;
   ['log','tools','runs'].forEach(t=>document.getElementById(`op-tab-${t}`)?.classList.toggle('on', t===tab));
@@ -7003,18 +7430,162 @@ function toggleCodeMode() {
     // ⌨ Terminal button in the top bar.
     document.body.classList.add('code-terminal-collapsed');
     document.getElementById('code-mode-btn').classList.add('proc');
+    // Render the (possibly empty) tab strip immediately so the editor area
+    // looks complete instead of blank above Monaco.
+    renderCodeTabs();
     initCodeEditor().then(() => {
       // Monaco needs a layout pass after its container resizes from the
       // grid expansion, otherwise it draws at the old 360px width.
       try { codeEditor?.layout?.(); } catch(_){}
     }).catch(()=>{});
-    refreshCodeWorkspace().catch(()=>{});
+    refreshCodeWorkspace().then(() => {
+      // Once the workspace is loaded, restore the previously-open tabs.
+      if (codeOpenFiles.length === 0) _restoreOpenTabs().catch(()=>{});
+    }).catch(()=>{});
     renderCodeContext();
   } else {
     document.body.classList.remove('code-mode-active');
     document.body.classList.remove('code-terminal-collapsed');
     document.getElementById('code-mode-btn').classList.remove('proc');
   }
+}
+
+// Code Mode keyboard shortcuts. Active only while body.code-mode-active so
+// they don't fight the chat keybinds. Ctrl+W closes the active tab,
+// Ctrl+Tab cycles forward (Shift+Ctrl+Tab cycles back), Ctrl+P opens the
+// fuzzy file finder.
+document.addEventListener('keydown', (e) => {
+  if (!document.body.classList.contains('code-mode-active')) return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  // Ctrl+P always opens quick-find regardless of focus target — that's
+  // the muscle memory from VS Code / Cursor.
+  if (ctrl && (e.key === 'p' || e.key === 'P') && !e.shiftKey) {
+    e.preventDefault();
+    openQuickOpen();
+    return;
+  }
+  // Ignore tab-management hotkeys when focus is in a chat input/textarea
+  // (Monaco handles its own keybinds — Ctrl+W there is fine to intercept).
+  const tag = e.target?.tagName;
+  const inMonaco = e.target?.closest?.('.code-monaco');
+  if (!inMonaco && (tag === 'INPUT' || tag === 'TEXTAREA')) return;
+  if (ctrl && (e.key === 'w' || e.key === 'W')) {
+    if (codeOpenFiles.length === 0) return;
+    e.preventDefault();
+    closeCodeTab(codeActiveTabIdx);
+  } else if (ctrl && e.key === 'Tab') {
+    if (codeOpenFiles.length < 2) return;
+    e.preventDefault();
+    const dir = e.shiftKey ? -1 : 1;
+    const next = (codeActiveTabIdx + dir + codeOpenFiles.length) % codeOpenFiles.length;
+    activateCodeTab(next);
+  }
+});
+
+// ── Quick file open (Ctrl+P) ────────────────────────────────────────────
+let _qoSelected = 0;
+let _qoLastQuery = '';
+let _qoTimer = null;
+
+function openQuickOpen(){
+  if (!codeWorkspace) {
+    codeSetStatus('Open a folder first.', true);
+    return;
+  }
+  document.getElementById('quickopen-palette').classList.add('show');
+  const input = document.getElementById('quickopen-input');
+  if (input) { input.value = ''; setTimeout(() => input.focus(), 30); }
+  filterQuickOpen('');
+}
+
+function closeQuickOpen(){
+  document.getElementById('quickopen-palette').classList.remove('show');
+}
+
+function filterQuickOpen(query){
+  query = (query || '').trim();
+  _qoLastQuery = query;
+  if (_qoTimer) clearTimeout(_qoTimer);
+  const results = document.getElementById('quickopen-results');
+  if (!results) return;
+  if (!query) {
+    // Show currently-open tabs as a starting list, then files cached from
+    // the visible tree. Saves a backend hit when the user just wants to
+    // jump between things they've already touched.
+    const seen = new Set();
+    const items = [];
+    for (const f of codeOpenFiles) {
+      if (!seen.has(f.rel)) { seen.add(f.rel); items.push({rel:f.rel, hint:'open'}); }
+    }
+    for (const path in codeTreeNodes) {
+      for (const e of (codeTreeNodes[path]?.entries || [])) {
+        if (!e.isDir && !seen.has(e.rel)) { seen.add(e.rel); items.push({rel:e.rel, hint:''}); if (items.length >= 30) break; }
+      }
+      if (items.length >= 30) break;
+    }
+    if (!items.length) {
+      results.innerHTML = '<div class="cmd-item" style="cursor:default;color:var(--t3);font-style:italic">Type to search files in workspace…</div>';
+      return;
+    }
+    results.innerHTML = items.map((it, i) => `
+      <div class="cmd-item${i===0?' active':''}" data-rel="${esc(it.rel)}" onclick="quickOpenSelect(this.dataset.rel)">
+        <span class="cmd-item-icon">📄</span>
+        <span class="cmd-item-text">${esc(it.rel)}</span>
+        <span class="cmd-item-hint">${esc(it.hint)}</span>
+      </div>`).join('');
+    _qoSelected = 0;
+    return;
+  }
+  // Debounce server search by 120ms so fast typing doesn't fan out.
+  _qoTimer = setTimeout(async () => {
+    if (query !== _qoLastQuery) return;
+    const r = await H.wsSearch(query, '').catch(e => ({ok:false,err:e.message,results:[]}));
+    if (!r?.ok) {
+      results.innerHTML = `<div class="cmd-item" style="cursor:default;color:var(--red)">${esc(r?.err || 'Search failed')}</div>`;
+      return;
+    }
+    const files = (r.results || []).filter(it => !it.isDir).slice(0, 50);
+    if (!files.length) {
+      results.innerHTML = '<div class="cmd-item" style="cursor:default;color:var(--t3);font-style:italic">No matches</div>';
+      return;
+    }
+    results.innerHTML = files.map((f, i) => `
+      <div class="cmd-item${i===0?' active':''}" data-rel="${esc(f.rel)}" onclick="quickOpenSelect(this.dataset.rel)">
+        <span class="cmd-item-icon">📄</span>
+        <span class="cmd-item-text">${esc(f.rel)}</span>
+        <span class="cmd-item-hint">${esc(f.match || '')}</span>
+      </div>`).join('');
+    _qoSelected = 0;
+  }, 120);
+}
+
+function quickOpenKeyDown(e){
+  const items = document.querySelectorAll('#quickopen-results .cmd-item[data-rel]');
+  if (e.key === 'Escape') { e.preventDefault(); closeQuickOpen(); return; }
+  if (e.key === 'ArrowDown' && items.length) {
+    e.preventDefault();
+    _qoSelected = Math.min(_qoSelected + 1, items.length - 1);
+    _updateQOSelection();
+  } else if (e.key === 'ArrowUp' && items.length) {
+    e.preventDefault();
+    _qoSelected = Math.max(_qoSelected - 1, 0);
+    _updateQOSelection();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const target = items[_qoSelected];
+    if (target?.dataset?.rel) quickOpenSelect(target.dataset.rel);
+  }
+}
+
+function _updateQOSelection(){
+  const items = document.querySelectorAll('#quickopen-results .cmd-item[data-rel]');
+  items.forEach((el, i) => el.classList.toggle('active', i === _qoSelected));
+  items[_qoSelected]?.scrollIntoView({block:'nearest'});
+}
+
+async function quickOpenSelect(rel){
+  closeQuickOpen();
+  if (rel) await openCodeFile(rel);
 }
 
 
