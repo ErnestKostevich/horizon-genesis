@@ -129,6 +129,15 @@ const machineId = crypto.createHash('sha256')
 const keysStore     = new Store({ name: 'horizon-keys',     encryptionKey: machineId });
 const settingsStore = new Store({ name: 'horizon-settings' });
 
+// Expose the settings store on this module's exports so sibling modules
+// (e.g. agentLoop.js) can read user preferences (active persona, etc)
+// without us having to thread them through every call signature.
+// `module.exports.settingsStore = ...` is intentional — agentLoop
+// reaches us via `require.cache[require.resolve('./main')].exports`
+// rather than a direct require() loop.
+module.exports.settingsStore = settingsStore;
+module.exports.keysStore = keysStore;
+
 const ALLOWED_KEY_IDS = new Set([
   'gemini', 'groq', 'groq_voice', 'deepseek', 'mistral', 'qwen', 'grok',
   'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
@@ -1730,9 +1739,41 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
     ? `Ты — Хорайзон (Horizon AI), продвинутый персональный AI-агент для ПК. Тебя создал Эрнест Костевич (Ernest Kostevich). Ты НЕ являешься Claude, ChatGPT, Gemini или любым другим AI — ты Хорайзон. Пользователь: ${userName}. Время: ${new Date().toLocaleString()}. Ты умный, дружелюбный, немного как Джарвис из Marvel. Можешь управлять ПК, видеть экран. Используй Markdown.`
     : `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown.`;
 
-  const sysMsg = system
-    ? (system.includes('Ты') || system.includes('You are') ? system : `${identity}\n\n${system}`)
-    : identity;
+  // PERSONA INJECTION (defense-in-depth): the renderer's chat send path
+  // already prepends the active persona's prompt to `system` before
+  // invoking H.ai (chat.html ~line 5921). But other call sites — agent
+  // loop, voice bursts, plugin re-asks — sometimes hand us a system
+  // string that doesn't carry the persona, or pass null entirely. So we
+  // also read the active persona from settingsStore here and merge it
+  // in. This is what makes the user-visible persona dropdown actually
+  // shape every assistant reply, not just the ones initiated from the
+  // chat UI.
+  let personaPrompt = '';
+  try {
+    loadAgentModules();
+    if (personas) {
+      const personaId = settingsStore.get('persona') || 'jarvis';
+      // Skip if the renderer already inlined the persona text — cheap
+      // substring check on the persona's signature opening line keeps us
+      // from doubling the prompt for the common chat path.
+      const pp = personas.getPersonaPrompt(personaId, lang);
+      if (pp && (!system || !system.includes(pp.slice(0, 32)))) {
+        personaPrompt = pp;
+      }
+    }
+  } catch (_) { /* persona is optional; never block a send */ }
+
+  const sysParts = [identity];
+  if (personaPrompt) sysParts.push(personaPrompt);
+  if (system && (!system.includes('Ты') && !system.includes('You are'))) {
+    sysParts.push(system);
+  } else if (system) {
+    // Renderer supplied a self-contained system message (already includes
+    // identity + persona) — use it verbatim so we don't double up.
+    sysParts.length = 0;
+    sysParts.push(system);
+  }
+  const sysMsg = sysParts.join('\n\n');
 
   // Normalise per-provider usage shapes to {prompt, completion, total}.
   // Returns null if the response didn't include usage info (e.g. local models
@@ -2742,10 +2783,44 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     try { mcpTools = await mcpRegistry.toolsForAgent(); }
     catch (e) { console.warn('MCP tools unavailable:', e.message); }
   }
+
+  // Plugin tools — pluginManager.getToolDefinitions() returns the list of
+  // tool descriptors from every enabled plugin's manifest in the format
+  // the agent loop already understands (`{name, desc, params, _plugin}`).
+  // Without this branch the agent never *saw* installed plugins and the
+  // user's complaint that "all plugins are stubs that don't do anything"
+  // was correct — even a fully-implemented Spotify plugin had no path
+  // from the LLM's tool call to its handler. Dispatch routes plugin
+  // tools (prefixed `plugin.<id>.<tool>` or matched via _plugin marker)
+  // to pluginManager.executeTool().
+  let pluginTools = [];
+  if (pluginManager && typeof pluginManager.getToolDefinitions === 'function') {
+    try { pluginTools = pluginManager.getToolDefinitions() || []; }
+    catch (e) { console.warn('Plugin tools unavailable:', e.message); }
+  }
+
   const dispatchToolFn = async (tool, args) => {
     if (mcpRegistry && String(tool || '').includes('__')) {
       const mcpResult = await mcpRegistry.dispatch(tool, args);
       if (mcpResult) return mcpResult;
+    }
+    // Plugin tool name format from pluginManager.getToolDefinitions():
+    // `plugin_<pluginId>_<toolName>`. Look up the descriptor by name in
+    // the pluginTools list (richer match — pluginId might itself contain
+    // underscores, so we can't safely split blindly). Fall through to
+    // built-in tools when not found.
+    const t = String(tool || '');
+    if (t.startsWith('plugin_') && pluginManager) {
+      const def = pluginTools.find(d => d && d.name === t);
+      if (def && def.pluginId) {
+        const toolName = t.slice(`plugin_${def.pluginId}_`.length);
+        try {
+          const r = await pluginManager.executeTool(def.pluginId, toolName, args || {});
+          return r;
+        } catch (e) {
+          return { ok: false, error: 'Plugin tool failed: ' + (e?.message || e) };
+        }
+      }
     }
     return agentTools.dispatchTool(tool, args);
   };
@@ -2773,7 +2848,8 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       runId,
       control: controller,
       nativeTools: provider === 'claude' || provider === 'openai',
-      extraTools: mcpTools,
+      extraTools: [...mcpTools, ...pluginTools],
+      personaId: settingsStore.get('persona') || 'jarvis',
       dispatchToolFn
     });
   } catch (e) {
