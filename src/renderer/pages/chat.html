@@ -4525,7 +4525,279 @@ function setSettingsTab(name){
     }
   } catch(_) {}
   if (name === 'features') refreshPermissionAllowlist().catch(()=>{});
+  if (name === 'personas') renderPersonasEditor().catch(()=>{});
 }
+
+// ═══ PERSONAS EDITOR ═══════════════════════════════════════════════════
+// Renders the two-column editor inside #pe-mount. Left: list of all
+// personas (built-ins + custom). Right: detail with system prompt
+// (Russian + English), allowed-tools toggles, and long-term memories.
+// Edits persist via H.personaUpsert; deleting a built-in resets it to
+// default. Refreshes on tab open + after save / delete.
+let _peActiveId = null;
+let _peCache = { list: [], full: {} };
+
+const PE_TOOLS = [
+  { name: 'fs.read',  label: 'Read files',  write: false },
+  { name: 'fs.write', label: 'Write files', write: true  },
+  { name: 'shell',    label: 'Shell',       write: true  },
+  { name: 'web.fetch', label: 'Web fetch',  write: false },
+  { name: 'web.search', label: 'Web search', write: false },
+  { name: 'screenshot', label: 'Screenshot', write: false },
+  { name: 'computer.click', label: 'Computer click', write: true },
+  { name: 'computer.type',  label: 'Computer type',  write: true }
+];
+
+async function renderPersonasEditor() {
+  const mount = document.getElementById('pe-mount');
+  if (!mount) return;
+  let list = [];
+  try { list = await H.getPersonas(); } catch (_) { list = []; }
+  _peCache.list = Array.isArray(list) ? list : [];
+  if (!_peCache.list.length) {
+    mount.innerHTML = '<div class="info-box">Personas module unavailable. Reload the app and try again.</div>';
+    return;
+  }
+  if (!_peActiveId || !_peCache.list.find(p => p.id === _peActiveId)) {
+    _peActiveId = _peCache.list[0].id;
+  }
+  // Skeleton — body filled in by _renderPeBody after fetching the full
+  // shape (prompt + tools + memories) for the active persona.
+  mount.innerHTML = `
+    <div class="pe-shell">
+      <aside class="pe-list">
+        <div class="pe-list-h">
+          <span class="pe-list-h-t">Personas · ${_peCache.list.length}</span>
+          <button class="pe-list-add" onclick="peCreateCustom()">+ New</button>
+        </div>
+        <div class="pe-list-body" id="pe-list-body"></div>
+      </aside>
+      <main class="pe-detail" id="pe-detail">
+        <div class="pe-detail-empty">
+          <div class="pe-detail-empty-icon">⏳</div>
+          <div class="pe-detail-empty-text">Loading…</div>
+        </div>
+      </main>
+    </div>
+  `;
+  _renderPeList();
+  await _renderPeBody();
+}
+
+function _renderPeList() {
+  const body = document.getElementById('pe-list-body');
+  if (!body) return;
+  body.innerHTML = _peCache.list.map(p => `
+    <div class="pe-item ${p.id === _peActiveId ? 'on' : ''}" onclick="peSelect('${p.id}')">
+      <div class="pe-item-icon">${p.icon || '🪪'}</div>
+      <div class="pe-item-name">${(p.name || p.id || 'Untitled').replace(/[<>]/g, '')}</div>
+      <span class="pe-item-tag">${p.builtin ? 'BUILTIN' : 'CUSTOM'}</span>
+    </div>
+  `).join('');
+}
+
+async function _renderPeBody() {
+  const detail = document.getElementById('pe-detail');
+  if (!detail) return;
+  if (!_peActiveId) {
+    detail.innerHTML = '<div class="pe-detail-empty"><div class="pe-detail-empty-icon">🎭</div><div class="pe-detail-empty-text">Pick a persona on the left.</div></div>';
+    return;
+  }
+  let full = _peCache.full[_peActiveId];
+  if (!full) {
+    try { full = await H.getPersonaFull(_peActiveId); } catch (_) { full = null; }
+    if (full) _peCache.full[_peActiveId] = full;
+  }
+  if (!full) {
+    detail.innerHTML = '<div class="pe-detail-empty"><div class="pe-detail-empty-icon">⚠️</div><div class="pe-detail-empty-text">Failed to load this persona.</div></div>';
+    return;
+  }
+  const allowed = Array.isArray(full.allowedTools) ? full.allowedTools : null; // null = all allowed
+  const memories = Array.isArray(full.memories) ? full.memories : [];
+  const ru = (full.prompt && full.prompt.ru) || '';
+  const en = (full.prompt && full.prompt.en) || '';
+  const isCustom = full.builtin === false;
+
+  detail.innerHTML = `
+    <div class="pe-detail-h">
+      <div class="pe-detail-h-t">
+        <span style="font-size:22px">${full.icon || '🪪'}</span>
+        <span>${(full.name || _peActiveId).replace(/[<>]/g,'')}</span>
+        <span class="pe-item-tag" style="margin-left:8px">${full.builtin ? 'BUILT-IN' : 'CUSTOM'}</span>
+      </div>
+      <div class="pe-detail-h-actions">
+        ${full.builtin
+          ? '<button class="wfp-btn" onclick="peReset()" title="Discard your overlay and restore the default">Reset</button>'
+          : '<button class="wfp-btn del" onclick="peDelete()" title="Delete this persona">Delete</button>'
+        }
+        <button class="wfp-btn run" onclick="peSave()">Save</button>
+      </div>
+    </div>
+
+    <div class="pe-section-h">SYSTEM PROMPT — RU</div>
+    <textarea class="pe-prompt" id="pe-prompt-ru" placeholder="System prompt (Russian)…">${(ru || '').replace(/[<>]/g,'')}</textarea>
+
+    <div class="pe-section-h">SYSTEM PROMPT — EN</div>
+    <textarea class="pe-prompt" id="pe-prompt-en" placeholder="System prompt (English)…">${(en || '').replace(/[<>]/g,'')}</textarea>
+
+    <div class="pe-section-h">ALLOWED TOOLS</div>
+    <div class="pe-tools" id="pe-tools">
+      ${PE_TOOLS.map(t => {
+        const on = allowed === null ? true : allowed.includes(t.name);
+        return `<button class="pe-tool ${on ? 'on' : ''} ${on && t.write ? 'write' : ''}"
+                        data-tool="${t.name}" data-write="${t.write ? '1' : ''}"
+                        onclick="peToggleTool(this)">
+                  ${t.label}${t.write ? ' ⚠' : ''}
+                </button>`;
+      }).join('')}
+      <button class="pe-tool" onclick="peAllowAll()" style="margin-left:auto;border-style:dashed">All</button>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:6px">⚠ = write/destructive tool. The Permission Gate still asks before each call.</div>
+
+    <div class="pe-section-h">LONG-TERM MEMORIES — ${memories.length}</div>
+    <div class="pe-mems" id="pe-mems">
+      ${memories.length === 0
+        ? '<div style="color:var(--t3);font-size:12px;padding:6px 0">No memories yet. Add facts the persona should always remember.</div>'
+        : memories.map(m => `
+          <div class="pe-mem" data-mid="${m.id || ''}">
+            <div class="pe-mem-icon">📌</div>
+            <div class="pe-mem-text">${(m.text || '').replace(/[<>]/g,'')}</div>
+            <button class="pe-mem-x" onclick="peRemoveMem('${(m.id || '').replace(/'/g,"\\'")}')">×</button>
+          </div>
+        `).join('')
+      }
+    </div>
+    <div class="pe-mem-add">
+      <input class="pe-mem-input" id="pe-mem-input" placeholder="Add a new memory… (Enter to save)" onkeydown="if(event.key==='Enter')peAddMem()"/>
+      <button class="wfp-btn run" onclick="peAddMem()">Add</button>
+    </div>
+  `;
+}
+
+window.peSelect = async function (id) {
+  _peActiveId = id;
+  _renderPeList();
+  await _renderPeBody();
+};
+
+window.peToggleTool = function (btn) {
+  const isOn = btn.classList.contains('on');
+  btn.classList.toggle('on', !isOn);
+  if (btn.dataset.write === '1') {
+    btn.classList.toggle('write', !isOn);
+  }
+};
+
+window.peAllowAll = function () {
+  document.querySelectorAll('#pe-tools .pe-tool[data-tool]').forEach(b => {
+    b.classList.add('on');
+    if (b.dataset.write === '1') b.classList.add('write');
+  });
+};
+
+function _peCollectAllowedTools() {
+  const onBtns = [...document.querySelectorAll('#pe-tools .pe-tool.on[data-tool]')];
+  const onNames = onBtns.map(b => b.dataset.tool);
+  // If the user has all tools enabled, persist null (= "no restriction")
+  // — keeps behaviour symmetric with un-edited built-ins.
+  if (onNames.length === PE_TOOLS.length) return null;
+  return onNames;
+}
+
+window.peAddMem = function () {
+  const input = document.getElementById('pe-mem-input');
+  if (!input) return;
+  const text = (input.value || '').trim();
+  if (!text) return;
+  const full = _peCache.full[_peActiveId] || (_peCache.full[_peActiveId] = {});
+  full.memories = Array.isArray(full.memories) ? full.memories : [];
+  full.memories.push({ id: 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), text, ts: Date.now() });
+  input.value = '';
+  _renderPeBody();
+};
+
+window.peRemoveMem = function (mid) {
+  const full = _peCache.full[_peActiveId];
+  if (!full || !Array.isArray(full.memories)) return;
+  full.memories = full.memories.filter(m => (m.id || '') !== mid);
+  _renderPeBody();
+};
+
+window.peSave = async function () {
+  const ru = document.getElementById('pe-prompt-ru')?.value ?? '';
+  const en = document.getElementById('pe-prompt-en')?.value ?? '';
+  const allowedTools = _peCollectAllowedTools();
+  const full = _peCache.full[_peActiveId] || {};
+  const memories = Array.isArray(full.memories) ? full.memories : [];
+  const patch = {
+    prompt: { ru, en },
+    allowedTools,
+    memories
+  };
+  try {
+    const res = await H.personaUpsert(_peActiveId, patch);
+    if (res && res.ok === false) {
+      H.notify('Personas', 'Save failed: ' + (res.error || 'unknown'));
+      return;
+    }
+    // Refresh cache for this persona from canonical store.
+    delete _peCache.full[_peActiveId];
+    H.notify('Personas', 'Saved');
+    await renderPersonasEditor();
+  } catch (e) {
+    H.notify('Personas', 'Save failed: ' + (e.message || e));
+  }
+};
+
+window.peReset = async function () {
+  if (!confirm('Discard your overlay and restore default for this built-in persona?')) return;
+  try {
+    await H.personaDelete(_peActiveId);
+    delete _peCache.full[_peActiveId];
+    H.notify('Personas', 'Reset to default');
+    await renderPersonasEditor();
+  } catch (e) {
+    H.notify('Personas', 'Reset failed: ' + (e.message || e));
+  }
+};
+
+window.peDelete = async function () {
+  if (!confirm('Delete this custom persona? This cannot be undone.')) return;
+  try {
+    await H.personaDelete(_peActiveId);
+    delete _peCache.full[_peActiveId];
+    _peActiveId = null;
+    H.notify('Personas', 'Deleted');
+    await renderPersonasEditor();
+  } catch (e) {
+    H.notify('Personas', 'Delete failed: ' + (e.message || e));
+  }
+};
+
+window.peCreateCustom = async function () {
+  const name = (prompt('Name for the new persona') || '').trim();
+  if (!name) return;
+  const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now().toString(36);
+  try {
+    await H.personaUpsert(id, {
+      name,
+      icon: '🪪',
+      color: '#56d2ff',
+      prompt: {
+        ru: 'Ты — ' + name + '. Опиши тут стиль и тон.',
+        en: 'You are ' + name + '. Describe the style and tone here.'
+      },
+      allowedTools: null,
+      memories: []
+    });
+    _peActiveId = id;
+    delete _peCache.full[id];
+    H.notify('Personas', 'Created: ' + name);
+    await renderPersonasEditor();
+  } catch (e) {
+    H.notify('Personas', 'Create failed: ' + (e.message || e));
+  }
+};
 
 // On reload, if the URL hash points to a Settings tab, open the panel and
 // jump to that tab. Lets devs use F5 / Ctrl+R during testing without
