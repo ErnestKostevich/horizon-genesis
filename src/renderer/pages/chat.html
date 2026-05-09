@@ -3755,9 +3755,20 @@ function _replayMessages(messages){
     const meta = m.meta || {};
     addMsg(role, m.content || '', { model: meta.model });
     history.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' });
-    // Re-account tokens for this chat. Provider stored on meta when known,
-    // fall back to the active provider so the heuristic still runs.
-    try { trackTokens(m.content || '', m.role === 'assistant' ? 'assistant' : 'user', meta.provider || prov); } catch(_){}
+    // Re-account tokens for this chat. If meta.usage is present (provider
+    // returned real token counts at send time and we persisted them), use
+    // it — the running session totals then survive chat-switch / reload
+    // instead of degrading to "usage unavailable" the moment you click
+    // away from a chat. Falls back to the heuristic when meta.usage is
+    // absent (e.g. messages persisted before this fix landed).
+    try {
+      trackTokens(
+        m.content || '',
+        m.role === 'assistant' ? 'assistant' : 'user',
+        meta.provider || prov,
+        meta.usage
+      );
+    } catch(_){}
   }
 }
 async function switchChat(id){
@@ -3966,8 +3977,37 @@ function updateStatusBar(title) {
   } catch(_) {}
 }
 
+// Renderer-side cache of `model.<provider>` settingsStore values. Lives
+// for the lifetime of the renderer process and is the canonical source
+// for `aiOptsForProvider()` — picker writes feed it via saveModelSetting()
+// (chat-status-bar pill OR Settings dropdown), and _bootModelCache() seeds
+// it from settingsStore at startup. This breaks the old DOM-only read path
+// that silently used stale Settings-dropdown values when the user switched
+// model from the chat status bar instead of from Settings.
+const _modelCache = Object.create(null);
+
+async function _bootModelCache() {
+  const known = ['claude','openai','gemini','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','ollama','lmstudio','localai'];
+  await Promise.all(known.map(async (p) => {
+    try {
+      const v = await H.get('model.' + p);
+      if (v) _modelCache[p] = v;
+    } catch (_) {}
+  }));
+  // Refresh status bar if anything's already painted.
+  try { if (typeof prov !== 'undefined') updateStatusBar(); } catch (_) {}
+}
+// Fire and forget; if it loses the boot race the picker writes will fix
+// the cache anyway. No await — keeps the renderer init non-blocking.
+_bootModelCache().catch(() => {});
+
 function getSelectedModelForProvider(p){
   try {
+    // Cache (settingsStore mirror) is the source of truth — it reflects
+    // both Settings-panel <select> changes and chat-status-bar picker
+    // clicks. DOM `<select>` is consulted ONLY as a fallback for the very
+    // first frame before the cache boot completes.
+    if (_modelCache[p]) return _modelCache[p];
     if (p === 'ollama') return document.getElementById('pi-ollama-model')?.value || '';
     if (p === 'lmstudio') return document.getElementById('pi-lmstudio-model')?.value || '';
     const sel = document.getElementById('ms-' + p);
@@ -5207,6 +5247,26 @@ async function saveModelSetting(provider, model){
     await H.set('model.' + provider, model);
     // Special case: gemini uses a separate global also read by autoNameChat.
     if (provider === 'gemini') { geminiModel = model; await H.set('geminiModel', model); }
+    // Mirror into the renderer-side cache the send path reads from. Without
+    // this, the chat-status-bar model picker (csb-model click → pickModel)
+    // would write to settingsStore but the next `aiOptsForProvider()` call
+    // would still see the stale Settings-panel `<select>` value (which only
+    // reflects edits made INSIDE the Settings panel, not from the popover).
+    try { _modelCache[provider] = model; } catch(_){}
+    // Also push the value back into the Settings panel's <select> so the
+    // dropdown reflects the picker choice if the user opens Settings next.
+    try {
+      const sel = document.getElementById('ms-' + provider);
+      if (sel && sel.value !== model) {
+        const has = [...sel.options].some(o => o.value === model);
+        if (!has) {
+          const opt = document.createElement('option');
+          opt.value = model; opt.textContent = model;
+          sel.appendChild(opt);
+        }
+        sel.value = model;
+      }
+    } catch(_){}
     // Refresh the chat status-bar pill if the active provider matches.
     if (typeof prov !== 'undefined' && prov === provider) {
       try { document.getElementById('csb-model').textContent = model; } catch(_){}
@@ -5747,8 +5807,8 @@ async function sendMsg(){
         msgs.appendChild(card);
         msgs.scrollTop=msgs.scrollHeight;
         history.push({role:'assistant',content:r.analysis});
-        _persistChatMessage('assistant', r.analysis, {model:r.model});
-        trackTokens(r.analysis, 'assistant', prov);
+        _persistChatMessage('assistant', r.analysis, {model:r.model, usage:r.usage, provider:prov});
+        trackTokens(r.analysis, 'assistant', prov, r.usage);
         speak(r.analysis.slice(0,300));
         addTyping();
         cleanup();
@@ -5772,7 +5832,7 @@ ${fileContext}`}];
         catch(e) { res = {error: e.message}; }
         rmTyping();
         if(res.error) addMsg('bot',`❌ ${res.error}`);
-        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov}); trackTokens(res.reply, 'assistant', prov, res.usage); speak(res.reply.slice(0,300)); }
+        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov, usage:res.usage, provider:prov}); trackTokens(res.reply, 'assistant', prov, res.usage); speak(res.reply.slice(0,300)); }
         cleanup(); return;
       }
     }
@@ -5791,7 +5851,7 @@ ${fileContext}`}];
           setStatus(lang==='ru'?'◉ Смотрю на экран…':'◉ Seeing screen…',true);
           res=await H.analyzeScreen(text);rmTyping();
           if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
           cleanup();return;
         case 'open':
           res=await H.pcOpen(cmd.arg);rmTyping();
@@ -5877,7 +5937,7 @@ ${fileContext}`}];
     setStatus(lang==='ru'?'◉ Смотрю…':'◉ Seeing…',true);
     const res=await H.analyzeScreen(text);rmTyping();
     if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     cleanup();return;
   }
 
@@ -5899,7 +5959,7 @@ ${fileContext}`}];
       catch(e){ res={error:e.message}; }
       rmTyping();
       if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-      else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+      else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     }else{
       rmTyping();
       addMsg('bot',lang==='ru'?`⚠️ Нет результатов. ${sr.error||'Добавь Tavily ключ в ⚙️ Настройках.'}`:`⚠️ No results. ${sr.error||'Add Tavily key in ⚙️ Settings.'}`);
@@ -5940,7 +6000,7 @@ ${fileContext}`}];
       const cleanReply = action ? res.reply.replace(/\[\[ACTION:[^\]]+\]\]\s*$/, '').replace(/\{"_action"[^\n]*\}\s*$/, '').trim() : res.reply;
       addMsg('bot',cleanReply,{model:res.model||prov});
       history.push({role:'assistant',content:res.reply});
-      _persistChatMessage('assistant',res.reply,{model:res.model||prov});
+      _persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});
       trackTokens(res.reply,'assistant',prov,res.usage);
       speak(cleanReply);
       if (action) renderActionCard(action, _executeActionIntent, ()=>{});
@@ -6357,33 +6417,106 @@ async function runWorkflow(id) {
 
 // Quick workflow creation from natural language
 async function createWorkflowFromText(description) {
+  // Two prior bugs the audit caught:
+  //   (1) Used the module-init `provider` constant ('gemini') instead of
+  //       `prov` (the live active provider). If the user switched to
+  //       Claude / OpenAI / etc, this path silently picked Gemini and
+  //       failed when there was no Gemini key — with no error shown.
+  //   (2) Advertised actions that didn't match the engine palette
+  //       (open_site, press_key) → engine threw "unknown action" at run
+  //       time even when the AI generated valid-looking JSON.
+  //   (3) Persisted to local `workflows[]` only — never called
+  //       H.workflowCreate so the engine never saw it (no schedule, no
+  //       persistence across restarts).
+  const activeProv = (typeof prov !== 'undefined' && prov) ? prov : 'gemini';
   const prompt = lang === 'ru'
     ? `Создай JSON workflow из описания: "${description}"
-Формат: {"name":"...", "steps":[{"action":"open_url|open_site|type_text|press_key|run_code|wait|notify|speak|send_message", "args":{...}}]}
-Доступные actions: open_url(url), open_site(name), type_text(text,enter), press_key(key), run_code(code,language), wait(ms), notify(message), speak(text), send_message(text)
-Ответь ТОЛЬКО JSON.`
+Формат: {"name":"...", "trigger":"manual|interval:N|schedule:HH:MM", "steps":[{"action":"<имя>", "args":{...}}]}
+Доступные actions (используй ТОЛЬКО их):
+- open_url(url)         — открыть URL в браузере
+- open_app(app)         — открыть приложение по имени
+- close_app(app)        — закрыть приложение
+- shell(command)        — выполнить shell-команду
+- type_text(text)       — напечатать текст
+- run_code(code, language) — выполнить JS/Node-код или shell
+- wait(ms)              — подождать N миллисекунд
+- notify(title, body)   — системное уведомление
+- speak(text)           — сказать голосом
+- send_message(text)    — отправить сообщение в чат AI
+- screenshot()          — снять скриншот
+- clipboard_read() / clipboard_write(text)
+По умолчанию trigger="manual". Ответь ТОЛЬКО валидным JSON, никакого текста.`
     : `Create JSON workflow from description: "${description}"
-Format: {"name":"...", "steps":[{"action":"open_url|open_site|type_text|press_key|run_code|wait|notify|speak|send_message", "args":{...}}]}
-Available actions: open_url(url), open_site(name), type_text(text,enter), press_key(key), run_code(code,language), wait(ms), notify(message), speak(text), send_message(text)
-Reply with ONLY JSON.`;
-  
+Format: {"name":"...", "trigger":"manual|interval:N|schedule:HH:MM", "steps":[{"action":"<name>", "args":{...}}]}
+Available actions (use ONLY these):
+- open_url(url)         — open URL in browser
+- open_app(app)         — open application by name
+- close_app(app)        — close application
+- shell(command)        — run a shell command
+- type_text(text)       — type text via keyboard
+- run_code(code, language) — execute JS/Node code or shell
+- wait(ms)              — wait N milliseconds
+- notify(title, body)   — system notification
+- speak(text)           — text-to-speech
+- send_message(text)    — send a message to chat AI
+- screenshot()          — capture a screenshot
+- clipboard_read() / clipboard_write(text)
+Default trigger="manual". Reply with ONLY valid JSON, no prose.`;
+
   try {
-    const res = await H.ai([{role:'user',content:prompt}], provider, null, aiOptsForProvider(provider));
-    if (res.reply) {
-      const jsonMatch = res.reply.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const wfData = JSON.parse(jsonMatch[0]);
-        const wf = createWorkflow(wfData.name, wfData.steps);
-        addMsg('bot', lang === 'ru'
-          ? `⚡ Workflow **${wf.name}** создан! ${wf.steps.length} шагов.\nЗапустить: скажи "запусти workflow ${wf.name}"`
-          : `⚡ Workflow **${wf.name}** created! ${wf.steps.length} steps.\nRun: say "run workflow ${wf.name}"`);
-        return wf;
-      }
+    const res = await H.ai([{role:'user',content:prompt}], activeProv, null, aiOptsForProvider(activeProv));
+    if (!res || res.error) {
+      const msg = res?.error || (lang === 'ru' ? 'AI-провайдер не ответил' : 'AI provider returned no response');
+      addMsg('bot', `⚠️ ${msg}${(lang === 'ru' ? ' (provider: ' : ' (provider: ')}${activeProv}). ${lang === 'ru' ? 'Проверь ключ в Settings → Providers.' : 'Check the key in Settings → Providers.'}`);
+      return null;
     }
-  } catch(e) {
-    addMsg('bot', `⚠️ ${e.message}`);
+    if (!res.reply) {
+      addMsg('bot', `⚠️ ${lang === 'ru' ? 'AI вернул пустой ответ' : 'AI returned empty reply'}`);
+      return null;
+    }
+    // Strip markdown code fences if the model added them.
+    const cleaned = res.reply
+      .replace(/^\s*```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/, '')
+      .trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      addMsg('bot', `⚠️ ${lang === 'ru' ? 'AI не вернул валидный JSON.' : 'AI did not return valid JSON.'}\n\n\`\`\`\n${res.reply.slice(0, 500)}\n\`\`\``);
+      return null;
+    }
+    let wfData;
+    try { wfData = JSON.parse(jsonMatch[0]); }
+    catch (parseErr) {
+      addMsg('bot', `⚠️ ${lang === 'ru' ? 'Не удалось распарсить JSON' : 'JSON parse failed'}: ${parseErr.message}`);
+      return null;
+    }
+    if (!wfData.name || !Array.isArray(wfData.steps) || wfData.steps.length === 0) {
+      addMsg('bot', `⚠️ ${lang === 'ru' ? 'Workflow без шагов или имени' : 'Workflow missing name or steps'}`);
+      return null;
+    }
+    const trigger = wfData.trigger || 'manual';
+    // Persist locally (legacy renderer-side store, used by the chat-mode
+    // "run workflow X" wake intent matcher).
+    const wf = createWorkflow(wfData.name, wfData.steps, trigger);
+    // ALSO persist to the engine so cron/interval/startup triggers
+    // actually fire and the workflow survives an app restart. Without
+    // this the entire schedule story was a UI-only mirage.
+    try {
+      const er = await H.workflowCreate(wfData.name, trigger, wfData.steps, description);
+      if (er && er.ok === false) console.warn('Engine workflow create failed:', er.error);
+    } catch (e) {
+      console.warn('Engine workflow create threw:', e?.message || e);
+    }
+    addMsg('bot', lang === 'ru'
+      ? `⚡ Workflow **${wf.name}** создан! ${wf.steps.length} шагов · trigger: ${trigger}.\nЗапустить: скажи "запусти workflow ${wf.name}" или открой Workflows.`
+      : `⚡ Workflow **${wf.name}** created! ${wf.steps.length} steps · trigger: ${trigger}.\nRun: say "run workflow ${wf.name}" or open Workflows.`);
+    // Refresh the Workflows panel if it's open.
+    try { if (document.getElementById('wf-panel')?.classList.contains('show')) renderWfBody(); } catch (_) {}
+    return wf;
+  } catch (e) {
+    addMsg('bot', `⚠️ ${e.message || e}`);
+    return null;
   }
-  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════

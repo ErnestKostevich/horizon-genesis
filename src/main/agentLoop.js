@@ -40,6 +40,40 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
   const memoryBlock = [memoryFacts && `Known user facts:\n${memoryFacts}`, memoryRelevant && `Relevant memories:\n${memoryRelevant}`].filter(Boolean).join('\n');
   const githubBlock = (sysInfo?.github_repos || []).slice(0, 10).map(r => `- ${r.fullName} (${r.defaultBranch || 'main'}): ${r.description || r.url}`).join('\n');
 
+  // Persona block — read the user's selected persona from settingsStore
+  // and prepend its system prompt + memories. Without this, the agent
+  // hardcoded "You are JARVIS" regardless of which persona the user
+  // picked in Settings → Personas, so personas were a UI-only feature
+  // that never shaped agent replies. Caller can override via
+  // options.personaPrompt for tests.
+  let personaBlock = '';
+  try {
+    if (options.personaPrompt) {
+      personaBlock = options.personaPrompt;
+    } else {
+      const personas = require('./personas');
+      // settingsStore lookup is lazy: we call require('electron').app
+      // safe-only via the module loaded by main.js. Fall back to no
+      // overlay if the settings module isn't reachable from this worker.
+      let personaId = options.personaId;
+      if (!personaId) {
+        try {
+          const mainMod = require.cache[require.resolve('./main')];
+          // Best-effort: if main.js exposed settingsStore on its module
+          // exports we use it; otherwise the renderer pre-supplies the
+          // persona id via options.personaId.
+          if (mainMod && mainMod.exports && mainMod.exports.settingsStore) {
+            personaId = mainMod.exports.settingsStore.get('persona') || 'jarvis';
+          }
+        } catch (_) {}
+      }
+      if (personaId && typeof personas.getPersonaPrompt === 'function') {
+        const pp = personas.getPersonaPrompt(personaId, lang);
+        if (pp) personaBlock = pp;
+      }
+    }
+  } catch (_) { /* persona is optional for the agent loop */ }
+
   if (nativeTools) {
     return `
 You are Horizon AI, a real desktop AI agent created by Ernest Kostevich.
@@ -47,6 +81,7 @@ User: ${userName}. Time: ${sysInfo?.time || new Date().toLocaleString()}.
 System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total} (free: ${sysInfo?.ram_free})
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
+${personaBlock ? `\n## Persona / style\n${personaBlock}` : ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 
@@ -62,9 +97,8 @@ After tools finish, answer normally and concisely. If a tool fails twice, explai
 Система: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total} (свободно: ${sysInfo?.ram_free})
 ${sysInfo?.active_window ? `Активное окно: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Местоположение: ${sysInfo.location}` : ''}
-
-Ты НАСТОЯЩИЙ агент. У тебя есть инструменты для управления ПК, запуска кода, работы с файлами и браузером.
-Ты как ДЖАРВИС — умный, эффективный, всегда говори "Сэр".
+${personaBlock ? `\n## Персона / стиль\n${personaBlock}\n` : ''}
+Ты НАСТОЯЩИЙ агент. У тебя есть инструменты для управления ПК, запуска кода, работы с файлами и браузером.${personaBlock ? '' : '\nТы как ДЖАРВИС — умный, эффективный, всегда говори "Сэр".'}
 
 ## Как отвечать:
 
@@ -94,11 +128,11 @@ User: ${userName}. Time: ${sysInfo?.time || new Date().toLocaleString()}.
 System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total} (free: ${sysInfo?.ram_free})
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
+${personaBlock ? `\n## Persona / style\n${personaBlock}\n` : ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 
-You are a REAL agent with tools to control the PC, run code, manage files and browse the web.
-You are like JARVIS — smart, efficient, always say "Sir".
+You are a REAL agent with tools to control the PC, run code, manage files and browse the web.${personaBlock ? '' : '\nYou are like JARVIS — smart, efficient, always say "Sir".'}
 
 ## Response format:
 
@@ -328,13 +362,15 @@ async function runAgentLoop(userMessage, opts = {}) {
     control = null,
     nativeTools = false,
     extraTools = [],
-    dispatchToolFn = dispatchTool
+    dispatchToolFn = dispatchTool,
+    personaId = null,    // overrides settingsStore lookup in buildAgentSystemPrompt
+    personaPrompt = null // pre-resolved persona text (cheaper for hot paths)
   } = opts;
 
   // Select relevant tools for this query
   const selectedTools = [...selectToolsForQuery(userMessage), ...extraTools]
     .filter((tool, index, arr) => tool?.name && arr.findIndex(t => t?.name === tool.name) === index);
-  const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools });
+  const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools, personaId, personaPrompt });
   
   const messages = [
     ...history.slice(-10), // last 10 messages for context
