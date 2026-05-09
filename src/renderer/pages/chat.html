@@ -1335,43 +1335,35 @@ body.code-mode-active .modes { display: none; }
 .apex-right-pane #arp-tools-section[hidden],
 .apex-right-pane #arp-persona[hidden] { display: none !important; }
 
-/* ═══ INSPECTOR PANEL — premium right-side dock (chat mode only) ════════
-   Right-side dock with 4 tabs (Context · Tools · Cost · Log). Lives next
-   to the chat. In code-mode-active the chat panel itself sits at right:0
-   and the Inspector hides — Code Mode owns the canvas in that mode.
-
-   `top: 52px` matches the title bar height exactly — at 42px there was a
-   10px sliver of the chat-status-bar / mode-chip strip visible above the
-   pane on the right edge that looked like a layout bug. */
+/* Inspector panel: chat-only right dock.
+   It starts below top controls and ends above the composer, so it never
+   squeezes the titlebar/license pills or covers the input buttons. */
 .inspector-pane {
   display: none;
   position: fixed;
-  top: 64px;
-  right: 12px;
-  bottom: 12px;
-  width: 340px;
+  top: 184px;
+  right: 14px;
+  bottom: 96px;
+  width: 326px;
   background: linear-gradient(180deg, var(--code-bg-2,#0c1018) 0%, var(--code-bg,#07090f) 100%);
   border: 1px solid var(--code-line, #1d2333);
-  border-radius: 16px;
-  box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  border-radius: 18px;
+  box-shadow: 0 22px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.04);
   z-index: 85;
   flex-direction: column;
   -webkit-app-region: no-drag;
   overflow: hidden;
 }
 body.inspector-active .inspector-pane { display: flex; }
-/* When inspector is open, slide chat content left by the panel width. The
-   .modes mode-chip row and .wake-bar / .sb status strips are included
-   here — without them they would extend under the Inspector and visually
-   "leak" behind the panel's left border (chips chopped mid-button). */
+/* Keep top controls and composer stable; only the readable chat surface
+   makes room for the dock. */
 body.inspector-active .chat-status-bar,
+body.inspector-active .msgs { margin-right: 356px; }
 body.inspector-active .modes,
 body.inspector-active .wake-bar,
 body.inspector-active .sb,
-body.inspector-active .msgs,
-body.inspector-active .inp-wrap { margin-right: 364px; }
-/* But not when Code Mode is active — code mode owns the right column with
-   its own 380px chat panel. Inspector hides in code mode. */
+body.inspector-active .inp-wrap { margin-right: 0; }
+/* Code Mode owns the canvas and its own right column. */
 body.code-mode-active .inspector-pane { display: none !important; }
 body.code-mode-active.inspector-active .chat-status-bar,
 body.code-mode-active.inspector-active .modes,
@@ -1381,28 +1373,56 @@ body.code-mode-active.inspector-active .msgs,
 body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
 
 .insp-head {
-  display: flex; align-items: center;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px;
   border-bottom: 1px solid var(--code-line, #1d2333);
-  background: rgba(0,0,0,.28);
-  min-height: 42px;
+  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(0,0,0,.20));
+  min-height: 48px;
 }
-.insp-tab {
+.insp-tabs {
   flex: 1;
   min-width: 0;
-  padding: 12px 5px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.insp-tab {
+  min-width: 0;
+  height: 30px;
+  padding: 0 4px;
   background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
   color: var(--t2);
-  font: 700 9.5px/1 var(--mono);
-  letter-spacing: .8px;
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .9px;
   text-transform: uppercase;
   cursor: pointer;
   transition: all .12s ease;
   -webkit-app-region: no-drag;
 }
 .insp-tab:hover { color: var(--tx); background: rgba(255,255,255,.03); }
-.insp-tab.on { color: var(--code-cyan, #56d2ff); border-bottom-color: var(--code-cyan, #56d2ff); }
+.insp-tab.on {
+  color: var(--code-cyan, #56d2ff);
+  background: rgba(86,210,255,.12);
+  border-color: rgba(86,210,255,.34);
+  box-shadow: inset 0 0 0 1px rgba(86,210,255,.08);
+}
+.insp-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.035);
+  color: var(--t2);
+  font: 900 16px/1 var(--font);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+.insp-close:hover { color: var(--tx); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.07); }
 
 .insp-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
 .insp-section { margin-bottom: 22px; }
@@ -1498,6 +1518,16 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
   background: rgba(0,0,0,.25);
 }
 .insp-byok strong { color: var(--code-cyan, #56d2ff); }
+@media (max-width: 1280px) {
+  .inspector-pane { width: 304px; right: 10px; top: 176px; bottom: 92px; }
+  body.inspector-active .chat-status-bar,
+  body.inspector-active .msgs { margin-right: 326px; }
+}
+@media (max-width: 980px) {
+  .inspector-pane { left: 12px; right: 12px; width: auto; top: 96px; bottom: 92px; }
+  body.inspector-active .chat-status-bar,
+  body.inspector-active .msgs { margin-right: 0; }
+}
 
 /* ═══ STEP RAIL — agent plan progress at top of chat ═══════════════════
    Hidden by default; renderStepRail() flips display:flex when an agent
@@ -2392,10 +2422,13 @@ body.with-sidebar .chat-status-bar{display:flex}
      BYOK footer. Only visible when body.inspector-active. -->
 <div class="inspector-pane" id="inspector-pane">
   <div class="insp-head">
-    <button class="insp-tab on" data-tab="context" onclick="setInspectorTab('context')">Context</button>
-    <button class="insp-tab"    data-tab="tools"   onclick="setInspectorTab('tools')">Tools</button>
-    <button class="insp-tab"    data-tab="cost"    onclick="setInspectorTab('cost')">Cost</button>
-    <button class="insp-tab"    data-tab="log"     onclick="setInspectorTab('log')">Log</button>
+    <div class="insp-tabs">
+      <button class="insp-tab on" data-tab="context" onclick="setInspectorTab('context')">Context</button>
+      <button class="insp-tab"    data-tab="tools"   onclick="setInspectorTab('tools')">Tools</button>
+      <button class="insp-tab"    data-tab="cost"    onclick="setInspectorTab('cost')">Cost</button>
+      <button class="insp-tab"    data-tab="log"     onclick="setInspectorTab('log')">Log</button>
+    </div>
+    <button class="insp-close" onclick="toggleInspectorMode()" title="Close inspector">&times;</button>
   </div>
   <div class="insp-body" id="insp-body-context">
     <div class="insp-section">
