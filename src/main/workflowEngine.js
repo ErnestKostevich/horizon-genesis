@@ -1,11 +1,10 @@
 'use strict';
 /**
- * Horizon AI v2 — Workflow Engine
- * Поддержка:
- * - Ручного запуска workflows
- * - Scheduled workflows (cron-like: каждые N минут, в конкретное время)
- * - Wake-word триггеров
- * - Автоматического создания workflows через AI
+ * Horizon AI v2 - Workflow Engine
+ *
+ * Supports manual workflows, scheduled workflows, wake-word triggers, and
+ * AI-assisted workflow creation. Keep user-visible text here plain ASCII so
+ * corrupted legacy encodings never leak into notifications or examples.
  */
 
 const { Notification, app, desktopCapturer, shell } = require('electron');
@@ -297,8 +296,8 @@ class WorkflowEngine {
     // Notification
     try {
       new Notification({
-        title: `◈ Horizon — Workflow`,
-        body: `"${wf.name}" ${success ? 'выполнен ✅' : 'завершён с ошибкой ⚠️'}`
+        title: 'Horizon Workflow',
+        body: `"${wf.name}" ${success ? 'completed' : 'finished with errors'}`
       }).show();
     } catch {}
 
@@ -421,7 +420,7 @@ class WorkflowEngine {
         const title = params.title || 'Horizon Workflow';
         const body = params.body || params.message || action;
         try {
-          new Notification({ title: `◈ ${title}`, body }).show();
+          new Notification({ title: String(title), body: String(body || '') }).show();
           return { ok: true, out: 'Notification sent' };
         } catch (e) {
           return { ok: false, error: e.message };
@@ -521,7 +520,7 @@ class WorkflowEngine {
     try {
       const data = typeof aiJson === 'string' ? JSON.parse(aiJson) : aiJson;
       return {
-        name: data.name || 'Новый Workflow',
+        name: data.name || 'New Workflow',
         description: data.description || '',
         trigger: data.trigger || 'manual',
         steps: (data.steps || []).map(s => ({
@@ -540,47 +539,47 @@ class WorkflowEngine {
   static getExampleWorkflows() {
     return [
       {
-        name: '🌐 Открыть YouTube',
-        description: 'Открывает YouTube в браузере',
+        name: 'Open YouTube',
+        description: 'Opens YouTube in the browser and confirms when it is ready.',
         trigger: 'manual',
         steps: [
           { type: 'open_url', action: 'https://youtube.com', params: { url: 'https://youtube.com' } },
-          { type: 'notify', action: 'YouTube открыт!', params: { title: 'Workflow', body: 'YouTube открыт!' } }
+          { type: 'notify', action: 'YouTube opened', params: { title: 'Workflow', body: 'YouTube opened.' } }
         ]
       },
       {
-        name: '🌅 Утренний старт',
-        description: 'Каждое утро в 9:00 открывает почту и новости',
+        name: 'Morning start',
+        description: 'Opens mail and news every morning at 09:00.',
         trigger: 'schedule:09:00',
         steps: [
           { type: 'open_url', params: { url: 'https://gmail.com' } },
           { type: 'wait', params: { seconds: 2 } },
           { type: 'open_url', params: { url: 'https://news.google.com' } },
-          { type: 'notify', params: { title: 'Утренний старт', body: 'Почта и новости открыты!' } }
+          { type: 'notify', params: { title: 'Morning start', body: 'Mail and news are open.' } }
         ]
       },
       {
-        name: '🔒 Вечерняя уборка',
-        description: 'Каждый день в 22:00 закрывает браузер',
+        name: 'Evening cleanup',
+        description: 'Closes common browsers every day at 22:00.',
         trigger: 'schedule:22:00',
         steps: [
           { type: 'close_app', params: { app: 'chrome' } },
           { type: 'close_app', params: { app: 'msedge' } },
-          { type: 'notify', params: { title: 'Вечерняя уборка', body: 'Браузер закрыт. Хорошего вечера!' } }
+          { type: 'notify', params: { title: 'Evening cleanup', body: 'Browsers were closed.' } }
         ]
       },
       {
-        name: '📊 Мониторинг каждые 30 мин',
-        description: 'Каждые 30 минут проверяет статус системы',
+        name: 'System check every 30 minutes',
+        description: 'Runs the built-in system monitor every 30 minutes.',
         trigger: 'interval:30',
         steps: [
           { type: 'plugin', params: { pluginId: 'system-monitor', tool: 'status', args: {} } },
-          { type: 'notify', params: { title: 'System Check', body: 'Проверка системы выполнена' } }
+          { type: 'notify', params: { title: 'System Check', body: 'System check completed.' } }
         ]
       },
       {
-        name: '🎵 Включить музыку',
-        description: 'Открывает Spotify и включает воспроизведение',
+        name: 'Start music',
+        description: 'Opens Spotify and starts playback when the Spotify plugin is configured.',
         trigger: 'manual',
         steps: [
           { type: 'open_app', params: { app: 'Spotify' } },
