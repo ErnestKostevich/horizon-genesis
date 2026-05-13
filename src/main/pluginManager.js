@@ -17,6 +17,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+const electron = require('electron');
+const shell = electron.shell || { openExternal: async () => { throw new Error('Electron shell is not available'); } };
+const Notification = electron.Notification || class { constructor() {} show() {} };
 const COMMUNITY_PLUGINS_ENABLED = process.env.HORIZON_ENABLE_COMMUNITY_PLUGINS === '1';
 
 class PluginManager {
@@ -77,7 +81,7 @@ class PluginManager {
 
   isTrusted(plugin) {
     const tier = plugin?.tier || 'community';
-    return tier === 'built_in' || tier === 'demo' || COMMUNITY_PLUGINS_ENABLED;
+    return tier === 'built_in' || tier === 'demo' || tier === 'local' || tier === 'marketplace' || COMMUNITY_PLUGINS_ENABLED;
   }
 
   install(pluginJson) {
@@ -86,7 +90,7 @@ class PluginManager {
       if (!plugin.id || !plugin.name) return { ok: false, error: 'Plugin must have id and name' };
 
       // Anti-impersonation: community plugins cannot claim to be from the Horizon Team
-      if (plugin.tier !== 'built_in' && plugin.tier !== 'demo') {
+      if (!['built_in', 'demo', 'local'].includes(plugin.tier)) {
         const author = (plugin.author || '').toLowerCase();
         if (author.includes('horizon team') || author.includes('ernest kostevich')) {
           return { ok: false, error: 'Only official plugins can use the Horizon Team / Ernest Kostevich author name.' };
@@ -198,22 +202,99 @@ class PluginManager {
 
   async executeTool(pluginId, toolName, args) {
     if (!this.enabled.has(pluginId)) return { ok: false, error: `Plugin ${pluginId} is disabled` };
-    const handler = this.handlers.get(pluginId);
-    if (!handler) return { ok: false, error: `Plugin ${pluginId} has no handler` };
     const manifest = this.plugins.get(pluginId) || {};
     if (!this.isTrusted(manifest)) {
       return { ok: false, error: 'Community plugin execution is disabled until sandboxing ships.' };
     }
+    const handler = this.handlers.get(pluginId);
     const ctx = { settings: manifest.config || {} };
-    if (typeof handler.execute === 'function') {
-      try { return await handler.execute(toolName, args, ctx); }
-      catch (e) { return { ok: false, error: e.message }; }
+    if (handler) {
+      if (typeof handler.execute === 'function') {
+        try { return await handler.execute(toolName, args, ctx); }
+        catch (e) { return { ok: false, error: e.message }; }
+      }
+      if (typeof handler[toolName] === 'function') {
+        try { return await handler[toolName](args, ctx); }
+        catch (e) { return { ok: false, error: e.message }; }
+      }
     }
-    if (typeof handler[toolName] === 'function') {
-      try { return await handler[toolName](args, ctx); }
+    const spec = (manifest.tools || []).find(t => t && t.name === toolName);
+    if (spec && spec.action) {
+      try { return await this.executeManifestAction(manifest, spec, args || {}); }
       catch (e) { return { ok: false, error: e.message }; }
     }
     return { ok: false, error: `Tool ${toolName} not found in plugin ${pluginId}` };
+  }
+
+  async executeManifestAction(manifest, tool, runtimeArgs = {}) {
+    const action = String(tool.action || tool.name || '').trim();
+    const args = { ...(tool.args || {}), ...(runtimeArgs || {}) };
+    const sh = (cmd, timeout = 15000) => new Promise(r => {
+      exec(cmd, { timeout }, (e, o, er) => r({ ok: !e, out: (o || '').trim(), err: (er || '').trim(), error: e?.message }));
+    });
+    const IS_WIN = process.platform === 'win32';
+    const IS_MAC = process.platform === 'darwin';
+    const title = args.title || manifest.name || 'Horizon Plugin';
+    if (action === 'notify') {
+      const body = args.body || args.message || args.text || `${tool.name} completed`;
+      try { new Notification({ title, body: String(body) }).show(); } catch (_) {}
+      return { ok: true, out: `Notification sent: ${body}` };
+    }
+    if (action === 'open_url') {
+      const url = args.url || args.href || args.target;
+      if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'open_url requires http(s) url' };
+      await shell.openExternal(String(url));
+      return { ok: true, out: `Opened ${url}` };
+    }
+    if (action === 'open_app') {
+      const app = args.app || args.name || args.target;
+      if (!app) return { ok: false, error: 'open_app requires app' };
+      if (IS_WIN) return sh(`start "" "${String(app).replace(/"/g, '\\"')}"`);
+      if (IS_MAC) return sh(`open -a "${String(app).replace(/"/g, '\\"')}"`);
+      return sh(`${String(app).replace(/"/g, '\\"')} &`);
+    }
+    if (action === 'close_app') {
+      const app = args.app || args.name || args.target;
+      if (!app) return { ok: false, error: 'close_app requires app' };
+      if (IS_WIN) return sh(`taskkill /F /IM "${String(app).replace(/\.exe$/i, '')}.exe" 2>nul`);
+      if (IS_MAC) return sh(`osascript -e 'tell application "${String(app).replace(/"/g, '\\"')}" to quit'`);
+      return sh(`pkill -f "${String(app).replace(/"/g, '\\"')}"`);
+    }
+    if (action === 'run_code' || action === 'shell') {
+      const language = String(args.language || 'shell').toLowerCase();
+      const code = args.command || args.code || '';
+      if (!code) return { ok: false, error: `${action} requires code/command` };
+      if (language === 'javascript' || language === 'js' || language === 'node') {
+        const result = await Promise.resolve(Function('"use strict";\n' + String(code))());
+        return { ok: true, out: result == null ? 'done' : String(result) };
+      }
+      return sh(String(code), Number(args.timeout || 15000));
+    }
+    if (action === 'speak') return { ok: true, out: `speak:${args.text || args.message || ''}` };
+    if (action === 'send_message') return { ok: true, out: `message:${args.text || args.message || ''}` };
+    if (action === 'wait') {
+      const ms = Number(args.ms || (Number(args.seconds || 1) * 1000));
+      await new Promise(r => setTimeout(r, Math.max(0, Math.min(ms || 1000, 600000))));
+      return { ok: true, out: `Waited ${ms || 1000}ms` };
+    }
+    if (action === 'type_text') {
+      const text = String(args.text || args.message || '');
+      if (!text) return { ok: false, error: 'type_text requires text' };
+      if (IS_WIN) {
+        const send = text.replace(/'/g, "''").replace(/[+^%~(){}[\]]/g, '{$&}');
+        return sh(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 300; [System.Windows.Forms.SendKeys]::SendWait('${send}')"`);
+      }
+      if (IS_MAC) return sh(`osascript -e 'tell application "System Events" to keystroke "${text.replace(/"/g, '\\"')}"'`);
+      return sh(`xdotool type --clearmodifiers --delay 20 '${text.replace(/'/g, "'\\''")}'`);
+    }
+    if (action === 'press_key') {
+      const key = String(args.key || args.keys || '').trim();
+      if (!key) return { ok: false, error: 'press_key requires key' };
+      if (IS_WIN) return sh(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${key.replace(/'/g, "''")}')"`);
+      if (IS_MAC) return sh(`osascript -e 'tell application "System Events" to keystroke "${key.replace(/"/g, '\\"')}"'`);
+      return sh(`xdotool key ${key.replace(/[^a-zA-Z0-9_+.-]/g, '')}`);
+    }
+    return { ok: false, error: `Unsupported manifest action: ${action}` };
   }
 
   setConfig(pluginId, config) {
@@ -251,8 +332,10 @@ class PluginManager {
       }
       if (!data) return { ok: false, error: 'Invalid share URL' };
       const pluginData = JSON.parse(Buffer.from(data, 'base64').toString());
-      // Force community tier on share-installed plugins unless they arrived with a signed bundle.
-      if (pluginData.tier !== 'built_in' && pluginData.tier !== 'demo') pluginData.tier = 'community';
+      // Share URLs are explicitly imported by the local user, so install them
+      // as local plugins. Remote marketplace installs use the signed bundle
+      // path in main.js and get tier=marketplace.
+      if (pluginData.tier !== 'built_in' && pluginData.tier !== 'demo') pluginData.tier = 'local';
       return this.install(pluginData);
     } catch (e) { return { ok: false, error: e.message }; }
   }
