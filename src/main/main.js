@@ -784,10 +784,8 @@ ipcMain.handle('sysInfo', () => ({
   arch:     os.arch()
 }));
 
-// ── VOICE: Multiple free/paid providers ───────────────────────────────────────
-// Groq Whisper  — FREE (2h audio/day, fastest)  → groq.com
-// OpenAI Whisper — $0.006/min                   → platform.openai.com
-// Deepgram Nova-2 — FREE $200 credit             → deepgram.com
+// ── VOICE: Multiple external providers ───────────────────────────────────────
+// Provider pricing and quotas change often, so Horizon does not hardcode them.
 ipcMain.handle('transcribeAudio', async (_, base64Audio, mimeType) => {
   const fetch    = require('node-fetch');
   const FormData = require('form-data');
@@ -833,7 +831,7 @@ ipcMain.handle('transcribeAudio', async (_, base64Audio, mimeType) => {
 
     if (voiceProv === 'deepgram') {
       const key = keysStore.get('k_deepgram');
-      if (!key) { cleanup(); return { error: 'Deepgram key needed → Settings. Free $200 credit at deepgram.com' }; }
+      if (!key) { cleanup(); return { error: 'Deepgram key needed -> Settings -> Voice.' }; }
       const audioData = fs.readFileSync(tmp);
       const r = await fetch('https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&language=multi', {
         method: 'POST', headers: { 'Authorization': `Token ${key}`, 'Content-Type': mimeType.split(';')[0] }, body: audioData
