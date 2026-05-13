@@ -8,7 +8,9 @@
  * - Автоматического создания workflows через AI
  */
 
-const { Notification } = require('electron');
+const { Notification, app, desktopCapturer, shell } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
 class WorkflowEngine {
   constructor(store, pluginManager) {
@@ -307,7 +309,16 @@ class WorkflowEngine {
     const type = step.type || step.action || 'shell';
     const params = step.params || step.args || {};
     if (type === 'shell' || type === 'run_code') return 'shell_command';
-    if (type === 'plugin') return `${params.pluginId || 'plugin'}__${params.tool || 'run'}`;
+    if (type === 'plugin') {
+      const pluginId = params.pluginId || 'plugin';
+      const toolName = params.tool || 'run';
+      try {
+        const manifest = this.pluginManager?.plugins?.get?.(pluginId) || {};
+        const spec = (manifest.tools || []).find(t => t && t.name === toolName);
+        if (spec?.action) return `${pluginId}__${spec.action}`;
+      } catch (_) {}
+      return `${pluginId}__${toolName}`;
+    }
     if (type === 'open_url' || type === 'open_site') return 'browser.open';
     if (type === 'open_app' || type === 'close_app') return `app.${type}`;
     if (type === 'type_text' || type === 'press_key') return `computer.${type}`;
@@ -345,12 +356,28 @@ class WorkflowEngine {
 
   // Выполнить один шаг workflow
   async executeStep(step, onStep) {
-    const { exec } = require('child_process');
+    const { exec, execFile } = require('child_process');
     const IS_WIN = process.platform === 'win32';
     const IS_MAC = process.platform === 'darwin';
 
     function sh(cmd) {
       return new Promise(r => exec(cmd, { timeout: 15000 }, (e, o, er) => r({ ok: !e, out: (o || '').trim(), err: (er || '').trim() })));
+    }
+
+    function runNode(code) {
+      return new Promise((resolve) => {
+        execFile(
+          process.env.HORIZON_NODE_PATH || 'node',
+          ['-e', String(code)],
+          { timeout: 15000, windowsHide: true, maxBuffer: 1024 * 1024 },
+          (e, o, er) => resolve({
+            ok: !e,
+            out: (o || '').trim() || (!e ? 'done' : ''),
+            err: (er || '').trim(),
+            error: e ? (e.message || 'Node execution failed') : undefined
+          })
+        );
+      });
     }
 
     // Support both {type, params} and {action, args} formats
@@ -361,9 +388,13 @@ class WorkflowEngine {
     switch (type) {
       case 'open_url': {
         const url = params.url || action;
-        if (IS_WIN) return sh(`start "" "${url}"`);
-        if (IS_MAC) return sh(`open "${url}"`);
-        return sh(`xdg-open "${url}"`);
+        if (!/^https?:\/\//i.test(String(url || ''))) return { ok: false, error: 'open_url requires http(s) URL' };
+        try {
+          await shell.openExternal(String(url));
+          return { ok: true, out: `Opened ${url}` };
+        } catch (e) {
+          return { ok: false, error: e.message };
+        }
       }
 
       case 'close_app': {
@@ -388,7 +419,7 @@ class WorkflowEngine {
 
       case 'notify': {
         const title = params.title || 'Horizon Workflow';
-        const body = params.body || action;
+        const body = params.body || params.message || action;
         try {
           new Notification({ title: `◈ ${title}`, body }).show();
           return { ok: true, out: 'Notification sent' };
@@ -417,8 +448,7 @@ class WorkflowEngine {
         const lang = params.language || 'node';
         if (!code) return { ok: false, error: 'No code specified' };
         if (lang === 'node' || lang === 'javascript') {
-          try { const r = eval(code); return { ok: true, out: String(r || 'done') }; }
-          catch(e) { return { ok: false, error: e.message }; }
+          return runNode(code);
         }
         return sh(code);
       }
@@ -464,8 +494,21 @@ class WorkflowEngine {
       }
 
       case 'screenshot': {
-        // Handled by main process via IPC, return placeholder
-        return { ok: true, out: 'Screenshot requested' };
+        try {
+          const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 1920, height: 1080 }
+          });
+          if (!sources.length) return { ok: false, error: 'No screen source available' };
+          const dir = path.join(app.getPath('userData'), 'workflow-screenshots');
+          fs.mkdirSync(dir, { recursive: true });
+          const file = path.join(dir, `workflow-${Date.now()}.png`);
+          const buf = sources[0].thumbnail.toPNG();
+          fs.writeFileSync(file, buf);
+          return { ok: true, out: `Screenshot saved: ${file}`, path: file, base64: buf.toString('base64') };
+        } catch (e) {
+          return { ok: false, error: e.message };
+        }
       }
 
       default:
