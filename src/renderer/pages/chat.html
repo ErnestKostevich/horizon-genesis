@@ -4599,6 +4599,7 @@ async function loadPersonaSelect() {
     currentPersona = list[0].id;
     sel.value = currentPersona;
   }
+  try { updateInspector(); } catch(_){}
 }
 
 async function renderPersonasEditor() {
@@ -6606,6 +6607,7 @@ async function setPersona(id) {
   currentPersona = id;
   try { const sel = document.getElementById('persona-select'); if (sel && sel.value !== id) sel.value = id; } catch(_){}
   await saveSetting('persona', id, 'Persona');
+  try { updateInspector(); } catch(_){}
   try {
     const p = await H.getPersona(id);
     if (p) {
@@ -9585,7 +9587,7 @@ function refreshInspector(){
     document.getElementById('insp-provider').textContent = p;
     document.getElementById('insp-model').textContent = m;
     document.getElementById('insp-mode').textContent = mode || 'chat';
-    document.getElementById('insp-persona').textContent = (typeof persona !== 'undefined' && persona) ? persona : 'Default';
+    document.getElementById('insp-persona').textContent = currentPersona || 'Default';
     document.getElementById('insp-workspace').textContent = codeWorkspace || 'No workspace';
     document.getElementById('insp-open-files').textContent = (codeOpenFiles?.length || 0).toString();
     document.getElementById('insp-voice').textContent = voiceProvider || '—';

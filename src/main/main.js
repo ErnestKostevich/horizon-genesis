@@ -3015,7 +3015,27 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     catch (e) { console.warn('Plugin tools unavailable:', e.message); }
   }
 
+  const activePersonaId = settingsStore.get('persona') || 'jarvis';
+  let allowedToolGroups = null;
+  try {
+    if (personas && typeof personas.getPersonaFull === 'function') {
+      const personaFull = personas.getPersonaFull(activePersonaId);
+      if (Array.isArray(personaFull?.allowedTools)) allowedToolGroups = personaFull.allowedTools;
+    }
+  } catch (_) {}
+  const personaAllowsTool = (toolName) => {
+    if (!agentLoop?.toolAllowedByPersona) return true;
+    return agentLoop.toolAllowedByPersona(toolName, allowedToolGroups);
+  };
+
   const dispatchToolFn = async (tool, args) => {
+    if (!personaAllowsTool(tool)) {
+      return {
+        ok: false,
+        err: `Tool ${tool} is disabled for persona ${activePersonaId}`,
+        error: `Tool ${tool} is disabled for persona ${activePersonaId}`,
+      };
+    }
     if (mcpRegistry && String(tool || '').includes('__')) {
       const mcpResult = await mcpRegistry.dispatch(tool, args);
       if (mcpResult) return mcpResult;
@@ -3065,7 +3085,8 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       control: controller,
       nativeTools: provider === 'claude' || provider === 'openai',
       extraTools: [...mcpTools, ...pluginTools],
-      personaId: settingsStore.get('persona') || 'jarvis',
+      personaId: activePersonaId,
+      allowedToolGroups,
       dispatchToolFn
     });
   } catch (e) {

@@ -26,6 +26,37 @@ function normalizeDecision(decision) {
   return { decision: decision.decision || 'allow', ...decision };
 }
 
+function toolAllowedByPersona(toolName, allowedGroups) {
+  if (!Array.isArray(allowedGroups)) return true;
+  if (allowedGroups.length === 0) return false;
+  const allowed = new Set(allowedGroups.map(String));
+  const name = String(toolName || '');
+  const groups = {
+    'fs.read': [
+      'read_file', 'list_dir', 'search_files', 'get_system_info',
+      'get_running_apps', 'get_facts', 'recall', 'get_nutrition'
+    ],
+    'fs.write': ['write_file', 'remember', 'set_fact', 'log_meal'],
+    shell: ['run_code', 'run_powershell', 'run_shell', 'shell_command'],
+    'web.fetch': ['browser_open', 'open_site', 'get_location', 'get_weather', 'wikipedia'],
+    'web.search': ['browser_search', 'web_search', 'wikipedia'],
+    screenshot: ['screenshot', 'capture_screen', 'browser_screenshot'],
+    'computer.click': ['mouse_click', 'mouse_move', 'scroll', 'smart_click'],
+    'computer.type': ['type_text', 'press_key'],
+  };
+  for (const [group, tools] of Object.entries(groups)) {
+    if (allowed.has(group) && tools.includes(name)) return true;
+  }
+  if (name.startsWith('plugin_') || name.includes('__')) {
+    return allowed.has('plugins') || allowed.has('web.fetch') || allowed.has('fs.write') || allowed.has('shell');
+  }
+  return false;
+}
+
+function filterToolsForPersona(tools, allowedGroups) {
+  return (tools || []).filter(t => toolAllowedByPersona(t?.name, allowedGroups));
+}
+
 // Build the agent system prompt with available tools
 function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, options = {}) {
   const tools = (selectedTools || TOOL_DEFINITIONS).map(t =>
@@ -364,11 +395,12 @@ async function runAgentLoop(userMessage, opts = {}) {
     extraTools = [],
     dispatchToolFn = dispatchTool,
     personaId = null,    // overrides settingsStore lookup in buildAgentSystemPrompt
-    personaPrompt = null // pre-resolved persona text (cheaper for hot paths)
+    personaPrompt = null, // pre-resolved persona text (cheaper for hot paths)
+    allowedToolGroups = null
   } = opts;
 
   // Select relevant tools for this query
-  const selectedTools = [...selectToolsForQuery(userMessage), ...extraTools]
+  const selectedTools = filterToolsForPersona([...selectToolsForQuery(userMessage), ...extraTools], allowedToolGroups)
     .filter((tool, index, arr) => tool?.name && arr.findIndex(t => t?.name === tool.name) === index);
   const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools, personaId, personaPrompt });
   
@@ -515,4 +547,12 @@ async function runAgentLoop(userMessage, opts = {}) {
   return { ok: true, answer: finalAnswer, steps };
 }
 
-module.exports = { runAgentLoop, buildAgentSystemPrompt, parseAgentResponse, selectToolsForQuery, agentEvents };
+module.exports = {
+  runAgentLoop,
+  buildAgentSystemPrompt,
+  parseAgentResponse,
+  selectToolsForQuery,
+  toolAllowedByPersona,
+  filterToolsForPersona,
+  agentEvents
+};
