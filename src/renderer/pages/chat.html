@@ -2477,7 +2477,7 @@ body.with-sidebar .chat-status-bar{display:flex}
     <div class="insp-section">
       <div class="insp-h">Session usage</div>
       <div class="cost-headline" id="insp-cost-headline">0 tok</div>
-      <div class="cost-subhead" id="insp-cost-sub">0 msgs · provider usage pending</div>
+      <div class="cost-subhead" id="insp-cost-sub">0 msgs - 0 tokens - estimates start after the first message</div>
     </div>
     <div class="insp-section">
       <div class="insp-h">Token budget</div>
@@ -6492,64 +6492,11 @@ function deleteWorkflow(id) {
 }
 
 async function runWorkflow(id) {
-  const wf = workflows.find(w => w.id === id);
-  if (!wf) return { ok: false, error: 'Workflow not found' };
-  
-  addMsg('bot', lang === 'ru' 
-    ? `⚡ Запускаю workflow: **${wf.name}**`
-    : `⚡ Running workflow: **${wf.name}**`);
-  
-  for (const step of wf.steps) {
-    try {
-      switch(step.action) {
-        case 'open_url':
-          await H.browserOpenUrl(step.args.url);
-          break;
-        case 'open_site':
-          await H.browserOpenSite(step.args.name);
-          break;
-        case 'type_text':
-          await H.agentTool('type_text', step.args);
-          break;
-        case 'press_key':
-          await H.agentTool('press_key', step.args);
-          break;
-        case 'run_code':
-          await H.execCode(step.args.code, step.args.language);
-          break;
-        case 'screenshot': {
-          const shot = await H.pcScreenshot();
-          if (shot?.ok && shot.base64) addCard('Workflow screenshot', shot.path || '', shot.base64);
-          else throw new Error(shot?.err || shot?.error || 'Screenshot failed');
-          break;
-        }
-        case 'wait':
-          await new Promise(r => setTimeout(r, step.args.ms || 1000));
-          break;
-        case 'notify':
-          H.notify('Horizon Workflow', step.args.message);
-          break;
-        case 'speak':
-          speak(step.args.text);
-          break;
-        case 'send_message':
-          const inp = document.getElementById('inp');
-          inp.value = step.args.text;
-          ar(inp);
-          await sendMsg();
-          break;
-        default:
-          console.log('Unknown workflow action:', step.action);
-      }
-    } catch(e) {
-      addMsg('bot', `⚠️ Workflow step failed: ${e.message}`);
-      break;
-    }
-    // Small delay between steps
-    await new Promise(r => setTimeout(r, 300));
+  const r = await H.workflowRun?.(id);
+  if (!r || r.ok === false) {
+    return { ok: false, error: (r && r.error) || 'Workflow engine failed' };
   }
-  
-  addMsg('bot', lang === 'ru' ? `✅ Workflow **${wf.name}** завершён` : `✅ Workflow **${wf.name}** complete`);
+  return r;
 }
 
 // Quick workflow creation from natural language
@@ -8038,7 +7985,7 @@ async function runWorkflowById(id) {
     addMsg('bot', `Workflow **${label}** complete in ${Math.round((r.duration || 0) / 1000)}s.`);
     await loadWorkflows();
   } catch (e) {
-    await runWorkflow(id);
+    addMsg('bot', `Workflow error: ${e?.message || e || 'workflow engine failed'}`);
   }
 }
 
@@ -9680,14 +9627,14 @@ function refreshInspectorCost(){
   if (sub) {
     const source = sessionUsageKnown
       ? (sessionHasEstimatedUsage ? 'provider + estimated usage' : 'provider usage')
-      : (sessionTokens ? 'estimated usage' : 'provider usage pending');
-    sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} · ${formatTokens(sessionTokens)} tokens · ${source}`;
+      : (sessionTokens ? 'estimated usage' : 'estimates start after the first message');
+    sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} - ${formatTokens(sessionTokens)} tokens - ${source}`;
   }
 
   // Token budget visualisation. We don't have per-segment counters; estimate
   // splits as 7% system, 83% history, 8% files, 2% tools (a rough pattern
   // that matches typical chat sessions). Real per-segment tracking is a
-  // follow-up — this gets the bar visible and updating as tokens grow.
+  // follow-up. This gets the bar visible and updating as tokens grow.
   const total = sessionTokens || 0;
   const budget = 200000;
   const segs = {
