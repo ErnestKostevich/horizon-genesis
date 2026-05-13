@@ -1367,6 +1367,7 @@ body.inspector-active .inspector-pane { display: flex; }
 /* The dock is no longer an overlay: every chat bar below the titlebar
    reserves real room so provider chips, mode buttons, messages and composer
    never sit underneath Context / Tools / Cost / Log. */
+body.inspector-active > .tb,
 body.inspector-active .wake-bar,
 body.inspector-active .sb,
 body.inspector-active .modes,
@@ -1377,6 +1378,7 @@ body.inspector-active .inp-wrap {
 }
 /* Code Mode owns the canvas and its own right column. */
 body.code-mode-active .inspector-pane { display: none !important; }
+body.code-mode-active.inspector-active > .tb,
 body.code-mode-active.inspector-active .chat-status-bar,
 body.code-mode-active.inspector-active .modes,
 body.code-mode-active.inspector-active .wake-bar,
@@ -1535,6 +1537,7 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
 }
 @media (max-width: 980px) {
   .inspector-pane { left: 0; right: 0; width: auto; top: 52px; bottom: 0; }
+  body.inspector-active > .tb,
   body.inspector-active .wake-bar,
   body.inspector-active .sb,
   body.inspector-active .modes,
