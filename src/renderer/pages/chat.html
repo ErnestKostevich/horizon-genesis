@@ -6791,7 +6791,8 @@ async function sharePlugin(id) {
 async function removePlugin(id) {
   try {
     await H.pluginUninstall(id);
-    renderHubBody();
+    if (document.getElementById('hub-panel')?.classList.contains('show')) renderHubBody();
+    if (document.getElementById('store-panel')?.classList.contains('show')) renderStoreBody();
     H.notify('Plugin Hub', 'Plugin removed');
   } catch(_) {}
 }
@@ -7153,6 +7154,7 @@ async function renderStoreBody() {
       }
       storeItems = r.items || [];
       const installed = (await H.pluginList()).map(p => p.id);
+      storeInstalled = installed;
       renderStorePlugins(storeItems, installed);
     } catch(e) {
       body.innerHTML = `<div style="color:var(--red);font-size:11px">Error: ${e.message}</div>`;
