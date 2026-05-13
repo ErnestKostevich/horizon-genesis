@@ -1340,20 +1340,24 @@ body.code-mode-active .modes { display: none; }
 .apex-right-pane #arp-persona[hidden] { display: none !important; }
 
 /* Inspector panel: chat-only right dock.
-   It starts below top controls and ends above the composer, so it never
-   squeezes the titlebar/license pills or covers the input buttons. */
-:root { --inspector-w: 360px; --inspector-gap: 18px; }
+   This is a real reserved side surface, not a floating overlay. It begins
+   below the titlebar, owns the right edge, and every chat row reserves width
+   for it so status pills, messages and composer controls stay visible. */
+:root { --inspector-w: 352px; --inspector-gap: 0px; }
 .inspector-pane {
   display: none;
   position: fixed;
-  top: 80px;
-  right: 16px;
-  bottom: 16px;
+  top: 52px;
+  right: 0;
+  bottom: 0;
   width: var(--inspector-w);
   background: linear-gradient(180deg, var(--code-bg-2,#0c1018) 0%, var(--code-bg,#07090f) 100%);
   border: 1px solid var(--code-line, #1d2333);
-  border-radius: 16px;
-  box-shadow: 0 22px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.04);
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  box-shadow: -22px 0 60px rgba(0,0,0,.34), inset 1px 0 0 rgba(255,255,255,.035);
   z-index: 85;
   flex-direction: column;
   -webkit-app-region: no-drag;
@@ -1369,7 +1373,7 @@ body.inspector-active .modes,
 body.inspector-active .chat-status-bar,
 body.inspector-active .msgs,
 body.inspector-active .inp-wrap {
-  margin-right: calc(var(--inspector-w) + var(--inspector-gap) + 16px);
+  margin-right: calc(var(--inspector-w) + var(--inspector-gap));
 }
 /* Code Mode owns the canvas and its own right column. */
 body.code-mode-active .inspector-pane { display: none !important; }
@@ -1527,11 +1531,10 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
 }
 .insp-byok strong { color: var(--code-cyan, #56d2ff); }
 @media (max-width: 1280px) {
-  :root { --inspector-w: 320px; --inspector-gap: 12px; }
-  .inspector-pane { right: 10px; top: 76px; bottom: 12px; }
+  :root { --inspector-w: 320px; --inspector-gap: 0px; }
 }
 @media (max-width: 980px) {
-  .inspector-pane { left: 12px; right: 12px; width: auto; top: 64px; bottom: 84px; }
+  .inspector-pane { left: 0; right: 0; width: auto; top: 52px; bottom: 0; }
   body.inspector-active .wake-bar,
   body.inspector-active .sb,
   body.inspector-active .modes,
@@ -4101,36 +4104,37 @@ async function refreshLicensePill() {
   if (!pill) return;
   try {
     const state = await H.licenseState();
-    if (!state) { pill.style.display='none'; return; }
+    if (!state) { pill.style.display = 'none'; return; }
     pill.style.display = 'inline-block';
-    pill.classList.remove('accent','warn','danger');
+    pill.classList.remove('accent', 'warn', 'danger');
     const plan = String(state.plan || '').toLowerCase();
     const privileged = _PRIVILEGED_PILL_LABELS[plan];
     if (privileged) {
-      pill.textContent = `● ${privileged}`;
+      pill.textContent = privileged;
       pill.classList.add('accent');
-      pill.title = `${privileged} access — Horizon is included for this account.`;
+      pill.title = privileged + ' access - Horizon is included for this account.';
     } else if (state.reason === 'pro') {
-      pill.textContent = '● PRO';
+      pill.textContent = 'PRO';
       pill.classList.add('accent');
-      const planSuffix = plan ? ' · ' + plan : '';
-      pill.title = 'Pro active' + planSuffix + (state.expiresAt ? ' · renews ' + new Date(state.expiresAt).toLocaleDateString() : '');
+      const planSuffix = plan ? ' - ' + plan : '';
+      pill.title = 'Pro active' + planSuffix + (state.expiresAt ? ' - renews ' + new Date(state.expiresAt).toLocaleDateString() : '');
     } else if (state.reason === 'trial') {
-      const days = (state.trialDaysLeft != null) ? state.trialDaysLeft : null;
-      pill.textContent = days != null ? `● TRIAL · ${days}d` : '● TRIAL';
+      const days = state.trialDaysLeft != null ? state.trialDaysLeft : null;
+      pill.textContent = days != null ? 'TRIAL ' + days + 'd' : 'TRIAL';
       pill.classList.add('warn');
-      pill.title = `Free trial — ${days != null ? days + ' days' : ''} left. Click to upgrade.`;
+      pill.title = 'Free trial - ' + (days != null ? days + ' days' : '') + ' left. Click to upgrade.';
     } else if (state.reason === 'trial-expired' || state.reason === 'expired') {
-      pill.textContent = '● EXPIRED';
+      pill.textContent = 'EXPIRED';
       pill.classList.add('danger');
       pill.title = state.reason === 'trial-expired'
         ? 'Trial ended. Click to upgrade.'
         : 'Subscription expired. Click to renew.';
     } else {
-      // Unknown reason → hide rather than lie.
       pill.style.display = 'none';
     }
-  } catch(_) { try { pill.style.display='none'; } catch(__){} }
+  } catch (_) {
+    try { pill.style.display = 'none'; } catch (__) {}
+  }
 }
 function onLicensePillClick() {
   try { H.licenseOpenUpgradePage && H.licenseOpenUpgradePage(); } catch(_){}
