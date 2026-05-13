@@ -17,7 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const electron = require('electron');
 const shell = electron.shell || { openExternal: async () => { throw new Error('Electron shell is not available'); } };
 const Notification = electron.Notification || class { constructor() {} show() {} };
@@ -230,7 +230,16 @@ class PluginManager {
     const action = String(tool.action || tool.name || '').trim();
     const args = { ...(tool.args || {}), ...(runtimeArgs || {}) };
     const sh = (cmd, timeout = 15000) => new Promise(r => {
-      exec(cmd, { timeout }, (e, o, er) => r({ ok: !e, out: (o || '').trim(), err: (er || '').trim(), error: e?.message }));
+      exec(cmd, { timeout, windowsHide: true }, (e, o, er) => r({ ok: !e, out: (o || '').trim(), err: (er || '').trim(), error: e?.message }));
+    });
+    const runNode = (code, timeout = 15000) => new Promise(r => {
+      const nodeBin = process.env.HORIZON_NODE_PATH || process.execPath || 'node';
+      execFile(
+        nodeBin,
+        ['-e', String(code)],
+        { timeout, windowsHide: true, maxBuffer: 1024 * 1024 },
+        (e, o, er) => r({ ok: !e, out: (o || '').trim() || 'done', err: (er || '').trim(), error: e?.message })
+      );
     });
     const IS_WIN = process.platform === 'win32';
     const IS_MAC = process.platform === 'darwin';
@@ -265,8 +274,7 @@ class PluginManager {
       const code = args.command || args.code || '';
       if (!code) return { ok: false, error: `${action} requires code/command` };
       if (language === 'javascript' || language === 'js' || language === 'node') {
-        const result = await Promise.resolve(Function('"use strict";\n' + String(code))());
-        return { ok: true, out: result == null ? 'done' : String(result) };
+        return runNode(code, Number(args.timeout || 15000));
       }
       return sh(String(code), Number(args.timeout || 15000));
     }

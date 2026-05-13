@@ -1720,7 +1720,7 @@ body.with-sidebar .chat-status-bar{display:flex}
   <div class="cs-stats" id="cs-stats">
     <div class="cs-stat"><span>✉</span> <span class="cs-stat-val" id="stat-msgs">0</span> msgs</div>
     <div class="cs-stat"><span>⭐</span> <span class="cs-stat-val" id="stat-tokens">0</span> tokens</div>
-    <div class="cs-stat"><span>Usage</span> <span class="cs-stat-val" id="stat-usage">real only</span></div>
+    <div class="cs-stat"><span>Usage</span> <span class="cs-stat-val" id="stat-usage">estimated</span></div>
   </div>
 </aside>
 
@@ -2477,7 +2477,7 @@ body.with-sidebar .chat-status-bar{display:flex}
     <div class="insp-section">
       <div class="insp-h">Session usage</div>
       <div class="cost-headline" id="insp-cost-headline">0 tok</div>
-      <div class="cost-subhead" id="insp-cost-sub">0 msgs · provider usage pending</div>
+      <div class="cost-subhead" id="insp-cost-sub">0 msgs - 0 tokens - estimates start after the first message</div>
     </div>
     <div class="insp-section">
       <div class="insp-h">Token budget</div>
@@ -4339,7 +4339,7 @@ async function _executeActionIntent(action){
     } else {
       addMsg('bot', `Unknown action intent: ${intent}`);
     }
-  } catch(e) { addMsg('bot', `Action failed: ${e.message}`); }
+  } catch(e) { addMsg('bot', `Plugin error: ${e.message}`); }
 }
 
 // ═══ PERMISSION CARD (P3) — gate destructive operations ═══
@@ -5745,6 +5745,12 @@ async function runAgent(text) {
   const opRun = opStartRun('agent', text);
   rmGreet();
   addMsg('user', text);
+  const currentProvider = provider || 'gemini';
+  const currentModel = getSelectedModelForProvider(currentProvider);
+  const userEstimatedTokens = estimateTokensForText(text);
+  history.push({ role: 'user', content: text });
+  _persistChatMessage('user', text, { provider: currentProvider, model: currentModel, estimatedTokens: userEstimatedTokens });
+  trackTokens(text, 'user', currentProvider, null, userEstimatedTokens);
 
   const steps = [];
   let agentPanelRef = renderAgentPanel([], null, true);
@@ -5752,13 +5758,10 @@ async function runAgent(text) {
   activeAgentPanelRef = agentPanelRef;
   ensureOperatorAgentListener();
 
-  // FIX: Use the global 'provider' variable correctly
-  const currentProvider = provider || 'gemini';
-
   try {
     const result = await H.agentRun(text, {
       provider: currentProvider,
-      model: getSelectedModelForProvider(currentProvider),
+      model: currentModel,
       history: history.slice(-8),
       maxSteps: 8
     });
@@ -5767,9 +5770,9 @@ async function runAgent(text) {
     renderAgentPanel(result.steps || steps, result.ok ? result.answer : `Error: ${result.error}`);
 
     if (result.ok && result.answer) {
-      history.push({ role: 'user', content: text });
       history.push({ role: 'assistant', content: result.answer });
-      _persistChatMessage('assistant', result.answer, {model:'agent'});
+      _persistChatMessage('assistant', result.answer, { provider: currentProvider, model: result.model || currentModel || 'agent', usage: result.usage });
+      trackTokens(result.answer, 'assistant', currentProvider, result.usage);
       speak(result.answer.slice(0, 400).replace(/[*#`]/g, ''));
       // Save to long-term memory
       try { H.memSaveConversation(text, result.answer); } catch(_){}
@@ -6489,64 +6492,11 @@ function deleteWorkflow(id) {
 }
 
 async function runWorkflow(id) {
-  const wf = workflows.find(w => w.id === id);
-  if (!wf) return { ok: false, error: 'Workflow not found' };
-  
-  addMsg('bot', lang === 'ru' 
-    ? `⚡ Запускаю workflow: **${wf.name}**`
-    : `⚡ Running workflow: **${wf.name}**`);
-  
-  for (const step of wf.steps) {
-    try {
-      switch(step.action) {
-        case 'open_url':
-          await H.browserOpenUrl(step.args.url);
-          break;
-        case 'open_site':
-          await H.browserOpenSite(step.args.name);
-          break;
-        case 'type_text':
-          await H.agentTool('type_text', step.args);
-          break;
-        case 'press_key':
-          await H.agentTool('press_key', step.args);
-          break;
-        case 'run_code':
-          await H.execCode(step.args.code, step.args.language);
-          break;
-        case 'screenshot': {
-          const shot = await H.pcScreenshot();
-          if (shot?.ok && shot.base64) addCard('Workflow screenshot', shot.path || '', shot.base64);
-          else throw new Error(shot?.err || shot?.error || 'Screenshot failed');
-          break;
-        }
-        case 'wait':
-          await new Promise(r => setTimeout(r, step.args.ms || 1000));
-          break;
-        case 'notify':
-          H.notify('Horizon Workflow', step.args.message);
-          break;
-        case 'speak':
-          speak(step.args.text);
-          break;
-        case 'send_message':
-          const inp = document.getElementById('inp');
-          inp.value = step.args.text;
-          ar(inp);
-          await sendMsg();
-          break;
-        default:
-          console.log('Unknown workflow action:', step.action);
-      }
-    } catch(e) {
-      addMsg('bot', `⚠️ Workflow step failed: ${e.message}`);
-      break;
-    }
-    // Small delay between steps
-    await new Promise(r => setTimeout(r, 300));
+  const r = await H.workflowRun?.(id);
+  if (!r || r.ok === false) {
+    return { ok: false, error: (r && r.error) || 'Workflow engine failed' };
   }
-  
-  addMsg('bot', lang === 'ru' ? `✅ Workflow **${wf.name}** завершён` : `✅ Workflow **${wf.name}** complete`);
+  return r;
 }
 
 // Quick workflow creation from natural language
@@ -6817,11 +6767,11 @@ async function execPluginTool(pluginId, toolName, args = {}) {
       } else if (typeof data === 'string' && data) {
         payload = '\n' + data;
       }
-      addMsg('bot', (lang === 'ru' ? `🧩 Плагин выполнил: **${toolName}**` : `🧩 Plugin executed: **${toolName}**`) + payload);
+      addMsg('bot', `Plugin executed: **${toolName}**` + payload);
     } else {
-      addMsg('bot', `⚠️ Plugin error: ${(r && r.error) || 'unknown'}`);
+      addMsg('bot', `Plugin error: ${(r && r.error) || 'unknown'}`);
     }
-  } catch(e) { addMsg('bot', `⚠️ ${e.message}`); }
+  } catch(e) { addMsg('bot', `Plugin error: ${e.message}`); }
 }
 
 async function sharePlugin(id) {
@@ -8035,7 +7985,7 @@ async function runWorkflowById(id) {
     addMsg('bot', `Workflow **${label}** complete in ${Math.round((r.duration || 0) / 1000)}s.`);
     await loadWorkflows();
   } catch (e) {
-    await runWorkflow(id);
+    addMsg('bot', `Workflow error: ${e?.message || e || 'workflow engine failed'}`);
   }
 }
 
@@ -9677,14 +9627,14 @@ function refreshInspectorCost(){
   if (sub) {
     const source = sessionUsageKnown
       ? (sessionHasEstimatedUsage ? 'provider + estimated usage' : 'provider usage')
-      : (sessionTokens ? 'estimated usage' : 'provider usage pending');
-    sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} · ${formatTokens(sessionTokens)} tokens · ${source}`;
+      : (sessionTokens ? 'estimated usage' : 'estimates start after the first message');
+    sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} - ${formatTokens(sessionTokens)} tokens - ${source}`;
   }
 
   // Token budget visualisation. We don't have per-segment counters; estimate
   // splits as 7% system, 83% history, 8% files, 2% tools (a rough pattern
   // that matches typical chat sessions). Real per-segment tracking is a
-  // follow-up — this gets the bar visible and updating as tokens grow.
+  // follow-up. This gets the bar visible and updating as tokens grow.
   const total = sessionTokens || 0;
   const budget = 200000;
   const segs = {
