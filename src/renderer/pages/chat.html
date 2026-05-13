@@ -1720,7 +1720,7 @@ body.with-sidebar .chat-status-bar{display:flex}
   <div class="cs-stats" id="cs-stats">
     <div class="cs-stat"><span>✉</span> <span class="cs-stat-val" id="stat-msgs">0</span> msgs</div>
     <div class="cs-stat"><span>⭐</span> <span class="cs-stat-val" id="stat-tokens">0</span> tokens</div>
-    <div class="cs-stat"><span>Usage</span> <span class="cs-stat-val" id="stat-usage">real only</span></div>
+    <div class="cs-stat"><span>Usage</span> <span class="cs-stat-val" id="stat-usage">estimated</span></div>
   </div>
 </aside>
 
@@ -4339,7 +4339,7 @@ async function _executeActionIntent(action){
     } else {
       addMsg('bot', `Unknown action intent: ${intent}`);
     }
-  } catch(e) { addMsg('bot', `Action failed: ${e.message}`); }
+  } catch(e) { addMsg('bot', `Plugin error: ${e.message}`); }
 }
 
 // ═══ PERMISSION CARD (P3) — gate destructive operations ═══
@@ -6817,11 +6817,11 @@ async function execPluginTool(pluginId, toolName, args = {}) {
       } else if (typeof data === 'string' && data) {
         payload = '\n' + data;
       }
-      addMsg('bot', (lang === 'ru' ? `🧩 Плагин выполнил: **${toolName}**` : `🧩 Plugin executed: **${toolName}**`) + payload);
+      addMsg('bot', `Plugin executed: **${toolName}**` + payload);
     } else {
-      addMsg('bot', `⚠️ Plugin error: ${(r && r.error) || 'unknown'}`);
+      addMsg('bot', `Plugin error: ${(r && r.error) || 'unknown'}`);
     }
-  } catch(e) { addMsg('bot', `⚠️ ${e.message}`); }
+  } catch(e) { addMsg('bot', `Plugin error: ${e.message}`); }
 }
 
 async function sharePlugin(id) {
