@@ -24,11 +24,16 @@ class WorkflowEngine {
     // forward workflow:running:start / step / end events to the renderer
     // without holding a hard dependency on Electron's webContents here.
     this.eventBridge = null;
+    this.permissionHook = null;
   }
 
   // main.js calls this once after constructing the engine.
   setEventBridge(fn) {
     this.eventBridge = typeof fn === 'function' ? fn : null;
+  }
+
+  setPermissionHook(fn) {
+    this.permissionHook = typeof fn === 'function' ? fn : null;
   }
 
   emit(event, payload) {
@@ -127,6 +132,12 @@ class WorkflowEngine {
   // Запланировать workflow
   scheduleWorkflow(wf) {
     if (!wf.trigger || wf.trigger === 'manual') return;
+    if (wf.trigger === 'startup') {
+      const handle = setTimeout(() => this.run(wf.id), 1500);
+      this.scheduledJobs.set(wf.id, handle);
+      console.log(`Workflow "${wf.name}" scheduled on startup`);
+      return;
+    }
 
     // interval:N — каждые N минут
     if (wf.trigger.startsWith('interval:')) {
@@ -138,6 +149,19 @@ class WorkflowEngine {
     }
 
     // schedule:HH:MM — каждый день в конкретное время
+    if (wf.trigger.startsWith('cron:')) {
+      const expr = wf.trigger.slice('cron:'.length).trim();
+      const parts = expr.split(/\s+/);
+      const mm = Number(parts[0]);
+      const hh = Number(parts[1]);
+      if (Number.isFinite(hh) && Number.isFinite(mm)) {
+        wf = { ...wf, trigger: `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` };
+      } else {
+        console.warn(`Workflow "${wf.name}" has unsupported cron expression: ${expr}`);
+        return;
+      }
+    }
+
     if (wf.trigger.startsWith('schedule:')) {
       const timePart = wf.trigger.split(':').slice(1).join(':'); // HH:MM
       const [hh, mm] = timePart.split(':').map(Number);
@@ -170,7 +194,7 @@ class WorkflowEngine {
   }
 
   // Выполнить workflow
-  async run(id, onStep = null) {
+  async run(id, onStep = null, opts = {}) {
     const workflows = this.loadAll();
     const wf = workflows.find(w => w.id === id);
     if (!wf) return { ok: false, error: 'Workflow not found' };
@@ -209,6 +233,18 @@ class WorkflowEngine {
       this.emit('workflow:running:step', { runId, stepIndex: i, status: 'running' });
 
       try {
+        const permission = await this.requestStepPermission(wf, step, i, runId, opts);
+        if (permission && permission.ok === false) {
+          const deniedResult = { ok: false, error: permission.error || 'Denied by user', denied: true };
+          results.push({ step: step.action || step.type, result: deniedResult, ok: false });
+          liveRun.steps[i].status = 'failed';
+          liveRun.steps[i].endedAt = Date.now();
+          liveRun.steps[i].error = deniedResult.error;
+          this.emit('workflow:running:step', { runId, stepIndex: i, status: 'failed', error: deniedResult.error });
+          success = false;
+          break;
+        }
+
         const result = await this.executeStep(step, onStep);
         const stepOk = result.ok !== false;
         results.push({ step: step.action || step.type, result, ok: stepOk });
@@ -265,6 +301,46 @@ class WorkflowEngine {
     } catch {}
 
     return { ok: success, workflowName: wf.name, results, duration };
+  }
+
+  workflowPermissionTool(step) {
+    const type = step.type || step.action || 'shell';
+    const params = step.params || step.args || {};
+    if (type === 'shell' || type === 'run_code') return 'shell_command';
+    if (type === 'plugin') return `${params.pluginId || 'plugin'}__${params.tool || 'run'}`;
+    if (type === 'open_url' || type === 'open_site') return 'browser.open';
+    if (type === 'open_app' || type === 'close_app') return `app.${type}`;
+    if (type === 'type_text' || type === 'press_key') return `computer.${type}`;
+    if (type === 'clipboard_write') return 'clipboard.write';
+    if (type === 'notify' || type === 'wait' || type === 'speak' || type === 'send_message' || type === 'clipboard_read') return type;
+    return `workflow.${type}`;
+  }
+
+  workflowPermissionArgs(step) {
+    const type = step.type || step.action || 'shell';
+    const params = step.params || step.args || {};
+    if (type === 'shell') return { ...params, command: params.command || step.action || '' };
+    if (type === 'run_code') return { ...params, command: params.code || step.action || '', language: params.language || 'node' };
+    if (type === 'open_url' || type === 'open_site') return { ...params, url: params.url || step.action || '' };
+    if (type === 'open_app' || type === 'close_app') return { ...params, target: params.app || step.action || '' };
+    return params;
+  }
+
+  async requestStepPermission(workflow, step, stepIndex, runId, opts = {}) {
+    if (!this.permissionHook) return { ok: true };
+    const tool = this.workflowPermissionTool(step);
+    const args = this.workflowPermissionArgs(step);
+    return this.permissionHook({
+      sender: opts.sender || null,
+      tool,
+      args,
+      reason: `Workflow "${workflow.name}" step ${stepIndex + 1}/${(workflow.steps || []).length}`,
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      runId,
+      stepIndex,
+      step,
+    });
   }
 
   // Выполнить один шаг workflow
@@ -374,6 +450,17 @@ class WorkflowEngine {
         }
         if (IS_MAC) return sh(`osascript -e 'tell application "System Events" to keystroke "${text.replace(/"/g, '\\"')}"'`);
         return sh(`xdotool type --clearmodifiers --delay 20 '${text}'`);
+      }
+
+      case 'press_key': {
+        const key = params.key || params.keys || action;
+        if (!key) return { ok: false, error: 'No key specified' };
+        if (IS_WIN) {
+          const esc = String(key).replace(/'/g, "''");
+          return sh(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 150; [System.Windows.Forms.SendKeys]::SendWait('${esc}')"`);
+        }
+        if (IS_MAC) return sh(`osascript -e 'tell application "System Events" to keystroke "${String(key).replace(/"/g, '\\"')}"'`);
+        return sh(`xdotool key ${String(key).replace(/[^a-zA-Z0-9_+.-]/g, '')}`);
       }
 
       case 'screenshot': {

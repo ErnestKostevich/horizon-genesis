@@ -146,7 +146,7 @@ const ALLOWED_KEY_IDS = new Set([
 const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
   'claude', 'openai', 'gemini', 'groq', 'deepseek',
   'grok', 'mistral', 'qwen', 'perplexity', 'cohere',
-  'openrouter',
+  'openrouter', 'ollama', 'lmstudio', 'localai',
 ]);
 const ALLOWED_SETTING_KEYS = new Set([
   'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider',
@@ -179,6 +179,9 @@ const DEFAULT_PROVIDER_MODELS = {
   perplexity: 'sonar-pro',
   cohere: 'command-a-03-2025',
   openrouter: 'openai/gpt-4o-mini',
+  ollama: 'llama3.1',
+  lmstudio: 'local-model',
+  localai: 'local-model',
 };
 
 function assertAllowedKey(service) {
@@ -203,7 +206,7 @@ function localOpenAIEndpoint(provider) {
     const base = settingsStore.get('ollamaUrl') || 'http://127.0.0.1:11434/v1';
     return {
       url: `${String(base).replace(/\/+$/, '')}/chat/completions`,
-      model: settingsStore.get('ollamaModel') || 'llama3.1',
+      model: settingsStore.get('model.ollama') || settingsStore.get('ollamaModel') || DEFAULT_PROVIDER_MODELS.ollama,
       key: '',
       label: 'ollama/local',
     };
@@ -212,7 +215,7 @@ function localOpenAIEndpoint(provider) {
     const base = settingsStore.get('lmStudioUrl') || 'http://127.0.0.1:1234/v1';
     return {
       url: `${String(base).replace(/\/+$/, '')}/chat/completions`,
-      model: settingsStore.get('lmStudioModel') || 'local-model',
+      model: settingsStore.get('model.lmstudio') || settingsStore.get('lmStudioModel') || DEFAULT_PROVIDER_MODELS.lmstudio,
       key: '',
       label: 'lm-studio/local',
     };
@@ -221,7 +224,7 @@ function localOpenAIEndpoint(provider) {
     const base = settingsStore.get('localAiUrl') || 'http://127.0.0.1:8080/v1';
     return {
       url: `${String(base).replace(/\/+$/, '')}/chat/completions`,
-      model: settingsStore.get('localAiModel') || 'local-model',
+      model: settingsStore.get('model.localai') || settingsStore.get('localAiModel') || DEFAULT_PROVIDER_MODELS.localai,
       key: keysStore.get('k_localai') || '',
       label: 'openai-compatible/local',
     };
@@ -1131,8 +1134,16 @@ function smartOpenUrl(raw) {
   return null;
 }
 
-ipcMain.handle('pcOpen', async (_, appName) => {
-  const raw = appName.trim();
+ipcMain.handle('pcOpen', async (event, appName = '') => {
+  const target = String(appName || '').trim();
+  if (!target) return { ok: false, err: 'Empty target' };
+  return withPermission(
+    event.sender,
+    'app.open',
+    { target },
+    'Open app, URL, or folder',
+    async () => {
+  const raw = target;
 
   // 1. Smart URL
   const smartUrl = smartOpenUrl(raw);
@@ -1207,15 +1218,28 @@ ipcMain.handle('pcOpen', async (_, appName) => {
     cmd = `xdg-open "${raw}" 2>/dev/null &`;
   }
   return runShell(cmd);
+    }
+  );
 });
 
-ipcMain.handle('pcOpenPath', (_, p) => {
+ipcMain.handle('pcOpenPath', async (event, p) => withPermission(
+  event.sender,
+  'app.open_path',
+  { path: String(p || '') },
+  'Open local path',
+  () => {
   if (!p) return { ok: false };
   shell.openPath(p);
   return { ok: true, opened: p };
-});
+  }
+));
 
-ipcMain.handle('pcScreenshot', async () => {
+ipcMain.handle('pcScreenshot', async (event) => withPermission(
+  event.sender,
+  'screen.capture',
+  { target: 'primary-display' },
+  'Capture screen',
+  async () => {
   try {
     const sources = await desktopCapturer.getSources({ types:['screen'], thumbnailSize:{ width:1920, height:1080 } });
     if (!sources.length) return { ok:false, err:'No source' };
@@ -1224,24 +1248,45 @@ ipcMain.handle('pcScreenshot', async () => {
     fs.writeFileSync(tmp, buf);
     return { ok:true, base64:buf.toString('base64'), path:tmp };
   } catch(e) { return { ok:false, err:e.message }; }
-});
+  }
+));
 
-ipcMain.handle('pcShell',      async (_, cmd) => runShell(cmd));
+ipcMain.handle('pcShell',      async (event, cmd) => withPermission(
+  event.sender,
+  'shell_command',
+  { command: String(cmd || '') },
+  'Run shell command',
+  () => runShell(cmd)
+));
 ipcMain.handle('pcProcesses',  async ()        => runShell(IS_WIN ? 'tasklist /FO CSV /NH' : 'ps aux --sort=-%cpu | head -25'));
-ipcMain.handle('pcKillProc',   async (_, n)    => runShell(IS_WIN ? `taskkill /F /IM "${n}"` : `pkill -f "${n}"`));
+ipcMain.handle('pcKillProc',   async (event, n) => withPermission(
+  event.sender,
+  'process.kill',
+  { target: String(n || '') },
+  'Kill process',
+  () => runShell(IS_WIN ? `taskkill /F /IM "${n}"` : `pkill -f "${n}"`)
+));
 ipcMain.handle('pcClipboard',  ()              => ({ ok:true, out: clipboard.readText()||'(empty)' }));
-ipcMain.handle('pcSetClip',    (_, t)          => { clipboard.writeText(t); return { ok:true }; });
+ipcMain.handle('pcSetClip',    async (event, t) => withPermission(
+  event.sender,
+  'clipboard.write',
+  { text: String(t || '').slice(0, 240) },
+  'Write clipboard',
+  () => { clipboard.writeText(t); return { ok:true }; }
+));
 
-ipcMain.handle('pcType', async (_, text) => {
+ipcMain.handle('pcType', async (event, text) => {
+  text = String(text ?? '');
   const esc = text.replace(/'/g, "''");
   let cmd;
   if (IS_WIN)      cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 200; [System.Windows.Forms.SendKeys]::SendWait('${esc.replace(/[+^%~(){}[\]]/g,'{$&}')}')"`;
   else if (IS_MAC) cmd = `osascript -e 'tell application "System Events" to keystroke "${text.replace(/"/g,'\\"')}"'`;
   else             cmd = `xdotool type --clearmodifiers --delay 20 '${esc}'`;
-  return runShell(cmd);
+  return withPermission(event.sender, 'computer.type', { text: String(text || '').slice(0, 240) }, 'Type into the active app', () => runShell(cmd));
 });
 
-ipcMain.handle('pcKeyPress', async (_, key) => {
+ipcMain.handle('pcKeyPress', async (event, key) => {
+  key = String(key ?? '');
   const wm = {'ctrl+c':'^c','ctrl+v':'^v','ctrl+z':'^z','ctrl+a':'^a','ctrl+s':'^s',
                'alt+f4':'%{F4}','alt+tab':'%{TAB}','enter':'{ENTER}','escape':'{ESC}','tab':'{TAB}',
                'win':'{LWIN}','f5':'{F5}','delete':'{DEL}','backspace':'{BS}'};
@@ -1249,19 +1294,25 @@ ipcMain.handle('pcKeyPress', async (_, key) => {
   if (IS_WIN)      cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.SendKeys]::SendWait('${wm[key.toLowerCase()]||`{${key.toUpperCase()}}`}')"`;
   else if (IS_MAC) cmd = `osascript -e 'tell application "System Events" to keystroke "${key}"'`;
   else             cmd = `xdotool key ${key}`;
-  return runShell(cmd);
+  return withPermission(event.sender, 'computer.press_key', { key: String(key || '') }, 'Press key in the active app', () => runShell(cmd));
 });
 
-ipcMain.handle('pcVolume', async (_, level) => {
+ipcMain.handle('pcVolume', async (event, level) => {
   let cmd;
   if (IS_WIN)      cmd = `powershell -NoProfile -Command "& {$v=[uint32](${level}/100.0*65535);Add-Type -TypeDefinition 'using System.Runtime.InteropServices;public class A{[DllImport(\\"winmm.dll\\")]public static extern int waveOutSetVolume(System.IntPtr h,uint v);}';[A]::waveOutSetVolume([System.IntPtr]::Zero,$v -bor ($v -shl 16))}"`;
   else if (IS_MAC) cmd = `osascript -e 'set volume output volume ${level}'`;
   else             cmd = `amixer sset Master ${level}%`;
-  return runShell(cmd);
+  return withPermission(event.sender, 'system.volume', { level: Number(level) }, 'Change system volume', () => runShell(cmd));
 });
 
 ipcMain.handle('pcReadFile',  (_, p) => { try { return {ok:true,content:fs.readFileSync(p,'utf8')}; } catch(e) { return {ok:false,err:e.message}; } });
-ipcMain.handle('pcWriteFile', (_, p, c) => { try { fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,c,'utf8');return {ok:true}; } catch(e) { return {ok:false,err:e.message}; } });
+ipcMain.handle('pcWriteFile', async (event, p, c) => withPermission(
+  event.sender,
+  'fs.write_file',
+  { path: String(p || ''), bytes: Buffer.byteLength(String(c ?? ''), 'utf8') },
+  'Write file',
+  () => { try { fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,c,'utf8');return {ok:true}; } catch(e) { return {ok:false,err:e.message}; } }
+));
 ipcMain.handle('pcListDir',   (_, d) => { try { return {ok:true,entries:fs.readdirSync(d,{withFileTypes:true}).map(e=>({name:e.name,isDir:e.isDirectory()}))}; } catch(e) { return {ok:false,err:e.message}; } });
 ipcMain.handle('pcChooseFolder', async () => {
   try {
@@ -1315,12 +1366,20 @@ ipcMain.handle('wsRead', (_, rel = '') => {
   } catch(e) { return { ok:false, err:e.message }; }
 });
 
-ipcMain.handle('wsWrite', (_, rel = '', content = '') => {
+ipcMain.handle('wsWrite', async (event, rel = '', content = '') => {
   try {
     const { root, target, rel: safeRel } = resolveWorkspacePath(rel);
-    fs.mkdirSync(path.dirname(target), { recursive:true });
-    fs.writeFileSync(target, String(content ?? ''), 'utf8');
-    return { ok:true, root, rel:safeRel, bytes:Buffer.byteLength(String(content ?? ''), 'utf8') };
+    return withPermission(
+      event.sender,
+      'fs.write_file',
+      { path: safeRel, bytes: Buffer.byteLength(String(content ?? ''), 'utf8') },
+      'Write workspace file',
+      () => {
+        fs.mkdirSync(path.dirname(target), { recursive:true });
+        fs.writeFileSync(target, String(content ?? ''), 'utf8');
+        return { ok:true, root, rel:safeRel, bytes:Buffer.byteLength(String(content ?? ''), 'utf8') };
+      }
+    );
   } catch(e) { return { ok:false, err:e.message }; }
 });
 
@@ -1334,10 +1393,16 @@ ipcMain.handle('wsSearch', (_, query = '', rel = '') => {
   } catch(e) { return { ok:false, err:e.message }; }
 });
 
-ipcMain.handle('wsShell', async (_, cmd) => {
+ipcMain.handle('wsShell', async (event, cmd) => {
   try {
     const root = currentWorkspaceRoot();
-    return await runShell(String(cmd || ''), 30000, { cwd: root });
+    return await withPermission(
+      event.sender,
+      'shell_command',
+      { command: String(cmd || ''), cwd: root },
+      'Run workspace command',
+      () => runShell(String(cmd || ''), 30000, { cwd: root })
+    );
   } catch(e) { return { ok:false, err:e.message }; }
 });
 
@@ -1506,13 +1571,24 @@ public class HorizonMouse {
 }
 '@ -PassThru`;
 
-ipcMain.handle('pcMouseMove', async (_, x, y) => {
+ipcMain.handle('pcMouseMove', async (event, x, y) => withPermission(
+  event.sender,
+  'computer.mouse_move',
+  { x: Number(x), y: Number(y) },
+  'Move mouse cursor',
+  () => {
   if (IS_WIN) return runShell(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x}, ${y})"`);
   if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to set the position of the mouse to {${x}, ${y}}'`);
   return runShell(`xdotool mousemove ${x} ${y}`);
-});
+  }
+));
 
-ipcMain.handle('pcMouseClick', async (_, x, y, button) => {
+ipcMain.handle('pcMouseClick', async (event, x, y, button) => withPermission(
+  event.sender,
+  'computer.mouse_click',
+  { x: Number(x), y: Number(y), button: button || 'left' },
+  'Click mouse',
+  () => {
   button = button || 'left';
   if (IS_WIN) {
     const flags = button === 'right'
@@ -1522,25 +1598,44 @@ ipcMain.handle('pcMouseClick', async (_, x, y, button) => {
   }
   if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to ${button === 'right' ? 'secondary click' : 'click'} at {${x}, ${y}}'`);
   return runShell(`xdotool mousemove ${x} ${y} click ${button === 'right' ? '3' : '1'}`);
-});
+  }
+));
 
-ipcMain.handle('pcMouseDoubleClick', async (_, x, y) => {
+ipcMain.handle('pcMouseDoubleClick', async (event, x, y) => withPermission(
+  event.sender,
+  'computer.mouse_double_click',
+  { x: Number(x), y: Number(y) },
+  'Double-click mouse',
+  () => {
   if (IS_WIN) return runShell(`powershell -NoProfile -Command "${PS_MOUSE_CLASS} | Out-Null; [HorizonMouse]::SetCursorPos(${x},${y}); Start-Sleep -Milliseconds 80; [HorizonMouse]::mouse_event([HorizonMouse]::L_DOWN,0,0,0,0);[HorizonMouse]::mouse_event([HorizonMouse]::L_UP,0,0,0,0);Start-Sleep -Milliseconds 60;[HorizonMouse]::mouse_event([HorizonMouse]::L_DOWN,0,0,0,0);[HorizonMouse]::mouse_event([HorizonMouse]::L_UP,0,0,0,0)"`);
   if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to double click at {${x}, ${y}}'`);
   return runShell(`xdotool mousemove ${x} ${y} click --repeat 2 1`);
-});
+  }
+));
 
-ipcMain.handle('pcMouseScroll', async (_, direction, amount) => {
+ipcMain.handle('pcMouseScroll', async (event, direction, amount) => withPermission(
+  event.sender,
+  'computer.mouse_scroll',
+  { direction: String(direction || ''), amount: Number(amount || 3) },
+  'Scroll mouse wheel',
+  () => {
   amount = amount || 3;
   if (IS_WIN) return runShell(`powershell -NoProfile -Command "${PS_MOUSE_CLASS} | Out-Null; [HorizonMouse]::mouse_event([HorizonMouse]::WHEEL,0,0,${direction === 'down' ? -120*amount : 120*amount},0)"`);
   if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to scroll ${direction === 'down' ? 'down' : 'up'} 3'`);
   return runShell(`xdotool click ${direction === 'down' ? '5' : '4'} --repeat ${amount}`);
-});
+  }
+));
 
-ipcMain.handle('pcMouseDrag', async (_, x1, y1, x2, y2) => {
+ipcMain.handle('pcMouseDrag', async (event, x1, y1, x2, y2) => withPermission(
+  event.sender,
+  'computer.mouse_drag',
+  { from: [Number(x1), Number(y1)], to: [Number(x2), Number(y2)] },
+  'Drag mouse',
+  () => {
   if (IS_WIN) return runShell(`powershell -NoProfile -Command "${PS_MOUSE_CLASS} | Out-Null; [HorizonMouse]::SetCursorPos(${x1},${y1}); Start-Sleep -Milliseconds 50; [HorizonMouse]::mouse_event([HorizonMouse]::L_DOWN,0,0,0,0); Start-Sleep -Milliseconds 50; [HorizonMouse]::SetCursorPos(${x2},${y2}); Start-Sleep -Milliseconds 50; [HorizonMouse]::mouse_event([HorizonMouse]::L_UP,0,0,0,0)"`);
   return runShell(`xdotool mousemove ${x1} ${y1} mousedown 1 mousemove ${x2} ${y2} mouseup 1`);
-});
+  }
+));
 
 ipcMain.handle('pcGetMousePos', async () => {
   if (IS_WIN) {
@@ -1675,10 +1770,16 @@ ${listing}`, ext };
 });
 
 // ── Direct URL opener ─────────────────────────────────────────────────────────
-ipcMain.handle('pcOpenUrl', (_, url) => { shell.openExternal(url); return { ok: true }; });
+ipcMain.handle('pcOpenUrl', async (event, url) => withPermission(
+  event.sender,
+  'browser.open',
+  { url: String(url || '') },
+  'Open URL',
+  () => { shell.openExternal(url); return { ok: true }; }
+));
 
 // ── Smart Web Search / YouTube opener ────────────────────────────────────────
-ipcMain.handle('pcSearch', async (_, query, engine) => {
+ipcMain.handle('pcSearch', async (event, query, engine) => {
   const urls = {
     google:   `https://www.google.com/search?q=${encodeURIComponent(query)}`,
     youtube:  `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
@@ -1688,8 +1789,13 @@ ipcMain.handle('pcSearch', async (_, query, engine) => {
     reddit:   `https://www.reddit.com/search/?q=${encodeURIComponent(query)}`,
   };
   const url = urls[engine || 'google'];
-  shell.openExternal(url);
-  return { ok: true, url };
+  return withPermission(
+    event.sender,
+    'browser.search',
+    { query: String(query || ''), engine: engine || 'google', url },
+    'Open web search',
+    () => { shell.openExternal(url); return { ok: true, url }; }
+  );
 });
 
 // ── ElevenLabs TTS ────────────────────────────────────────────────────────────
@@ -2214,7 +2320,7 @@ function classifyToolOperation(tool, args = {}) {
   const base = name.includes('__') ? name.split('__').pop() : name;
   if (base === 'shell_command') return looksSafeReadOnlyShell(args.command || args.cmd) ? 'read_shell' : 'shell';
   if (/^(read|get|list|search|find|query|describe|status|inspect|recall|wikipedia|weather|calendar_list|gmail_search|github_read)/.test(base)) return 'read';
-  if (/(write|create|delete|remove|update|move|rename|patch|commit|push|exec|shell|run|kill|type|press|click|mouse|scroll|open|browser|fetch|http|post|put|send|email|calendar|remember|set_fact|log_meal|clipboard|screenshot|capture)/.test(base)) return base.includes('fetch') || base.includes('http') ? 'network' : 'side_effect';
+  if (/(write|save|create|delete|remove|update|move|rename|patch|commit|push|exec|shell|run|launch|kill|type|press|click|mouse|scroll|open|browser|fetch|http|post|put|send|email|calendar|remember|set_|log_meal|clipboard|screenshot|capture)/.test(base)) return base.includes('fetch') || base.includes('http') ? 'network' : 'side_effect';
   if (name.includes('__')) return 'mcp_tool';
   return 'read';
 }
@@ -2385,6 +2491,83 @@ function broadcastAgentStep(step, sender = null) {
   }
 }
 
+function normalizePermissionDecision(decision) {
+  const raw = typeof decision === 'string' ? { decision } : (decision || {});
+  const next = String(raw.decision || raw.action || 'deny').toLowerCase();
+  if (next === 'allow' || next === 'approve' || next === 'allow_once') return { ...raw, decision: 'allow_once' };
+  if (next === 'always' || next === 'always_allow') return { ...raw, decision: 'always_allow' };
+  if (next === 'stop') return { ...raw, decision: 'stop' };
+  return { ...raw, decision: 'deny' };
+}
+
+async function requestToolPermission(sender, tool, args = {}, reason = '') {
+  const stepId = `perm-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  const runId = `direct-${Date.now().toString(36)}`;
+  const payload = {
+    type: 'waiting',
+    runId,
+    stepId,
+    step: 0,
+    tool,
+    args,
+    reason,
+    permission: classifyAgentPermission({ tool, args }),
+  };
+
+  broadcastAgentStep(payload, sender);
+  if (!payload.permission?.required || payload.permission?.allowed) {
+    broadcastAgentStep({ ...payload, type: 'executing' }, sender);
+    return { ok: true, allowed: true, permission: payload.permission };
+  }
+
+  return new Promise(resolve => {
+    const controller = {
+      resolveStep(id, decision) {
+        if (id !== stepId) return { ok: false, error: 'Step is not waiting' };
+        const normalized = normalizePermissionDecision(decision);
+        pendingAgentSteps.delete(stepId);
+        if (normalized.decision === 'always_allow') {
+          addPermissionAllowlist(payload.permission);
+          broadcastAgentStep({ ...payload, type: 'executing', approved: 'always_allow' }, sender);
+          resolve({ ok: true, allowed: true, decision: 'always_allow', permission: payload.permission });
+          return { ok: true, stepId, decision: 'always_allow' };
+        }
+        if (normalized.decision === 'allow_once') {
+          broadcastAgentStep({ ...payload, type: 'executing', approved: 'allow_once' }, sender);
+          resolve({ ok: true, allowed: true, decision: 'allow_once', permission: payload.permission });
+          return { ok: true, stepId, decision: 'allow_once' };
+        }
+        const stopped = normalized.decision === 'stop';
+        const denied = {
+          type: stopped ? 'stopped' : 'denied',
+          runId,
+          stepId,
+          step: 0,
+          tool,
+          reason: normalized.reason || (stopped ? 'Stopped by user' : 'Denied by user'),
+          permission: payload.permission,
+          result: { ok: false, err: normalized.reason || (stopped ? 'Stopped by user' : 'Denied by user') },
+        };
+        broadcastAgentStep(denied, sender);
+        resolve({ ok: false, denied: !stopped, stopped, decision: normalized.decision, error: denied.result.err, permission: payload.permission });
+        return { ok: true, stepId, decision: normalized.decision };
+      }
+    };
+    pendingAgentSteps.set(stepId, controller);
+  });
+}
+
+async function withPermission(sender, tool, args, reason, fn) {
+  const approval = await requestToolPermission(sender, tool, args, reason);
+  if (!approval.ok) {
+    return { ok: false, denied: true, error: approval.error || 'Denied by user', err: approval.error || 'Denied by user' };
+  }
+  if (approval.permission?.operation === 'shell') {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+  return fn();
+}
+
 function loadAgentModules() {
   if (!agentTools) {
     try {
@@ -2454,6 +2637,11 @@ function loadAgentModules() {
       const { PluginManager } = require('./pluginManager');
       pluginManager = new PluginManager(path.join(app.getPath('userData'), 'plugins'));
       pluginManager.loadAll();
+      for (const tpl of PluginManager.getBuiltinTemplates()) {
+        if (!pluginManager.plugins.has(tpl.id)) {
+          try { pluginManager.install(tpl); } catch (_) {}
+        }
+      }
       // Auto-install bundled Spotify Control demo on first run
       try { pluginManager.installBundledSpotify(); } catch (_) {}
       console.log('✓ Plugin manager loaded');
@@ -2502,6 +2690,12 @@ function loadAgentModules() {
           }
         } catch (_) { /* best-effort */ }
       });
+      if (typeof workflowEngine.setPermissionHook === 'function') {
+        workflowEngine.setPermissionHook(async ({ sender, tool, args, reason }) => {
+          const target = sender || (win && !win.isDestroyed() ? win.webContents : null);
+          return requestToolPermission(target, tool, args || {}, reason || 'Run workflow step');
+        });
+      }
       workflowEngine.startAll();
       console.log('✓ Workflow Engine loaded');
     } catch(e) {
@@ -3017,10 +3211,16 @@ ipcMain.handle('chatGetCurrent', () => {
 });
 
 // ── CODE EXECUTION ────────────────────────────────────────────────────────────
-ipcMain.handle('executeCode', async (_, code, language) => {
+ipcMain.handle('executeCode', async (event, code, language) => {
   loadAgentModules();
   if (!agentTools) return { ok: false, err: 'Agent not loaded' };
-  return agentTools.executeCode(code, language || 'python');
+  return withPermission(
+    event.sender,
+    'shell_command',
+    { command: String(code || '').slice(0, 1200), language: language || 'python' },
+    'Execute code',
+    () => agentTools.executeCode(code, language || 'python')
+  );
 });
 
 // ── DETAILED SYSTEM INFO ──────────────────────────────────────────────────────
@@ -3137,7 +3337,12 @@ ipcMain.handle('mcpCalendarQuickAdd', async (_, text) => {
 });
 
 // ── COMPUTER USE: Smart click by description ─────────────────────────────────
-ipcMain.handle('smartClick', async (_, targetDescription) => {
+ipcMain.handle('smartClick', async (event, targetDescription) => withPermission(
+  event.sender,
+  'computer.smart_click',
+  { target: String(targetDescription || '') },
+  'Analyze screen and click target',
+  async () => {
   loadAgentModules();
   if (!computerUse || !agentTools) return { ok: false, error: 'Computer Use not loaded' };
   
@@ -3179,7 +3384,8 @@ ipcMain.handle('smartClick', async (_, targetDescription) => {
     aiVisionFn,
     agentTools.mouseClick
   );
-});
+  }
+));
 
 // ── COMPUTER USE: Find UI Elements ───────────────────────────────────────────
 ipcMain.handle('findUIElements', async () => {
@@ -3213,23 +3419,41 @@ ipcMain.handle('findUIElements', async () => {
 });
 
 // ── BROWSER AUTOMATION ───────────────────────────────────────────────────────
-ipcMain.handle('browserOpenUrl', async (_, url) => {
+ipcMain.handle('browserOpenUrl', async (event, url) => withPermission(
+  event.sender,
+  'browser.open',
+  { url: String(url || '') },
+  'Open browser URL',
+  async () => {
   loadAgentModules();
   if (!browserManager) return { ok: false, error: 'Browser not loaded' };
   return browserManager.openUrl(url);
-});
+  }
+));
 
-ipcMain.handle('browserSearch', async (_, query, engine) => {
+ipcMain.handle('browserSearch', async (event, query, engine) => withPermission(
+  event.sender,
+  'browser.search',
+  { query: String(query || ''), engine: engine || 'google' },
+  'Search in browser',
+  async () => {
   loadAgentModules();
   if (!browserManager) return { ok: false, error: 'Browser not loaded' };
   return browserManager.search(query, engine);
-});
+  }
+));
 
-ipcMain.handle('browserOpenSite', async (_, name) => {
+ipcMain.handle('browserOpenSite', async (event, name) => withPermission(
+  event.sender,
+  'browser.open_site',
+  { site: String(name || '') },
+  'Open browser site',
+  async () => {
   loadAgentModules();
   if (!browserManager) return { ok: false, error: 'Browser not loaded' };
   return browserManager.openSite(name);
-});
+  }
+));
 
 // ── PERSONAS ─────────────────────────────────────────────────────────────────
 ipcMain.handle('getPersonas', () => {
@@ -3317,10 +3541,22 @@ ipcMain.handle('pluginToggle', (_, id) => {
   return pluginManager.toggleEnable(id);
 });
 
-ipcMain.handle('pluginExecTool', async (_, pluginId, toolName, args) => {
+ipcMain.handle('pluginExecTool', async (event, pluginId, toolName, args) => {
   loadAgentModules();
   if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  return pluginManager.executeTool(pluginId, toolName, args);
+  let permissionTool = `${pluginId || 'plugin'}__${toolName || 'run'}`;
+  try {
+    const manifest = pluginManager.plugins?.get?.(pluginId) || {};
+    const spec = (manifest.tools || []).find(t => t && t.name === toolName);
+    if (spec?.action) permissionTool = `${pluginId || 'plugin'}__${spec.action}`;
+  } catch (_) {}
+  return withPermission(
+    event.sender,
+    permissionTool,
+    args || {},
+    'Run plugin tool',
+    () => pluginManager.executeTool(pluginId, toolName, args)
+  );
 });
 
 ipcMain.handle('pluginSetConfig', (_, pluginId, config) => {
@@ -3342,7 +3578,11 @@ ipcMain.handle('pluginInstallFromUrl', (_, url) => {
 });
 
 // Legacy — fake templates removed; real plugins come from the marketplace backend.
-ipcMain.handle('pluginTemplates', () => []);
+ipcMain.handle('pluginTemplates', () => {
+  loadAgentModules();
+  const { PluginManager } = require('./pluginManager');
+  return PluginManager.getBuiltinTemplates();
+});
 
 // ── WORKFLOW ENGINE ───────────────────────────────────────────────────────────
 ipcMain.handle('workflowList', () => {
@@ -3373,7 +3613,7 @@ ipcMain.handle('workflowRun', async (event, id) => {
   loadAgentModules();
   if (!workflowEngine) return { ok: false, error: 'Workflow engine not loaded' };
   const onStep = (step) => { try { event.sender.send('workflowStep', step); } catch {} };
-  return workflowEngine.run(id, onStep);
+  return workflowEngine.run(id, onStep, { sender: event.sender });
 });
 
 // Snapshot of currently-running workflows for the premium Workflows panel
@@ -3601,7 +3841,9 @@ ipcMain.handle('marketRemoteInstall', async (_, pluginId) => {
     const r = pluginManager.install({
       id: m.id, name: m.name, version: m.version,
       description: m.description, author: m.author,
-      category: m.category, tier: m.tier, icon: m.icon,
+      category: m.category,
+      tier: ['built_in', 'demo', 'local', 'marketplace'].includes(m.tier) ? m.tier : 'marketplace',
+      icon: m.icon,
       tools: m.tools, settings: m.settings || [],
       permissions: m.permissions || [],
       handler: bundle.handler || '',
