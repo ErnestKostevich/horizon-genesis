@@ -6414,6 +6414,71 @@ function normaliseWorkflowTrigger(trigger) {
   return raw;
 }
 
+
+function buildLocalWorkflowFromText(description) {
+  const text = String(description || '').trim();
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  const steps = [];
+  const add = (action, args = {}) => steps.push({ action, args });
+  const has = (pattern) => pattern.test(text);
+  const url = text.match(/https?:\/\/[^\s"')]+/i)?.[0];
+  if (url) add('open_url', { url });
+  else if (has(/\byoutube\b|\u044e\u0442\u0443\u0431/i)) add('open_url', { url: 'https://youtube.com' });
+  else if (has(/\bgoogle\b|\u0433\u0443\u0433\u043b/i)) add('open_url', { url: 'https://google.com' });
+  else if (has(/\bgithub\b|\u0433\u0438\u0442\u0445\u0430\u0431|\u0433\u0438\u0442\s*\u0445\u0430\u0431/i)) add('open_url', { url: 'https://github.com' });
+  else if (has(/\bgmail\b|\u043f\u043e\u0447\u0442|mail/i)) add('open_url', { url: 'https://mail.google.com' });
+
+  const appMatch = text.match(/(?:open|launch|start|\u043e\u0442\u043a\u0440\u043e\u0439|\u0437\u0430\u043f\u0443\u0441\u0442\u0438)\s+(?:app|application|\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435)?\s*([a-zA-Z0-9_. -]{2,60})/i);
+  if (appMatch && !url && !/\byoutube|google|github|gmail\b/i.test(appMatch[1])) {
+    add('open_app', { app: appMatch[1].trim() });
+  }
+  const closeMatch = text.match(/(?:close|quit|kill|\u0437\u0430\u043a\u0440\u043e\u0439|\u043e\u0441\u0442\u0430\u043d\u043e\u0432\u0438)\s+([a-zA-Z0-9_. -]{2,60})/i);
+  if (closeMatch) add('close_app', { app: closeMatch[1].trim() });
+
+  const waitMatch = lower.match(/(?:wait|sleep|\u043f\u043e\u0434\u043e\u0436\u0434\u0438|\u0436\u0434\u0438)\s+(\d+)\s*(sec|secs|second|seconds|s|\u0441\u0435\u043a|\u0441\u0435\u043a\u0443\u043d\u0434|minute|minutes|min|m|\u043c\u0438\u043d)?/i);
+  if (waitMatch) {
+    const n = Number(waitMatch[1]);
+    const unit = waitMatch[2] || 'sec';
+    add('wait', { ms: /min|minute|m|\u043c\u0438\u043d/i.test(unit) ? n * 60000 : n * 1000 });
+  }
+  if (has(/screenshot|screen shot|\u0441\u043a\u0440\u0438\u043d|\u0441\u043a\u0440\u0438\u043d\u0448\u043e\u0442/i)) add('screenshot', {});
+  const typeMatch = text.match(/(?:type|write|\u043d\u0430\u043f\u0435\u0447\u0430\u0442\u0430\u0439|\u0432\u0432\u0435\u0434\u0438)\s+["'\u201c]?([^"'\u201d]+)["'\u201d]?/i);
+  if (typeMatch) add('type_text', { text: typeMatch[1].trim() });
+  const sayMatch = text.match(/(?:say|speak|\u0441\u043a\u0430\u0436\u0438|\u043f\u0440\u043e\u0438\u0437\u043d\u0435\u0441\u0438)\s+["'\u201c]?([^"'\u201d]+)["'\u201d]?/i);
+  if (sayMatch) add('speak', { text: sayMatch[1].trim() });
+  if (has(/notify|notification|\u0443\u0432\u0435\u0434\u043e\u043c/i)) add('notify', { title: 'Horizon Workflow', body: text.slice(0, 160) });
+  if (!steps.length) add('send_message', { text });
+  const title = text.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 48) || 'Generated workflow';
+  return { name: title.charAt(0).toUpperCase() + title.slice(1), trigger: 'manual', steps };
+}
+
+async function persistGeneratedWorkflow(wfData, sourceDescription, options = {}) {
+  if (!wfData || !wfData.name || !Array.isArray(wfData.steps) || wfData.steps.length === 0) {
+    addMsg('bot', 'Workflow missing name or executable steps.');
+    return null;
+  }
+  const trigger = normaliseWorkflowTrigger(wfData.trigger || 'manual');
+  let wf = null;
+  try {
+    const er = await H.workflowCreate(wfData.name, trigger, wfData.steps, sourceDescription || '');
+    if (er && er.ok === false) throw new Error(er.error || 'Workflow engine create failed');
+    wf = er;
+    await loadWorkflows();
+  } catch (error) {
+    console.warn('Engine workflow create threw:', error?.message || error);
+    wf = createWorkflow(wfData.name, wfData.steps, trigger);
+  }
+  const prefix = options.fallback
+    ? 'AI was unavailable or returned invalid workflow JSON, so Horizon created this workflow with the local parser.\n'
+    : '';
+  addMsg('bot', prefix + 'Workflow **' + wf.name + '** created. ' + wf.steps.length + ' steps, trigger: ' + trigger + '.\nRun it from Workflows or say "run workflow ' + wf.name + '".');
+  try {
+    if (document.getElementById('wf-panel')?.classList.contains('show')) renderWfBody();
+  } catch (_) {}
+  return wf;
+}
+
 function deleteWorkflow(id) {
   workflows = workflows.filter(w => w.id !== id);
   saveWorkflows();
@@ -6482,103 +6547,59 @@ async function runWorkflow(id) {
 
 // Quick workflow creation from natural language
 async function createWorkflowFromText(description) {
-  // Two prior bugs the audit caught:
-  //   (1) Used the module-init `provider` constant ('gemini') instead of
-  //       `prov` (the live active provider). If the user switched to
-  //       Claude / OpenAI / etc, this path silently picked Gemini and
-  //       failed when there was no Gemini key — with no error shown.
-  //   (2) Advertised actions that didn't match the engine palette
-  //       (open_site, press_key) → engine threw "unknown action" at run
-  //       time even when the AI generated valid-looking JSON.
-  //   (3) Persisted to local `workflows[]` only — never called
-  //       H.workflowCreate so the engine never saw it (no schedule, no
-  //       persistence across restarts).
-  const activeProv = (typeof prov !== 'undefined' && prov) ? prov : 'gemini';
-  const prompt = lang === 'ru'
-    ? `Создай JSON workflow из описания: "${description}"
-Формат: {"name":"...", "trigger":"manual|interval:N|schedule:HH:MM", "steps":[{"action":"<имя>", "args":{...}}]}
-Доступные actions (используй ТОЛЬКО их):
-- open_url(url)         — открыть URL в браузере
-- open_app(app)         — открыть приложение по имени
-- close_app(app)        — закрыть приложение
-- shell(command)        — выполнить shell-команду
-- type_text(text)       — напечатать текст
-- run_code(code, language) — выполнить JS/Node-код или shell
-- wait(ms)              — подождать N миллисекунд
-- notify(title, body)   — системное уведомление
-- speak(text)           — сказать голосом
-- send_message(text)    — отправить сообщение в чат AI
-- screenshot()          — снять скриншот
-- clipboard_read() / clipboard_write(text)
-По умолчанию trigger="manual". Ответь ТОЛЬКО валидным JSON, никакого текста.`
-    : `Create JSON workflow from description: "${description}"
-Format: {"name":"...", "trigger":"manual|interval:N|schedule:HH:MM", "steps":[{"action":"<name>", "args":{...}}]}
-Available actions (use ONLY these):
-- open_url(url)         — open URL in browser
-- open_app(app)         — open application by name
-- close_app(app)        — close application
-- shell(command)        — run a shell command
-- type_text(text)       — type text via keyboard
-- run_code(code, language) — execute JS/Node code or shell
-- wait(ms)              — wait N milliseconds
-- notify(title, body)   — system notification
-- speak(text)           — text-to-speech
-- send_message(text)    — send a message to chat AI
-- screenshot()          — capture a screenshot
-- clipboard_read() / clipboard_write(text)
-Default trigger="manual". Reply with ONLY valid JSON, no prose.`;
+  const providerForWorkflow = (typeof prov !== 'undefined' && prov) ? prov : 'gemini';
+  const fallbackWorkflow = async (reason) => {
+    if (reason) console.warn('Workflow AI generation fallback:', reason);
+    const localWorkflow = buildLocalWorkflowFromText(description);
+    return persistGeneratedWorkflow(localWorkflow, description, { fallback: true });
+  };
+  const workflowPrompt = `Create an executable Horizon workflow from this user request:
+
+${description}
+
+Return ONLY valid JSON with this exact shape:
+{"name":"Short workflow name","trigger":"manual","steps":[{"action":"open_url","args":{"url":"https://example.com"}}]}
+
+Allowed actions only:
+- open_url: args { "url": "https://..." }
+- open_app: args { "app": "Application name" }
+- close_app: args { "app": "Application name" }
+- shell: args { "command": "command" }
+- type_text: args { "text": "text to type" }
+- press_key: args { "key": "Enter" }
+- run_code: args { "code": "console.log('hi')", "language": "node" }
+- wait: args { "ms": 1000 }
+- notify: args { "title": "Title", "body": "Message" }
+- speak: args { "text": "Text to speak" }
+- send_message: args { "text": "Message to send to chat AI" }
+- screenshot: args {}
+- clipboard_read: args {}
+- clipboard_write: args { "text": "text" }
+
+Use trigger "manual" unless the user clearly asked for a schedule.`;
 
   try {
-    const res = await H.ai([{role:'user',content:prompt}], activeProv, null, aiOptsForProvider(activeProv));
-    if (!res || res.error) {
-      const msg = res?.error || (lang === 'ru' ? 'AI-провайдер не ответил' : 'AI provider returned no response');
-      addMsg('bot', `⚠️ ${msg}${(lang === 'ru' ? ' (provider: ' : ' (provider: ')}${activeProv}). ${lang === 'ru' ? 'Проверь ключ в Settings → Providers.' : 'Check the key in Settings → Providers.'}`);
-      return null;
+    const completion = await H.ai([{ role: 'user', content: workflowPrompt }], providerForWorkflow, null, aiOptsForProvider(providerForWorkflow));
+    if (!completion || completion.error || !completion.reply) {
+      return fallbackWorkflow(completion?.error || 'empty AI workflow response');
     }
-    if (!res.reply) {
-      addMsg('bot', `⚠️ ${lang === 'ru' ? 'AI вернул пустой ответ' : 'AI returned empty reply'}`);
-      return null;
-    }
-    // Strip markdown code fences if the model added them.
-    const cleaned = res.reply
-      .replace(/^\s*```(?:json)?\s*/i, '')
-      .replace(/\s*```\s*$/, '')
+    const rawReply = String(completion.reply || '')
+      .replace(new RegExp('^\\s*\\x60{3}(?:json)?\\s*', 'i'), '')
+      .replace(new RegExp('\\s*\\x60{3}\\s*$', 'i'), '')
       .trim();
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      addMsg('bot', `⚠️ ${lang === 'ru' ? 'AI не вернул валидный JSON.' : 'AI did not return valid JSON.'}\n\n\`\`\`\n${res.reply.slice(0, 500)}\n\`\`\``);
-      return null;
-    }
-    let wfData;
-    try { wfData = JSON.parse(jsonMatch[0]); }
-    catch (parseErr) {
-      addMsg('bot', `⚠️ ${lang === 'ru' ? 'Не удалось распарсить JSON' : 'JSON parse failed'}: ${parseErr.message}`);
-      return null;
-    }
-    if (!wfData.name || !Array.isArray(wfData.steps) || wfData.steps.length === 0) {
-      addMsg('bot', `⚠️ ${lang === 'ru' ? 'Workflow без шагов или имени' : 'Workflow missing name or steps'}`);
-      return null;
-    }
-    const trigger = normaliseWorkflowTrigger(wfData.trigger || 'manual');
-    let wf = null;
+    const jsonText = rawReply.match(/\{[\s\S]*\}/)?.[0];
+    if (!jsonText) return fallbackWorkflow('AI workflow response did not contain JSON');
+    let parsedWorkflow;
     try {
-      const er = await H.workflowCreate(wfData.name, trigger, wfData.steps, description);
-      if (er && er.ok === false) throw new Error(er.error || 'Workflow engine create failed');
-      wf = er;
-      await loadWorkflows();
-    } catch (e) {
-      console.warn('Engine workflow create threw:', e?.message || e);
-      wf = createWorkflow(wfData.name, wfData.steps, trigger);
+      parsedWorkflow = JSON.parse(jsonText);
+    } catch (parseError) {
+      return fallbackWorkflow(parseError.message || 'AI workflow JSON parse failed');
     }
-    addMsg('bot', lang === 'ru'
-      ? `⚡ Workflow **${wf.name}** создан! ${wf.steps.length} шагов · trigger: ${trigger}.\nЗапустить: скажи "запусти workflow ${wf.name}" или открой Workflows.`
-      : `⚡ Workflow **${wf.name}** created! ${wf.steps.length} steps · trigger: ${trigger}.\nRun: say "run workflow ${wf.name}" or open Workflows.`);
-    // Refresh the Workflows panel if it's open.
-    try { if (document.getElementById('wf-panel')?.classList.contains('show')) renderWfBody(); } catch (_) {}
-    return wf;
-  } catch (e) {
-    addMsg('bot', `⚠️ ${e.message || e}`);
-    return null;
+    const savedWorkflow = await persistGeneratedWorkflow(parsedWorkflow, description);
+    if (!savedWorkflow) return fallbackWorkflow('AI workflow had no executable steps');
+    return savedWorkflow;
+  } catch (error) {
+    return fallbackWorkflow(error?.message || error);
   }
 }
 
