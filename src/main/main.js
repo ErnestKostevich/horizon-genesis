@@ -2325,13 +2325,35 @@ function classifyToolOperation(tool, args = {}) {
   return 'read';
 }
 
+function resolvePermissionToolName(tool) {
+  const raw = String(tool || '');
+  if (!raw || !pluginManager?.plugins) return raw;
+  try {
+    for (const [pluginId, manifest] of pluginManager.plugins) {
+      const prefix = `plugin_${pluginId}_`;
+      let toolName = null;
+      if (raw.startsWith(prefix)) {
+        toolName = raw.slice(prefix.length);
+      } else if (raw.startsWith(`${pluginId}__`)) {
+        toolName = raw.slice(`${pluginId}__`.length);
+      }
+      if (!toolName) continue;
+      const spec = (manifest.tools || []).find(t => t && t.name === toolName);
+      if (spec?.action) return `${pluginId}__${spec.action}`;
+      return `${pluginId}__${toolName}`;
+    }
+  } catch (_) {}
+  return raw;
+}
+
 function permissionRequiresApproval(operation) {
   return !['read', 'read_shell'].includes(operation);
 }
 
 function classifyAgentPermission(payload) {
   const args = payload?.args || {};
-  const tool = String(payload?.tool || '');
+  const displayTool = String(payload?.tool || '');
+  const tool = resolvePermissionToolName(displayTool);
   const operation = classifyToolOperation(tool, args);
   const required = permissionRequiresApproval(operation);
   const ctx = permissionContext();
@@ -2345,7 +2367,7 @@ function classifyAgentPermission(payload) {
     workspace: ctx.workspace,
     persona: ctx.persona,
     risk: required ? 'side-effect' : 'read-only',
-    title: `${tool || 'tool'} approval`,
+    title: `${displayTool || tool || 'tool'} approval`,
     description: required
       ? 'This tool can affect files, shell, network, browser, external services, or MCP state.'
       : 'Read-only tool allowed automatically.',
