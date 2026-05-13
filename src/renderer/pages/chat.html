@@ -989,9 +989,13 @@ body.with-sidebar > .sb,
 body.with-sidebar > .modes,
 body.with-sidebar > .msgs,
 body.with-sidebar > .inp-wrap,
-body.with-sidebar > .panel,
 body.with-sidebar > #fractalBg,
 body.with-sidebar > .chat-status-bar{margin-left:280px}
+body.surface-active.with-sidebar > .panel.show,
+body.surface-active.with-sidebar > .fpanel.show,
+body.surface-active.with-sidebar > #fractalBg{margin-left:0!important}
+body.surface-active.with-sidebar > .panel.show,
+body.surface-active.with-sidebar > .fpanel.show{left:0!important;right:0!important;width:100vw!important;max-width:none!important}
 .chatside .cs-head{padding:12px 12px 6px 12px;-webkit-app-region:drag;flex-shrink:0}
 .chatside .cs-new{-webkit-app-region:no-drag;width:100%;padding:9px 12px;background:linear-gradient(135deg,rgba(108,140,255,.14),rgba(167,139,250,.08));border:1px solid rgba(108,140,255,.25);border-radius:10px;color:var(--tx);font:600 12.5px var(--font);cursor:pointer;letter-spacing:.2px;transition:all .18s;display:flex;align-items:center;gap:8px;justify-content:center}
 .chatside .cs-new:hover{background:linear-gradient(135deg,rgba(108,140,255,.24),rgba(167,139,250,.15));border-color:rgba(108,140,255,.5);transform:translateY(-1px)}
@@ -1338,16 +1342,17 @@ body.code-mode-active .modes { display: none; }
 /* Inspector panel: chat-only right dock.
    It starts below top controls and ends above the composer, so it never
    squeezes the titlebar/license pills or covers the input buttons. */
+:root { --inspector-w: 360px; --inspector-gap: 18px; }
 .inspector-pane {
   display: none;
   position: fixed;
-  top: 184px;
-  right: 14px;
-  bottom: 96px;
-  width: 326px;
+  top: 80px;
+  right: 16px;
+  bottom: 16px;
+  width: var(--inspector-w);
   background: linear-gradient(180deg, var(--code-bg-2,#0c1018) 0%, var(--code-bg,#07090f) 100%);
   border: 1px solid var(--code-line, #1d2333);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: 0 22px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.04);
   z-index: 85;
   flex-direction: column;
@@ -1355,14 +1360,17 @@ body.code-mode-active .modes { display: none; }
   overflow: hidden;
 }
 body.inspector-active .inspector-pane { display: flex; }
-/* Keep top controls and composer stable; only the readable chat surface
-   makes room for the dock. */
-body.inspector-active .chat-status-bar,
-body.inspector-active .msgs { margin-right: 356px; }
-body.inspector-active .modes,
+/* The dock is no longer an overlay: every chat bar below the titlebar
+   reserves real room so provider chips, mode buttons, messages and composer
+   never sit underneath Context / Tools / Cost / Log. */
 body.inspector-active .wake-bar,
 body.inspector-active .sb,
-body.inspector-active .inp-wrap { margin-right: 0; }
+body.inspector-active .modes,
+body.inspector-active .chat-status-bar,
+body.inspector-active .msgs,
+body.inspector-active .inp-wrap {
+  margin-right: calc(var(--inspector-w) + var(--inspector-gap) + 16px);
+}
 /* Code Mode owns the canvas and its own right column. */
 body.code-mode-active .inspector-pane { display: none !important; }
 body.code-mode-active.inspector-active .chat-status-bar,
@@ -1519,14 +1527,17 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
 }
 .insp-byok strong { color: var(--code-cyan, #56d2ff); }
 @media (max-width: 1280px) {
-  .inspector-pane { width: 304px; right: 10px; top: 176px; bottom: 92px; }
-  body.inspector-active .chat-status-bar,
-  body.inspector-active .msgs { margin-right: 326px; }
+  :root { --inspector-w: 320px; --inspector-gap: 12px; }
+  .inspector-pane { right: 10px; top: 76px; bottom: 12px; }
 }
 @media (max-width: 980px) {
-  .inspector-pane { left: 12px; right: 12px; width: auto; top: 96px; bottom: 92px; }
+  .inspector-pane { left: 12px; right: 12px; width: auto; top: 64px; bottom: 84px; }
+  body.inspector-active .wake-bar,
+  body.inspector-active .sb,
+  body.inspector-active .modes,
   body.inspector-active .chat-status-bar,
-  body.inspector-active .msgs { margin-right: 0; }
+  body.inspector-active .msgs,
+  body.inspector-active .inp-wrap { margin-right: 0; }
 }
 
 /* ═══ STEP RAIL — agent plan progress at top of chat ═══════════════════
@@ -2461,9 +2472,9 @@ body.with-sidebar .chat-status-bar{display:flex}
   </div>
   <div class="insp-body" id="insp-body-cost" style="display:none">
     <div class="insp-section">
-      <div class="insp-h">Session cost</div>
-      <div class="cost-headline" id="insp-cost-headline">$0.00</div>
-      <div class="cost-subhead" id="insp-cost-sub">0 msgs · 0 tokens</div>
+      <div class="insp-h">Session usage</div>
+      <div class="cost-headline" id="insp-cost-headline">0 tok</div>
+      <div class="cost-subhead" id="insp-cost-sub">0 msgs · provider usage pending</div>
     </div>
     <div class="insp-section">
       <div class="insp-h">Token budget</div>
@@ -2604,20 +2615,28 @@ let chatSearchQuery = ''; // sidebar search filter
 let sessionTokens = 0;
 let sessionMsgs = 0;
 let sessionUsageKnown = false;
+let sessionHasEstimatedUsage = false;
 // trackTokens(text, role, provider [, usage])
 // `usage` is the normalised {prompt, completion, total} object that the
-// main-process H.ai handler now returns next to `reply`. No fake pricing or
-// char-based estimates: if the provider does not return usage, we say so.
-function trackTokens(text, role, provider, usage) {
+// main-process H.ai handler now returns next to `reply`. When a provider does
+// not return usage (many local/OpenAI-compatible servers do this), Horizon
+// keeps an honest estimate instead of showing "usage unavailable" forever.
+function estimateTokensForText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return 0;
+  const words = raw.split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(raw.length / 4), Math.ceil(words * 1.3));
+}
+function trackTokens(text, role, provider, usage, estimatedTokens) {
   let pTok = 0, cTok = 0;
-  if (usage && (usage.prompt != null || usage.completion != null)) {
+  if (usage && (usage.total != null || usage.prompt != null || usage.completion != null)) {
     pTok = usage.prompt || 0;
     cTok = usage.completion || 0;
+    if (usage.total != null && !pTok && !cTok) cTok = Number(usage.total) || 0;
     sessionUsageKnown = true;
   } else {
-    if (role === 'user') sessionMsgs++;
-    updateTokenDisplay();
-    return 0;
+    cTok = Number(estimatedTokens || estimateTokensForText(text)) || 0;
+    sessionHasEstimatedUsage = true;
   }
   const tokens = pTok + cTok;
   sessionTokens += tokens;
@@ -2629,9 +2648,11 @@ function updateTokenDisplay() {
   const fmt = n => n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n);
   try {
     document.getElementById('stat-msgs').textContent = sessionMsgs;
-    document.getElementById('stat-tokens').textContent = fmt(sessionTokens);
-    document.getElementById('stat-usage').textContent = sessionUsageKnown ? 'provider usage' : 'unavailable';
-    document.getElementById('csb-tokens').textContent = sessionUsageKnown ? fmt(sessionTokens) + ' tokens' : 'usage unavailable';
+    document.getElementById('stat-tokens').textContent = (sessionHasEstimatedUsage ? '~' : '') + fmt(sessionTokens);
+    document.getElementById('stat-usage').textContent = sessionUsageKnown
+      ? (sessionHasEstimatedUsage ? 'mixed usage' : 'provider usage')
+      : 'estimated';
+    document.getElementById('csb-tokens').textContent = `${sessionHasEstimatedUsage ? '~' : ''}${fmt(sessionTokens)} tokens`;
   } catch(_) {}
 }
 
@@ -3775,6 +3796,7 @@ function _replayMessages(messages){
   sessionTokens = 0;
   sessionMsgs = 0;
   sessionUsageKnown = false;
+  sessionHasEstimatedUsage = false;
   if (!messages || messages.length === 0) {
     // Empty chat → restore the welcome greeting so the canvas isn't blank.
     if (typeof showGreeting === 'function') {
@@ -3799,7 +3821,8 @@ function _replayMessages(messages){
         m.content || '',
         m.role === 'assistant' ? 'assistant' : 'user',
         meta.provider || prov,
-        meta.usage
+        meta.usage,
+        meta.estimatedTokens
       );
     } catch(_){}
   }
@@ -4303,7 +4326,7 @@ async function _executeActionIntent(action){
     if (intent === 'run_code') {
       await H.execCode(args.code || '', args.lang || 'python');
     } else if (intent === 'open_url') {
-      await H.openUrl(args.url || '');
+      await H.pcOpenUrl(args.url || '');
     } else if (intent === 'send_message') {
       const inp = document.getElementById('inp');
       if (inp) { inp.value = args.text || ''; sendMsg(); }
@@ -4317,42 +4340,6 @@ async function _executeActionIntent(action){
 
 // ═══ PERMISSION CARD (P3) — gate destructive operations ═══
 // Returns Promise<boolean>. true = allow, false = deny. Esc = deny, Enter = allow.
-function requestPermission(opts){
-  return new Promise(resolve => {
-    try {
-      const overlay = document.createElement('div');
-      overlay.className = 'perm-overlay';
-      const card = document.createElement('div');
-      card.className = 'perm-card';
-      card.innerHTML =
-        '<div class="perm-eyebrow">'+_escHtml(opts.eyebrow || (lang==='ru'?'Требуется разрешение':'Permission required'))+'</div>'+
-        '<div class="perm-title">'+_escHtml(opts.title || 'Action')+'</div>'+
-        '<div class="perm-desc">'+_escHtml(opts.description || '')+'</div>'+
-        (opts.detail ? '<pre class="perm-detail">'+_escHtml(opts.detail)+'</pre>' : '')+
-        '<div class="perm-actions">'+
-          '<button class="perm-btn deny" data-act="deny">'+_escHtml(lang==='ru'?'Отклонить':'Deny')+'</button>'+
-          '<button class="perm-btn allow" data-act="allow">'+_escHtml(lang==='ru'?'Разрешить':'Allow')+' ⏎</button>'+
-        '</div>'+
-        '<div class="perm-hint">'+_escHtml(lang==='ru'?'Esc — отклонить · Enter — разрешить':'Esc to deny · Enter to allow')+'</div>';
-      overlay.appendChild(card);
-      document.body.appendChild(overlay);
-      const cleanup = (val) => {
-        try { document.removeEventListener('keydown', onKey); } catch(_){}
-        try { overlay.remove(); } catch(_){}
-        resolve(val);
-      };
-      const onKey = (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
-        else if (e.key === 'Enter') { e.preventDefault(); cleanup(true); }
-      };
-      document.addEventListener('keydown', onKey);
-      card.querySelector('[data-act="deny"]').onclick = () => cleanup(false);
-      card.querySelector('[data-act="allow"]').onclick = () => cleanup(true);
-      // Focus the Allow button for keyboard users
-      setTimeout(()=>{ try { card.querySelector('[data-act="allow"]').focus(); } catch(_){} }, 30);
-    } catch(_) { resolve(false); }
-  });
-}
 function requestPermission(opts){
   return new Promise(resolve => {
     try {
@@ -4456,35 +4443,14 @@ async function _gateDestructive(intent, opts) {
   return await requestPermission(opts);
 }
 async function safeExecCode(code, langCode){
-  const ok = await _gateDestructive('exec_code', {
-    eyebrow: lang==='ru'?'Запустить код':'Run code',
-    title: (langCode||'python').toUpperCase()+' · execute',
-    description: lang==='ru'?'Этот код будет выполнен с правами Horizon на твоей машине.':'This code will run on your machine with Horizon\'s privileges.',
-    detail: code
-  });
-  if (!ok) return { ok:false, err:'denied by user' };
-  codeSetStatus('Execution approved. Running in 5 seconds...');
-  await sleepMs(5000);
+  codeSetStatus('Waiting for permission before executing code...');
   return await H.execCode(code, langCode);
 }
 async function safeShell(cmd){
-  const ok = await _gateDestructive('shell', {
-    eyebrow: lang==='ru'?'Выполнить команду':'Run shell command',
-    title: 'shell · '+(cmd||'').slice(0,60),
-    description: lang==='ru'?'Команда будет выполнена в системной оболочке.':'The command will run in the system shell.',
-    detail: cmd
-  });
-  if (!ok) return { ok:false, err:'denied by user' };
+  setStatus(lang==='ru'?'Ожидаю подтверждения команды…':'Waiting for command approval...', true);
   return await H.pcShell(cmd);
 }
 async function safeWriteFile(filePath, content){
-  const ok = await _gateDestructive('write_file', {
-    eyebrow: lang==='ru'?'Записать файл':'Write file',
-    title: filePath,
-    description: lang==='ru'?(`Будет перезаписан/создан файл (${(content||'').length} символов).`):'This file will be created or overwritten ('+ (content||'').length +' chars).',
-    detail: (content||'').slice(0,400) + ((content||'').length>400?'\n…':'')
-  });
-  if (!ok) return { ok:false, err:'denied by user' };
   return await H.pcWriteFile(filePath, content);
 }
 async function safeWriteWorkspaceFile(relPath, content, before=''){
@@ -4499,15 +4465,7 @@ async function safeWriteWorkspaceFile(relPath, content, before=''){
   return await H.wsWrite(relPath, content);
 }
 async function safeWorkspaceShell(cmd){
-  const ok = await _gateDestructive('workspace_shell', {
-    eyebrow: 'Run workspace command',
-    title: 'workspace shell',
-    description: 'This command will run in the selected workspace after a 5 second delay.',
-    detail: cmd
-  });
-  if (!ok) return { ok:false, err:'denied by user' };
-  codeSetStatus('Command approved. Running in 5 seconds...');
-  await sleepMs(5000);
+  codeSetStatus('Waiting for workspace command approval...');
   return await H.wsShell(cmd);
 }
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
@@ -4620,6 +4578,28 @@ const PE_TOOLS = [
   { name: 'computer.click', label: 'Computer click', write: true },
   { name: 'computer.type',  label: 'Computer type',  write: true }
 ];
+
+async function loadPersonaSelect() {
+  const sel = document.getElementById('persona-select');
+  if (!sel) return;
+  let list = [];
+  try { list = await H.getPersonas(); } catch (_) { list = []; }
+  if (!Array.isArray(list) || !list.length) return;
+  const saved = await H.get('persona').catch(() => currentPersona);
+  sel.innerHTML = list.map(p => {
+    const label = `${p.icon || ''} ${p.name || p.id}`.trim();
+    return `<option value="${escHtml(p.id)}">${escHtml(label)}</option>`;
+  }).join('');
+  if (saved && list.some(p => p.id === saved)) {
+    currentPersona = saved;
+    sel.value = saved;
+  } else if (list.some(p => p.id === currentPersona)) {
+    sel.value = currentPersona;
+  } else {
+    currentPersona = list[0].id;
+    sel.value = currentPersona;
+  }
+}
 
 async function renderPersonasEditor() {
   const mount = document.getElementById('pe-mount');
@@ -4817,6 +4797,7 @@ window.peSave = async function () {
     delete _peCache.full[_peActiveId];
     H.notify('Personas', 'Saved');
     await renderPersonasEditor();
+    await loadPersonaSelect();
   } catch (e) {
     H.notify('Personas', 'Save failed: ' + (e.message || e));
   }
@@ -4829,6 +4810,7 @@ window.peReset = async function () {
     delete _peCache.full[_peActiveId];
     H.notify('Personas', 'Reset to default');
     await renderPersonasEditor();
+    await loadPersonaSelect();
   } catch (e) {
     H.notify('Personas', 'Reset failed: ' + (e.message || e));
   }
@@ -4842,6 +4824,7 @@ window.peDelete = async function () {
     _peActiveId = null;
     H.notify('Personas', 'Deleted');
     await renderPersonasEditor();
+    await loadPersonaSelect();
   } catch (e) {
     H.notify('Personas', 'Delete failed: ' + (e.message || e));
   }
@@ -4867,6 +4850,7 @@ window.peCreateCustom = async function () {
     delete _peCache.full[id];
     H.notify('Personas', 'Created: ' + name);
     await renderPersonasEditor();
+    await loadPersonaSelect();
   } catch (e) {
     H.notify('Personas', 'Create failed: ' + (e.message || e));
   }
@@ -4949,16 +4933,17 @@ async function loadPanel(){
   // Wake-word calibration toggles + sensitivity slider.
   await loadWakeSettings();
   initWakeCalibrationUI();
-  const [ou, om, lu, lm] = await Promise.all([
-    H.get('ollamaUrl'), H.get('ollamaModel'), H.get('lmStudioUrl'), H.get('lmStudioModel')
+  const [ou, om, om2, lu, lm, lm2] = await Promise.all([
+    H.get('ollamaUrl'), H.get('ollamaModel'), H.get('model.ollama'),
+    H.get('lmStudioUrl'), H.get('lmStudioModel'), H.get('model.lmstudio')
   ]);
   document.getElementById('pi-ollama-url').value = ou || 'http://127.0.0.1:11434/v1';
   document.getElementById('pi-lmstudio-url').value = lu || 'http://127.0.0.1:1234/v1';
   // Seed the local-provider model selects with the saved value so it stays
   // selected even if the local server is offline. Then refresh in the
   // background to populate the rest of the list.
-  _seedLocalModelSelect('ollama', om || 'llama3.1');
-  _seedLocalModelSelect('lmstudio', lm || 'local-model');
+  _seedLocalModelSelect('ollama', om2 || om || 'llama3.1');
+  _seedLocalModelSelect('lmstudio', lm2 || lm || 'local-model');
   refreshLocalModels('ollama').catch(()=>{});
   refreshLocalModels('lmstudio').catch(()=>{});
   refreshOpenRouterModels().catch(()=>{});
@@ -4980,6 +4965,7 @@ function _seedLocalModelSelect(provider, savedValue){
   const sel = document.getElementById('pi-' + provider + '-model');
   if (!sel) return;
   if (savedValue) {
+    try { _modelCache[provider] = savedValue; } catch(_){}
     const opt = document.createElement('option');
     opt.value = savedValue;
     opt.textContent = savedValue + ' (saved)';
@@ -5079,6 +5065,7 @@ async function refreshLocalModels(provider){
         sel.appendChild(opt);
         sel.value = previousValue;
       }
+      try { _modelCache[provider] = sel.value || previousValue; } catch(_){}
       if (statusEl) {
         statusEl.textContent = `Loaded ${r.models.length} model${r.models.length===1?'':'s'} from ${r.url || 'local server'}.`;
         statusEl.className = 'local-status ok';
@@ -5315,15 +5302,25 @@ async function saveVP(){
   if(dg) dg.style.display=(voiceProvider==='deepgram')?'block':'none';
 }
 async function saveLocalProvider(kind){
+  let selectedModel = '';
   if(kind==='ollama'){
     await saveSetting('ollamaUrl', document.getElementById('pi-ollama-url').value.trim() || 'http://127.0.0.1:11434/v1','Ollama URL');
-    await saveSetting('ollamaModel', document.getElementById('pi-ollama-model').value.trim() || 'llama3.1','Ollama model');
+    selectedModel = document.getElementById('pi-ollama-model').value.trim() || 'llama3.1';
+    await saveSetting('ollamaModel', selectedModel,'Ollama model');
     document.getElementById('pd-ollama')?.classList.add('on');
   }
   if(kind==='lmstudio'){
     await saveSetting('lmStudioUrl', document.getElementById('pi-lmstudio-url').value.trim() || 'http://127.0.0.1:1234/v1','LM Studio URL');
-    await saveSetting('lmStudioModel', document.getElementById('pi-lmstudio-model').value.trim() || 'local-model','LM Studio model');
+    selectedModel = document.getElementById('pi-lmstudio-model').value.trim() || 'local-model';
+    await saveSetting('lmStudioModel', selectedModel,'LM Studio model');
     document.getElementById('pd-lmstudio')?.classList.add('on');
+  }
+  if (selectedModel) {
+    try { await H.set('model.' + kind, selectedModel); } catch(e) { console.warn('save local model setting failed:', e?.message); }
+    try { _modelCache[kind] = selectedModel; } catch(_){}
+    if (typeof prov !== 'undefined' && prov === kind) {
+      try { document.getElementById('csb-model').textContent = selectedModel; updateStatusBar(); } catch(_){}
+    }
   }
   H.notify?.('Local models', 'Saved local provider settings.');
 }
@@ -5478,7 +5475,7 @@ const MCP_PRESETS = {
     command: 'npx',
     args:    '-y @modelcontextprotocol/server-brave-search',
     env:     'BRAVE_API_KEY=BSAxxxxxxxx',
-    hint:    'Brave Search: free 2k req/mo at brave.com/search/api. Paste key in env.',
+    hint:    'Brave Search: create an API key at brave.com/search/api and paste it in env.',
   },
   memory: {
     name:    'memory',
@@ -5816,7 +5813,12 @@ async function sendMsg(){
 ? *${names}*` : `? *${names}*`;
   }
   addMsg('user', displayText || text);
-  if(text) { history.push({role:'user',content:text}); _persistChatMessage('user', text, {}); trackTokens(text, 'user', prov); }
+  if(text) {
+    const userEstimatedTokens = estimateTokensForText(text);
+    history.push({role:'user',content:text});
+    _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov), estimatedTokens: userEstimatedTokens });
+    trackTokens(text, 'user', prov, null, userEstimatedTokens);
+  }
   addTyping();
 
   // Process attachments first
@@ -6365,8 +6367,15 @@ let workflows = [];
 
 async function loadWorkflows() {
   try {
+    const engine = await H.workflowList?.();
+    if (Array.isArray(engine)) {
+      workflows = engine;
+      return;
+    }
+  } catch(_) {}
+  try {
     const saved = await H.get('workflows');
-    if (saved) workflows = JSON.parse(saved);
+    if (saved) workflows = typeof saved === 'string' ? JSON.parse(saved) : saved;
   } catch(_) { workflows = []; }
 }
 
@@ -6386,6 +6395,22 @@ function createWorkflow(name, steps, trigger = 'manual') {
   workflows.push(wf);
   saveWorkflows();
   return wf;
+}
+
+function normaliseWorkflowTrigger(trigger) {
+  const raw = String(trigger || 'manual').trim();
+  if (!raw || raw === 'manual') return 'manual';
+  if (raw === 'startup' || raw.startsWith('interval:') || raw.startsWith('schedule:')) return raw;
+  if (raw.startsWith('cron:')) {
+    const expr = raw.slice(5).trim();
+    const parts = expr.split(/\s+/);
+    const mm = Number(parts[0]);
+    const hh = Number(parts[1]);
+    if (Number.isFinite(hh) && Number.isFinite(mm)) return `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    return 'manual';
+  }
+  if (/^\d{1,2}:\d{2}$/.test(raw)) return `schedule:${raw}`;
+  return raw;
 }
 
 function deleteWorkflow(id) {
@@ -6527,18 +6552,16 @@ Default trigger="manual". Reply with ONLY valid JSON, no prose.`;
       addMsg('bot', `⚠️ ${lang === 'ru' ? 'Workflow без шагов или имени' : 'Workflow missing name or steps'}`);
       return null;
     }
-    const trigger = wfData.trigger || 'manual';
-    // Persist locally (legacy renderer-side store, used by the chat-mode
-    // "run workflow X" wake intent matcher).
-    const wf = createWorkflow(wfData.name, wfData.steps, trigger);
-    // ALSO persist to the engine so cron/interval/startup triggers
-    // actually fire and the workflow survives an app restart. Without
-    // this the entire schedule story was a UI-only mirage.
+    const trigger = normaliseWorkflowTrigger(wfData.trigger || 'manual');
+    let wf = null;
     try {
       const er = await H.workflowCreate(wfData.name, trigger, wfData.steps, description);
-      if (er && er.ok === false) console.warn('Engine workflow create failed:', er.error);
+      if (er && er.ok === false) throw new Error(er.error || 'Workflow engine create failed');
+      wf = er;
+      await loadWorkflows();
     } catch (e) {
       console.warn('Engine workflow create threw:', e?.message || e);
+      wf = createWorkflow(wfData.name, wfData.steps, trigger);
     }
     addMsg('bot', lang === 'ru'
       ? `⚡ Workflow **${wf.name}** создан! ${wf.steps.length} шагов · trigger: ${trigger}.\nЗапустить: скажи "запусти workflow ${wf.name}" или открой Workflows.`
@@ -6575,6 +6598,7 @@ let currentPersona = 'jarvis';
 
 async function setPersona(id) {
   currentPersona = id;
+  try { const sel = document.getElementById('persona-select'); if (sel && sel.value !== id) sel.value = id; } catch(_){}
   await saveSetting('persona', id, 'Persona');
   try {
     const p = await H.getPersona(id);
@@ -6749,9 +6773,13 @@ async function execPluginTool(pluginId, toolName, args = {}) {
       if (data && typeof data === 'object') {
         const clean = { ...data };
         delete clean.ok;
+        if (typeof clean.out === 'string' && clean.out) payload = '\n' + clean.out;
+        else if (typeof clean.error === 'string' && clean.error) payload = '\n' + clean.error;
+        else {
         const keys = Object.keys(clean);
         if (keys.length) {
           try { payload = '\n```\n' + JSON.stringify(clean, null, 2).slice(0, 800) + '\n```'; } catch (_) {}
+        }
         }
       } else if (typeof data === 'string' && data) {
         payload = '\n' + data;
@@ -6872,7 +6900,7 @@ async function createPluginFromForm() {
   if (!name) { H.notify('Plugin Hub', 'Plugin name required'); return; }
   let tools = [];
   try { tools = JSON.parse(toolsRaw || '[]'); } catch(e) { H.notify('Plugin Hub', 'Invalid JSON in tools'); return; }
-  const plugin = { id: 'custom_' + Date.now(), name, description: desc, icon, version: '1.0.0', author: userName, tools };
+  const plugin = { id: 'custom_' + Date.now(), name, description: desc, icon, version: '1.0.0', author: userName, tier: 'local', permissions: ['local:actions'], tools };
   try {
     const r = await H.pluginInstall(plugin);
     if (r.ok) {
@@ -6900,6 +6928,7 @@ async function installFromUrl() {
 let storeCurrentTab = 'plugins';
 let storeCat = 'all';
 let storeItems = [];
+let storeInstalled = [];
 
 // ═══════════════════════════════════════════════════════════════
 // HORIZON ACCOUNT (SSO with marketplace website)
@@ -7124,7 +7153,7 @@ function storeTab(tab) {
 async function renderStoreBody() {
   const body = document.getElementById('store-body');
   if (storeCurrentTab === 'plugins') {
-    body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading marketplace…</div>';
+    body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading marketplace...</div>';
     try {
       const r = await H.marketRemoteList({});
       if (!r.ok) {
@@ -7144,7 +7173,7 @@ async function renderStoreBody() {
     }
   } else if (storeCurrentTab === 'workflows') {
     body.innerHTML = `
-      <div class="empty-state"><div class="es-icon">⚡</div><h3>Workflows stay local</h3>
+      <div class="empty-state"><div class="es-icon">&#9889;</div><h3>Workflows stay local</h3>
       <p>Workflows are your own automations. They live in <b>Workflows</b> panel, not in the marketplace. Publish to community from the web dashboard.</p></div>
     `;
   } else if (storeCurrentTab === 'publish') {
@@ -7159,7 +7188,7 @@ async function renderStoreBody() {
         <button class="publish-cta-btn" onclick="H.openUrl('${url}/publish')">Open publisher</button>
       </div>
       <div class="empty-state"><div class="es-icon">&#9889;</div><h3>Why not in the app?</h3>
-      <p>Publishing needs: account identity, human moderation, screenshots, pricing review. That's a web surface — the desktop app only runs plugins.</p>
+      <p>Publishing needs: account identity, human moderation, screenshots, pricing review. That's a web surface - the desktop app only runs plugins.</p>
       <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">
         <button class="sc-btn primary" onclick="H.openUrl('${url}/publish')">Publish a plugin</button>
         <button class="sc-btn" onclick="H.openUrl('${url}/dashboard')">My shelf / earnings</button>
@@ -7173,12 +7202,12 @@ function renderStorePlugins(items, installed) {
   const cats = ['all', ...new Set(items.map(i => i.category).filter(Boolean))];
   const acctBanner = currentUser
     ? `<div style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:10px;margin-bottom:14px;font-size:11px;color:var(--t2)">
-        <span style="font-size:14px">✅</span>
+        <span style="font-size:14px">&#10003;</span>
         <span>Signed in as <b>${currentUser.display_name || currentUser.email}</b>. Installs, purchases and reviews are tied to your account.</span>
       </div>`
     : `<div style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--acc3);border:1px solid rgba(108,140,255,.25);border-radius:10px;margin-bottom:14px;font-size:11px;color:var(--t2)">
-        <span style="font-size:14px">👤</span>
-        <span style="flex:1">Not signed in. Free plugins install anonymously — paid plugins need an account.</span>
+        <span style="font-size:14px">&#128100;</span>
+        <span style="flex:1">Not signed in. Free plugins install anonymously - paid plugins need an account.</span>
         <button class="sc-btn primary" style="padding:4px 10px" onclick="openAccount()">Sign in</button>
       </div>`;
   body.innerHTML = `
@@ -7190,7 +7219,7 @@ function renderStorePlugins(items, installed) {
       ${cats.map(c => `<button class="store-cat ${c === storeCat ? 'on' : ''}" onclick="setStoreCat('${c}')">${c === 'all' ? 'All' : c}</button>`).join('')}
     </div>
     <div class="store-grid" id="store-grid">
-      ${renderStoreCards(items, installed)}
+      ${items.length ? renderStoreCards(items, installed) : '<div class="empty-state"><div class="es-icon">&#128269;</div><h3>No real marketplace plugins yet</h3><p>Horizon only shows plugins returned by the marketplace API. Local built-ins live under Installed.</p></div>'}
     </div>
   `;
 }
@@ -7198,8 +7227,10 @@ function renderStorePlugins(items, installed) {
 function renderStoreCards(items, installed) {
   return items.map(p => {
     const isInstalled = installed.includes(p.id);
-    const rating = Math.round(p.rating_avg || p.rating || 0);
-    const stars = rating > 0 ? ('★'.repeat(rating) + '☆'.repeat(5 - rating)) : '';
+    const rawRating = Number(p.rating_avg || p.rating || 0);
+    const ratingText = rawRating > 0 ? rawRating.toFixed(1).replace(/\.0$/, '') + '/5' : 'Not rated';
+    const installs = Number(p.downloads || p.installs || 0);
+    const installText = installs > 0 ? installs.toLocaleString() + ' installs' : 'No installs yet';
     const price = p.price_usd ?? p.price ?? 0;
     const safeId = String(p.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const safeSlug = String(p.slug || p.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -7223,8 +7254,8 @@ function renderStoreCards(items, installed) {
             <span class="sc-tag">${(p.tools||[]).length} tools</span>
           </div>
           <div class="sc-actions">
-            <div class="sc-rating">${stars}<span class="sc-dl">${p.downloads || 0} ↓</span></div>
-            <button class="sc-btn ${isInstalled ? 'installed' : 'primary'}" onclick="${isInstalled ? `removePlugin('${safeId}')` : `installStorePlugin('${safeId}', ${price}, '${safeSlug}')`}">${isInstalled ? 'Installed \u2713' : (price > 0 ? 'Buy · $' + price : 'Install')}</button>
+            <div class="sc-rating"><span>${ratingText}</span><span class="sc-dl">${installText}</span></div>
+            <button class="sc-btn ${isInstalled ? 'installed' : 'primary'}" onclick="${isInstalled ? `removePlugin('${safeId}')` : `installStorePlugin('${safeId}', ${price}, '${safeSlug}')`}">${isInstalled ? 'Installed \u2713' : (price > 0 ? 'Buy - $' + price : 'Install')}</button>
           </div>
         </div>
       </div>
@@ -7246,7 +7277,7 @@ function filterStore(q) {
     return matchCat && matchQ;
   });
   const grid = document.getElementById('store-grid');
-  if (grid) grid.innerHTML = renderStoreCards(filtered, []);
+  if (grid) grid.innerHTML = filtered.length ? renderStoreCards(filtered, storeInstalled) : '<div class="empty-state"><div class="es-icon">&#128269;</div><h3>No matching real plugins</h3><p>Try a different category or search query.</p></div>';
 }
 
 async function installStorePlugin(id, price = 0, slug = '') {
@@ -7721,16 +7752,38 @@ async function renderWfBody() {
           <label>Trigger</label>
           <select class="wf-input" id="wf-trigger-input">
             <option value="manual">Manual (run on demand)</option>
-            <option value="schedule">Scheduled (cron)</option>
+            <option value="schedule">Scheduled (daily time)</option>
             <option value="startup">On startup</option>
           </select>
         </div>
         <div class="wf-field" id="wf-cron-field" style="display:none">
-          <label>Cron expression (e.g. 0 9 * * 1-5 = weekdays 9am)</label>
-          <input class="wf-input" id="wf-cron-input" placeholder="0 9 * * *"/>
+          <label>Daily time (HH:MM)</label>
+          <input class="wf-input" id="wf-cron-input" placeholder="09:00"/>
         </div>
         <div class="wf-field">
-          <label>Steps (JSON)</label>
+          <label>No-code steps</label>
+          <div style="display:grid;grid-template-columns:170px 1fr 1fr auto;gap:8px;align-items:center">
+            <select class="wf-input" id="wf-step-action" onchange="updateWfStepBuilderHints()">
+              <option value="open_url">Open URL</option>
+              <option value="open_app">Open app</option>
+              <option value="close_app">Close app</option>
+              <option value="notify">Notify</option>
+              <option value="speak">Speak</option>
+              <option value="send_message">Send chat message</option>
+              <option value="wait">Wait</option>
+              <option value="type_text">Type text</option>
+              <option value="press_key">Press key</option>
+              <option value="shell">Shell command</option>
+              <option value="run_code">Run code</option>
+            </select>
+            <input class="wf-input" id="wf-step-param-a" placeholder="url / app / text / command"/>
+            <input class="wf-input" id="wf-step-param-b" placeholder="optional"/>
+            <button class="wf-btn run" onclick="addWfStepFromBuilder()" type="button">Add</button>
+          </div>
+          <div id="wf-step-builder-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+        <div class="wf-field">
+          <label>Advanced JSON (auto-filled from no-code steps)</label>
           <textarea class="wf-textarea" id="wf-steps-input" style="min-height:120px" placeholder='[{"action":"open_url","args":{"url":"https://youtube.com"}},{"action":"wait","args":{"ms":5000}},{"action":"notify","args":{"message":"Done!"}}]'></textarea>
         </div>
         <button class="wf-ai-btn" onclick="createWfManual()">Create Workflow</button>
@@ -7745,11 +7798,14 @@ async function renderWfBody() {
     document.getElementById('wf-trigger-input').addEventListener('change', function() {
       document.getElementById('wf-cron-field').style.display = this.value === 'schedule' ? 'block' : 'none';
     });
+    wfDraftSteps = [];
+    updateWfStepBuilderHints();
+    renderWfDraftSteps();
   } else if (wfCurrentTab === 'scheduled') {
     body.innerHTML = `
       <div style="margin-bottom:16px">
         <div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:6px">⏰ Scheduled Workflows</div>
-        <div style="font-size:11px;color:var(--t3)">Workflows with cron triggers run automatically in the background.</div>
+        <div style="font-size:11px;color:var(--t3)">Scheduled and interval workflows run automatically in the background.</div>
       </div>
       <div id="scheduled-list">Loading...</div>
     `;
@@ -7759,7 +7815,7 @@ async function renderWfBody() {
       const scheduled = all.filter(w => w.trigger && w.trigger !== 'manual');
       const el = document.getElementById('scheduled-list');
       if (!scheduled.length) {
-        el.innerHTML = `<div class="empty-state"><div class="es-icon">⏰</div><h3>No scheduled workflows</h3><p>Create a workflow with a cron trigger to run it automatically.</p></div>`;
+        el.innerHTML = `<div class="empty-state"><div class="es-icon">⏰</div><h3>No scheduled workflows</h3><p>Create a workflow with a daily time or interval trigger to run it automatically.</p></div>`;
       } else {
         el.innerHTML = scheduled.map(w => `
           <div class="wf-card">
@@ -7784,6 +7840,88 @@ async function renderWfBody() {
   }
 }
 
+let wfDraftSteps = [];
+
+function updateWfStepBuilderHints() {
+  const action = document.getElementById('wf-step-action')?.value || 'open_url';
+  const a = document.getElementById('wf-step-param-a');
+  const b = document.getElementById('wf-step-param-b');
+  if (!a || !b) return;
+  const hints = {
+    open_url: ['https://example.com', ''],
+    open_app: ['chrome / code / Spotify', ''],
+    close_app: ['chrome / msedge / Spotify', ''],
+    notify: ['Message', 'Title (optional)'],
+    speak: ['Text to speak', ''],
+    send_message: ['Message to send to Horizon', ''],
+    wait: ['Seconds or ms', ''],
+    type_text: ['Text to type', ''],
+    press_key: ['ENTER / ^s / {TAB}', ''],
+    shell: ['Command', ''],
+    run_code: ['Code or command', 'language: node/shell']
+  };
+  a.placeholder = hints[action]?.[0] || 'value';
+  b.placeholder = hints[action]?.[1] || 'optional';
+}
+
+function stepFromBuilderInput() {
+  const action = document.getElementById('wf-step-action')?.value || 'open_url';
+  const a = document.getElementById('wf-step-param-a')?.value.trim() || '';
+  const b = document.getElementById('wf-step-param-b')?.value.trim() || '';
+  const args = {};
+  if (action === 'open_url') args.url = a;
+  else if (action === 'open_app' || action === 'close_app') args.app = a;
+  else if (action === 'notify') { args.message = a; if (b) args.title = b; }
+  else if (action === 'speak' || action === 'send_message' || action === 'type_text') args.text = a;
+  else if (action === 'wait') args.ms = /^\d+$/.test(a) && Number(a) < 1000 ? Number(a) * 1000 : Number(a || 1000);
+  else if (action === 'press_key') args.key = a;
+  else if (action === 'shell') args.command = a;
+  else if (action === 'run_code') { args.code = a; if (b) args.language = b.replace(/^language:\s*/i, ''); }
+  return { action, args };
+}
+
+function syncWfStepsTextarea() {
+  const ta = document.getElementById('wf-steps-input');
+  if (ta) ta.value = JSON.stringify(wfDraftSteps, null, 2);
+}
+
+function renderWfDraftSteps() {
+  const el = document.getElementById('wf-step-builder-list');
+  if (!el) return;
+  if (!wfDraftSteps.length) {
+    el.innerHTML = '<div style="font-size:10px;color:var(--t3)">No steps yet. Pick an action and press Add.</div>';
+    syncWfStepsTextarea();
+    return;
+  }
+  el.innerHTML = wfDraftSteps.map((s, i) => `
+    <div class="wf-step" style="justify-content:space-between">
+      <span>${i + 1}. ${escHtml(s.action)} <span style="color:var(--t3)">${escHtml(JSON.stringify(s.args || {})).slice(0, 120)}</span></span>
+      <button class="wf-btn del" onclick="removeWfDraftStep(${i})" type="button">x</button>
+    </div>
+  `).join('');
+  syncWfStepsTextarea();
+}
+
+function addWfStepFromBuilder() {
+  const step = stepFromBuilderInput();
+  const value = Object.values(step.args || {}).find(v => String(v || '').trim());
+  if (!value && !['wait'].includes(step.action)) {
+    H.notify?.('Workflows', 'Fill the main field for this step.');
+    return;
+  }
+  wfDraftSteps.push(step);
+  const a = document.getElementById('wf-step-param-a');
+  const b = document.getElementById('wf-step-param-b');
+  if (a) a.value = '';
+  if (b) b.value = '';
+  renderWfDraftSteps();
+}
+
+function removeWfDraftStep(i) {
+  wfDraftSteps.splice(i, 1);
+  renderWfDraftSteps();
+}
+
 async function createWfFromAI() {
   const desc = document.getElementById('wf-desc-input').value.trim();
   if (!desc) { H.notify('Workflows', 'Please describe the workflow'); return; }
@@ -7794,7 +7932,7 @@ async function createWfFromAI() {
     wfTab('list');
   } else {
     document.getElementById('wf-desc-input').disabled = false;
-    document.querySelector('.wf-ai-btn').textContent = '&#129302; Generate with AI';
+    document.querySelector('.wf-ai-btn').textContent = 'Generate with AI';
   }
 }
 
@@ -7805,10 +7943,15 @@ async function createWfManual() {
   const stepsRaw = document.getElementById('wf-steps-input').value.trim();
   let steps = [];
   try { steps = JSON.parse(stepsRaw || '[]'); } catch(e) { H.notify('Workflows', 'Invalid JSON in steps'); return; }
-  const finalTrigger = trigger === 'schedule' ? `cron:${cron}` : trigger;
-  const wf = createWorkflow(name, steps, finalTrigger);
-  // Also register with engine
-  try { await H.workflowCreate(name, finalTrigger, steps, ''); } catch(_) {}
+  const finalTrigger = trigger === 'schedule' ? normaliseWorkflowTrigger(cron || 'manual') : normaliseWorkflowTrigger(trigger);
+  try {
+    const r = await H.workflowCreate(name, finalTrigger, steps, '');
+    if (!r || r.ok === false) throw new Error(r?.error || 'Workflow engine create failed');
+    await loadWorkflows();
+  } catch(e) {
+    console.warn('workflowCreate failed, falling back to local store:', e?.message || e);
+    createWorkflow(name, steps, finalTrigger);
+  }
   addMsg('bot', lang === 'ru' ? `⚡ Workflow **${name}** создан!` : `⚡ Workflow **${name}** created!`);
   wfTab('list');
 }
@@ -7816,7 +7959,7 @@ async function createWfManual() {
 const WF_EXAMPLES = {
   youtube: { name: 'YouTube Open & Close', trigger: 'manual', steps: [{action:'open_url',args:{url:'https://youtube.com'}},{action:'wait',args:{ms:10000}},{action:'notify',args:{message:'Closing YouTube now'}},{action:'run_code',args:{code:'require("child_process").exec("taskkill /F /IM chrome.exe")',language:'node'}}] },
   screenshot: { name: 'Screenshot & Notify', trigger: 'manual', steps: [{action:'notify',args:{message:'Taking screenshot...'}},{action:'run_code',args:{code:'// Screenshot via agent',language:'node'}},{action:'notify',args:{message:'Screenshot saved!'}}] },
-  morning: { name: 'Morning Routine', trigger: 'cron:0 9 * * 1-5', steps: [{action:'notify',args:{message:'Good morning! Time to start your day.'}},{action:'speak',args:{text:'Good morning! Here is your daily briefing.'}},{action:'send_message',args:{text:'Give me a morning briefing with weather and tasks'}}] },
+  morning: { name: 'Morning Routine', trigger: 'schedule:09:00', steps: [{action:'notify',args:{message:'Good morning! Time to start your day.'}},{action:'speak',args:{text:'Good morning! Here is your daily briefing.'}},{action:'send_message',args:{text:'Give me a morning briefing with weather and tasks'}}] },
   search: { name: 'Google Search', trigger: 'manual', steps: [{action:'open_url',args:{url:'https://google.com'}},{action:'wait',args:{ms:1000}},{action:'notify',args:{message:'Google opened!'}}] }
 };
 
@@ -7825,11 +7968,14 @@ function fillWfExample(key) {
   if (!ex) return;
   document.getElementById('wf-name-input').value = ex.name;
   document.getElementById('wf-trigger-input').value = ex.trigger.startsWith('cron:') ? 'schedule' : ex.trigger;
-  if (ex.trigger.startsWith('cron:')) {
+  if (ex.trigger.startsWith('schedule:') || ex.trigger.startsWith('cron:')) {
+    document.getElementById('wf-trigger-input').value = 'schedule';
     document.getElementById('wf-cron-field').style.display = 'block';
-    document.getElementById('wf-cron-input').value = ex.trigger.replace('cron:','');
+    document.getElementById('wf-cron-input').value = normaliseWorkflowTrigger(ex.trigger).replace('schedule:','');
   }
   document.getElementById('wf-steps-input').value = JSON.stringify(ex.steps, null, 2);
+  wfDraftSteps = [...ex.steps];
+  renderWfDraftSteps();
 }
 
 async function wfQuickCreate(desc) {
@@ -7840,7 +7986,18 @@ async function wfQuickCreate(desc) {
 
 async function runWorkflowById(id) {
   closeWorkflows();
-  await runWorkflow(id);
+  try {
+    const r = await H.workflowRun?.(id);
+    if (!r || r.ok === false) {
+      addMsg('bot', `Workflow error: ${(r && r.error) || 'could not run workflow'}`);
+      return;
+    }
+    const label = r.workflowName || id;
+    addMsg('bot', `Workflow **${label}** complete in ${Math.round((r.duration || 0) / 1000)}s.`);
+    await loadWorkflows();
+  } catch (e) {
+    await runWorkflow(id);
+  }
 }
 
 async function deleteWorkflowById(id) {
@@ -8111,8 +8268,7 @@ H.onMarketAuthenticated?.(async (user) => {
 (async function initHorizon() {
   // Load persona
   try {
-    const saved = await H.get('persona');
-    if (saved) { currentPersona = saved; document.getElementById('persona-select').value = saved; }
+    await loadPersonaSelect();
   } catch(_) {}
   
   // Load ambient/notifications state
@@ -9448,11 +9604,15 @@ function refreshInspectorTools(){
 
 function refreshInspectorCost(){
   // Pull live values from the existing token tracker.
-  const cost = (typeof sessionTokens !== 'undefined') ? sessionTokens : 0;
   const headline = document.getElementById('insp-cost-headline');
   const sub = document.getElementById('insp-cost-sub');
-  if (headline) headline.textContent = sessionUsageKnown ? formatCost() : '—';
-  if (sub) sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} · ${formatTokens(sessionTokens)} tokens`;
+  if (headline) headline.textContent = formatCost();
+  if (sub) {
+    const source = sessionUsageKnown
+      ? (sessionHasEstimatedUsage ? 'provider + estimated usage' : 'provider usage')
+      : (sessionTokens ? 'estimated usage' : 'provider usage pending');
+    sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} · ${formatTokens(sessionTokens)} tokens · ${source}`;
+  }
 
   // Token budget visualisation. We don't have per-segment counters; estimate
   // splits as 7% system, 83% history, 8% files, 2% tools (a rough pattern
@@ -9477,11 +9637,12 @@ function refreshInspectorCost(){
   }
   const meta = document.getElementById('insp-token-meta');
   if (meta) {
+    const approx = sessionTokens ? '~' : '';
     meta.innerHTML = `
-      <span class="seg system">System ${formatTokens(segs.system)}</span>
-      <span class="seg history">History ${formatTokens(segs.history)}</span>
-      <span class="seg files">Files ${formatTokens(segs.files)}</span>
-      <span class="seg tools">Tools ${formatTokens(segs.tools)}</span>`;
+      <span class="seg system" title="Approximate split until provider exposes per-part usage">System ${approx}${formatTokens(segs.system)}</span>
+      <span class="seg history" title="Approximate split until provider exposes per-part usage">History ${approx}${formatTokens(segs.history)}</span>
+      <span class="seg files" title="Approximate split until provider exposes per-part usage">Files ${approx}${formatTokens(segs.files)}</span>
+      <span class="seg tools" title="Approximate split until provider exposes per-part usage">Tools ${approx}${formatTokens(segs.tools)}</span>`;
   }
   document.getElementById('insp-token-used').textContent = formatTokens(totalUsed);
   document.getElementById('insp-token-budget').textContent = formatTokens(budget);
@@ -9506,10 +9667,9 @@ function formatTokens(n){
   return String(n);
 }
 function formatCost(){
-  // Token tracker doesn't carry $ cost in the simplified flow — show tokens
-  // as the headline and leave the dollar sign for a future per-provider
-  // pricing source. For now show a compact tokens value.
-  return formatTokens(sessionTokens) + ' tok';
+  // No hardcoded dollars. Show token usage only because each BYOK provider can
+  // bill differently and local models may not report provider usage at all.
+  return (sessionHasEstimatedUsage ? '~' : '') + formatTokens(sessionTokens) + ' tok';
 }
 
 // ═══════════════════════════════════════════════════════════════
