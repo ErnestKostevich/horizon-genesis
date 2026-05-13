@@ -4048,6 +4048,79 @@ function updateStatusBar(title) {
 // model from the chat status bar instead of from Settings.
 const _modelCache = Object.create(null);
 
+const MODEL_PICKER_REGISTRY = {
+  claude: [
+    ['claude-sonnet-4-6', 'Claude Sonnet 4.6'],
+    ['claude-opus-4-5', 'Claude Opus 4.5'],
+    ['claude-3-7-sonnet-latest', 'Claude 3.7 Sonnet'],
+    ['claude-3-5-haiku-latest', 'Claude 3.5 Haiku'],
+  ],
+  openai: [
+    ['gpt-4o', 'GPT-4o'],
+    ['gpt-4o-mini', 'GPT-4o mini'],
+    ['gpt-4.1', 'GPT-4.1'],
+    ['gpt-5', 'GPT-5'],
+    ['gpt-5-mini', 'GPT-5 mini'],
+    ['o3', 'o3 reasoning'],
+    ['o4-mini', 'o4-mini reasoning'],
+  ],
+  gemini: [
+    ['gemini-2.5-flash', 'Gemini 2.5 Flash'],
+    ['gemini-2.5-pro', 'Gemini 2.5 Pro'],
+    ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite'],
+    ['gemini-2.0-flash', 'Gemini 2.0 Flash'],
+    ['gemini-3-flash', 'Gemini 3 Flash'],
+    ['gemini-3-pro', 'Gemini 3 Pro'],
+  ],
+  groq: [
+    ['llama-3.3-70b-versatile', 'Llama 3.3 70B Versatile'],
+    ['llama-3.1-8b-instant', 'Llama 3.1 8B Instant'],
+    ['qwen/qwen3-32b', 'Qwen3 32B'],
+    ['moonshotai/kimi-k2-instruct', 'Kimi K2 Instruct'],
+    ['openai/gpt-oss-120b', 'GPT-OSS 120B'],
+  ],
+  deepseek: [
+    ['deepseek-chat', 'DeepSeek Chat'],
+    ['deepseek-reasoner', 'DeepSeek Reasoner'],
+  ],
+  grok: [
+    ['grok-4', 'Grok 4'],
+    ['grok-4-fast-reasoning', 'Grok 4 Fast Reasoning'],
+    ['grok-4-mini', 'Grok 4 Mini'],
+    ['grok-code-fast-1', 'Grok Code Fast 1'],
+  ],
+  mistral: [
+    ['mistral-large-latest', 'Mistral Large'],
+    ['mistral-medium-latest', 'Mistral Medium'],
+    ['mistral-small-latest', 'Mistral Small'],
+    ['codestral-latest', 'Codestral'],
+  ],
+  qwen: [
+    ['qwen-plus', 'Qwen Plus'],
+    ['qwen3-max', 'Qwen3 Max'],
+    ['qwen3.5-plus', 'Qwen3.5 Plus'],
+    ['qwen3.5-flash', 'Qwen3.5 Flash'],
+    ['qwen3-coder-plus', 'Qwen3 Coder Plus'],
+  ],
+  perplexity: [
+    ['sonar-pro', 'Sonar Pro'],
+    ['sonar', 'Sonar'],
+    ['sonar-reasoning', 'Sonar Reasoning'],
+    ['sonar-reasoning-pro', 'Sonar Reasoning Pro'],
+  ],
+  cohere: [
+    ['command-a-03-2025', 'Command A'],
+    ['command-r-plus', 'Command R+'],
+    ['command-r', 'Command R'],
+  ],
+  openrouter: [
+    ['openai/gpt-4o-mini', 'OpenAI GPT-4o mini'],
+    ['anthropic/claude-sonnet-4.5', 'Claude Sonnet via OpenRouter'],
+    ['google/gemini-2.5-flash', 'Gemini 2.5 Flash via OpenRouter'],
+    ['meta-llama/llama-3.3-70b-instruct', 'Llama 3.3 70B via OpenRouter'],
+  ],
+};
+
 async function _bootModelCache() {
   const known = ['claude','openai','gemini','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','ollama','lmstudio','localai'];
   await Promise.all(known.map(async (p) => {
@@ -4082,6 +4155,31 @@ function getSelectedModelForProvider(p){
 function aiOptsForProvider(p){
   const model = getSelectedModelForProvider(p);
   return model ? { model } : {};
+}
+
+function modelChoicesForProvider(p) {
+  const choices = [];
+  const add = (value, label) => {
+    const id = String(value || '').trim();
+    if (!id || choices.some(x => x.value === id)) return;
+    choices.push({ value: id, label: String(label || id) });
+  };
+
+  if (p === 'openrouter' && Array.isArray(_openrouterAllModels) && _openrouterAllModels.length) {
+    _openrouterAllModels.forEach(m => add(typeof m === 'string' ? m : m.id, typeof m === 'string' ? m : (m.name ? `${m.id} — ${m.name}` : m.id)));
+  }
+
+  const localSelId = (p === 'ollama' || p === 'lmstudio' || p === 'localai') ? `pi-${p}-model` : null;
+  const domSel = document.getElementById(localSelId || ('ms-' + p));
+  if (domSel?.options?.length) {
+    Array.from(domSel.options).forEach(opt => add(opt.value, opt.textContent || opt.value));
+  }
+
+  (MODEL_PICKER_REGISTRY[p] || []).forEach(([value, label]) => add(value, label));
+
+  const selected = getSelectedModelForProvider(p);
+  if (selected) add(selected, selected + ' (saved)');
+  return choices;
 }
 
 // ═══ LICENSE PILL — show Pro/Trial/Expired status in chat status bar ═══
@@ -4169,25 +4267,18 @@ function openModelPicker(ev){
   const pop = document.getElementById('model-popover');
   if (!pop) return;
   const currentProv = (typeof prov !== 'undefined' ? prov : null) || 'gemini';
-  let html = `<div class="model-popover-h">${currentProv} · model</div>`;
-  // Local providers (ollama, lmstudio, localai) keep their dropdown in
-  // pi-<provider>-model. Cloud providers in ms-<provider>.
-  let localSel = null;
-  if (currentProv === 'ollama' || currentProv === 'lmstudio' || currentProv === 'localai') {
-    localSel = document.getElementById('pi-' + currentProv + '-model');
-  }
-  const cloudSel = document.getElementById('ms-' + currentProv);
-  const sourceSel = localSel || cloudSel;
-  if (!sourceSel || !sourceSel.options || sourceSel.options.length === 0) {
-    html += `<div class="model-popover-empty">No model picker for this provider yet. Configure it in Settings → Models.</div>`;
+  const choices = modelChoicesForProvider(currentProv);
+  const current = getSelectedModelForProvider(currentProv) || '';
+  const isLocalProvider = currentProv === 'ollama' || currentProv === 'lmstudio' || currentProv === 'localai';
+  let html = `<div class="model-popover-h">${_escHtml(currentProv)} · active model</div>`;
+  if (!choices.length) {
+    html += `<div class="model-popover-empty">No models loaded for this provider yet. Open Settings → Models or refresh the local server list.</div>`;
   } else {
-    const current = sourceSel.value || '';
-    for (const opt of sourceSel.options) {
-      if (!opt.value) continue;
-      const escVal = opt.value.replace(/'/g, "\\'");
-      const handler = localSel ? `pickLocalModel('${currentProv}','${escVal}')` : `pickModel('${currentProv}','${escVal}')`;
-      const onClass = (opt.value === current) ? ' on' : '';
-      html += `<div class="model-popover-opt${onClass}" onclick="${handler}">${_escHtml(opt.textContent)}</div>`;
+    for (const item of choices) {
+      const escVal = item.value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const handler = isLocalProvider ? `pickLocalModel('${currentProv}','${escVal}')` : `pickModel('${currentProv}','${escVal}')`;
+      const onClass = (item.value === current) ? ' on' : '';
+      html += `<div class="model-popover-opt${onClass}" onclick="${handler}" title="${_escHtml(item.value)}">${_escHtml(item.label)}</div>`;
     }
   }
   pop.innerHTML = html;
@@ -4204,6 +4295,7 @@ function openModelPicker(ev){
 async function pickModel(provider, model){
   try { await saveModelSetting(provider, model); } catch(_) {}
   try { document.getElementById('csb-model').textContent = model; } catch(_) {}
+  try { H.notify?.('Model selected', `${provider}: ${model}`); } catch(_) {}
   closeModelPicker();
 }
 
@@ -5630,7 +5722,7 @@ function renderAttachPreview(){
       const wrap=document.createElement('div');
       wrap.style.position='relative';
       const rm=document.createElement('button');
-      rm.textContent='Г—'; rm.style.cssText='position:absolute;top:-4px;right:-4px;background:var(--bg3);border:1px solid var(--b1);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0;z-index:1';
+      rm.textContent='×'; rm.style.cssText='position:absolute;top:-4px;right:-4px;background:var(--bg3);border:1px solid var(--b1);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0;z-index:1';
       rm.onclick=()=>{attachments.splice(i,1);renderAttachPreview();};
       wrap.appendChild(img); wrap.appendChild(rm);
       area.appendChild(wrap);
@@ -5638,7 +5730,7 @@ function renderAttachPreview(){
       const chip=document.createElement('div');
       chip.className='att-chip';
       const icon = att.name.endsWith('.zip')?'📦': att.name.endsWith('.pdf')?'📄': att.name.match(/\.(js|ts|py|html|css|json)$/)?'💻': '📝';
-      chip.innerHTML=`<span>${icon}</span><span title="${att.name}">${att.name}</span><button onclick="attachments.splice(${i},1);renderAttachPreview()">Г—</button>`;
+      chip.innerHTML=`<span>${icon}</span><span title="${att.name}">${att.name}</span><button onclick="attachments.splice(${i},1);renderAttachPreview()">×</button>`;
       area.appendChild(chip);
     }
   });
@@ -6660,6 +6752,7 @@ async function checkGoogleAuth() {
 // PLUGIN HUB
 // ═══════════════════════════════════════════════════════════════
 let hubCurrentTab = 'installed';
+let hubPluginsCache = [];
 
 function openHub() {
   setActiveSurface('plugins', { keepPanels:['hub-panel'] });
@@ -6684,6 +6777,7 @@ async function renderHubBody() {
     body.innerHTML = '<div style="color:var(--t3);font-size:11px;margin-bottom:12px">Loading plugins...</div>';
     try {
       const plugins = await H.pluginList();
+      hubPluginsCache = plugins;
       if (!plugins.length) {
         body.innerHTML = `<div class="empty-state"><div class="es-icon">🧩</div><h3>No plugins installed</h3><p>Go to Marketplace to discover and install plugins, or create your own.</p><button class="sc-btn primary" onclick="openStore()">Browse Marketplace</button></div>`;
         return;
@@ -6699,7 +6793,7 @@ async function renderHubBody() {
             <div class="sw ${p.enabled !== false ? 'on' : ''}" onclick="togglePlugin('${p.id}',this)" title="Enable/Disable"></div>
           </div>
           <div class="hub-plugin-tools">
-            ${(p.toolList || (Array.isArray(p.tools) ? p.tools : [])).map(t => `<div class="hub-tool" onclick="execPluginTool('${p.id}','${t.name}')" title="${t.description||''}">&#9654; ${t.name}</div>`).join('')}
+            ${(p.toolList || (Array.isArray(p.tools) ? p.tools : [])).map(t => `<div class="hub-tool" onclick="execPluginToolInteractive('${p.id}','${t.name}')" title="${t.description||''}">&#9654; ${t.name}</div>`).join('')}
           </div>
           <div class="hub-plugin-footer">
             <div style="font-size:10px;color:var(--t3)">${p.description||''}</div>
@@ -6775,6 +6869,36 @@ async function execPluginTool(pluginId, toolName, args = {}) {
       addMsg('bot', `Plugin error: ${(r && r.error) || 'unknown'}`);
     }
   } catch(e) { addMsg('bot', `Plugin error: ${e.message}`); }
+}
+
+async function execPluginToolInteractive(pluginId, toolName) {
+  try {
+    let plugins = hubPluginsCache || [];
+    if (!plugins.length) plugins = await H.pluginList();
+    const plugin = plugins.find(p => p.id === pluginId);
+    const tool = (plugin?.toolList || plugin?.tools || []).find(t => t.name === toolName) || {};
+    const spec = tool.params || tool.schema || {};
+    const args = {};
+    const entries = Array.isArray(spec)
+      ? spec.map(name => [name, 'string'])
+      : Object.entries(spec);
+    for (const [name, kind] of entries) {
+      const hint = typeof kind === 'string' ? kind : (kind?.description || kind?.type || 'value');
+      const value = window.prompt(`${plugin?.name || pluginId} / ${toolName}\n${name} (${hint})`, '');
+      if (value == null) return;
+      const trimmed = String(value).trim();
+      if (!trimmed) continue;
+      if (/number|integer|float/i.test(String(hint))) args[name] = Number(trimmed);
+      else if (/boolean|bool/i.test(String(hint))) args[name] = /^(true|1|yes|y)$/i.test(trimmed);
+      else {
+        try { args[name] = /^[\[{]/.test(trimmed) ? JSON.parse(trimmed) : trimmed; }
+        catch(_) { args[name] = trimmed; }
+      }
+    }
+    await execPluginTool(pluginId, toolName, args);
+  } catch (e) {
+    addMsg('bot', `Plugin error: ${e.message}`);
+  }
 }
 
 async function sharePlugin(id) {
@@ -7978,19 +8102,32 @@ async function wfQuickCreate(desc) {
 }
 
 async function runWorkflowById(id) {
-  closeWorkflows();
+  const panelOpen = document.getElementById('wf-panel')?.classList.contains('show');
   try {
+    if (panelOpen) {
+      H.notify?.('Workflows', 'Running workflow...');
+      wfCurrentTab = 'overview';
+      await renderWfBody();
+    } else {
+      closeWorkflows();
+    }
     const r = await H.workflowRun?.(id);
     if (!r || r.ok === false) {
       addMsg('bot', `Workflow error: ${(r && r.error) || 'could not run workflow'}`);
+      if (panelOpen) await renderWfBody();
       return;
     }
     await handleWorkflowRunEffects(r);
     const label = r.workflowName || id;
-    addMsg('bot', `Workflow **${label}** complete in ${Math.round((r.duration || 0) / 1000)}s.`);
+    const stepSummary = Array.isArray(r.results)
+      ? '\n' + r.results.map((x, idx) => `${idx + 1}. ${x.step || 'step'} - ${x.ok === false ? 'failed' : 'ok'}`).join('\n')
+      : '';
+    addMsg('bot', `Workflow **${label}** complete in ${Math.round((r.duration || 0) / 1000)}s.${stepSummary}`);
     await loadWorkflows();
+    if (panelOpen) await renderWfBody();
   } catch (e) {
     addMsg('bot', `Workflow error: ${e?.message || e || 'workflow engine failed'}`);
+    if (panelOpen) await renderWfBody();
   }
 }
 
