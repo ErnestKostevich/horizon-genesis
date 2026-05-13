@@ -421,7 +421,7 @@ async function runAgentLoop(userMessage, opts = {}) {
         else { lastToolName = parsed.tool; sameToolCount = 1; }
         if (sameToolCount >= 3) {
           finalAnswer = lang === 'ru'
-            ? `Р—Р°СЃС‚СЂСЏР» РЅР° РёРЅСЃС‚СЂСѓРјРµРЅС‚Рµ ${parsed.tool}. Р’РѕР·РјРѕР¶РЅРѕ, РЅСѓР¶РЅР° РґСЂСѓРіР°СЏ СЃС‚СЂР°С‚РµРіРёСЏ.`
+            ? `Застрял на инструменте ${parsed.tool}. Возможно, нужна другая стратегия.`
             : `Stuck on tool ${parsed.tool}. May need a different approach.`;
           break;
         }
