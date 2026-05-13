@@ -4599,6 +4599,7 @@ async function loadPersonaSelect() {
     currentPersona = list[0].id;
     sel.value = currentPersona;
   }
+  try { updateInspector(); } catch(_){}
 }
 
 async function renderPersonasEditor() {
@@ -6444,6 +6445,12 @@ async function runWorkflow(id) {
         case 'run_code':
           await H.execCode(step.args.code, step.args.language);
           break;
+        case 'screenshot': {
+          const shot = await H.pcScreenshot();
+          if (shot?.ok && shot.base64) addCard('Workflow screenshot', shot.path || '', shot.base64);
+          else throw new Error(shot?.err || shot?.error || 'Screenshot failed');
+          break;
+        }
         case 'wait':
           await new Promise(r => setTimeout(r, step.args.ms || 1000));
           break;
@@ -6600,6 +6607,7 @@ async function setPersona(id) {
   currentPersona = id;
   try { const sel = document.getElementById('persona-select'); if (sel && sel.value !== id) sel.value = id; } catch(_){}
   await saveSetting('persona', id, 'Persona');
+  try { updateInspector(); } catch(_){}
   try {
     const p = await H.getPersona(id);
     if (p) {
@@ -7745,7 +7753,7 @@ async function renderWfBody() {
           <label>Describe what you want to automate</label>
           <textarea class="wf-textarea" id="wf-desc-input" placeholder="e.g. Open YouTube, wait 5 seconds, then close it"></textarea>
         </div>
-        <button class="wf-ai-btn" onclick="createWfFromAI()">&#129302; Generate with AI</button>
+        <button class="wf-ai-btn" id="wf-generate-btn" onclick="createWfFromAI()">&#129302; Generate with AI</button>
         <div style="font-size:10px;color:var(--t3);margin-bottom:14px">Or create manually:</div>
         <div class="wf-field"><label>Workflow Name</label><input class="wf-input" id="wf-name-input" placeholder="My Workflow"/></div>
         <div class="wf-field">
@@ -7770,6 +7778,7 @@ async function renderWfBody() {
               <option value="notify">Notify</option>
               <option value="speak">Speak</option>
               <option value="send_message">Send chat message</option>
+              <option value="screenshot">Screenshot</option>
               <option value="wait">Wait</option>
               <option value="type_text">Type text</option>
               <option value="press_key">Press key</option>
@@ -7854,6 +7863,7 @@ function updateWfStepBuilderHints() {
     notify: ['Message', 'Title (optional)'],
     speak: ['Text to speak', ''],
     send_message: ['Message to send to Horizon', ''],
+    screenshot: ['Optional note', ''],
     wait: ['Seconds or ms', ''],
     type_text: ['Text to type', ''],
     press_key: ['ENTER / ^s / {TAB}', ''],
@@ -7873,6 +7883,7 @@ function stepFromBuilderInput() {
   else if (action === 'open_app' || action === 'close_app') args.app = a;
   else if (action === 'notify') { args.message = a; if (b) args.title = b; }
   else if (action === 'speak' || action === 'send_message' || action === 'type_text') args.text = a;
+  else if (action === 'screenshot') { if (a) args.note = a; }
   else if (action === 'wait') args.ms = /^\d+$/.test(a) && Number(a) < 1000 ? Number(a) * 1000 : Number(a || 1000);
   else if (action === 'press_key') args.key = a;
   else if (action === 'shell') args.command = a;
@@ -7925,14 +7936,16 @@ function removeWfDraftStep(i) {
 async function createWfFromAI() {
   const desc = document.getElementById('wf-desc-input').value.trim();
   if (!desc) { H.notify('Workflows', 'Please describe the workflow'); return; }
-  document.getElementById('wf-desc-input').disabled = true;
-  document.querySelector('.wf-ai-btn').textContent = 'Generating...';
+  const descEl = document.getElementById('wf-desc-input');
+  const btn = document.getElementById('wf-generate-btn');
+  descEl.disabled = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
   const wf = await createWorkflowFromText(desc);
   if (wf) {
     wfTab('list');
   } else {
-    document.getElementById('wf-desc-input').disabled = false;
-    document.querySelector('.wf-ai-btn').textContent = 'Generate with AI';
+    descEl.disabled = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#129302; Generate with AI'; }
   }
 }
 
@@ -7958,7 +7971,7 @@ async function createWfManual() {
 
 const WF_EXAMPLES = {
   youtube: { name: 'YouTube Open & Close', trigger: 'manual', steps: [{action:'open_url',args:{url:'https://youtube.com'}},{action:'wait',args:{ms:10000}},{action:'notify',args:{message:'Closing YouTube now'}},{action:'run_code',args:{code:'require("child_process").exec("taskkill /F /IM chrome.exe")',language:'node'}}] },
-  screenshot: { name: 'Screenshot & Notify', trigger: 'manual', steps: [{action:'notify',args:{message:'Taking screenshot...'}},{action:'run_code',args:{code:'// Screenshot via agent',language:'node'}},{action:'notify',args:{message:'Screenshot saved!'}}] },
+  screenshot: { name: 'Screenshot & Notify', trigger: 'manual', steps: [{action:'notify',args:{message:'Taking screenshot...'}},{action:'screenshot',args:{}},{action:'notify',args:{message:'Screenshot saved!'}}] },
   morning: { name: 'Morning Routine', trigger: 'schedule:09:00', steps: [{action:'notify',args:{message:'Good morning! Time to start your day.'}},{action:'speak',args:{text:'Good morning! Here is your daily briefing.'}},{action:'send_message',args:{text:'Give me a morning briefing with weather and tasks'}}] },
   search: { name: 'Google Search', trigger: 'manual', steps: [{action:'open_url',args:{url:'https://google.com'}},{action:'wait',args:{ms:1000}},{action:'notify',args:{message:'Google opened!'}}] }
 };
@@ -7992,11 +8005,40 @@ async function runWorkflowById(id) {
       addMsg('bot', `Workflow error: ${(r && r.error) || 'could not run workflow'}`);
       return;
     }
+    await handleWorkflowRunEffects(r);
     const label = r.workflowName || id;
     addMsg('bot', `Workflow **${label}** complete in ${Math.round((r.duration || 0) / 1000)}s.`);
     await loadWorkflows();
   } catch (e) {
     await runWorkflow(id);
+  }
+}
+
+async function handleWorkflowRunEffects(runResult) {
+  const results = Array.isArray(runResult?.results) ? runResult.results : [];
+  for (const item of results) {
+    const res = item?.result || {};
+    const out = String(res.out || '');
+    if (out.startsWith('message:')) {
+      const text = out.slice('message:'.length).trim();
+      if (text) addMsg('bot', text);
+      continue;
+    }
+    if (out.startsWith('speak:')) {
+      const text = out.slice('speak:'.length).trim();
+      if (text) {
+        addMsg('bot', text);
+        try { if (ttsOn) speak(text.slice(0, 400)); } catch (_) {}
+      }
+      continue;
+    }
+    if (res.base64) {
+      addCard('Workflow screenshot', res.path || '', res.base64);
+      continue;
+    }
+    if (res.path && /workflow-\d+\.png$/i.test(String(res.path))) {
+      addMsg('bot', `Screenshot saved: \`${res.path}\``);
+    }
   }
 }
 
@@ -9545,7 +9587,7 @@ function refreshInspector(){
     document.getElementById('insp-provider').textContent = p;
     document.getElementById('insp-model').textContent = m;
     document.getElementById('insp-mode').textContent = mode || 'chat';
-    document.getElementById('insp-persona').textContent = (typeof persona !== 'undefined' && persona) ? persona : 'Default';
+    document.getElementById('insp-persona').textContent = currentPersona || 'Default';
     document.getElementById('insp-workspace').textContent = codeWorkspace || 'No workspace';
     document.getElementById('insp-open-files').textContent = (codeOpenFiles?.length || 0).toString();
     document.getElementById('insp-voice').textContent = voiceProvider || '—';
