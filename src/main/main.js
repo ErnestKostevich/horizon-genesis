@@ -2325,13 +2325,35 @@ function classifyToolOperation(tool, args = {}) {
   return 'read';
 }
 
+function resolvePermissionToolName(tool) {
+  const raw = String(tool || '');
+  if (!raw || !pluginManager?.plugins) return raw;
+  try {
+    for (const [pluginId, manifest] of pluginManager.plugins) {
+      const prefix = `plugin_${pluginId}_`;
+      let toolName = null;
+      if (raw.startsWith(prefix)) {
+        toolName = raw.slice(prefix.length);
+      } else if (raw.startsWith(`${pluginId}__`)) {
+        toolName = raw.slice(`${pluginId}__`.length);
+      }
+      if (!toolName) continue;
+      const spec = (manifest.tools || []).find(t => t && t.name === toolName);
+      if (spec?.action) return `${pluginId}__${spec.action}`;
+      return `${pluginId}__${toolName}`;
+    }
+  } catch (_) {}
+  return raw;
+}
+
 function permissionRequiresApproval(operation) {
   return !['read', 'read_shell'].includes(operation);
 }
 
 function classifyAgentPermission(payload) {
   const args = payload?.args || {};
-  const tool = String(payload?.tool || '');
+  const displayTool = String(payload?.tool || '');
+  const tool = resolvePermissionToolName(displayTool);
   const operation = classifyToolOperation(tool, args);
   const required = permissionRequiresApproval(operation);
   const ctx = permissionContext();
@@ -2345,7 +2367,7 @@ function classifyAgentPermission(payload) {
     workspace: ctx.workspace,
     persona: ctx.persona,
     risk: required ? 'side-effect' : 'read-only',
-    title: `${tool || 'tool'} approval`,
+    title: `${displayTool || tool || 'tool'} approval`,
     description: required
       ? 'This tool can affect files, shell, network, browser, external services, or MCP state.'
       : 'Read-only tool allowed automatically.',
@@ -2993,7 +3015,27 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     catch (e) { console.warn('Plugin tools unavailable:', e.message); }
   }
 
+  const activePersonaId = settingsStore.get('persona') || 'jarvis';
+  let allowedToolGroups = null;
+  try {
+    if (personas && typeof personas.getPersonaFull === 'function') {
+      const personaFull = personas.getPersonaFull(activePersonaId);
+      if (Array.isArray(personaFull?.allowedTools)) allowedToolGroups = personaFull.allowedTools;
+    }
+  } catch (_) {}
+  const personaAllowsTool = (toolName) => {
+    if (!agentLoop?.toolAllowedByPersona) return true;
+    return agentLoop.toolAllowedByPersona(toolName, allowedToolGroups);
+  };
+
   const dispatchToolFn = async (tool, args) => {
+    if (!personaAllowsTool(tool)) {
+      return {
+        ok: false,
+        err: `Tool ${tool} is disabled for persona ${activePersonaId}`,
+        error: `Tool ${tool} is disabled for persona ${activePersonaId}`,
+      };
+    }
     if (mcpRegistry && String(tool || '').includes('__')) {
       const mcpResult = await mcpRegistry.dispatch(tool, args);
       if (mcpResult) return mcpResult;
@@ -3043,7 +3085,8 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       control: controller,
       nativeTools: provider === 'claude' || provider === 'openai',
       extraTools: [...mcpTools, ...pluginTools],
-      personaId: settingsStore.get('persona') || 'jarvis',
+      personaId: activePersonaId,
+      allowedToolGroups,
       dispatchToolFn
     });
   } catch (e) {
