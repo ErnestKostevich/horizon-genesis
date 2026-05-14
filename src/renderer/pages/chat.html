@@ -2738,6 +2738,73 @@ body.surface-active .inspector-pane{display:none!important}
   color: var(--t2);
   margin: 0 2px;
 }
+
+/* PR-C1 — slash-command popover. Same anchor model as at-mention but
+   a different accent color (purple) so the user instantly sees they're
+   in command mode vs context-injection mode. */
+.slash-pop {
+  display: none;
+  width: 440px;
+  max-height: 360px;
+  background: rgba(11,14,22,.97);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--special-500, #a78bfa);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 18px 40px -12px rgba(0,0,0,.7);
+  z-index: 261;
+  overflow: hidden;
+  flex-direction: column;
+  -webkit-app-region: no-drag;
+}
+.slash-pop.show { display: flex; }
+.slash-pop-h {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--code-line, #1d2333);
+  font: 700 var(--text-xs, 11px)/1 var(--mono);
+  letter-spacing: var(--tracking-extra, 1.6px);
+  color: var(--special-500, #a78bfa);
+  text-transform: uppercase;
+}
+.slash-pop-list { list-style: none; margin: 0; padding: 4px; overflow-y: auto; flex: 1; }
+.slash-pop-item {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: background .08s ease;
+}
+.slash-pop-item:hover, .slash-pop-item.on {
+  background: rgba(167,139,250,.10);
+}
+.slash-pop-label {
+  font: 600 var(--text-sm, 12px)/1 var(--mono);
+  color: var(--special-500, #a78bfa);
+  flex-shrink: 0;
+  min-width: 140px;
+}
+.slash-pop-hint {
+  flex: 1;
+  font: var(--text-xs, 11px)/1.3 var(--font);
+  color: var(--t2);
+  text-align: right;
+}
+.slash-pop-foot {
+  padding: 6px 12px;
+  border-top: 1px solid var(--code-line, #1d2333);
+  font: var(--text-xs, 11px)/1 var(--font);
+  color: var(--t3);
+}
+.slash-pop-kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 16px; padding: 0 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 4px;
+  font: 9.5px/1 var(--mono);
+  color: var(--t2);
+  margin: 0 2px;
+}
 .tb-r{
   max-width:none;
   padding:4px;
@@ -7946,17 +8013,172 @@ const q=text=>{const inp=document.getElementById('inp');inp.value=text;ar(inp);s
 // it's open (Tab/↓/↑ navigate, Enter inserts, Esc closes). The Enter→
 // sendMsg path remains the default when the dropdown is hidden.
 const kd=e=>{
+  // Order matters: slash-commands check first (they have their own
+  // dropdown handling), then @-mentions, then default Enter→send.
+  if (typeof slashKeyDown === 'function' && slashKeyDown(e)) return;
   if (typeof atMentionKeyDown === 'function' && atMentionKeyDown(e)) return;
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}
+  if(e.key==='Enter'&&!e.shiftKey){
+    // PR-C1 — if the input starts with `/`, route to a slash command
+    // before falling through to sendMsg(). slashExecuteFromInput
+    // returns true if it handled the line.
+    if (typeof slashExecuteFromInput === 'function') {
+      const inp = e.target;
+      if (inp && /^\s*\//.test(inp.value || '')) {
+        e.preventDefault();
+        slashExecuteFromInput(inp);
+        return;
+      }
+    }
+    e.preventDefault();sendMsg();
+  }
 };
-// `ar` autosizes the textarea AND triggers @-mention detection. The
-// detection runs after autosize so the dropdown's anchor position
-// reflects the current textarea height.
+// `ar` autosizes the textarea AND triggers @-mention detection + slash
+// detection. Order: slash first (it owns the input when it fires).
 const ar=el=>{
   el.style.height='auto';
   el.style.height=Math.min(el.scrollHeight,110)+'px';
+  try { if (typeof slashMaybeOpen === 'function') slashMaybeOpen(el); } catch(_){}
   try { if (typeof atMentionMaybeOpen === 'function') atMentionMaybeOpen(el); } catch(_){}
 };
+
+// ═══ PR-C1 — Slash commands ═══════════════════════════════════════════
+// Type `/foo` at the start of the chat input → autocomplete dropdown
+// with matching commands. Tab/Enter executes; Esc closes. Each command
+// is { id, label, hint, exec(arg) }. Designed to mirror Claude Code /
+// Cursor / ChatGPT-codex slash conventions.
+const SLASH_COMMANDS = [
+  { id: 'help',     label: '/help',           hint: 'Show all slash commands',                           exec: () => slashShowHelp() },
+  { id: 'clear',    label: '/clear',          hint: 'Clear current chat history',                       exec: () => { try { clearHist?.(); } catch(_){} } },
+  { id: 'new',      label: '/new',            hint: 'Start a new chat',                                 exec: () => { try { createNewChat?.(); } catch(_){} } },
+  { id: 'persona',  label: '/persona <id>',   hint: 'Switch persona (jarvis|friday|alfred|sage|pixel)', exec: (arg) => { try { setPersona?.(arg || 'jarvis'); } catch(_){} } },
+  { id: 'model',    label: '/model <name>',   hint: 'Switch active provider model',                     exec: (arg) => { try { saveModelSetting?.(prov, arg); } catch(_){} } },
+  { id: 'mode',     label: '/mode <name>',    hint: 'Switch chat mode (chat|code|agent|vision|...)',    exec: (arg) => { try { setMode?.(arg || 'chat'); } catch(_){} } },
+  { id: 'code',     label: '/code',           hint: 'Open Code Mode IDE',                               exec: () => { try { toggleCodeMode?.(); } catch(_){} } },
+  { id: 'agent',    label: '/agent',          hint: 'Switch to Agent mode',                             exec: () => { try { setMode?.('agent'); } catch(_){} } },
+  { id: 'settings', label: '/settings [tab]', hint: 'Open settings panel (account|models|providers|…)', exec: (arg) => { try { openPanel?.(arg || ''); } catch(_){} } },
+  { id: 'voice',    label: '/voice',          hint: 'Toggle voice (TTS) on/off',                        exec: () => { try { togSw?.('tts','sw-tts'); } catch(_){} } },
+  { id: 'wake',     label: '/wake',           hint: 'Toggle wake-word on/off',                          exec: () => { try { document.getElementById('tc-wake')?.click(); } catch(_){} } },
+  { id: 'eye',      label: '/eye',            hint: 'Toggle screen-watcher on/off',                     exec: () => { try { togSw?.('screenWatcher','sw-eye'); } catch(_){} } },
+  { id: 'workflows',label: '/workflows',      hint: 'Open Workflows panel',                             exec: () => { try { openWorkflows?.(); } catch(_){} } },
+  { id: 'plugins',  label: '/plugins',        hint: 'Open Plugin Hub',                                  exec: () => { try { openHub?.(); } catch(_){} } },
+  { id: 'store',    label: '/store',          hint: 'Open Marketplace',                                 exec: () => { try { openStore?.(); } catch(_){} } },
+  { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                    exec: () => { try { openCmdPalette?.(); } catch(_){} } },
+];
+let _slashState = null; // { items, activeIdx, inputEl, query } when open
+
+function slashMaybeOpen(inputEl) {
+  if (!inputEl) return;
+  const value = inputEl.value || '';
+  // Only trigger when the entire current line starts with `/`.
+  const m = value.match(/^\s*\/([A-Za-z0-9_-]*)$/);
+  if (!m) {
+    if (_slashState) slashClose();
+    return;
+  }
+  const query = m[1].toLowerCase();
+  const items = SLASH_COMMANDS.filter(c =>
+    !query || c.id.startsWith(query) || c.label.toLowerCase().includes('/' + query)
+  ).slice(0, 12);
+  if (!items.length) {
+    if (_slashState) slashClose();
+    return;
+  }
+  _slashState = { items, activeIdx: 0, inputEl, query };
+  slashRender();
+}
+function slashClose() {
+  _slashState = null;
+  document.getElementById('slash-pop')?.classList.remove('show');
+}
+function slashRender() {
+  let pop = document.getElementById('slash-pop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'slash-pop';
+    pop.className = 'slash-pop';
+    document.body.appendChild(pop);
+  }
+  const s = _slashState;
+  if (!s || !s.items.length) { pop.classList.remove('show'); return; }
+  pop.innerHTML = `
+    <div class="slash-pop-h">SLASH${s.query ? ' · /' + esc(s.query) : ''}</div>
+    <ul class="slash-pop-list">
+      ${s.items.map((it, i) => `
+        <li class="slash-pop-item${i === s.activeIdx ? ' on' : ''}" data-idx="${i}" onmousedown="slashApply(${i});event.preventDefault()">
+          <span class="slash-pop-label">${esc(it.label)}</span>
+          <span class="slash-pop-hint">${esc(it.hint)}</span>
+        </li>`).join('')}
+    </ul>
+    <div class="slash-pop-foot"><span class="slash-pop-kbd">↵</span>/<span class="slash-pop-kbd">Tab</span> run · <span class="slash-pop-kbd">esc</span> close</div>
+  `;
+  // Anchor above textarea.
+  const inp = s.inputEl || document.getElementById('inp');
+  if (inp) {
+    const r = inp.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.left = Math.max(8, r.left) + 'px';
+    pop.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+    pop.style.maxWidth = Math.min(440, window.innerWidth - 16) + 'px';
+  }
+  pop.classList.add('show');
+}
+function slashKeyDown(e) {
+  const s = _slashState;
+  if (!s || !s.items.length) return false;
+  if (e.key === 'ArrowDown') { s.activeIdx = (s.activeIdx + 1) % s.items.length; slashRender(); e.preventDefault(); return true; }
+  if (e.key === 'ArrowUp')   { s.activeIdx = (s.activeIdx - 1 + s.items.length) % s.items.length; slashRender(); e.preventDefault(); return true; }
+  if (e.key === 'Tab' || e.key === 'Enter') { slashApply(s.activeIdx); e.preventDefault(); return true; }
+  if (e.key === 'Escape')    { slashClose(); e.preventDefault(); return true; }
+  return false;
+}
+window.slashApply = function (idx) {
+  const s = _slashState;
+  if (!s || !s.items[idx]) return;
+  const cmd = s.items[idx];
+  const inp = s.inputEl || document.getElementById('inp');
+  if (!inp) { slashClose(); return; }
+  // If the user typed exactly `/foo` (no args), execute immediately.
+  // Otherwise pre-fill `/foo ` so they can append an argument and hit Enter.
+  if (cmd.label.includes('<') || cmd.label.includes('[')) {
+    inp.value = cmd.label.split(/\s/)[0] + ' ';
+    slashClose();
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+    return;
+  }
+  // No-arg command — execute now.
+  slashClose();
+  inp.value = '';
+  ar(inp);
+  try { cmd.exec(); } catch (e) { if (typeof addMsg === 'function') addMsg('bot', `⚠️ /${cmd.id} failed: ${e?.message || e}`); }
+};
+
+// Called from kd() when Enter is pressed and the input starts with `/`.
+// Parses `/cmd arg1 arg2 ...` and routes to the matching command.
+function slashExecuteFromInput(inp) {
+  const value = (inp?.value || '').trim();
+  const m = value.match(/^\/([A-Za-z0-9_-]+)(?:\s+(.+))?$/);
+  if (!m) return false;
+  const cmdId = m[1].toLowerCase();
+  const arg = (m[2] || '').trim();
+  const cmd = SLASH_COMMANDS.find(c => c.id === cmdId);
+  slashClose();
+  if (!cmd) {
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ Unknown slash command: /${cmdId}. Type /help for the list.`);
+    return true;
+  }
+  inp.value = '';
+  ar(inp);
+  try { cmd.exec(arg); }
+  catch (e) { if (typeof addMsg === 'function') addMsg('bot', `⚠️ /${cmd.id} failed: ${e?.message || e}`); }
+  return true;
+}
+
+function slashShowHelp() {
+  if (typeof addMsg !== 'function') return;
+  const lines = SLASH_COMMANDS.map(c => `\`${c.label}\` — ${c.hint}`);
+  addMsg('bot', '**Slash commands:**\n\n' + lines.join('\n'));
+}
 
 // ═══ PR-D2 — @-mention autocomplete (workspace symbols) ═══════════════
 // Detects an `@` token at the caret position, queries the workspace
