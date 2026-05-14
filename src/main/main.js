@@ -563,19 +563,53 @@ function createWindow(page = 'chat') {
   const initW = Math.min(1600, Math.max(1280, Math.round(work.width  * 0.85)));
   const initH = Math.min(980,  Math.max(800,  Math.round(work.height * 0.88)));
 
-  win = new BrowserWindow({
+  // PR-B5 — native window-control treatment per platform.
+  //   • macOS: titleBarStyle: 'hiddenInset' shows the native traffic-
+  //     lights in the top-left while the rest of the title bar stays
+  //     transparent for our custom drag region. trafficLightPosition
+  //     pushes them down 18px so they sit centered in our 52px .tb
+  //     bar instead of clipping at the very top.
+  //   • Windows 11+: titleBarOverlay puts the native min/max/close
+  //     in the top-right with our brand colours so it composes with
+  //     the dark UI. Falls back gracefully on Win10 where the API
+  //     ignores `color` but still draws the native buttons.
+  //   • Linux: no native equivalent → keep frame: false + custom
+  //     .wbtn buttons (rendered in the title bar itself).
+  // The renderer's existing `body { -webkit-app-region: drag }` +
+  // `.no-drag` markers continue to work unchanged.
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  const winOpts = {
     width: initW, height: initH,
     minWidth: 1280, minHeight: 760,
     center: true,
-    frame: false, transparent: true,
+    transparent: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
       allowRunningInsecureContent: false,
-    }
-  });
+    },
+  };
+  if (isMac) {
+    winOpts.frame = false;
+    winOpts.titleBarStyle = 'hiddenInset';
+    winOpts.trafficLightPosition = { x: 14, y: 18 }; // centre in 52px .tb
+  } else if (isWin) {
+    winOpts.frame = false;
+    // titleBarOverlay requires titleBarStyle: 'hidden' on Win.
+    winOpts.titleBarStyle = 'hidden';
+    winOpts.titleBarOverlay = {
+      color: '#08090c',         // matches --bg
+      symbolColor: '#8b95a8',   // matches --t2
+      height: 52,               // matches .tb height
+    };
+  } else {
+    // Linux fallback — unchanged.
+    winOpts.frame = false;
+  }
+  win = new BrowserWindow(winOpts);
 
   const isLocalRenderer = (wc) => {
     try {
