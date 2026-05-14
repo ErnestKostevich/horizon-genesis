@@ -1931,6 +1931,106 @@ body.with-sidebar .chat-status-bar{display:flex}
 .diff-desc{color:#8d96ab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .diff-host{flex:1;min-height:0;background:#05070c}
 .diff-actions{padding:10px 14px;border-top:1px solid #242936;display:flex;justify-content:flex-end;gap:8px}
+
+/* ─── PR-D1.3 per-hunk picker (sidebar inside diff-card) ──────────────
+   Splits the diff-card into a left "hunks list" rail (240px) and the
+   Monaco diff host on the right. Each hunk is a checkbox row with a
+   colored chip (ADD / DEL / MOD) and a one-line preview snippet.
+   Reused .diff-overlay / .diff-card / .diff-head / .diff-actions —
+   the new bits are scoped under .cek-hunk-*. */
+.cek-hunk-card { /* override the default diff-card grid to make room */
+  display: flex; flex-direction: column;
+}
+.cek-hunk-body {
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  gap: 0;
+}
+.cek-hunk-list {
+  background: #0a0d14;
+  border-right: 1px solid #242936;
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.cek-hunk-list-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid #1a1f2c;
+}
+.cek-hunk-list-title {
+  font: 700 9px/1 var(--mono);
+  letter-spacing: 1.4px;
+  color: var(--t3);
+  text-transform: uppercase;
+}
+.cek-hunk-list-summary {
+  font: 700 11px/1 var(--mono);
+  color: var(--accent-cyan-500, #56d2ff);
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
+  border: 1px solid var(--accent-cyan-300, rgba(86,210,255,.32));
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.cek-hunk-list-actions {
+  display: flex; gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #1a1f2c;
+}
+.cek-hunk-list-actions .btn { flex: 1; }
+.cek-hunk-items {
+  flex: 1; min-height: 0;
+  list-style: none; margin: 0; padding: 4px 6px;
+  overflow-y: auto;
+}
+.cek-hunk-item {
+  margin: 4px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--b1);
+  background: rgba(255,255,255,.02);
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.cek-hunk-item:hover { background: rgba(255,255,255,.04); }
+.cek-hunk-item.on  { border-color: var(--accent-cyan-300, rgba(86,210,255,.32)); background: var(--accent-cyan-100, rgba(86,210,255,.06)); }
+.cek-hunk-item.off { opacity: .5; }
+.cek-hunk-row {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer;
+}
+.cek-hunk-row input[type=checkbox] { margin: 0; width: 14px; height: 14px; cursor: pointer; }
+.cek-hunk-kind {
+  font: 700 9px/1 var(--mono);
+  letter-spacing: 1px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.cek-hunk-item.kind-add .cek-hunk-kind { background: rgba(52,211,153,.15); color: #34d399; }
+.cek-hunk-item.kind-del .cek-hunk-kind { background: rgba(248,113,113,.15); color: #f87171; }
+.cek-hunk-item.kind-mod .cek-hunk-kind { background: rgba(251,191,36,.15); color: #fbbf24; }
+.cek-hunk-range {
+  font: 600 10.5px/1 var(--mono);
+  color: var(--t2);
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cek-hunk-preview {
+  font: 10.5px/1.4 var(--mono);
+  color: var(--t3);
+  margin-top: 4px;
+  padding-left: 22px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cek-hunk-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--t3);
+  font: 11.5px/1.5 var(--font);
+  font-style: italic;
+}
+.cek-hunk-diff { background: #05070c; min-width: 0; }
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
@@ -9550,25 +9650,35 @@ async function submitCmdKBar() {
     return;
   }
 
-  const ok = await requestDiffPermission({
+  // PR-D1.3 — switched from binary-accept requestDiffPermission to the
+  // per-hunk variant. Returns the merged text reflecting only the hunks
+  // the user kept checked. Empty acceptance = effectively a reject.
+  const result = await requestDiffPermissionPerHunk({
     title: hasSelection ? `${fileLabel} (lines ${sel.startLineNumber}-${sel.endLineNumber})` : fileLabel,
     description: `⌘K: ${prompt}`,
     before,
     after,
     language,
   });
-  if (!ok) {
+  if (!result || !result.ok) {
     if (typeof opLog === 'function') opLog(`⌘K rejected by user`, 'error');
     if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'cancelled');
     return;
   }
+  if (result.accepted === 0) {
+    if (typeof opLog === 'function') opLog(`⌘K — no hunks accepted`, 'tool');
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'cancelled');
+    if (typeof codeSetStatus === 'function') codeSetStatus(`⌘K closed without changes (no hunks accepted).`);
+    return;
+  }
+  const merged = result.mergedAfter;
 
   // Apply via Monaco's executeEdits so undo-stack works (Ctrl+Z reverts).
   try {
     if (hasSelection) {
-      codeEditor.executeEdits('cmdk-d1.2', [{ range: sel, text: after }]);
+      codeEditor.executeEdits('cmdk-d1.3', [{ range: sel, text: merged }]);
     } else {
-      codeEditor.setValue(after);
+      codeEditor.setValue(merged);
     }
     codeEditor.focus();
   } catch (e) {
@@ -9578,9 +9688,9 @@ async function submitCmdKBar() {
     return;
   }
 
-  if (typeof opLog === 'function') opLog(`⌘K applied: "${prompt.slice(0, 80)}" → ${fileLabel}${hasSelection ? ` (L${sel.startLineNumber}-${sel.endLineNumber})` : ''}`, 'tool');
+  if (typeof opLog === 'function') opLog(`⌘K applied ${result.accepted} hunk${result.accepted === 1 ? '' : 's'}: "${prompt.slice(0, 80)}" → ${fileLabel}${hasSelection ? ` (L${sel.startLineNumber}-${sel.endLineNumber})` : ''}`, 'tool');
   if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'done');
-  if (typeof codeSetStatus === 'function') codeSetStatus(`⌘K applied. Press 💾 Save (Ctrl+S) to write to disk, or Ctrl+Z to undo.`);
+  if (typeof codeSetStatus === 'function') codeSetStatus(`⌘K applied ${result.accepted} hunk${result.accepted === 1 ? '' : 's'}. Press 💾 Save (Ctrl+S) to write to disk, or Ctrl+Z to undo.`);
 }
 
 // Global hotkey: also bind ⌘K at the document level when Code Mode is
@@ -9746,6 +9856,211 @@ async function restartWorkspaceTerminal(){
   if(codeTerminal){ try { codeTerminal.clear(); } catch(_){} }
   codeTerminalId='';
   await initWorkspaceTerminal(true);
+}
+
+// PR-D1.3 — per-hunk accept/reject diff modal.
+// Like requestDiffPermission but returns either:
+//   { ok: false }                              user rejected the whole change
+//   { ok: true, mergedAfter, accepted: N }     user accepted ≥0 hunks; the
+//                                              merged result is the original
+//                                              `before` with only the accepted
+//                                              hunks applied, line numbers
+//                                              correct because we splice from
+//                                              the bottom up.
+// Hunks come from Monaco's diffEditor.getLineChanges(), which exposes a
+// `LineChange` per contiguous block of differences:
+//   { originalStartLineNumber, originalEndLineNumber,
+//     modifiedStartLineNumber, modifiedEndLineNumber }
+// originalEndLineNumber === 0 → pure addition (no original lines).
+// modifiedEndLineNumber === 0 → pure deletion (no modified lines).
+async function requestDiffPermissionPerHunk({ title='Review changes', description='', before='', after='', language='plaintext' } = {}) {
+  await initCodeEditor().catch(() => false);
+  if (!window.monaco) {
+    // No Monaco → fall back to the simple binary modal so the flow
+    // still works on diagnostics-only setups. All-or-nothing in that
+    // case (mergedAfter = `after`).
+    const ok = await requestDiffPermission({ title, description, before, after, language });
+    return ok ? { ok: true, mergedAfter: after, accepted: ok ? 1 : 0 } : { ok: false };
+  }
+  const beforeLines = String(before ?? '').split(/\r?\n/);
+  const afterLines = String(after ?? '').split(/\r?\n/);
+
+  return await new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'diff-overlay';
+    overlay.innerHTML = `
+      <div class="diff-card cek-hunk-card">
+        <div class="diff-head">
+          <span class="diff-title">${esc(title)}</span>
+          <span class="diff-desc">${esc(description)}</span>
+        </div>
+        <div class="cek-hunk-body">
+          <aside class="cek-hunk-list" id="cek-hunk-list">
+            <div class="cek-hunk-list-header">
+              <span class="cek-hunk-list-title">HUNKS</span>
+              <span class="cek-hunk-list-summary" id="cek-hunk-summary">—</span>
+            </div>
+            <div class="cek-hunk-list-actions">
+              <button class="btn btn-sm" id="cek-hunk-all">Accept all</button>
+              <button class="btn btn-sm" id="cek-hunk-none">Reject all</button>
+            </div>
+            <ul class="cek-hunk-items" id="cek-hunk-items"></ul>
+          </aside>
+          <div class="diff-host cek-hunk-diff"></div>
+        </div>
+        <div class="diff-actions">
+          <button class="perm-btn deny" data-act="deny">Cancel</button>
+          <button class="perm-btn allow" data-act="apply">Apply selected</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    let diff = null;
+    let original = null;
+    let modified = null;
+    let lineChanges = [];
+    let acceptedFlags = []; // boolean per change — default ON
+
+    const cleanup = (value) => {
+      try { diff?.dispose?.(); } catch(_){}
+      try { overlay.remove(); } catch(_){}
+      resolve(value);
+    };
+
+    try {
+      const host = overlay.querySelector('.diff-host');
+      original = monaco.editor.createModel(String(before ?? ''), language);
+      modified = monaco.editor.createModel(String(after ?? ''), language);
+      diff = monaco.editor.createDiffEditor(host, {
+        theme: 'vs-dark',
+        automaticLayout: true,
+        renderSideBySide: true,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        readOnly: true,
+      });
+      diff.setModel({ original, modified });
+      const oldDispose = diff.dispose.bind(diff);
+      diff.dispose = () => { try { original.dispose(); modified.dispose(); } catch(_){} oldDispose(); };
+
+      // Wait for Monaco to compute the diff, then populate the hunk list.
+      const onUpdate = () => {
+        try {
+          const changes = diff.getLineChanges() || [];
+          lineChanges = changes;
+          acceptedFlags = changes.map(() => true); // all accepted by default
+          renderHunkItems();
+        } catch (e) {
+          console.warn('cek hunk-list build failed:', e?.message);
+        }
+      };
+      // onDidUpdateDiff fires once the diff worker finishes; it can also
+      // fire never if the contents are equal — in that case getLineChanges()
+      // returns []. We schedule a microtask + a timeout fallback.
+      diff.onDidUpdateDiff?.(onUpdate);
+      setTimeout(onUpdate, 200);
+    } catch (e) {
+      console.warn('cek diff render failed:', e?.message);
+      overlay.querySelector('.cek-hunk-diff').innerHTML =
+        `<pre class="perm-detail" style="max-height:none;height:100%;box-sizing:border-box">${esc(buildDiffPreview(before, after, 200))}</pre>`;
+    }
+
+    function fmtRange(start, end) {
+      if (!end) return `+${start}`;
+      if (!start) return `-${end}`;
+      if (start === end) return `${start}`;
+      return `${start}-${end}`;
+    }
+
+    function snippet(lines, startLn, endLn, max = 2) {
+      if (!startLn || !endLn || endLn < startLn) return '';
+      const slice = lines.slice(startLn - 1, Math.min(endLn, startLn - 1 + max));
+      return slice.join(' ⏎ ').trim().slice(0, 80);
+    }
+
+    function renderHunkItems() {
+      const items = document.getElementById('cek-hunk-items');
+      const summary = document.getElementById('cek-hunk-summary');
+      if (!items || !summary) return;
+      if (!lineChanges.length) {
+        items.innerHTML = '<li class="cek-hunk-empty">No changes detected — files are identical.</li>';
+        summary.textContent = '0 / 0';
+        return;
+      }
+      items.innerHTML = lineChanges.map((ch, i) => {
+        const isAdd = ch.originalEndLineNumber === 0;
+        const isDel = ch.modifiedEndLineNumber === 0;
+        const kind = isAdd ? 'add' : isDel ? 'del' : 'mod';
+        const kindLabel = isAdd ? 'ADD' : isDel ? 'DEL' : 'MOD';
+        const ofRange = fmtRange(ch.originalStartLineNumber, ch.originalEndLineNumber);
+        const mfRange = fmtRange(ch.modifiedStartLineNumber, ch.modifiedEndLineNumber);
+        const previewSrc = isAdd ? snippet(afterLines, ch.modifiedStartLineNumber, ch.modifiedEndLineNumber)
+                          : isDel ? snippet(beforeLines, ch.originalStartLineNumber, ch.originalEndLineNumber)
+                          : snippet(afterLines, ch.modifiedStartLineNumber, ch.modifiedEndLineNumber);
+        return `
+          <li class="cek-hunk-item ${acceptedFlags[i] ? 'on' : 'off'} kind-${kind}" data-idx="${i}">
+            <label class="cek-hunk-row">
+              <input type="checkbox" data-idx="${i}" ${acceptedFlags[i] ? 'checked' : ''}/>
+              <span class="cek-hunk-kind">${kindLabel}</span>
+              <span class="cek-hunk-range">L${ofRange} → L${mfRange}</span>
+            </label>
+            <div class="cek-hunk-preview" title="${esc(previewSrc)}">${esc(previewSrc) || '<i style="opacity:.5">(empty)</i>'}</div>
+          </li>`;
+      }).join('');
+      // Wire checkboxes.
+      items.querySelectorAll('input[type=checkbox]').forEach((box) => {
+        box.onchange = () => {
+          const i = Number(box.dataset.idx);
+          acceptedFlags[i] = box.checked;
+          const li = items.querySelector(`li[data-idx="${i}"]`);
+          if (li) li.classList.toggle('on', box.checked);
+          if (li) li.classList.toggle('off', !box.checked);
+          updateSummary();
+        };
+      });
+      updateSummary();
+    }
+    function updateSummary() {
+      const summary = document.getElementById('cek-hunk-summary');
+      if (!summary) return;
+      const accepted = acceptedFlags.filter(Boolean).length;
+      summary.textContent = `${accepted} / ${lineChanges.length}`;
+    }
+
+    overlay.querySelector('#cek-hunk-all').onclick = () => {
+      acceptedFlags = lineChanges.map(() => true);
+      renderHunkItems();
+    };
+    overlay.querySelector('#cek-hunk-none').onclick = () => {
+      acceptedFlags = lineChanges.map(() => false);
+      renderHunkItems();
+    };
+    overlay.querySelector('[data-act="deny"]').onclick = () => cleanup({ ok: false });
+    overlay.querySelector('[data-act="apply"]').onclick = () => {
+      // Build merged text by applying accepted hunks bottom-up (so line
+      // numbers in earlier hunks stay valid as we splice). Original is
+      // the source of truth; for each accepted hunk we replace the
+      // original line range with the modified line range.
+      const result = beforeLines.slice();
+      const accepted = lineChanges
+        .map((ch, i) => acceptedFlags[i] ? ch : null)
+        .filter(Boolean)
+        .sort((a, b) => b.originalStartLineNumber - a.originalStartLineNumber);
+      for (const ch of accepted) {
+        const oStart = ch.originalEndLineNumber === 0
+          ? ch.originalStartLineNumber       // pure-add: insert AFTER this line
+          : ch.originalStartLineNumber - 1;  // 0-indexed splice
+        const oCount = ch.originalEndLineNumber === 0
+          ? 0
+          : ch.originalEndLineNumber - ch.originalStartLineNumber + 1;
+        const mLines = ch.modifiedEndLineNumber === 0
+          ? []
+          : afterLines.slice(ch.modifiedStartLineNumber - 1, ch.modifiedEndLineNumber);
+        result.splice(oStart, oCount, ...mLines);
+      }
+      cleanup({ ok: true, mergedAfter: result.join('\n'), accepted: accepted.length });
+    };
+  });
 }
 
 async function requestDiffPermission({ title='Review changes', description='', before='', after='', language='plaintext' } = {}){
