@@ -4390,7 +4390,7 @@ function setChatSidebarCollapsed(on){
   chatSidebarCollapsed = Boolean(on);
   document.body.classList.toggle('chat-sidebar-collapsed', chatSidebarCollapsed);
   document.querySelector('.cs-collapse')?.setAttribute('title', chatSidebarCollapsed ? 'Show chat list' : 'Hide chat list');
-  try { window.H?.set?.('chatSidebarCollapsed', chatSidebarCollapsed); } catch(_) {}
+  Promise.resolve(window.H?.set?.('chatSidebarCollapsed', chatSidebarCollapsed)).catch(()=>{});
   try { layoutInspectorDock(); } catch(_) {}
 }
 function toggleChatSidebar(){
@@ -4400,7 +4400,7 @@ function setChatSidebarWidth(width, persist=true){
   const next = Math.max(240, Math.min(420, Number(width) || 280));
   document.documentElement.style.setProperty('--sidebar-w', `${next}px`);
   if (persist) {
-    try { window.H?.set?.('chatSidebarWidth', next); } catch(_) {}
+    Promise.resolve(window.H?.set?.('chatSidebarWidth', next)).catch(()=>{});
   }
   try { layoutInspectorDock(); } catch(_) {}
 }
