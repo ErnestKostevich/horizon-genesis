@@ -8,17 +8,131 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
+  /* ═══ DESIGN TOKENS (PR-B2) ═══════════════════════════════════════════
+     Single source of truth for color, button sizes, radii. Replaces
+     30+ inline rgba() literals scattered through the file. Conventions:
+       --accent-*  : primary CTA color (cyan-blue), used by Inspector,
+                     buttons, focus rings, "active" pills.
+       --gray-*    : neutral surfaces / borders / text. Higher number =
+                     more opaque / closer to foreground.
+       --success/--warn/--danger : semantic status. Use the -50 variant
+                     for backgrounds, -300 for borders, -500 for text.
+       --btn-h-*   : three button heights — keep them so .btn / .btn-sm
+                     / .btn-icon are visually consistent across surfaces.
+     Legacy --acc / --green / --red / --blue / --purple / --amber kept
+     as aliases pointing at the new tokens — old call sites keep working
+     while we migrate, no big-bang rewrite needed. */
+
+  /* Backgrounds + neutral text (existing — kept) */
   --bg:#08090c;--bg2:#0f1117;--bg3:#161921;
   --b1:rgba(120,160,255,.06);--b2:rgba(120,160,255,.10);--b3:rgba(120,160,255,.15);
   --tx:#e8ecf4;--t2:#8b95a8;--t3:#4a5568;
-  --acc:#6c8cff;--acc2:#4a6aef;--acc3:rgba(108,140,255,.1);
-  --green:#34d399;--red:#f87171;--blue:#60a5fa;--purple:#a78bfa;--amber:#fbbf24;
-  --usr-bg:linear-gradient(135deg,rgba(108,140,255,.12),rgba(74,106,239,.08));
-  --usr-b:rgba(108,140,255,.25);
-  --glow:0 0 30px rgba(108,140,255,.15);
+
+  /* Accent palette — cyan-blue, the "Horizon" brand color. */
+  --accent-50:  rgba(108,140,255,.06);
+  --accent-100: rgba(108,140,255,.10);
+  --accent-200: rgba(108,140,255,.18);
+  --accent-300: rgba(108,140,255,.30);
+  --accent-400: rgba(108,140,255,.55);
+  --accent-500: #6c8cff;
+  --accent-600: #4a6aef;
+  --accent-cyan-100: rgba(86,210,255,.10);
+  --accent-cyan-200: rgba(86,210,255,.18);
+  --accent-cyan-300: rgba(86,210,255,.32);
+  --accent-cyan-500: #56d2ff;
+
+  /* Semantic status palette. */
+  --success-50: rgba(52,211,153,.06);
+  --success-100: rgba(52,211,153,.10);
+  --success-300: rgba(52,211,153,.30);
+  --success-500: #34d399;
+  --warn-50: rgba(251,191,36,.06);
+  --warn-100: rgba(251,191,36,.10);
+  --warn-300: rgba(251,191,36,.30);
+  --warn-500: #fbbf24;
+  --danger-50: rgba(248,113,113,.06);
+  --danger-100: rgba(248,113,113,.10);
+  --danger-300: rgba(248,113,113,.30);
+  --danger-500: #f87171;
+  --info-500: #60a5fa;
+  --special-500: #a78bfa;  /* purple */
+
+  /* Legacy aliases — keep so call sites that read --acc / --green etc.
+     don't have to be touched in this PR. New code should prefer the
+     tokenised names above. */
+  --acc:var(--accent-500);
+  --acc2:var(--accent-600);
+  --acc3:var(--accent-100);
+  --green:var(--success-500);
+  --red:var(--danger-500);
+  --blue:var(--info-500);
+  --purple:var(--special-500);
+  --amber:var(--warn-500);
+
+  /* User chat-bubble background (used in .msg.user) — derived from
+     accent so a future hue tweak cascades through. */
+  --usr-bg:linear-gradient(135deg, var(--accent-200), var(--accent-100));
+  --usr-b:var(--accent-300);
+  --glow:0 0 30px var(--accent-200);
+
+  /* Button system — three heights driven by tokens. Picked up by
+     .btn / .btn-sm / .btn-icon classes below; legacy buttons (.psv,
+     .sc-btn, .ic-btn, .mt, .wfp-btn) stay as-is for now. */
+  --btn-h-lg: 36px;
+  --btn-h-md: 28px;
+  --btn-h-sm: 24px;
+  --btn-radius: 8px;
+  --btn-radius-sm: 6px;
+
   --font:'Plus Jakarta Sans',system-ui,sans-serif;
   --mono:'JetBrains Mono','Cascadia Code',monospace;
 }
+
+/* ═══ UNIFIED BUTTON SYSTEM (PR-B2) ═══════════════════════════════════
+   Three sizes — `.btn` (default 36px), `.btn-sm` (28px), `.btn-icon`
+   (24×24 square icon-only). All inherit from `.btn` so hover/focus
+   styling is consistent. Variants apply via additional classes:
+     .btn.primary   — solid accent fill, white text
+     .btn.ghost     — transparent with accent border
+     .btn.danger    — danger semantic
+     .btn.success   — success semantic
+   Legacy classes (.psv, .sc-btn, .ic-btn, .mt) are NOT migrated in this
+   PR to keep the diff reviewable. New code should use .btn — see e.g.
+   PR-D1.2 diff modal. */
+.btn {
+  -webkit-app-region: no-drag;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px;
+  height: var(--btn-h-lg);
+  padding: 0 14px;
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--b1);
+  background: rgba(255,255,255,.03);
+  color: var(--t2);
+  font: 600 12px/1 var(--font);
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.btn:hover { background: rgba(255,255,255,.06); border-color: var(--accent-300); color: var(--tx); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
+.btn.btn-sm { height: var(--btn-h-md); padding: 0 11px; font-size: 11.5px; border-radius: var(--btn-radius-sm); }
+.btn.btn-icon { width: var(--btn-h-sm); height: var(--btn-h-sm); padding: 0; gap: 0; border-radius: var(--btn-radius-sm); }
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
+  border-color: transparent;
+  color: #fff;
+}
+.btn.primary:hover { background: linear-gradient(135deg, var(--accent-600), var(--accent-500)); filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: var(--accent-300); color: var(--accent-500); }
+.btn.ghost:hover { background: var(--accent-100); }
+.btn.danger { color: var(--danger-500); border-color: var(--danger-300); }
+.btn.danger:hover { background: var(--danger-50); border-color: var(--danger-500); color: var(--danger-500); }
+.btn.success { color: var(--success-500); border-color: var(--success-300); }
+.btn.success:hover { background: var(--success-50); border-color: var(--success-500); }
 html,body{height:100%;overflow:hidden;user-select:none}
 body{background:var(--bg);color:var(--tx);font-family:var(--font);display:flex;flex-direction:column;-webkit-app-region:no-drag}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
