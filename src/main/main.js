@@ -162,7 +162,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'openrouter.modelsCache', 'openrouter.modelsCacheAt',
   'mcp.enabled', 'mcp.servers', 'mcp.toolsCache', 'mcp.toolsCacheAt',
   'codeWorkspace', 'codeOpenFiles', 'codeActiveTabIdx', 'wsListIgnore',
-  'inspectorActive',
+  'inspectorActive', 'chatSidebarCollapsed', 'chatSidebarWidth',
   'customPersonas',
   'permissionAllowlist',
   // PR-D1.5 — ⌘K edit history (LRU 10) + auto-commit toggle.
