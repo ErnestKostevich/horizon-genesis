@@ -2542,6 +2542,73 @@ body.surface-active .inspector-pane{display:none!important}
   border-color:rgba(52,211,153,.20);
 }
 .shell-chip:hover{filter:brightness(1.08);transform:translateY(-1px)}
+
+/* PR-C4 — git branch chip (in the .tb-center cluster) + dropdown
+   popover. Detached-HEAD state gets an amber tint to flag the user
+   that they're not on a regular branch. */
+#shell-git-branch { display:inline-flex; align-items:center; }
+#shell-git-branch.detached {
+  border-color: var(--warn-300, rgba(251,191,36,.30));
+  background: var(--warn-50, rgba(251,191,36,.06));
+  color: var(--warn-500, #fbbf24);
+}
+.git-branch-pop {
+  display: none;
+  width: 280px;
+  max-height: 360px;
+  background: #0b0e16;
+  border: 1px solid var(--code-line, #1d2333);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 18px 40px -12px rgba(0,0,0,.7);
+  z-index: 240;
+  overflow: hidden;
+  flex-direction: column;
+  -webkit-app-region: no-drag;
+}
+.git-branch-pop.show { display: flex; }
+.git-branch-pop-h {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--code-line, #1d2333);
+  font: 700 var(--text-xs, 11px)/1 var(--mono);
+  letter-spacing: var(--tracking-extra, 1.6px);
+  color: var(--t3);
+  text-transform: uppercase;
+}
+.git-branch-pop-empty {
+  padding: 22px 14px;
+  text-align: center;
+  color: var(--t3);
+  font: var(--text-sm, 12px)/var(--lh-snug, 1.4) var(--font);
+  font-style: italic;
+}
+.git-branch-pop-list {
+  list-style: none; margin: 0; padding: 6px;
+  overflow-y: auto;
+}
+.git-branch-pop-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  font: 600 var(--text-sm, 12px)/1 var(--mono);
+  color: var(--t2);
+  transition: background .12s ease, color .12s ease;
+}
+.git-branch-pop-item:hover { background: rgba(255,255,255,.04); color: var(--tx); }
+.git-branch-pop-item.on { color: var(--accent-cyan-500, #56d2ff); }
+.git-branch-pop-icon {
+  display: inline-flex; width: 12px; justify-content: center;
+  font-size: 10px;
+  color: inherit;
+}
+.git-branch-pop-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.git-branch-pop-foot {
+  padding: 8px 12px;
+  border-top: 1px solid var(--code-line, #1d2333);
+  font: var(--text-xs, 11px)/1.4 var(--font);
+  color: var(--t3);
+  font-style: italic;
+}
 .tb-r{
   max-width:none;
   padding:4px;
@@ -3555,8 +3622,17 @@ textarea#inp{background:transparent!important}
   <div class="tb-center">
     <button class="shell-chip primary" id="shell-surface-label" onclick="openCmdPalette()" title="Command palette">Chat</button>
     <button class="shell-chip" id="shell-model-label" onclick="openModelPicker(event)" title="Switch active model">Gemini · gemini-2.5-flash</button>
+    <!-- PR-C4 — git branch chip. Hidden by default; populated by
+         refreshGitBranchChip() when a workspace is open and is a git
+         repo. Click opens the recent-branches dropdown. -->
+    <button class="shell-chip subtle" id="shell-git-branch" onclick="toggleGitBranchDropdown(event)" title="Git branch (click for recent branches)" style="display:none">
+      <svg class="licon" style="margin-right:4px"><use href="#i-puzzle"/></svg>
+      <span id="shell-git-branch-name">main</span>
+    </button>
     <button class="shell-chip subtle" id="shell-privacy-label" onclick="openPanel('providers')" title="BYOK settings">BYOK local-first</button>
   </div>
+  <!-- PR-C4 — recent-branches dropdown anchored under the git chip. -->
+  <div class="git-branch-pop" id="git-branch-pop"></div>
   <div class="tb-r">
     <div class="focus-timer" id="focus-timer">
       <span id="focus-time">25:00</span>
@@ -5896,6 +5972,145 @@ async function _bootModelCache() {
 // Fire and forget; if it loses the boot race the picker writes will fix
 // the cache anyway. No await — keeps the renderer init non-blocking.
 _bootModelCache().catch(() => {});
+
+// ═══ PR-C4 — Git branch indicator + recent-branch dropdown ═══════════
+// `refreshGitBranchChip()` is called whenever the workspace changes
+// (see openCodeFile / chooseCodeWorkspace) and on a 30s poll while
+// Code Mode is open so external CLI checkouts get reflected. Cheap:
+// reads `.git/HEAD` directly, no shell-out for the common path.
+let _gitBranchPollTimer = null;
+
+async function refreshGitBranchChip() {
+  const chip = document.getElementById('shell-git-branch');
+  const nameEl = document.getElementById('shell-git-branch-name');
+  if (!chip || !nameEl) return;
+  const ws = (typeof codeWorkspace !== 'undefined' && codeWorkspace) ? codeWorkspace : null;
+  if (!ws) {
+    chip.style.display = 'none';
+    return;
+  }
+  try {
+    const r = await H.gitBranch?.(ws);
+    if (r && r.ok && r.branch) {
+      // Truncate long branch names so the chip doesn't push the rest
+      // of the title bar off-screen.
+      const display = r.branch.length > 28 ? r.branch.slice(0, 26) + '…' : r.branch;
+      nameEl.textContent = display;
+      nameEl.title = r.branch;
+      chip.style.display = '';
+      chip.classList.toggle('detached', !!r.detached);
+    } else {
+      chip.style.display = 'none';
+    }
+  } catch (_) {
+    chip.style.display = 'none';
+  }
+}
+
+function startGitBranchPoll() {
+  if (_gitBranchPollTimer) return;
+  refreshGitBranchChip().catch(() => {});
+  _gitBranchPollTimer = setInterval(() => {
+    if (!document.body.classList.contains('code-mode-active')) return;
+    refreshGitBranchChip().catch(() => {});
+  }, 30000);
+}
+function stopGitBranchPoll() {
+  if (_gitBranchPollTimer) { clearInterval(_gitBranchPollTimer); _gitBranchPollTimer = null; }
+}
+// Auto-start poll once the renderer + IPC are ready.
+window.addEventListener('DOMContentLoaded', () => { startGitBranchPoll(); });
+
+// Recent-branches dropdown (click on the chip).
+window.toggleGitBranchDropdown = async function (ev) {
+  try { ev?.stopPropagation(); } catch (_) {}
+  const pop = document.getElementById('git-branch-pop');
+  const chip = document.getElementById('shell-git-branch');
+  if (!pop || !chip) return;
+  if (pop.classList.contains('show')) { pop.classList.remove('show'); return; }
+  pop.innerHTML = `<div class="git-branch-pop-h">Loading branches…</div>`;
+  // Position relative to chip BEFORE async fetch so user sees the
+  // popover open immediately.
+  const r = chip.getBoundingClientRect();
+  pop.style.position = 'fixed';
+  pop.style.top = (r.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - 280, r.left)) + 'px';
+  pop.classList.add('show');
+
+  let branches = [];
+  let currentName = '';
+  try {
+    const cur = await H.gitBranch?.(codeWorkspace);
+    if (cur && cur.ok) currentName = cur.branch;
+    const list = await H.gitRecentBranches?.(codeWorkspace);
+    if (list && list.ok) branches = list.branches;
+  } catch (_) {}
+
+  if (!branches.length) {
+    pop.innerHTML = `<div class="git-branch-pop-empty">No recent branches found.</div>`;
+  } else {
+    pop.innerHTML = `
+      <div class="git-branch-pop-h">RECENT BRANCHES · ${branches.length}</div>
+      <ul class="git-branch-pop-list">
+        ${branches.map(b => {
+          const isCurrent = b === currentName;
+          return `<li class="git-branch-pop-item${isCurrent ? ' on' : ''}" onclick="checkoutGitBranch('${String(b).replace(/'/g, "\\'")}')">
+            <span class="git-branch-pop-icon">${isCurrent ? '●' : '○'}</span>
+            <span class="git-branch-pop-name">${esc(b)}</span>
+          </li>`;
+        }).join('')}
+      </ul>
+      <div class="git-branch-pop-foot">Click a branch to checkout (asks permission)</div>`;
+  }
+  // Outside-click / Esc closes.
+  const offClick = (e) => {
+    if (pop.contains(e.target) || chip.contains(e.target)) return;
+    pop.classList.remove('show');
+    document.removeEventListener('mousedown', offClick);
+    document.removeEventListener('keydown', offEsc);
+  };
+  const offEsc = (e) => {
+    if (e.key !== 'Escape') return;
+    pop.classList.remove('show');
+    document.removeEventListener('mousedown', offClick);
+    document.removeEventListener('keydown', offEsc);
+  };
+  setTimeout(() => {
+    document.addEventListener('mousedown', offClick);
+    document.addEventListener('keydown', offEsc);
+  }, 0);
+};
+
+window.checkoutGitBranch = async function (branchName) {
+  if (!branchName) return;
+  const pop = document.getElementById('git-branch-pop');
+  if (pop) pop.classList.remove('show');
+  if (!codeWorkspace) return;
+  // Permission gate via existing requestPermission path.
+  const ok = typeof requestPermission === 'function'
+    ? await requestPermission({
+        eyebrow: 'GIT CHECKOUT',
+        title: `Switch to branch "${branchName}"?`,
+        description: 'Runs `git checkout <branch>` in the workspace. Uncommitted changes may be lost — Horizon does not stash automatically.',
+        detail: `git checkout ${branchName}`,
+      })
+    : confirm(`Run git checkout ${branchName}?`);
+  if (!ok) return;
+  try {
+    const safe = String(branchName).replace(/[^A-Za-z0-9_./\-]/g, '');
+    const r = await H.wsShell?.(`git checkout ${safe}`);
+    if (r && r.ok) {
+      if (typeof opLog === 'function') opLog(`git checkout ${safe}`, 'tool');
+      if (typeof codeSetStatus === 'function') codeSetStatus(`Switched to branch "${safe}".`);
+      refreshGitBranchChip();
+    } else {
+      const msg = (r?.err || r?.error || 'unknown').slice(0, 200);
+      if (typeof codeSetStatus === 'function') codeSetStatus(`git checkout failed: ${msg}`, true);
+    }
+  } catch (e) {
+    if (typeof codeSetStatus === 'function') codeSetStatus(`git checkout threw: ${e?.message || e}`, true);
+  }
+};
 
 function getSelectedModelForProvider(p){
   try {
@@ -11927,6 +12142,8 @@ async function chooseCodeWorkspace(){
   await refreshCodeWorkspace();
   renderCodeContext();
   await initWorkspaceTerminal(true).catch(()=>{});
+  // PR-C4 — refresh git branch chip whenever workspace changes.
+  try { refreshGitBranchChip(); } catch (_) {}
 }
 
 // ── File tree with lazy expand ───────────────────────────────────────────
