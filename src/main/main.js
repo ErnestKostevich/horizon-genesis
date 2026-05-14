@@ -76,6 +76,7 @@ const PRO_HANDLERS = new Set([
   'pcType', 'pcKeyPress', 'pcVolume',
   'pcReadFile', 'pcWriteFile', 'pcListDir', 'pcChooseFolder',
   'wsChooseFolder', 'wsGetWorkspace', 'wsList', 'wsRead', 'wsWrite', 'wsSearch', 'wsShell',
+  'projectConfigWriteRules', 'projectConfigWriteHooks',
   'terminalCreate', 'terminalWrite', 'terminalResize', 'terminalKill',
   'pcMouseMove', 'pcMouseClick', 'pcMouseDoubleClick',
   'pcMouseScroll', 'pcMouseDrag',
@@ -1431,6 +1432,43 @@ ipcMain.handle('wsSearch', (_, query = '', rel = '') => {
     const start = fs.existsSync(target) && fs.statSync(target).isDirectory() ? target : root;
     return { ok:true, root, query:q, results:searchWorkspaceFiles(root, start, q) };
   } catch(e) { return { ok:false, err:e.message }; }
+});
+
+// PR-D3 — Project config (.horizon/rules.md + hooks.json). Per-
+// workspace agent customisation; agentLoop.js pulls rules.md via
+// require.cache → getProjectConfig() so every agent turn includes
+// the project's instructions.
+let _projectConfig = null;
+function _getProjectConfig() {
+  if (!_projectConfig) {
+    const { ProjectConfig } = require('./projectConfig');
+    _projectConfig = new ProjectConfig();
+  }
+  return _projectConfig;
+}
+module.exports.getProjectConfig = _getProjectConfig;
+module.exports.currentWorkspaceRoot = currentWorkspaceRoot;
+
+ipcMain.handle('projectConfigGet', () => {
+  try {
+    const root = currentWorkspaceRoot();
+    if (!root) return { ok: false, err: 'no workspace open' };
+    return { ok: true, ...(_getProjectConfig().get(root)) };
+  } catch (e) { return { ok: false, err: e.message }; }
+});
+ipcMain.handle('projectConfigWriteRules', (_, content) => {
+  try {
+    const root = currentWorkspaceRoot();
+    if (!root) return { ok: false, error: 'no workspace open' };
+    return _getProjectConfig().writeRules(root, content);
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('projectConfigWriteHooks', (_, hooks) => {
+  try {
+    const root = currentWorkspaceRoot();
+    if (!root) return { ok: false, error: 'no workspace open' };
+    return _getProjectConfig().writeHooks(root, hooks || {});
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // PR-D2 — Workspace symbol indexer (lazy singleton). Build runs in
