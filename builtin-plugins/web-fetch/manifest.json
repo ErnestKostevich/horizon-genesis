@@ -1,0 +1,24 @@
+{
+  "id": "web-fetch",
+  "name": "Web Fetch",
+  "version": "1.0.0",
+  "author": "Horizon Team",
+  "description": "Fetch URLs and extract clean text from web pages — no API keys.",
+  "category": "utility",
+  "tier": "built_in",
+  "icon": "Globe",
+  "permissions": ["network:*"],
+  "settings": [],
+  "tools": [
+    {
+      "name": "fetch_url",
+      "description": "GET an HTTP(S) URL and return the raw response body (HTML / JSON / text). Capped at 1 MB.",
+      "params": { "url": "string" }
+    },
+    {
+      "name": "extract_text",
+      "description": "Fetch a URL and strip HTML to plain text — useful for summarising articles, docs, READMEs.",
+      "params": { "url": "string" }
+    }
+  ]
+}
