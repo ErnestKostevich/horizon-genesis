@@ -63,6 +63,10 @@ contextBridge.exposeInMainWorld('H', {
   // PR-C4 — git branch indicator + recent-branch dropdown.
   gitBranch:            (abs)        => ipcRenderer.invoke('gitBranch', abs),
   gitRecentBranches:    (abs)        => ipcRenderer.invoke('gitRecentBranches', abs),
+  // PR-D3 — project config (.horizon/rules.md + hooks.json).
+  projectConfigGet:        ()         => ipcRenderer.invoke('projectConfigGet'),
+  projectConfigWriteRules: (content)  => ipcRenderer.invoke('projectConfigWriteRules', content),
+  projectConfigWriteHooks: (hooks)    => ipcRenderer.invoke('projectConfigWriteHooks', hooks),
   // PR-D2 — workspace symbol index (built lazily on workspace open).
   wsIndexBuild:         (opts)       => ipcRenderer.invoke('wsIndexBuild', opts),
   wsIndexStatus:        ()           => ipcRenderer.invoke('wsIndexStatus'),

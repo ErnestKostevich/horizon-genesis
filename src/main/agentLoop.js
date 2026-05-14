@@ -105,6 +105,30 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
     }
   } catch (_) { /* persona is optional for the agent loop */ }
 
+  // PR-D3 — project rules block. Pulled from .horizon/rules.md in the
+  // active workspace. Injected ONCE per system prompt build (not per
+  // turn), so the user's project conventions are present every time
+  // the agent thinks. Caller can override via options.projectRulesText.
+  let projectRulesBlock = '';
+  try {
+    if (typeof options.projectRulesText === 'string' && options.projectRulesText.trim()) {
+      projectRulesBlock = options.projectRulesText;
+    } else {
+      const mainMod = require.cache[require.resolve('./main')];
+      const getCfg = mainMod && mainMod.exports && mainMod.exports.getProjectConfig;
+      const getRoot = mainMod && mainMod.exports && mainMod.exports.currentWorkspaceRoot;
+      if (typeof getCfg === 'function' && typeof getRoot === 'function') {
+        const root = getRoot();
+        if (root) {
+          const cfg = getCfg();
+          if (cfg && typeof cfg.buildSystemBlock === 'function') {
+            projectRulesBlock = cfg.buildSystemBlock(root) || '';
+          }
+        }
+      }
+    }
+  } catch (_) { /* project rules are optional */ }
+
   if (nativeTools) {
     return `
 You are Horizon AI, a real desktop AI agent created by Ernest Kostevich.
@@ -113,6 +137,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}` : ''}
+${projectRulesBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 
@@ -129,6 +154,7 @@ After tools finish, answer normally and concisely. If a tool fails twice, explai
 ${sysInfo?.active_window ? `Активное окно: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Местоположение: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Персона / стиль\n${personaBlock}\n` : ''}
+${projectRulesBlock || ''}
 Ты НАСТОЯЩИЙ агент. У тебя есть инструменты для управления ПК, запуска кода, работы с файлами и браузером.${personaBlock ? '' : '\nТы как ДЖАРВИС — умный, эффективный, всегда говори "Сэр".'}
 
 ## Как отвечать:
@@ -160,6 +186,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}\n` : ''}
+${projectRulesBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 
