@@ -2662,8 +2662,24 @@ function loadAgentModules() {
           try { pluginManager.install(tpl); } catch (_) {}
         }
       }
-      // Auto-install bundled Spotify Control demo on first run
-      try { pluginManager.installBundledSpotify(); } catch (_) {}
+      // Auto-install every bundle under builtin-plugins/. Ships:
+      //   • spotify-control (demo, needs Client ID)
+      //   • system-monitor / web-fetch / clipboard / screenshot
+      //     / crypto-pulse — built-in utilities, no credentials required
+      // Idempotent: existing installs get manifest refreshed with the
+      // latest app version's bundle, but user config + enabled state
+      // are preserved.
+      try {
+        const r = pluginManager.installAllBuiltins();
+        if (r && r.installed) {
+          console.log('✓ Built-in plugins installed:', r.installed.join(', '));
+          if (r.failed?.length) {
+            console.warn('Built-in plugin failures:', r.failed);
+          }
+        }
+      } catch (e) {
+        console.error('installAllBuiltins failed:', e.message);
+      }
       console.log('✓ Plugin manager loaded');
     } catch(e) {
       console.error('Plugin manager failed:', e.message);
