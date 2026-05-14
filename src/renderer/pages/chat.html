@@ -241,6 +241,14 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 .mt .licon{width:13px;height:13px;stroke-width:1.85;margin-right:2px}
 .wbtn{width:12px;height:12px;border-radius:50%;border:none;cursor:pointer;-webkit-app-region:no-drag}
 .wy{background:#FEBC2E}.wr{background:#FF5F57}
+/* PR-B5 — when the platform supplies native window controls (macOS
+   traffic-lights or Win11 titleBarOverlay), the custom .wbtn buttons
+   become redundant. Hide them via the body class set by the renderer
+   on boot. macOS additionally needs left padding so the logo cluster
+   doesn't overlap the inset traffic-lights. */
+body.os-mac .wbtn,
+body.os-win .wbtn { display: none !important; }
+body.os-mac .tb-l { padding-left: 80px !important; }
 
 /* ═══ WAKE BAR ═══ */
 .wake-bar{overflow:hidden;transition:height .25s;height:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid transparent;position:relative;z-index:9}
@@ -6263,6 +6271,24 @@ function stopGitBranchPoll() {
 }
 // Auto-start poll once the renderer + IPC are ready.
 window.addEventListener('DOMContentLoaded', () => { startGitBranchPoll(); });
+
+// PR-B5 — set body class so per-OS CSS rules can hide the custom
+// .wbtn buttons in favour of native window controls. Detection is
+// best-effort (renderer can't read process.platform directly because
+// nodeIntegration:false; we sniff via navigator.userAgent which is
+// stable enough for this single decision).
+(function _detectPlatform() {
+  try {
+    const ua = (navigator.userAgent || '').toLowerCase();
+    if (ua.includes('mac os x') || ua.includes('darwin')) {
+      document.body.classList.add('os-mac');
+    } else if (ua.includes('windows') || ua.includes('win64') || ua.includes('win32')) {
+      document.body.classList.add('os-win');
+    } else {
+      document.body.classList.add('os-linux');
+    }
+  } catch (_) { /* default to no-class behaviour (Linux-style custom .wbtn) */ }
+})();
 
 // Recent-branches dropdown (click on the chip).
 window.toggleGitBranchDropdown = async function (ev) {
