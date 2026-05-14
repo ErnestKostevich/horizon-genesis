@@ -9337,13 +9337,27 @@ function closeCmdKBar() {
   try { codeEditor?.focus(); } catch(_){}
 }
 
-// PR-D1.1 stub — captures the payload, logs it, and closes the bar. The
-// downstream sub-PRs replace this body with the real LLM-roundtrip:
-//   D1.2: invoke H.codeEditPrompt(payload) → render diff in modal
-//   D1.3: per-hunk accept/reject
-//   D1.4: multi-file batch apply
-//   D1.5: history + undo + auto-commit
-function submitCmdKBar() {
+// PR-D1.2 — real LLM round-trip + Monaco diff preview.
+//
+// Approach: ask the LLM for a REPLACEMENT block (not unified diff) so
+// parsing stays bulletproof — we already have `extractCodeFence()` that
+// pulls the last fenced code block out of any reply. The diff modal
+// (`requestDiffPermission`) does its own line-by-line visualisation,
+// so a unified-diff format isn't needed until D1.3 (per-hunk
+// accept/reject) and D1.4 (multi-file batch).
+//
+// On accept we apply the replacement via Monaco's `executeEdits`, which
+// fires `onDidChangeModelContent` → tab marked dirty automatically.
+// Save-to-disk is a separate explicit user action (existing 💾 Save
+// button) so the user can review one more time before the file changes.
+//
+// Cancel paths covered:
+//   • Empty prompt / no editor → silent close (D1.1 behaviour preserved).
+//   • LLM returned no fenced code → addMsg with the raw reply so the
+//     user can see what the model said (debug visibility).
+//   • User rejects diff → Monaco buffer untouched, opLog notes the
+//     rejection.
+async function submitCmdKBar() {
   const input = document.getElementById('cek-bar-input');
   const prompt = (input?.value || '').trim();
   if (!codeEditor || !prompt) { closeCmdKBar(); return; }
@@ -9351,33 +9365,108 @@ function submitCmdKBar() {
   const model = codeEditor.getModel();
   if (!sel || !model) { closeCmdKBar(); return; }
   const selectedText = model.getValueInRange(sel) || '';
+  const fullText = model.getValue();
   const language = (model.getLanguageId && model.getLanguageId()) || (typeof inferCodeLang === 'function' ? inferCodeLang(codeCurrentFile) : 'plaintext');
-  const payload = {
-    filePath: codeCurrentFile || '',
-    startLine: sel.startLineNumber,
-    endLine: sel.endLineNumber,
-    text: selectedText,
-    fullText: model.getValue(),
-    hasSelection: selectedText.length > 0,
-    language,
-    prompt,
-    capturedAt: new Date().toISOString(),
-  };
-  // PR-D1.1 visible feedback — write a notice into Operator log and a
-  // chat bubble so the owner sees the keybinding fired end-to-end.
-  // Replaced with diff modal in D1.2.
+  const hasSelection = selectedText.length > 0;
+  const fileLabel = codeCurrentFile || '(unsaved buffer)';
+
+  // Show "thinking" state on the bar — disable input, swap placeholder.
+  if (input) {
+    input.disabled = true;
+    input.placeholder = '⏳ Thinking…';
+  }
+  const opRunId = (typeof opStartRun === 'function') ? opStartRun('ai.cmdk', `${prompt.slice(0, 60)} → ${fileLabel}`) : null;
+
+  // Build LLM messages. The system prompt tells the model EXACTLY what
+  // to return so `extractCodeFence` can pull it out reliably. Include
+  // file context only when the user is editing a selection (whole-file
+  // edits get the entire file as the "before"; no need to repeat it).
+  const sys = [
+    `You are a code editor assistant. Apply the user's instruction to the ${hasSelection ? 'SELECTED CODE BLOCK' : 'CODE FILE'} below.`,
+    `Return ONLY the rewritten code in a single fenced code block (\`\`\`${language || ''}\\n…\\n\`\`\`). NO explanation, NO comments outside the block. Preserve original indentation style. Keep line endings consistent.`,
+    `If the instruction can't be applied (ambiguous, destructive, would break the file), return the ORIGINAL code unchanged inside the fence — do not return prose.`,
+    hasSelection ? `File: ${fileLabel} (${language})\nLines ${sel.startLineNumber}-${sel.endLineNumber} selected. Return the replacement for those lines only.` : `File: ${fileLabel} (${language})\nReturn the rewritten WHOLE FILE.`,
+  ].join('\n\n');
+  const userMsg = `${prompt}\n\n\`\`\`${language || ''}\n${hasSelection ? selectedText : fullText}\n\`\`\``;
+
+  let res = null;
   try {
-    if (typeof opLog === 'function') {
-      opLog(`⌘K captured: "${prompt.slice(0, 80)}" · ${payload.hasSelection ? `L${payload.startLine}-${payload.endLine}` : 'whole file'} · ${payload.filePath || '(no file)'}`, 'tool');
-    }
-  } catch(_){}
-  try {
-    if (typeof addMsg === 'function') {
-      addMsg('bot', `🪄 ⌘K capture (PR-D1.1 stub — diff preview lands in D1.2):\n\n**Prompt:** ${prompt}\n**Scope:** ${payload.hasSelection ? `lines ${payload.startLine}-${payload.endLine}` : 'whole file'}\n**File:** \`${payload.filePath || '(unsaved buffer)'}\`\n**Language:** ${payload.language}\n**Selection length:** ${selectedText.length} chars`);
-    }
-  } catch(_){}
-  console.log('[cmd-k payload]', payload);
+    const activeProv = (typeof prov !== 'undefined' && prov) ? prov : 'claude';
+    const opts = (typeof aiOptsForProvider === 'function') ? aiOptsForProvider(activeProv) : {};
+    res = await H.ai([{ role: 'user', content: userMsg }], activeProv, sys, opts);
+  } catch (e) {
+    res = { error: e?.message || String(e) };
+  }
+
+  // Re-enable bar so user can retry if needed.
+  if (input) {
+    input.disabled = false;
+    input.placeholder = 'Edit selection with AI…';
+  }
+
+  if (!res || res.error) {
+    if (opRunId && typeof opLog === 'function') opLog(`⌘K AI error: ${res?.error || 'unknown'}`, 'error');
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'error');
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ ⌘K AI error: ${res?.error || 'unknown'}`);
+    closeCmdKBar();
+    return;
+  }
+  const reply = res.reply || '';
+  const replacement = (typeof extractCodeFence === 'function') ? extractCodeFence(reply) : '';
+  if (!replacement) {
+    if (typeof opLog === 'function') opLog(`⌘K AI returned no fenced code (${reply.length} chars)`, 'error');
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'error');
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ ⌘K: AI didn't return a code block. Raw reply:\n\n${reply.slice(0, 1500)}`);
+    closeCmdKBar();
+    return;
+  }
+
+  // Token accounting (so the Inspector's Cost tab + chat-status-bar
+  // pill register the cost of the ⌘K turn).
+  try { if (typeof trackTokens === 'function') trackTokens(reply, 'assistant', (typeof prov !== 'undefined' ? prov : 'claude'), res.usage); } catch(_){}
+
+  // Hide the bar before showing the modal so they don't visually stack.
   closeCmdKBar();
+
+  const before = hasSelection ? selectedText : fullText;
+  const after = replacement;
+  if (before === after) {
+    if (typeof addMsg === 'function') addMsg('bot', `🪄 ⌘K: AI returned identical code — nothing to change.`);
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'done');
+    return;
+  }
+
+  const ok = await requestDiffPermission({
+    title: hasSelection ? `${fileLabel} (lines ${sel.startLineNumber}-${sel.endLineNumber})` : fileLabel,
+    description: `⌘K: ${prompt}`,
+    before,
+    after,
+    language,
+  });
+  if (!ok) {
+    if (typeof opLog === 'function') opLog(`⌘K rejected by user`, 'error');
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'cancelled');
+    return;
+  }
+
+  // Apply via Monaco's executeEdits so undo-stack works (Ctrl+Z reverts).
+  try {
+    if (hasSelection) {
+      codeEditor.executeEdits('cmdk-d1.2', [{ range: sel, text: after }]);
+    } else {
+      codeEditor.setValue(after);
+    }
+    codeEditor.focus();
+  } catch (e) {
+    if (typeof opLog === 'function') opLog(`⌘K apply failed: ${e?.message}`, 'error');
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'error');
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ ⌘K apply failed: ${e?.message}`);
+    return;
+  }
+
+  if (typeof opLog === 'function') opLog(`⌘K applied: "${prompt.slice(0, 80)}" → ${fileLabel}${hasSelection ? ` (L${sel.startLineNumber}-${sel.endLineNumber})` : ''}`, 'tool');
+  if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'done');
+  if (typeof codeSetStatus === 'function') codeSetStatus(`⌘K applied. Press 💾 Save (Ctrl+S) to write to disk, or Ctrl+Z to undo.`);
 }
 
 // Global hotkey: also bind ⌘K at the document level when Code Mode is
