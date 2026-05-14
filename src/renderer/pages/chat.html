@@ -281,6 +281,52 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 /* ═══ MODES ═══ */
 .modes{-webkit-app-region:no-drag;display:flex;gap:2px;padding:6px 12px;border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;position:relative;z-index:7}
 .modes::-webkit-scrollbar{display:none}
+/* PR-U1 — niche mode chips kept in DOM for setMode() compat but
+   never visible in the strip; the dropdown carries them. */
+.mt.mt-hidden { display: none !important; }
+.mt.mt-more {
+  background: rgba(255,255,255,.04);
+  color: var(--t2);
+}
+.mt.mt-more.on {
+  /* Light up when one of the niche modes is active so the user has
+     a hint that they're not on a core mode. */
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
+  color: var(--accent-cyan-500, #56d2ff);
+  border-color: var(--accent-cyan-300, rgba(86,210,255,.32));
+}
+/* PR-U1 — modes-more dropdown popover */
+.modes-more-pop {
+  display: none;
+  width: 220px;
+  max-height: 360px;
+  background: rgba(11,14,22,.97);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--b1);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 18px 40px -12px rgba(0,0,0,.7);
+  z-index: 240;
+  overflow: hidden;
+  flex-direction: column;
+  padding: 6px;
+  -webkit-app-region: no-drag;
+}
+.modes-more-pop.show { display: flex; }
+.modes-more-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  color: var(--t2);
+  font: 600 var(--text-sm, 12px)/1.2 var(--font);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.modes-more-item:hover { background: rgba(255,255,255,.04); color: var(--tx); }
+.modes-more-item.on    { background: var(--accent-cyan-100, rgba(86,210,255,.10)); color: var(--accent-cyan-500, #56d2ff); border-color: var(--accent-cyan-300, rgba(86,210,255,.32)); }
+.modes-more-item .licon { width: 14px; height: 14px; flex-shrink: 0; }
 .mt{background:none;border:1px solid transparent;color:var(--t3);border-radius:7px;padding:4px 11px;font-size:10px;font-weight:600;cursor:pointer;transition:all .18s;flex-shrink:0;-webkit-app-region:no-drag;font-family:var(--font)}
 .mt:hover{color:var(--t2);background:var(--b1)}
 .mt.on{background:var(--acc3);border-color:rgba(108,140,255,.35);color:var(--acc)}
@@ -3698,9 +3744,18 @@ textarea#inp{background:transparent!important}
       <span class="tb-sub" id="tb-sub">Genesis</span>
     </div>
   </div>
+  <!-- PR-U1 (UX research): the title-bar centre is a SINGLE source of
+       truth — the surface chip (opens Cmd-K palette) + git branch
+       (when applicable). Removed from this row vs the previous design:
+         · shell-model-label   (model picker now lives in composer-toolbar
+                                — eliminates the "4 places to switch
+                                model" trap that the audit called out)
+         · shell-privacy-label (BYOK posture moves to a tooltip on the
+                                surface chip + the inspector footer)
+       The csb-model pill in the chat status bar is also retired below
+       — composer-toolbar is now THE place for model selection. -->
   <div class="tb-center">
-    <button class="shell-chip primary" id="shell-surface-label" onclick="openCmdPalette()" title="Command palette">Chat</button>
-    <button class="shell-chip" id="shell-model-label" onclick="openModelPicker(event)" title="Switch active model">Gemini · gemini-2.5-flash</button>
+    <button class="shell-chip primary" id="shell-surface-label" onclick="openCmdPalette()" title="Command palette · ⌘K · BYOK · all calls go directly to your providers">Chat</button>
     <!-- PR-C4 — git branch chip. Hidden by default; populated by
          refreshGitBranchChip() when a workspace is open and is a git
          repo. Click opens the recent-branches dropdown. -->
@@ -3708,7 +3763,6 @@ textarea#inp{background:transparent!important}
       <svg class="licon" style="margin-right:4px"><use href="#i-puzzle"/></svg>
       <span id="shell-git-branch-name">main</span>
     </button>
-    <button class="shell-chip subtle" id="shell-privacy-label" onclick="openPanel('providers')" title="BYOK settings">BYOK local-first</button>
   </div>
   <!-- PR-C4 — recent-branches dropdown anchored under the git chip. -->
   <div class="git-branch-pop" id="git-branch-pop"></div>
@@ -3860,27 +3914,45 @@ textarea#inp{background:transparent!important}
   </select>
 </div>
 
-<!-- ═══════════ MODES ═══════════ -->
+<!-- ═══════════ MODES (PR-U1: 4 core + More) ═══════════
+     Audit found 12 mode chips on one strip — same priority,
+     overwhelming. Cursor / Claude Code / ChatGPT all collapse less-
+     used modes behind a "More" affordance. Now: Chat / Code / Agent /
+     Vision are the core trio + 1, and the dropdown carries the
+     niche modes (Focus / Plan / Coach / Write / Email / Search /
+     Translate / Roleplay). The button IDs are PRESERVED so existing
+     handlers and `setMode()` calls keep working. -->
 <div class="modes">
-  <button class="mt on" id="m-chat"    onclick="setMode('chat')"><svg class="licon"><use href="#i-message"/></svg> Chat</button>
-  <button class="mt"    id="m-agent"   onclick="setMode('agent')"><svg class="licon"><use href="#i-bot"/></svg> Agent</button>
-  <button class="mt"    id="m-vision"  onclick="setMode('vision')"><svg class="licon"><use href="#i-eye"/></svg> Vision</button>
-  <button class="mt"    id="m-code"    onclick="setMode('code')"><svg class="licon"><use href="#i-code"/></svg> Code</button>
-  <button class="mt"    id="m-focus"   onclick="setMode('focus')"><svg class="licon"><use href="#i-target"/></svg> Focus</button>
-  <button class="mt"    id="m-plan"    onclick="setMode('plan')"><svg class="licon"><use href="#i-clipboard"/></svg> Plan</button>
-  <button class="mt"    id="m-coach"   onclick="setMode('coach')"><svg class="licon"><use href="#i-trophy"/></svg> Coach</button>
-  <button class="mt"    id="m-write"   onclick="setMode('write')"><svg class="licon"><use href="#i-pen"/></svg> Write</button>
-  <button class="mt"    id="m-email"   onclick="setMode('email')"><svg class="licon"><use href="#i-mail"/></svg> Email</button>
-  <button class="mt"    id="m-search"  onclick="setMode('search')"><svg class="licon"><use href="#i-search"/></svg> Search</button>
-  <button class="mt"    id="m-translate" onclick="setMode('translate')"><svg class="licon"><use href="#i-globe"/></svg> Translate</button>
-  <button class="mt"    id="m-roleplay" onclick="setMode('roleplay')"><svg class="licon"><use href="#i-masks"/></svg> Roleplay</button>
+  <button class="mt on" id="m-chat"   onclick="setMode('chat')"><svg class="licon"><use href="#i-message"/></svg> Chat</button>
+  <button class="mt"    id="m-code"   onclick="setMode('code')"><svg class="licon"><use href="#i-code"/></svg> Code</button>
+  <button class="mt"    id="m-agent"  onclick="setMode('agent')"><svg class="licon"><use href="#i-bot"/></svg> Agent</button>
+  <button class="mt"    id="m-vision" onclick="setMode('vision')"><svg class="licon"><use href="#i-eye"/></svg> Vision</button>
+  <button class="mt mt-more" id="m-more" onclick="toggleModesMore(event)" title="Other modes">
+    More <span style="opacity:.6;margin-left:4px">▾</span>
+  </button>
+  <!-- The "More" dropdown lazy-renders into #modes-more-pop on toggle.
+       Hidden chip elements stay in DOM so setMode() can still apply
+       the .on class (visual indicator surfaces in the More chip when
+       a niche mode is active). -->
+  <button class="mt mt-hidden" id="m-focus"     onclick="setMode('focus')"     style="display:none">Focus</button>
+  <button class="mt mt-hidden" id="m-plan"      onclick="setMode('plan')"      style="display:none">Plan</button>
+  <button class="mt mt-hidden" id="m-coach"     onclick="setMode('coach')"     style="display:none">Coach</button>
+  <button class="mt mt-hidden" id="m-write"     onclick="setMode('write')"     style="display:none">Write</button>
+  <button class="mt mt-hidden" id="m-email"     onclick="setMode('email')"     style="display:none">Email</button>
+  <button class="mt mt-hidden" id="m-search"    onclick="setMode('search')"    style="display:none">Search</button>
+  <button class="mt mt-hidden" id="m-translate" onclick="setMode('translate')" style="display:none">Translate</button>
+  <button class="mt mt-hidden" id="m-roleplay"  onclick="setMode('roleplay')"  style="display:none">Roleplay</button>
 </div>
+<div class="modes-more-pop" id="modes-more-pop"></div>
 
-<!-- ═════ STATUS BAR (above messages) ═════ -->
+<!-- ═════ STATUS BAR (above messages) — PR-U1 trim ═════
+     csb-provider + csb-model removed: those were the third + fourth
+     places the user could pick a model, all opening the same picker.
+     Composer-toolbar's model chip is now THE single switchboard. The
+     status bar keeps only the unique per-chat info: title, tokens,
+     license state, BYOK reassurance. -->
 <div class="chat-status-bar" id="chat-status-bar">
   <span class="csb-title" id="csb-title">New chat</span>
-  <span class="csb-pill accent csb-clickable" id="csb-provider" onclick="openPanel('providers')" title="Click to switch provider">Gemini</span>
-  <span class="csb-pill csb-clickable" id="csb-model" onclick="openModelPicker(event)" title="Click to switch the active provider's model">2.5-flash</span>
   <span class="csb-pill" id="csb-tokens">0 tokens</span>
   <span class="csb-pill csb-clickable" id="csb-license" onclick="onLicensePillClick()" style="display:none"></span>
   <span class="csb-pill csb-byok" id="csb-byok" title="Your API keys live on your machine — calls go directly from your machine to the provider. Horizon never sees prompts.">🔒 BYOK</span>
@@ -5854,9 +5926,15 @@ async function _autoNameChat(userMsg) {
 }
 function updateStatusBar(title) {
   try {
-    document.getElementById('csb-title').textContent = title || (lang==='ru'?'Новый чат':'New chat');
-    document.getElementById('csb-provider').textContent = prov.charAt(0).toUpperCase() + prov.slice(1);
-    document.getElementById('csb-model').textContent = getSelectedModelForProvider(prov) || prov;
+    const t = document.getElementById('csb-title');
+    if (t) t.textContent = title || (lang==='ru'?'Новый чат':'New chat');
+    // PR-U1 — csb-provider + csb-model removed from DOM; gate the
+    // writes so old call sites stay safe. Composer-toolbar's model
+    // chip + the title-bar surface chip carry this info now.
+    const cp = document.getElementById('csb-provider');
+    if (cp) cp.textContent = prov.charAt(0).toUpperCase() + prov.slice(1);
+    const cm = document.getElementById('csb-model');
+    if (cm) cm.textContent = getSelectedModelForProvider(prov) || prov;
     updateShellChrome();
   } catch(_) {}
 }
@@ -6365,8 +6443,16 @@ function openModelPicker(ev){
     }
   }
   pop.innerHTML = html;
-  // Position the popover under the model pill.
-  const pill = document.getElementById('csb-model');
+  // PR-U1 — anchor the popover. csb-model was retired, so fall back
+  // to the composer-toolbar model chip, then to the title-bar
+  // surface-label as the last resort. Whichever element triggered
+  // the click is the natural anchor (event.target on click), so
+  // prefer that when available.
+  const trigger = (typeof event !== 'undefined' && event && event.currentTarget) || null;
+  const pill = trigger
+    || document.getElementById('composer-model-chip')
+    || document.getElementById('csb-model')
+    || document.getElementById('shell-surface-label');
   if (pill) {
     const r = pill.getBoundingClientRect();
     pop.style.left = Math.max(8, r.left) + 'px';
@@ -6377,7 +6463,9 @@ function openModelPicker(ev){
 
 async function pickModel(provider, model){
   try { await saveModelSetting(provider, model); } catch(_) {}
-  try { document.getElementById('csb-model').textContent = model; } catch(_) {}
+  // PR-U1 — old csb-model is gone; saveModelSetting + updateShellChrome
+  // already update the surviving surfaces. Wrap defensively.
+  try { document.getElementById('csb-model')?.textContent && (document.getElementById('csb-model').textContent = model); } catch(_) {}
   try { H.notify?.('Model selected', `${provider}: ${model}`); } catch(_) {}
   closeModelPicker();
 }
@@ -6387,7 +6475,8 @@ async function pickLocalModel(provider, model){
     const sel = document.getElementById('pi-' + provider + '-model');
     if (sel) sel.value = model;
     await saveLocalProvider(provider);
-    document.getElementById('csb-model').textContent = model;
+    const cm = document.getElementById('csb-model');
+    if (cm) cm.textContent = model;
   } catch(_) {}
   closeModelPicker();
 }
@@ -7774,7 +7863,69 @@ async function clearKeys(){if(!await customConfirm(lang==='ru'?'Удалить �
 // PROVIDER / MODE / TOGGLES
 // ═══════════════════════════════════════════════════════════════
 function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');try{updateThinkingHint();updateStatusBar();renderCodeContext();updateShellChrome();}catch(_){}}
-function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)saveSetting('mode',m,'Mode');try{updateShellChrome();}catch(_){}}
+function setMode(m,save=true){
+  mode=m;
+  document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));
+  document.getElementById(`m-${m}`)?.classList.add('on');
+  // PR-U1 — when a "More" mode is active, light up the More chip too
+  // so the user has a visual indicator at the top level.
+  const moreModes = new Set(['focus','plan','coach','write','email','search','translate','roleplay']);
+  const more = document.getElementById('m-more');
+  if (more) more.classList.toggle('on', moreModes.has(m));
+  if(save)saveSetting('mode',m,'Mode');
+  try{updateShellChrome();}catch(_){}
+  try{closeModesMore();}catch(_){}
+}
+
+// PR-U1 — "More" dropdown for niche modes. Opens a popover with the 8
+// hidden mode chips so the modes strip stays compact (4 core + More).
+window.toggleModesMore = function (ev) {
+  try { ev?.stopPropagation(); } catch (_) {}
+  const pop = document.getElementById('modes-more-pop');
+  const btn = document.getElementById('m-more');
+  if (!pop || !btn) return;
+  if (pop.classList.contains('show')) { pop.classList.remove('show'); return; }
+  const niche = [
+    { id: 'focus',     label: 'Focus',     icon: 'i-target' },
+    { id: 'plan',      label: 'Plan',      icon: 'i-clipboard' },
+    { id: 'coach',     label: 'Coach',     icon: 'i-trophy' },
+    { id: 'write',     label: 'Write',     icon: 'i-pen' },
+    { id: 'email',     label: 'Email',     icon: 'i-mail' },
+    { id: 'search',    label: 'Search',    icon: 'i-search' },
+    { id: 'translate', label: 'Translate', icon: 'i-globe' },
+    { id: 'roleplay',  label: 'Roleplay',  icon: 'i-masks' },
+  ];
+  pop.innerHTML = niche.map(n => `
+    <button class="modes-more-item${mode === n.id ? ' on' : ''}" onclick="setMode('${n.id}');closeModesMore()">
+      <svg class="licon"><use href="#${n.icon}"/></svg>
+      <span>${n.label}</span>
+    </button>
+  `).join('');
+  const r = btn.getBoundingClientRect();
+  pop.style.position = 'fixed';
+  pop.style.top = (r.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - 220, r.left)) + 'px';
+  pop.classList.add('show');
+  const offClick = (e) => {
+    if (pop.contains(e.target) || btn.contains(e.target)) return;
+    closeModesMore();
+    document.removeEventListener('mousedown', offClick);
+    document.removeEventListener('keydown', offEsc);
+  };
+  const offEsc = (e) => {
+    if (e.key !== 'Escape') return;
+    closeModesMore();
+    document.removeEventListener('mousedown', offClick);
+    document.removeEventListener('keydown', offEsc);
+  };
+  setTimeout(() => {
+    document.addEventListener('mousedown', offClick);
+    document.addEventListener('keydown', offEsc);
+  }, 0);
+};
+window.closeModesMore = function () {
+  document.getElementById('modes-more-pop')?.classList.remove('show');
+};
 function cycleComposerMode(){
   const order=['chat','agent','vision','code','focus','plan','coach','write','email','search','translate','roleplay'];
   const idx=Math.max(0,order.indexOf(mode));
