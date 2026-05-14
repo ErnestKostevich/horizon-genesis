@@ -3632,10 +3632,40 @@ ipcMain.handle('workflowList', () => {
   return workflowEngine.loadAll();
 });
 
+// Server-side trigger sanitiser. Mirrors the renderer's
+// normaliseWorkflowTrigger() — defense-in-depth so a malformed trigger
+// from a marketplace install / external IPC consumer can't crash the
+// engine at run time. Anything we can't recognise drops to "manual".
+function _sanitiseWorkflowTrigger(trigger) {
+  const raw = String(trigger || 'manual').trim();
+  if (!raw || raw === 'manual') return 'manual';
+  if (raw === 'startup') return 'startup';
+  if (raw.startsWith('interval:')) {
+    const n = Number(raw.slice('interval:'.length));
+    return (Number.isFinite(n) && n > 0 && n <= 60 * 24 * 30) ? `interval:${Math.floor(n)}` : 'manual';
+  }
+  if (raw.startsWith('schedule:')) {
+    const m = raw.slice('schedule:'.length).match(/^(\d{1,2}):(\d{1,2})$/);
+    if (m) {
+      const hh = Number(m[1]), mm = Number(m[2]);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        return `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    return 'manual';
+  }
+  if (raw.startsWith('wake:')) {
+    const kw = raw.slice('wake:'.length).trim();
+    if (kw && kw.length <= 32 && /^[\p{L}\p{N}\s_\-]+$/u.test(kw)) return `wake:${kw}`;
+    return 'manual';
+  }
+  return 'manual';
+}
+
 ipcMain.handle('workflowCreate', (_, name, trigger, steps, desc) => {
   loadAgentModules();
   if (!workflowEngine) return { ok: false, error: 'Workflow engine not loaded' };
-  return workflowEngine.create(name, trigger, steps, desc);
+  return workflowEngine.create(name, _sanitiseWorkflowTrigger(trigger), steps, desc);
 });
 
 ipcMain.handle('workflowUpdate', (_, id, updates) => {
@@ -3890,6 +3920,56 @@ ipcMain.handle('marketRemoteInstall', async (_, pluginId) => {
       handler: bundle.handler || '',
     });
     return r;
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Install a published workflow from the marketplace into the local engine.
+// Marketplace stores workflows in the same `plugins` collection with
+// `type: 'workflow'`. The bundle's `handler` field carries a JSON-encoded
+// workflow definition `{ trigger, steps }`. We tolerate two shapes:
+//   1. Modern: handler is a JSON string with {trigger, steps, name?}
+//   2. Legacy: handler is empty, steps live inside manifest.tools (each
+//      tool acts as a step with action / args)
+// Either way we end up calling workflowEngine.create(name, trigger, steps).
+ipcMain.handle('marketRemoteInstallWorkflow', async (_, workflowId) => {
+  try {
+    loadAgentModules();
+    if (!workflowEngine) return { ok: false, error: 'Workflow engine not ready' };
+    try { await marketClient.install(workflowId); } catch (_) { /* anonymous install OK for free items */ }
+    const bundle = await marketClient.bundle(workflowId);
+    const m = bundle.manifest || {};
+    let trigger = 'manual';
+    let steps = [];
+    let name = m.name || 'Imported workflow';
+    let desc = m.description || '';
+
+    // Shape 1: handler is JSON for the workflow.
+    if (bundle.handler && typeof bundle.handler === 'string') {
+      try {
+        const parsed = JSON.parse(bundle.handler);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.trigger) trigger = parsed.trigger;
+          if (Array.isArray(parsed.steps)) steps = parsed.steps;
+          if (parsed.name) name = parsed.name;
+          if (parsed.description) desc = parsed.description;
+        }
+      } catch (_) { /* handler wasn't JSON — fall through to tools shape */ }
+    }
+
+    // Shape 2: derive steps from manifest.tools (each tool ↔ workflow step).
+    if (!steps.length && Array.isArray(m.tools) && m.tools.length) {
+      steps = m.tools.map(t => ({
+        action: t.name || 'shell',
+        args: t.params || {}
+      }));
+    }
+
+    if (!steps.length) {
+      return { ok: false, error: 'Workflow bundle has no steps (neither handler JSON nor tools[])' };
+    }
+
+    const result = workflowEngine.create(name, _sanitiseWorkflowTrigger(trigger), steps, desc);
+    return { ok: true, workflow: result };
   } catch (e) { return { ok: false, error: e.message }; }
 });
 

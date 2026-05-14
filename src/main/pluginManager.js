@@ -233,7 +233,29 @@ class PluginManager {
       exec(cmd, { timeout, windowsHide: true }, (e, o, er) => r({ ok: !e, out: (o || '').trim(), err: (er || '').trim(), error: e?.message }));
     });
     const runNode = (code, timeout = 15000) => new Promise(r => {
-      const nodeBin = process.env.HORIZON_NODE_PATH || process.execPath || 'node';
+      // Resolve a trustworthy `node` binary. Path resolution priority:
+      //   1) HORIZON_NODE_PATH env var, but ONLY if it points to an
+      //      existing absolute path AND the basename looks like node /
+      //      node.exe — guards against an attacker-controlled env var
+      //      pointing exec at an arbitrary binary.
+      //   2) process.execPath (Electron's bundled node) — always safe.
+      //   3) Bare 'node' as a last resort (relies on PATH).
+      let nodeBin = process.execPath || 'node';
+      try {
+        const envPath = (process.env.HORIZON_NODE_PATH || '').trim();
+        if (envPath) {
+          const path = require('path');
+          const fs = require('fs');
+          const isAbs = path.isAbsolute(envPath);
+          const base = path.basename(envPath).toLowerCase();
+          const looksNode = base === 'node' || base === 'node.exe';
+          if (isAbs && looksNode && fs.existsSync(envPath)) {
+            nodeBin = envPath;
+          } else if (envPath) {
+            console.warn('HORIZON_NODE_PATH ignored — not absolute, not named node, or missing:', envPath);
+          }
+        }
+      } catch (_) { /* fall through to safe default */ }
       execFile(
         nodeBin,
         ['-e', String(code)],
