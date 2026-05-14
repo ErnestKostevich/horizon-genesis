@@ -213,6 +213,10 @@ contextBridge.exposeInMainWorld('H', {
   marketplacePublish:   (data)        => ipcRenderer.invoke('marketplacePublish', data),
   marketRemoteList:     (filters)     => ipcRenderer.invoke('marketRemoteList', filters),
   marketRemoteInstall:  (pluginId)    => ipcRenderer.invoke('marketRemoteInstall', pluginId),
+  // Install a marketplace workflow item into the local engine. Routes
+  // through workflowEngine.create instead of pluginManager.install so
+  // triggers / steps actually fire on schedule.
+  marketRemoteInstallWorkflow: (id)   => ipcRenderer.invoke('marketRemoteInstallWorkflow', id),
   marketGetUrl:         ()            => ipcRenderer.invoke('marketGetUrl'),
   marketGetWebUrl:      ()            => ipcRenderer.invoke('marketGetWebUrl'),
   marketSetUrl:         (url)         => ipcRenderer.invoke('marketSetUrl', url),

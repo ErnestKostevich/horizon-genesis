@@ -6593,17 +6593,57 @@ function createWorkflow(name, steps, trigger = 'manual') {
 function normaliseWorkflowTrigger(trigger) {
   const raw = String(trigger || 'manual').trim();
   if (!raw || raw === 'manual') return 'manual';
-  if (raw === 'startup' || raw.startsWith('interval:') || raw.startsWith('schedule:')) return raw;
+  if (raw === 'startup') return 'startup';
+  // interval:N — N must be a positive finite minute count.
+  if (raw.startsWith('interval:')) {
+    const n = Number(raw.slice('interval:'.length));
+    if (Number.isFinite(n) && n > 0 && n <= 60 * 24 * 30) {
+      return `interval:${Math.floor(n)}`;
+    }
+    return 'manual';
+  }
+  // schedule:HH:MM — clamp to 0-23 hours and 0-59 minutes. Previously
+  // an AI-generated "schedule:99:99" would pass through and crash at
+  // run time when the engine tried to set a Date.
+  if (raw.startsWith('schedule:')) {
+    const m = raw.slice('schedule:'.length).match(/^(\d{1,2}):(\d{1,2})$/);
+    if (m) {
+      const hh = Number(m[1]);
+      const mm = Number(m[2]);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        return `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+    return 'manual';
+  }
+  // wake:keyword — keyword must be 1-32 chars, no shell metacharacters.
+  if (raw.startsWith('wake:')) {
+    const kw = raw.slice('wake:'.length).trim();
+    if (kw && kw.length <= 32 && /^[\p{L}\p{N}\s_\-]+$/u.test(kw)) return `wake:${kw}`;
+    return 'manual';
+  }
   if (raw.startsWith('cron:')) {
     const expr = raw.slice(5).trim();
     const parts = expr.split(/\s+/);
     const mm = Number(parts[0]);
     const hh = Number(parts[1]);
-    if (Number.isFinite(hh) && Number.isFinite(mm)) return `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    if (Number.isFinite(hh) && Number.isFinite(mm) && hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+      return `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
     return 'manual';
   }
-  if (/^\d{1,2}:\d{2}$/.test(raw)) return `schedule:${raw}`;
-  return raw;
+  if (/^\d{1,2}:\d{2}$/.test(raw)) {
+    const m = raw.match(/^(\d{1,2}):(\d{1,2})$/);
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+      return `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+    return 'manual';
+  }
+  // Unknown trigger shape — refuse rather than passing arbitrary string
+  // through to the engine where it could be parsed mid-execution.
+  return 'manual';
 }
 
 
@@ -7356,7 +7396,11 @@ async function renderStoreBody() {
   if (storeCurrentTab === 'plugins') {
     body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading marketplace...</div>';
     try {
-      const r = await H.marketRemoteList({});
+      // Pass `type: 'plugin'` so the Plugins tab only shows plugins. Without
+      // this, items published as workflows on the marketplace bled into the
+      // plugin grid (the backend `/api/plugins` returns *both* types when
+      // no filter is supplied — see plugins_routes.py:188).
+      const r = await H.marketRemoteList({ type: 'plugin' });
       if (!r.ok) {
         const url = await H.marketGetUrl();
         body.innerHTML = `<div style="color:var(--red);font-size:11px;padding:16px;border:1px solid rgba(255,80,80,.3);border-radius:10px">
@@ -7400,12 +7444,25 @@ async function renderStoreWorkflows(body) {
   body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading workflows...</div>';
   let items = [];
   let activeRuns = [];
+  let marketWorkflows = [];
+  let marketErr = '';
   let error = '';
+  // (a) Local engine workflows — what the user has stored on their machine.
   try {
     const list = await H.workflowList?.();
     items = Array.isArray(list) ? list : [];
   } catch(e) {
     error = e?.message || 'workflow list failed';
+  }
+  // (b) Marketplace-published workflows — fetched separately so we can
+  // render an "Install" CTA per item. Failure here is non-fatal: local
+  // workflows still render even if marketplace is down.
+  try {
+    const r = await H.marketRemoteList({ type: 'workflow' });
+    if (r && r.ok) marketWorkflows = r.items || [];
+    else marketErr = (r && r.error) || 'marketplace unreachable';
+  } catch (e) {
+    marketErr = e?.message || 'marketplace fetch failed';
   }
   try {
     const live = await H.workflowActiveRuns?.();
@@ -7483,18 +7540,79 @@ async function renderStoreWorkflows(body) {
       <button class="sc-btn" onclick="renderStoreBody()">Refresh</button>
     </div>
     ${liveBlock}
+    <div style="font:600 9px/1 var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--t3);margin:18px 0 10px">YOUR WORKFLOWS — ${items.length}</div>
     ${items.length ? rows : `
-      <div class="empty-state">
+      <div class="empty-state" style="padding:24px 16px">
         <div class="es-icon">&#9889;</div>
-        <h3>No workflows created yet</h3>
-        <p>This tab now reads the real local workflow engine. Create a workflow and it will appear here with real run data.</p>
+        <h3>No local workflows yet</h3>
+        <p>Create one or install one from the marketplace below.</p>
         <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">
           <button class="sc-btn primary" onclick="openWorkflowPanelFromStore('create')">Create workflow</button>
           <button class="sc-btn" onclick="openWorkflowPanelFromStore('overview')">Open Workflows</button>
         </div>
       </div>`}
+
+    <div style="font:600 9px/1 var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--t3);margin:24px 0 10px">MARKETPLACE WORKFLOWS — ${marketWorkflows.length}</div>
+    ${marketErr
+      ? `<div style="color:var(--t3);font-size:11px;padding:14px;border:1px dashed var(--b1);border-radius:10px">Marketplace unavailable: ${_escHtml(marketErr)}. Local workflows above still work.</div>`
+      : (marketWorkflows.length
+        ? renderStoreWorkflowMarketCards(marketWorkflows, items)
+        : `<div style="color:var(--t3);font-size:11px;padding:14px;border:1px dashed var(--b1);border-radius:10px">No workflows have been published to the marketplace yet. Be the first — open the publisher on the web.</div>`)
+    }
   `;
 }
+
+// Render the marketplace-workflow cards. Each card carries an Install
+// button which routes through H.marketRemoteInstallWorkflow → the
+// engine's create() so triggers actually fire after install. We dedupe
+// by id against the local list so already-installed workflows show
+// "Installed" instead of a duplicate Install button.
+function renderStoreWorkflowMarketCards(remoteItems, localItems) {
+  const localIds = new Set((localItems || []).map(w => (w && w.id ? String(w.id) : '')).filter(Boolean));
+  return remoteItems.map(it => {
+    const id = _escAttr(it.id || it.slug || '');
+    const installed = localIds.has(String(it.id || it.slug || ''));
+    const stepsCount = Array.isArray(it.tools) ? it.tools.length : 0;
+    return `
+      <div class="phd-card" style="margin-bottom:10px">
+        <div class="phd-card-h">
+          <div class="phd-card-icon">${pluginIcon(it.icon || '\u{26A1}')}</div>
+          <div class="phd-card-info">
+            <div class="phd-card-name">${_escHtml(it.name || 'Untitled')}</div>
+            <div class="phd-card-author">${_escHtml(it.author_name || it.author || 'unknown')}</div>
+          </div>
+        </div>
+        <div class="phd-card-desc">${_escHtml(it.short_description || it.description || 'No description')}</div>
+        <div class="phd-card-foot">
+          <div class="phd-card-meta">
+            <span>${stepsCount} ${stepsCount === 1 ? 'step' : 'steps'}</span>
+            <span>v${_escHtml(it.version || '1.0.0')}</span>
+          </div>
+          <button class="phd-card-cta ${installed ? 'on' : ''}" ${installed ? 'disabled' : ''} onclick="installStoreWorkflow('${id}', this)">${installed ? '✓ Installed' : 'Install'}</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.installStoreWorkflow = async function (id, btn) {
+  if (!id) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Installing...'; }
+  try {
+    const r = await H.marketRemoteInstallWorkflow(id);
+    if (r && r.ok) {
+      if (btn) { btn.classList.add('on'); btn.textContent = '✓ Installed'; }
+      try { H.notify?.('Workflow installed', r.workflow?.name || 'Workflow ready'); } catch (_) {}
+      // Refresh the store body so KPIs / dedupe updates.
+      setTimeout(() => { renderStoreBody().catch(() => {}); }, 400);
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = 'Install'; }
+      alert('Install failed: ' + (r?.error || 'unknown error'));
+    }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Install'; }
+    alert('Install failed: ' + (e?.message || e));
+  }
+};
 
 function openWorkflowPanelFromStore(tab = 'overview') {
   closeStore();
@@ -8331,6 +8449,17 @@ async function runWorkflowById(id) {
 
 async function handleWorkflowRunEffects(runResult) {
   const results = Array.isArray(runResult?.results) ? runResult.results : [];
+  // Accept only paths that match the engine's own filename convention
+  // (`workflow-<digits>.png`). This prevents a malicious or mis-coded
+  // step from getting an arbitrary file path rendered or surfaced as
+  // a message — addCard / addMsg get only sanitized values.
+  const SAFE_PATH = /^[\w\-/\\:.]+workflow-\d+\.png$/i;
+  const sanitizePath = (p) => {
+    const s = String(p || '');
+    if (!s) return '';
+    if (s.length > 400) return '';
+    return SAFE_PATH.test(s) ? s : '';
+  };
   for (const item of results) {
     const res = item?.result || {};
     const out = String(res.out || '');
@@ -8348,11 +8477,19 @@ async function handleWorkflowRunEffects(runResult) {
       continue;
     }
     if (res.base64) {
-      addCard('Workflow screenshot', res.path || '', res.base64);
+      // base64 is rendered inline — path is just a label hint, sanitize it
+      // so a malicious step can't poison the card's stored URL.
+      addCard('Workflow screenshot', sanitizePath(res.path), res.base64);
       continue;
     }
-    if (res.path && /workflow-\d+\.png$/i.test(String(res.path))) {
-      addMsg('bot', `Screenshot saved: \`${res.path}\``);
+    const safe = sanitizePath(res.path);
+    if (safe) {
+      addMsg('bot', `Screenshot saved: \`${safe}\``);
+    } else if (res.path) {
+      // Engine returned a path that doesn't match our convention — log
+      // but don't render. Helps catch step regressions without exposing
+      // unverified paths to the user.
+      console.warn('[workflow] ignoring unrecognised screenshot path:', String(res.path).slice(0, 200));
     }
   }
 }
