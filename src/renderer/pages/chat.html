@@ -2106,10 +2106,919 @@ body.with-sidebar .chat-status-bar{display:flex}
   font-style: italic;
 }
 .cek-hunk-diff { background: #05070c; min-width: 0; }
+
+/* PR-D1.4 — multi-file modal: file tabs above the body. Reuses
+   `.cek-hunk-list` + `.cek-hunk-diff` from D1.3 for the per-file
+   picker — only the tab strip and the body's row layout are new. */
+.cek-mf-card { display: flex; flex-direction: column; }
+.cek-mf-tabs {
+  display: flex; align-items: stretch;
+  gap: 2px;
+  padding: 6px 10px 0;
+  background: #0a0d14;
+  border-bottom: 1px solid #242936;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.cek-mf-tabs::-webkit-scrollbar { height: 4px; }
+.cek-mf-tabs::-webkit-scrollbar-thumb { background: var(--accent-200, rgba(108,140,255,.18)); border-radius: 4px; }
+.cek-mf-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 7px 7px 0 0;
+  color: var(--t2);
+  font: 600 11px/1 var(--mono);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.cek-mf-tab:hover { background: rgba(255,255,255,.04); color: var(--tx); }
+.cek-mf-tab.on {
+  background: #0b0e16;
+  border-color: #242936;
+  border-bottom-color: #0b0e16;
+  color: var(--accent-cyan-500, #56d2ff);
+  margin-bottom: -1px;
+}
+.cek-mf-tab-name {
+  max-width: 280px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cek-mf-tab-badge {
+  font: 700 9.5px/1 var(--mono);
+  letter-spacing: .4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--b1);
+  background: rgba(255,255,255,.04);
+  color: var(--t3);
+}
+.cek-mf-tab.on .cek-mf-tab-badge {
+  color: var(--accent-cyan-500, #56d2ff);
+  border-color: var(--accent-cyan-300, rgba(86,210,255,.32));
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
+}
+.cek-mf-tab-badge-pending { color: var(--warn-500, #fbbf24) !important; border-color: var(--warn-300, rgba(251,191,36,.30)) !important; background: var(--warn-50, rgba(251,191,36,.06)) !important; }
+.cek-mf-tab-badge-zero    { color: var(--t3) !important; opacity: .7; }
+.cek-mf-tab-new {
+  font: 700 8.5px/1 var(--mono);
+  letter-spacing: 1px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--success-100, rgba(52,211,153,.10));
+  color: var(--success-500, #34d399);
+  border: 1px solid var(--success-300, rgba(52,211,153,.30));
+}
+.cek-mf-tab-curr {
+  font: 700 8.5px/1 var(--mono);
+  letter-spacing: 1px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--accent-100, rgba(108,140,255,.10));
+  color: var(--accent-500, #6c8cff);
+  border: 1px solid var(--accent-300, rgba(108,140,255,.30));
+}
+.cek-mf-body {
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  gap: 0;
+}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
 <link rel="stylesheet" href="/vendor/xterm/css/xterm.css"/>
+<style id="horizon-premium-shell-polish">
+/* Premium shell pass: stable chrome, logical buttons, honest right dock.
+   This intentionally lives after theme CSS so it wins over older layout
+   experiments without rewriting the whole 11k-line renderer in one go. */
+:root{
+  --sidebar-w:280px;
+  --shell-topbar-h:56px;
+  --chrome-blur:blur(26px) saturate(1.12);
+}
+.tb{
+  height:var(--shell-topbar-h);
+  display:grid;
+  grid-template-columns:minmax(190px,1fr) minmax(0,auto);
+  gap:14px;
+  align-items:center;
+  padding:0 14px 0 18px;
+  background:
+    radial-gradient(circle at 24px 0,rgba(86,210,255,.13),transparent 42px),
+    linear-gradient(180deg,rgba(9,13,21,.98),rgba(6,8,13,.94));
+  border-bottom:1px solid rgba(86,210,255,.16);
+  box-shadow:0 1px 0 rgba(255,255,255,.035),0 12px 40px rgba(0,0,0,.25);
+}
+.tb::after{
+  content:'';
+  position:absolute;
+  left:0;right:0;bottom:-1px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(86,210,255,.42),rgba(251,191,36,.28),transparent);
+  opacity:.75;
+  pointer-events:none;
+}
+.tb-l{min-width:0;gap:12px}
+.tb-l > div:last-child{min-width:0}
+.logo{
+  width:36px;height:36px;border-radius:12px;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(255,255,255,.95) 0 2px,transparent 3px),
+    conic-gradient(from 20deg,#56d2ff,#6c8cff,#fbbf24,#56d2ff);
+  color:#06101a;
+  box-shadow:0 0 0 1px rgba(86,210,255,.30),0 0 28px rgba(86,210,255,.22);
+  animation:horizonLogoBreath 4.5s ease-in-out infinite;
+}
+@keyframes horizonLogoBreath{
+  0%,100%{filter:saturate(1);box-shadow:0 0 0 1px rgba(86,210,255,.28),0 0 24px rgba(86,210,255,.16)}
+  50%{filter:saturate(1.16);box-shadow:0 0 0 1px rgba(86,210,255,.42),0 0 38px rgba(86,210,255,.28)}
+}
+.tb-name{font-size:15px;letter-spacing:.1px}
+.tb-sub{
+  display:inline-flex;
+  margin-top:2px;
+  max-width:180px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#f5b25f;
+  font:700 9px/1 var(--mono);
+  letter-spacing:.9px;
+  text-transform:uppercase;
+}
+.tb-r{
+  justify-self:end;
+  min-width:0;
+  max-width:min(760px,calc(100vw - 430px));
+  gap:7px;
+  padding:5px 7px;
+  border:1px solid rgba(255,255,255,.075);
+  border-radius:18px;
+  background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.022));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055),0 14px 42px rgba(0,0,0,.24);
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+}
+.tb-r::-webkit-scrollbar{display:none}
+body.with-sidebar > .tb{margin-left:var(--sidebar-w)}
+body.with-sidebar > .tb .tb-r{max-width:min(740px,calc(100vw - var(--sidebar-w) - 390px))}
+.ic-btn{
+  width:34px;height:34px;border-radius:12px;
+  background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.025));
+  border:1px solid rgba(255,255,255,.075);
+  color:#aeb8cc;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055);
+}
+.ic-btn:hover{
+  color:#fff;
+  background:linear-gradient(180deg,rgba(86,210,255,.16),rgba(108,140,255,.07));
+  border-color:rgba(86,210,255,.34);
+  transform:translateY(-1px);
+}
+.ic-btn.proc{
+  color:#56d2ff;
+  background:rgba(86,210,255,.13);
+  border-color:rgba(86,210,255,.38);
+  box-shadow:0 0 22px rgba(86,210,255,.12),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.ic-btn.hub{color:#a3e635}.ic-btn.wf{color:#fbbf24}.ic-btn.store{color:#93c5fd}
+.ic-btn.acct{color:#f5b25f}.ic-btn.rec{color:#56d2ff}
+.wbtn{width:13px;height:13px;box-shadow:0 0 0 1px rgba(255,255,255,.14)}
+.focus-timer{
+  height:30px;
+  border-radius:12px;
+  background:rgba(52,211,153,.09);
+  border-color:rgba(52,211,153,.24);
+}
+.wake-bar,.sb,.modes,.chat-status-bar,.inp-wrap{backdrop-filter:var(--chrome-blur)}
+.wake-bar.show{height:30px}
+.sb,.modes{
+  padding-left:16px;
+  padding-right:16px;
+  background:linear-gradient(180deg,rgba(8,12,20,.82),rgba(7,9,15,.72));
+}
+.sb{min-height:42px;gap:6px}
+.modes{min-height:42px;gap:5px}
+.chip,.mt{
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  border-color:rgba(255,255,255,.075);
+  background:rgba(255,255,255,.025);
+}
+.chip:hover,.mt:hover{background:rgba(255,255,255,.055);transform:translateY(-1px)}
+.chip.on,.mt.on{
+  background:linear-gradient(180deg,rgba(86,210,255,.15),rgba(108,140,255,.08));
+  border-color:rgba(86,210,255,.35);
+  color:#d9f7ff;
+  box-shadow:0 0 18px rgba(86,210,255,.08);
+}
+.chat-status-bar{
+  min-height:40px;
+  padding:7px 16px;
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  overflow-y:hidden;
+  background:linear-gradient(180deg,rgba(7,10,17,.82),rgba(7,9,15,.70));
+  box-shadow:inset 0 -1px 0 rgba(255,255,255,.025);
+}
+.chat-status-bar::-webkit-scrollbar{display:none}
+.csb-title{
+  max-width:min(420px,34vw);
+  font-size:12px;
+  letter-spacing:.1px;
+}
+.csb-pill{
+  min-height:24px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 9px;
+  border-radius:999px;
+  background:rgba(255,255,255,.04);
+  color:#aab5c9;
+}
+.csb-pill.accent{
+  color:#8eeaff;
+  background:rgba(86,210,255,.09);
+  border-color:rgba(86,210,255,.28);
+}
+.csb-byok{
+  color:#9df2c9;
+  background:rgba(52,211,153,.075);
+  border-color:rgba(52,211,153,.28);
+}
+.msgs{padding-top:18px}
+.inp-wrap{
+  background:linear-gradient(180deg,rgba(7,9,15,.82),rgba(5,7,12,.96));
+  border-top-color:rgba(86,210,255,.12);
+  box-shadow:0 -18px 60px rgba(0,0,0,.22);
+}
+.irow{
+  max-width:1080px;
+  margin:0 auto;
+  width:100%;
+}
+.hint{letter-spacing:.2px}
+.inspector-pane{
+  top:var(--inspector-top);
+  right:var(--inspector-right);
+  bottom:var(--inspector-bottom);
+  width:var(--inspector-w);
+  max-width:calc(100vw - var(--sidebar-w) - 34px);
+  border-radius:17px;
+  border-color:rgba(86,210,255,.17);
+  background:
+    radial-gradient(circle at 15% -10%,rgba(86,210,255,.13),transparent 35%),
+    radial-gradient(circle at 110% 18%,rgba(251,191,36,.08),transparent 30%),
+    linear-gradient(180deg,rgba(10,14,23,.97),rgba(5,7,12,.97));
+  box-shadow:0 28px 90px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.025),inset 0 1px 0 rgba(255,255,255,.055);
+  z-index:70;
+}
+body.inspector-active .chat-status-bar,
+body.inspector-active .msgs{margin-right:var(--inspector-space)}
+body.inspector-compact .chat-status-bar,
+body.inspector-compact .msgs{margin-right:0!important}
+.insp-head{min-height:50px;padding:9px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(0,0,0,.18))}
+.insp-tab{height:32px;border-radius:10px}
+.insp-body{padding:16px}
+.insp-row{
+  min-height:29px;
+  border-bottom:1px solid rgba(255,255,255,.045);
+}
+.insp-row:last-child{border-bottom:0}
+.insp-row .v{max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.insp-byok{
+  background:linear-gradient(180deg,rgba(52,211,153,.075),rgba(52,211,153,.035));
+  border-top-color:rgba(52,211,153,.18);
+}
+body.code-mode-active .inspector-pane,
+body.surface-active .inspector-pane{display:none!important}
+.panel.show{
+  inset:0!important;
+  left:0!important;
+  right:0!important;
+  width:100vw!important;
+  max-width:none!important;
+}
+.pbody-tabbed{
+  background:
+    radial-gradient(circle at 0 0,rgba(86,210,255,.07),transparent 32%),
+    linear-gradient(90deg,rgba(0,0,0,.25),transparent 260px);
+}
+.psnav{
+  width:236px;
+  padding:18px 12px;
+  background:rgba(0,0,0,.22);
+}
+.psnav-tab{
+  min-height:40px;
+  border-radius:12px;
+}
+.psnav-tab.on{
+  background:linear-gradient(135deg,rgba(86,210,255,.13),rgba(251,191,36,.08));
+  border-color:rgba(86,210,255,.24);
+  color:#d9f7ff;
+}
+.psview{padding:28px 40px}
+.psview > section{max-width:1280px}
+.fpanel{
+  background:
+    radial-gradient(circle at 18% 0,rgba(86,210,255,.08),transparent 34%),
+    radial-gradient(circle at 88% 14%,rgba(251,191,36,.055),transparent 30%),
+    var(--bg);
+}
+.fph{
+  height:56px;
+  background:linear-gradient(180deg,rgba(9,13,21,.98),rgba(6,8,13,.94));
+  border-bottom-color:rgba(86,210,255,.14);
+}
+.ftabs{
+  min-height:46px;
+  padding:9px 20px;
+  background:rgba(4,6,11,.72);
+}
+.ftab{height:28px;border-radius:999px}
+.ftab.on{
+  background:rgba(86,210,255,.12);
+  border-color:rgba(86,210,255,.32);
+  color:#d9f7ff;
+}
+.fbody{padding:24px 30px}
+@media (max-width:1360px){
+  .tb{grid-template-columns:minmax(170px,.7fr) minmax(0,1fr)}
+  body.with-sidebar > .tb .tb-r{max-width:calc(100vw - var(--sidebar-w) - 250px)}
+  .tb-r{max-width:calc(100vw - 280px)}
+  .csb-title{max-width:240px}
+}
+@media (max-width:1040px){
+  body.with-sidebar > .tb,
+  body.with-sidebar > .wake-bar,
+  body.with-sidebar > .sb,
+  body.with-sidebar > .modes,
+  body.with-sidebar > .msgs,
+  body.with-sidebar > .inp-wrap,
+  body.with-sidebar > #fractalBg,
+  body.with-sidebar > .chat-status-bar{margin-left:0}
+  .chatside{display:none}
+  .tb-r{max-width:calc(100vw - 230px)}
+  .inspector-pane{max-width:calc(100vw - 28px)}
+}
+@media (prefers-reduced-motion:reduce){
+  .logo{animation:none}
+  .chip:hover,.mt:hover,.ic-btn:hover{transform:none}
+}
+
+/* Cursor / ChatGPT / Claude Code navigation model.
+   - left sidebar owns navigation/history
+   - top bar is state, not a junk drawer
+   - composer owns model/persona/tools
+   - big surfaces own the window */
+.tb{
+  grid-template-columns:minmax(190px,auto) minmax(280px,1fr) auto;
+}
+.tb-center{
+  min-width:0;
+  justify-self:center;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  -webkit-app-region:no-drag;
+}
+.shell-chip{
+  height:32px;
+  max-width:260px;
+  min-width:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  padding:0 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.075);
+  background:rgba(255,255,255,.035);
+  color:#b8c3d8;
+  font:700 11px/1 var(--font);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  cursor:pointer;
+  -webkit-app-region:no-drag;
+}
+.shell-chip.primary{
+  color:#061019;
+  background:linear-gradient(135deg,#56d2ff,#f5b25f);
+  border-color:transparent;
+  box-shadow:0 10px 28px rgba(86,210,255,.12);
+}
+.shell-chip.subtle{
+  color:#9df2c9;
+  background:rgba(52,211,153,.065);
+  border-color:rgba(52,211,153,.20);
+}
+.shell-chip:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.tb-r{
+  max-width:none;
+  padding:4px;
+  border-radius:15px;
+}
+body.with-sidebar > .tb .tb-r{max-width:none}
+.cs-activity{
+  flex-shrink:0;
+  padding:8px 8px 6px;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+  border-top:1px solid rgba(255,255,255,.045);
+  border-bottom:1px solid rgba(255,255,255,.045);
+  background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(0,0,0,.10));
+}
+.cs-act,.cs-util{
+  min-width:0;
+  height:36px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 10px;
+  border-radius:11px;
+  border:1px solid transparent;
+  background:transparent;
+  color:#8f9bb1;
+  font:700 11px/1 var(--font);
+  cursor:pointer;
+  text-align:left;
+  -webkit-app-region:no-drag;
+}
+.cs-act span,.cs-util span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-act:hover,.cs-util:hover{
+  color:#e8ecf4;
+  background:rgba(255,255,255,.045);
+  border-color:rgba(255,255,255,.06);
+}
+.cs-act.on,.cs-act.proc{
+  color:#d9f7ff;
+  background:linear-gradient(135deg,rgba(86,210,255,.16),rgba(108,140,255,.07));
+  border-color:rgba(86,210,255,.28);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+}
+.cs-utility{
+  flex-shrink:0;
+  padding:8px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+  border-top:1px solid rgba(255,255,255,.045);
+}
+.cs-util{
+  height:34px;
+  justify-content:center;
+  background:rgba(255,255,255,.025);
+  border-color:rgba(255,255,255,.045);
+}
+.sb,.modes{
+  display:none;
+}
+.chat-status-bar{
+  display:flex!important;
+}
+body:not(.with-sidebar) .chat-status-bar{display:flex!important}
+.composer-toolbar{
+  max-width:1080px;
+  width:100%;
+  margin:0 auto 8px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+.composer-toolbar::-webkit-scrollbar{display:none}
+.composer-chip{
+  height:30px;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.07);
+  background:rgba(255,255,255,.035);
+  color:#8f9bb1;
+  font:700 10px/1 var(--font);
+  cursor:pointer;
+  white-space:nowrap;
+  -webkit-app-region:no-drag;
+}
+.composer-chip span{color:#667189;font-weight:800;text-transform:uppercase;letter-spacing:.8px}
+.composer-chip b{color:#d7deeb;font-weight:700;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+.composer-chip.strong{
+  background:rgba(86,210,255,.095);
+  border-color:rgba(86,210,255,.24);
+}
+.composer-chip.strong b{color:#8eeaff}
+.composer-chip.on{
+  background:rgba(251,191,36,.12);
+  border-color:rgba(251,191,36,.28);
+}
+.composer-chip:hover{
+  color:#fff;
+  border-color:rgba(86,210,255,.28);
+  transform:translateY(-1px);
+}
+body.surface-active .composer-toolbar{display:none}
+@media (max-width:1360px){
+  .tb{grid-template-columns:minmax(160px,auto) minmax(200px,1fr) auto}
+  .shell-chip.subtle{display:none}
+  .shell-chip{max-width:210px}
+}
+@media (max-width:1040px){
+  .tb{grid-template-columns:minmax(150px,auto) 1fr auto}
+  .tb-center{justify-self:start}
+  .shell-chip:not(.primary){display:none}
+  .cs-activity,.cs-utility{display:none}
+}
+
+/* Research-aligned correction pass.
+   Cursor, ChatGPT Atlas and Claude Code all use calmer hierarchy than the
+   earlier glossy pass: navigation lives left, current state lives in a compact
+   topbar, model/persona/tools live beside the composer, and detail lives in a
+   secondary inspector. Keep one accent, remove noisy glow. */
+:root{
+  --shell-bg:#07090f;
+  --shell-panel:#0a0e16;
+  --shell-panel-2:#101622;
+  --shell-line:rgba(148,163,184,.15);
+  --shell-line-strong:rgba(148,163,184,.24);
+  --shell-muted:#8b95a8;
+  --shell-text:#e8edf6;
+  --shell-accent:#7dd3fc;
+  --shell-accent-soft:rgba(125,211,252,.12);
+  --shell-warm:#f2b35f;
+}
+body::before,
+body::after{display:none!important}
+.tb{
+  background:rgba(7,9,15,.97)!important;
+  border-bottom:1px solid var(--shell-line)!important;
+  box-shadow:none!important;
+}
+.tb::after{display:none!important}
+.tb-l{gap:11px}
+.logo{
+  width:34px!important;height:34px!important;border-radius:11px!important;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(226,246,255,.96) 0 2px,transparent 3px),
+    radial-gradient(circle at 50% 50%,rgba(125,211,252,.26),transparent 54%),
+    #0d1420!important;
+  color:#dff6ff!important;
+  border:1px solid rgba(125,211,252,.28)!important;
+  box-shadow:0 0 0 1px rgba(255,255,255,.025),0 10px 28px rgba(0,0,0,.30)!important;
+  animation:horizonLogoBreathClean 5.5s ease-in-out infinite!important;
+}
+@keyframes horizonLogoBreathClean{
+  0%,100%{box-shadow:0 0 0 1px rgba(255,255,255,.025),0 10px 28px rgba(0,0,0,.28)}
+  50%{box-shadow:0 0 0 1px rgba(125,211,252,.24),0 10px 30px rgba(0,0,0,.32),0 0 22px rgba(125,211,252,.12)}
+}
+.tb-name{font-size:15px;letter-spacing:0}
+.tb-sub{color:#aab4c5;letter-spacing:.6px;opacity:.88}
+.tb-center{gap:6px}
+.shell-chip{
+  height:30px!important;
+  border-radius:8px!important;
+  background:#0c111a!important;
+  border:1px solid var(--shell-line)!important;
+  color:#aeb8c9!important;
+  box-shadow:none!important;
+  font-size:11px!important;
+}
+.shell-chip.primary{
+  background:#e8edf6!important;
+  color:#07090f!important;
+  border-color:#e8edf6!important;
+  box-shadow:none!important;
+}
+.shell-chip.subtle{
+  background:rgba(34,197,94,.075)!important;
+  color:#9de8bf!important;
+  border-color:rgba(34,197,94,.18)!important;
+}
+.shell-chip:hover{
+  filter:none!important;
+  transform:none!important;
+  border-color:var(--shell-line-strong)!important;
+}
+.tb-r{
+  padding:0!important;
+  gap:6px!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+.ic-btn{
+  width:32px!important;height:32px!important;border-radius:9px!important;
+  background:transparent!important;
+  border:1px solid var(--shell-line)!important;
+  color:#9aa5b8!important;
+  box-shadow:none!important;
+}
+.ic-btn:hover{
+  transform:none!important;
+  color:var(--shell-text)!important;
+  background:#0f1521!important;
+  border-color:var(--shell-line-strong)!important;
+}
+.ic-btn.proc{
+  color:var(--shell-accent)!important;
+  background:var(--shell-accent-soft)!important;
+  border-color:rgba(125,211,252,.28)!important;
+  box-shadow:none!important;
+}
+.focus-timer{
+  height:28px!important;
+  background:rgba(34,197,94,.07)!important;
+  border-color:rgba(34,197,94,.18)!important;
+}
+.chatside{
+  background:#070a10!important;
+  border-right:1px solid var(--shell-line)!important;
+  box-shadow:none!important;
+  padding-left:46px!important;
+  box-sizing:border-box!important;
+}
+.cs-new{
+  background:#e8edf6!important;
+  color:#07090f!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+.cs-new:hover{filter:none!important;background:#f4f7fb!important}
+.cs-search{
+  background:#0c111a!important;
+  border-color:var(--shell-line)!important;
+  box-shadow:none!important;
+}
+.cs-activity{
+  position:absolute!important;
+  left:0!important;
+  top:0!important;
+  bottom:78px!important;
+  width:46px!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  gap:4px!important;
+  padding:12px 6px!important;
+  border-top:0!important;
+  border-right:1px solid var(--shell-line)!important;
+  border-bottom:0!important;
+  background:#060910!important;
+}
+.cs-act,.cs-util{
+  width:34px!important;
+  height:34px!important;
+  padding:0!important;
+  justify-content:center!important;
+  border-radius:8px!important;
+  color:#9aa5b8!important;
+  background:transparent!important;
+  border:1px solid transparent!important;
+  box-shadow:none!important;
+  position:relative!important;
+}
+.cs-act span,.cs-util span{display:none!important}
+.cs-act:hover,.cs-util:hover{
+  color:var(--shell-text)!important;
+  background:#0e141f!important;
+  border-color:var(--shell-line)!important;
+}
+.cs-act.on,.cs-act.proc{
+  color:#eff6ff!important;
+  background:#111827!important;
+  border-color:var(--shell-line)!important;
+}
+.cs-act.on::before,.cs-act.proc::before{
+  content:'';position:absolute;left:-7px;top:8px;width:3px;height:18px;
+  border-radius:999px;background:var(--shell-accent);
+}
+.cs-utility{
+  position:absolute!important;
+  left:0!important;
+  bottom:0!important;
+  width:46px!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  gap:4px!important;
+  padding:8px 6px 10px!important;
+  border-top:1px solid var(--shell-line)!important;
+  border-right:1px solid var(--shell-line)!important;
+  background:#060910!important;
+}
+.cs-util{justify-content:center!important}
+.chatside .cs-head{padding:12px 10px 6px!important}
+.cs-search{padding:6px 10px!important;background:transparent!important}
+.cs-list{padding:4px 8px 12px!important}
+body.with-sidebar > .tb,
+body.with-sidebar > .wake-bar,
+body.with-sidebar > .sb,
+body.with-sidebar > .modes,
+body.with-sidebar > .msgs,
+body.with-sidebar > .inp-wrap,
+body.with-sidebar > #fractalBg,
+body.with-sidebar > .chat-status-bar{
+  margin-left:var(--sidebar-w)!important;
+}
+.chatside{width:var(--sidebar-w)!important}
+.cs-resize{
+  position:absolute!important;
+  top:0!important;
+  right:-3px!important;
+  bottom:0!important;
+  width:7px!important;
+  cursor:ew-resize!important;
+  z-index:4!important;
+}
+.cs-resize:hover{background:rgba(125,211,252,.18)!important}
+body.with-sidebar.chat-sidebar-collapsed > .tb,
+body.with-sidebar.chat-sidebar-collapsed > .wake-bar,
+body.with-sidebar.chat-sidebar-collapsed > .sb,
+body.with-sidebar.chat-sidebar-collapsed > .modes,
+body.with-sidebar.chat-sidebar-collapsed > .msgs,
+body.with-sidebar.chat-sidebar-collapsed > .inp-wrap,
+body.with-sidebar.chat-sidebar-collapsed > #fractalBg,
+body.with-sidebar.chat-sidebar-collapsed > .chat-status-bar{
+  margin-left:46px!important;
+}
+body.chat-sidebar-collapsed .chatside{
+  width:46px!important;
+  padding-left:46px!important;
+}
+body.chat-sidebar-collapsed .chatside .cs-head,
+body.chat-sidebar-collapsed .chatside .cs-search,
+body.chat-sidebar-collapsed .chatside .cs-list,
+body.chat-sidebar-collapsed .chatside .cs-stats{
+  opacity:0!important;
+  pointer-events:none!important;
+}
+body.chat-sidebar-collapsed .cs-resize{display:none!important}
+body.chat-sidebar-collapsed .cs-collapse svg{
+  transform:rotate(180deg);
+}
+.ibtn .licon{
+  width:16px!important;
+  height:16px!important;
+  stroke:currentColor;
+  stroke-width:2;
+  fill:none;
+}
+.btn-send .licon{width:15px!important;height:15px!important}
+.btn-attach,
+.btn-mic{
+  font-size:0!important;
+}
+.btn-attach:not(:has(svg))::before{
+  content:'+';
+  font:800 18px/1 var(--font);
+  color:currentColor;
+}
+.btn-mic:not(:has(svg))::before{
+  content:'';
+  width:15px;height:15px;border:2px solid currentColor;border-radius:999px;
+  box-sizing:border-box;
+}
+.btn-mic .mlbl{font-size:7px!important}
+.wake-bar,.sb,.modes,.chat-status-bar,.inp-wrap{backdrop-filter:none!important}
+.chat-status-bar{
+  min-height:34px!important;
+  padding:6px 16px!important;
+  justify-content:flex-start!important;
+  gap:7px!important;
+  background:#080c13!important;
+  border-top:0!important;
+  border-bottom:1px solid var(--shell-line)!important;
+  box-shadow:none!important;
+}
+.chat-status-bar #csb-provider,
+.chat-status-bar #csb-model,
+.chat-status-bar #csb-byok{display:none!important}
+.chat-status-bar .csb-title{
+  flex:1 1 auto!important;
+  max-width:none!important;
+  min-width:0!important;
+}
+.csb-pill{
+  min-height:22px!important;
+  border-radius:7px!important;
+  background:#0d131d!important;
+  border-color:var(--shell-line)!important;
+  color:#9aa5b8!important;
+}
+.csb-pill.accent{
+  color:#a7e8ff!important;
+  background:rgba(125,211,252,.08)!important;
+  border-color:rgba(125,211,252,.18)!important;
+}
+.csb-byok{
+  color:#a7f3c7!important;
+  background:rgba(34,197,94,.07)!important;
+  border-color:rgba(34,197,94,.18)!important;
+}
+.msgs{padding-top:16px!important}
+.inp-wrap{
+  background:rgba(7,9,15,.98)!important;
+  border-top:1px solid var(--shell-line)!important;
+  box-shadow:none!important;
+}
+.irow,.composer-toolbar{max-width:980px!important}
+.composer-toolbar{
+  margin-bottom:7px!important;
+  gap:6px!important;
+  justify-content:flex-start!important;
+}
+.composer-chip{
+  height:28px!important;
+  border-radius:8px!important;
+  background:#0c111a!important;
+  border:1px solid var(--shell-line)!important;
+  color:#9aa5b8!important;
+  box-shadow:none!important;
+}
+.composer-chip span{color:#6f7b90!important;letter-spacing:.7px}
+.composer-chip b{color:#dce3ef!important}
+.composer-chip.strong{
+  background:rgba(125,211,252,.08)!important;
+  border-color:rgba(125,211,252,.20)!important;
+}
+.composer-chip.strong b{color:#a7e8ff!important}
+.composer-chip.on{
+  background:rgba(242,179,95,.10)!important;
+  border-color:rgba(242,179,95,.24)!important;
+}
+.composer-chip:hover{
+  transform:none!important;
+  color:var(--shell-text)!important;
+  background:#111827!important;
+  border-color:var(--shell-line-strong)!important;
+}
+textarea#inp{background:transparent!important}
+.inspector-pane{
+  border-radius:12px!important;
+  border:1px solid var(--shell-line)!important;
+  background:#080c13!important;
+  box-shadow:0 24px 70px rgba(0,0,0,.40)!important;
+}
+.insp-head{
+  min-height:46px!important;
+  background:#090d14!important;
+  border-bottom:1px solid var(--shell-line)!important;
+}
+.insp-tab{height:30px!important;border-radius:8px!important}
+.insp-body{padding:14px!important}
+.insp-row{border-bottom:1px solid rgba(148,163,184,.10)!important}
+.insp-byok{
+  background:#090d14!important;
+  border-top:1px solid var(--shell-line)!important;
+}
+.panel.show,.fpanel{background:#07090f!important}
+.pbody-tabbed{background:#07090f!important}
+.psnav{
+  background:#080c13!important;
+  border-right:1px solid var(--shell-line)!important;
+}
+.psnav-tab{border-radius:8px!important}
+.psnav-tab.on{
+  background:#111827!important;
+  border-color:var(--shell-line)!important;
+  color:var(--shell-text)!important;
+}
+.fph{
+  background:#07090f!important;
+  border-bottom:1px solid var(--shell-line)!important;
+}
+.ftabs{
+  background:#080c13!important;
+  border-bottom:1px solid var(--shell-line)!important;
+}
+.ftab{height:28px!important;border-radius:8px!important}
+.ftab.on{
+  background:#111827!important;
+  color:#f8fafc!important;
+  border-color:var(--shell-line)!important;
+}
+.fbody{background:#07090f!important}
+@media (max-width:1040px){
+  .cs-activity,.cs-utility{display:none!important}
+}
+</style>
 </head>
 <body>
 <canvas id="fractalBg" aria-hidden="true"></canvas>
@@ -2166,6 +3075,8 @@ body.with-sidebar .chat-status-bar{display:flex}
     <!-- Misc inline -->
     <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9"/><path d="M3 12a9 9 0 0 1 9-9"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
     <symbol id="i-trending-up" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></symbol>
@@ -2183,7 +3094,37 @@ body.with-sidebar .chat-status-bar{display:flex}
       <input class="cs-search-input" id="cs-search" placeholder="Search chats…" oninput="filterChats(this.value)" />
     </div>
   </div>
+  <nav class="cs-activity" id="shell-nav" aria-label="Horizon workspace navigation">
+    <button class="cs-act on" data-shell-target="chat" onclick="showChatSurface()" title="Chat">
+      <svg class="licon"><use href="#i-message"/></svg><span>Chat</span>
+    </button>
+    <button class="cs-act cs-collapse" onclick="toggleChatSidebar()" title="Hide or show chat list">
+      <svg class="licon"><use href="#i-sidebar"/></svg><span>Collapse</span>
+    </button>
+    <button class="cs-act" data-shell-target="agent" id="operator-mode-btn" onclick="toggleOperatorMode()" title="Operator Console">
+      <svg class="licon"><use href="#i-terminal"/></svg><span>Agent</span>
+    </button>
+    <button class="cs-act" data-shell-target="code" id="code-mode-btn" onclick="toggleCodeMode()" title="Code Mode IDE">
+      <svg class="licon"><use href="#i-code"/></svg><span>Code</span>
+    </button>
+    <button class="cs-act" data-shell-target="workflows" onclick="openWorkflows()" title="Workflows">
+      <svg class="licon"><use href="#i-zap"/></svg><span>Flows</span>
+    </button>
+    <button class="cs-act" data-shell-target="plugins" onclick="openHub()" title="Installed Plugins">
+      <svg class="licon"><use href="#i-puzzle"/></svg><span>Plugins</span>
+    </button>
+    <button class="cs-act" data-shell-target="marketplace" onclick="openStore()" title="Marketplace">
+      <svg class="licon"><use href="#i-store"/></svg><span>Store</span>
+    </button>
+    <button class="cs-act" data-shell-target="inspector" id="inspector-mode-btn" onclick="toggleInspectorMode()" title="Context, Tools, Cost, Log">
+      <svg class="licon"><use href="#i-sidebar"/></svg><span>Inspect</span>
+    </button>
+  </nav>
   <div class="cs-list" id="chatlist"></div>
+  <div class="cs-utility">
+    <button class="cs-util" onclick="openAccount()" title="Horizon account"><svg class="licon"><use href="#i-user"/></svg><span>Account</span></button>
+    <button class="cs-util" onclick="openPanel()" title="Settings"><svg class="licon"><use href="#i-settings"/></svg><span>Settings</span></button>
+  </div>
   <div class="cs-stats" id="cs-stats">
     <div class="cs-stat"><span>✉</span> <span class="cs-stat-val" id="stat-msgs">0</span> msgs</div>
     <div class="cs-stat"><span>⭐</span> <span class="cs-stat-val" id="stat-tokens">0</span> tokens</div>
@@ -2593,20 +3534,17 @@ body.with-sidebar .chat-status-bar{display:flex}
       <span class="tb-sub" id="tb-sub">Genesis</span>
     </div>
   </div>
+  <div class="tb-center">
+    <button class="shell-chip primary" id="shell-surface-label" onclick="openCmdPalette()" title="Command palette">Chat</button>
+    <button class="shell-chip" id="shell-model-label" onclick="openModelPicker(event)" title="Switch active model">Gemini · gemini-2.5-flash</button>
+    <button class="shell-chip subtle" id="shell-privacy-label" onclick="openPanel('providers')" title="BYOK settings">BYOK local-first</button>
+  </div>
   <div class="tb-r">
     <div class="focus-timer" id="focus-timer">
       <span id="focus-time">25:00</span>
       <button class="focus-timer-btn" id="focus-toggle" onclick="toggleFocusTimer()">||</button>
       <button class="focus-timer-btn" onclick="stopFocusTimer()">x</button>
     </div>
-    <button class="ic-btn" id="operator-mode-btn" onclick="toggleOperatorMode()" title="Operator Console"><svg class="licon"><use href="#i-terminal"/></svg></button>
-    <button class="ic-btn" id="code-mode-btn" onclick="toggleCodeMode()" title="Code Mode IDE"><svg class="licon"><use href="#i-code"/></svg></button>
-    <button class="ic-btn" id="inspector-mode-btn" onclick="toggleInspectorMode()" title="Inspector — Context, Tools, Cost, Log"><svg class="licon"><use href="#i-sidebar"/></svg></button>
-    <button class="ic-btn hub" onclick="openHub()" title="Plugin Hub"><svg class="licon"><use href="#i-puzzle"/></svg></button>
-    <button class="ic-btn wf" onclick="openWorkflows()" title="Workflows"><svg class="licon"><use href="#i-zap"/></svg></button>
-    <button class="ic-btn store" onclick="openStore()" title="Marketplace"><svg class="licon"><use href="#i-store"/></svg></button>
-    <button class="ic-btn acct" id="acct-btn" onclick="openAccount()" title="Horizon account"><svg class="licon"><use href="#i-user"/></svg></button>
-    <button class="ic-btn rec" onclick="openRecorder()" title="Screen Recorder"><svg class="licon"><use href="#i-circle"/></svg></button>
     <button class="ic-btn" onclick="openCmdPalette()" title="Ctrl+K"><svg class="licon"><use href="#i-command"/></svg></button>
     <button class="ic-btn" onclick="openPanel()" title="Settings"><svg class="licon"><use href="#i-settings"/></svg></button>
     <div style="width:6px"></div>
@@ -3013,6 +3951,26 @@ body.with-sidebar .chat-status-bar{display:flex}
     <span style="font-size:9px;color:var(--t3)">нажми 🎤 чтобы стоп</span>
   </div>
   <div class="attach-preview" id="attach-preview"></div>
+  <div class="composer-toolbar" id="composer-toolbar">
+    <button class="composer-chip strong" onclick="openModelPicker(event)" title="Choose model">
+      <span>Model</span><b id="composer-model-chip">Gemini</b>
+    </button>
+    <button class="composer-chip" onclick="openPanel('personas')" title="Choose persona">
+      <span>Persona</span><b id="composer-persona-chip">Default</b>
+    </button>
+    <button class="composer-chip" onclick="cycleComposerMode()" title="Switch chat mode">
+      <span>Mode</span><b id="composer-mode-chip">Chat</b>
+    </button>
+    <button class="composer-chip" onclick="openCmdPalette()" title="Commands and actions">
+      <span>Tools</span><b>Ctrl K</b>
+    </button>
+    <button class="composer-chip" id="composer-web-chip" onclick="toggleSearch()" title="Toggle web/search grounding">
+      <span>Web</span><b id="composer-web-state">Off</b>
+    </button>
+    <button class="composer-chip" id="composer-screen-chip" onclick="toggleEye()" title="Toggle screen context">
+      <span>Screen</span><b id="composer-screen-state">Off</b>
+    </button>
+  </div>
   <div class="irow">
     <input type="file" id="file-input" accept="image/*,.txt,.md,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.csv,.xml,.yaml,.yml,.sh,.sql,.zip,.pdf" multiple onchange="onFilesSelected(event)"/>
     <button class="ibtn btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл или фото">📎</button>
@@ -3045,9 +4003,85 @@ let isRecording=false, isProcessing=false;
 let audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 let history=[];
 
-const SURFACE_NAMES = ['chat','code','workflows','plugins','personas','settings','account','recorder'];
+const SURFACE_NAMES = ['chat','code','workflows','plugins','marketplace','personas','settings','account','recorder'];
 const SURFACE_PANEL_IDS = ['hub-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
 let activeSurface = 'chat';
+let chatSidebarCollapsed = false;
+
+function uiIcon(id){
+  return `<svg class="licon"><use href="#${id}"/></svg>`;
+}
+function controlHtml(icon, label){
+  return `${uiIcon(icon)}<span class="mlbl">${label}</span>`;
+}
+function setVoiceButtonState(state='idle'){
+  const btn = document.getElementById('btn-mic');
+  if (!btn) return;
+  if (state === 'recording') btn.innerHTML = controlHtml('i-stop','STOP');
+  else if (state === 'processing') btn.innerHTML = controlHtml('i-loader','...');
+  else btn.innerHTML = controlHtml('i-mic','VOICE');
+}
+function setDictateButtonState(state='idle'){
+  const btn = document.getElementById('btn-dictate');
+  if (!btn) return;
+  if (state === 'recording') btn.innerHTML = controlHtml('i-stop','REC');
+  else if (state === 'processing') btn.innerHTML = controlHtml('i-loader','...');
+  else btn.innerHTML = controlHtml('i-circle','HOLD');
+}
+function normalizeComposerButtons(){
+  const attach = document.getElementById('file-input')?.nextElementSibling;
+  if (attach?.classList?.contains('btn-attach')) attach.innerHTML = uiIcon('i-paperclip');
+  setVoiceButtonState('idle');
+  setDictateButtonState('idle');
+  const send = document.getElementById('btn-send');
+  if (send) send.innerHTML = uiIcon('i-send');
+  const inp = document.getElementById('inp');
+  if (inp) inp.placeholder = 'Ask Horizon... attach files or use /commands';
+}
+function setChatSidebarCollapsed(on){
+  chatSidebarCollapsed = Boolean(on);
+  document.body.classList.toggle('chat-sidebar-collapsed', chatSidebarCollapsed);
+  document.querySelector('.cs-collapse')?.setAttribute('title', chatSidebarCollapsed ? 'Show chat list' : 'Hide chat list');
+  try { window.H?.set?.('chatSidebarCollapsed', chatSidebarCollapsed); } catch(_) {}
+  try { layoutInspectorDock(); } catch(_) {}
+}
+function toggleChatSidebar(){
+  setChatSidebarCollapsed(!chatSidebarCollapsed);
+}
+function setChatSidebarWidth(width, persist=true){
+  const next = Math.max(240, Math.min(420, Number(width) || 280));
+  document.documentElement.style.setProperty('--sidebar-w', `${next}px`);
+  if (persist) {
+    try { window.H?.set?.('chatSidebarWidth', next); } catch(_) {}
+  }
+  try { layoutInspectorDock(); } catch(_) {}
+}
+function ensureChatResizeHandle(){
+  const side = document.getElementById('chatside');
+  if (!side || side.querySelector('.cs-resize')) return;
+  const handle = document.createElement('div');
+  handle.className = 'cs-resize';
+  handle.title = 'Resize chat list';
+  handle.addEventListener('pointerdown', startChatSidebarResize);
+  side.appendChild(handle);
+}
+function startChatSidebarResize(ev){
+  if (chatSidebarCollapsed) return;
+  ev.preventDefault();
+  const startX = ev.clientX;
+  const startW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || 280;
+  document.body.classList.add('chat-sidebar-resizing');
+  const move = e => setChatSidebarWidth(startW + (e.clientX - startX), false);
+  const up = () => {
+    document.body.classList.remove('chat-sidebar-resizing');
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    const finalW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || startW;
+    setChatSidebarWidth(finalW, true);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up, { once:true });
+}
 
 function _surfaceClasses(){
   return ['surface-active'].concat(SURFACE_NAMES.map(s => 'surface-' + s));
@@ -3061,6 +4095,8 @@ function _clearSurfacePanels(keepIds=[]){
 function _setInspectorVisible(on){
   try {
     if (typeof inspectorActive !== 'undefined') inspectorActive = Boolean(on);
+    if (on && typeof layoutInspectorDock === 'function') layoutInspectorDock();
+    if (!on) document.body.classList.remove('inspector-compact');
     document.body.classList.toggle('inspector-active', Boolean(on));
     document.getElementById('inspector-mode-btn')?.classList.toggle('proc', Boolean(on));
     H.set?.('inspectorActive', Boolean(on));
@@ -3090,6 +4126,7 @@ function setActiveSurface(surface='chat', opts={}){
     }
   }
   if (next !== 'chat') _setInspectorVisible(false);
+  updateShellChrome(next);
   return activeSurface;
 }
 function closeActiveSurface(){
@@ -3097,9 +4134,61 @@ function closeActiveSurface(){
   _setCodeSurfaceVisible(false);
   document.body.classList.remove(..._surfaceClasses());
   activeSurface = 'chat';
+  updateShellChrome('chat');
 }
 function isSurfaceActive(surface){
   return activeSurface === surface;
+}
+function shellSurfaceName(surface){
+  if (typeof operatorModeActive !== 'undefined' && operatorModeActive) return 'Agent';
+  const names = {
+    chat: 'Chat',
+    code: 'Code',
+    workflows: 'Workflows',
+    plugins: 'Plugins',
+    marketplace: 'Marketplace',
+    personas: 'Personas',
+    settings: 'Settings',
+    account: 'Account',
+    recorder: 'Recorder',
+  };
+  return names[surface || activeSurface] || 'Chat';
+}
+function updateShellChrome(surface = activeSurface){
+  try {
+    const navTarget = (typeof operatorModeActive !== 'undefined' && operatorModeActive)
+      ? 'agent'
+      : ((typeof inspectorActive !== 'undefined' && inspectorActive)
+          ? 'inspector'
+          : (surface === 'marketplace' ? 'marketplace' : surface));
+    document.querySelectorAll('#shell-nav .cs-act').forEach(btn => {
+      btn.classList.toggle('on', btn.dataset.shellTarget === navTarget);
+    });
+    const label = document.getElementById('shell-surface-label');
+    if (label) label.textContent = shellSurfaceName(surface);
+    const modelLabel = document.getElementById('shell-model-label');
+    const model = getSelectedModelForProvider?.(prov) || prov || 'model';
+    if (modelLabel) modelLabel.textContent = `${(prov || provider || 'AI').toUpperCase()} · ${model}`;
+    const composerModel = document.getElementById('composer-model-chip');
+    if (composerModel) composerModel.textContent = model;
+    const composerPersona = document.getElementById('composer-persona-chip');
+    if (composerPersona) composerPersona.textContent = currentPersona || 'Default';
+    const composerMode = document.getElementById('composer-mode-chip');
+    if (composerMode) composerMode.textContent = String(mode || 'chat').replace(/^\w/, c => c.toUpperCase());
+    document.getElementById('composer-web-state')?.replaceChildren(document.createTextNode(searchOn ? 'On' : 'Off'));
+    document.getElementById('composer-screen-state')?.replaceChildren(document.createTextNode(eyeOn ? 'On' : 'Off'));
+    document.getElementById('composer-web-chip')?.classList.toggle('on', !!searchOn);
+    document.getElementById('composer-screen-chip')?.classList.toggle('on', !!eyeOn);
+  } catch(_) {}
+}
+function showChatSurface(){
+  closeActiveSurface();
+  if (typeof operatorModeActive !== 'undefined' && operatorModeActive) {
+    operatorModeActive = false;
+    document.body.classList.remove('operator-mode-active');
+    document.getElementById('operator-mode-btn')?.classList.remove('proc');
+  }
+  updateShellChrome('chat');
 }
 
 // ═══ MULTI-CHAT STATE ═══
@@ -3797,6 +4886,7 @@ async function startRec(){
     document.getElementById('vb').classList.add('show');
     document.getElementById('vtxt').textContent=t('recording');
     setStatus(t('recording'),true);startLvl(stream);
+    setVoiceButtonState('recording');
   }catch(e){addMsg('bot',`⚠️ Mic: ${e.message}`);}
 }
 
@@ -3807,6 +4897,7 @@ function stopRec(){
     btn.classList.remove('rec');btn.classList.add('proc');btn.innerHTML='⌛<span class="mlbl">…</span>';
     document.getElementById('vtxt').textContent=t('processing');
     setStatus(t('processing'),true);
+    setVoiceButtonState('processing');
   }
 }
 
@@ -3816,6 +4907,7 @@ async function processAudio(mimeType){
   const btn=document.getElementById('btn-mic');
   btn.classList.remove('proc');btn.innerHTML='🎤<span class="mlbl">VOICE</span>';
   document.getElementById('vb').classList.remove('show');
+  setVoiceButtonState('idle');
   setStatus(t('ready'));
 
   // Resume wake if it was on
@@ -3875,6 +4967,7 @@ async function startDictate() {
     btn.innerHTML = '🔴<span class="mlbl">REC</span>';
     
     document.getElementById('vb').classList.add('show');
+    setDictateButtonState('recording');
     document.getElementById('vtxt').textContent = lang === 'ru' ? 'Диктую…' : 'Dictating…';
     startLvl(dictateStream);
   } catch (e) {
@@ -3895,6 +4988,7 @@ function stopDictate() {
   
   document.getElementById('vtxt').textContent = t('processing');
   stopLvl();
+  setDictateButtonState('processing');
 }
 
 async function processDictation(mimeType) {
@@ -3902,6 +4996,7 @@ async function processDictation(mimeType) {
   btn.classList.remove('proc');
   btn.innerHTML = '✋<span class="mlbl">HOLD</span>';
   document.getElementById('vb').classList.remove('show');
+  setDictateButtonState('idle');
   
   const blob = new Blob(dictateChunks, { type: mimeType });
   if (blob.size < 500) return;
@@ -4574,6 +5669,7 @@ function updateStatusBar(title) {
     document.getElementById('csb-title').textContent = title || (lang==='ru'?'Новый чат':'New chat');
     document.getElementById('csb-provider').textContent = prov.charAt(0).toUpperCase() + prov.slice(1);
     document.getElementById('csb-model').textContent = getSelectedModelForProvider(prov) || prov;
+    updateShellChrome();
   } catch(_) {}
 }
 
@@ -5108,7 +6204,7 @@ async function safeWorkspaceShell(cmd){
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
 function applyLang(){
   setStatus(t('ready'));
-  document.getElementById('inp').placeholder=lang==='ru'?'Спроси Хорайзон…':'Ask Horizon…';
+  document.getElementById('inp').placeholder='Ask Horizon... attach files or use /commands';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -5133,7 +6229,13 @@ window.addEventListener('DOMContentLoaded', async()=>{
   const savedTTS=await H.get('ttsProvider');if(savedTTS)ttsProvider=savedTTS;
   const savedElV=await H.get('elevenLabsVoice');if(savedElV)elevenLabsVoice=savedElV;
   const savedOAIV=await H.get('openaiTtsVoice');if(savedOAIV)openaiTtsVoice=savedOAIV;
+  const savedChatWidth = await H.get('chatSidebarWidth').catch(()=>280);
+  const savedChatCollapsed = await H.get('chatSidebarCollapsed').catch(()=>false);
   applyLang(); setProv(prov,false); setMode(mode,false); showGreeting();
+  ensureChatResizeHandle();
+  setChatSidebarWidth(savedChatWidth || 280, false);
+  normalizeComposerButtons();
+  setChatSidebarCollapsed(savedChatCollapsed === true);
   if(!ttsOn)document.getElementById('sw-tts').classList.remove('on');
   document.getElementById('sw-eye')?.classList.toggle('on', eyeOn);
   document.getElementById('tc-eye')?.classList.toggle('on', eyeOn);
@@ -6222,10 +7324,15 @@ async function clearKeys(){if(!await customConfirm(lang==='ru'?'Удалить �
 // ═══════════════════════════════════════════════════════════════
 // PROVIDER / MODE / TOGGLES
 // ═══════════════════════════════════════════════════════════════
-function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');try{updateThinkingHint();updateStatusBar();renderCodeContext();}catch(_){}}
-function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)saveSetting('mode',m,'Mode');}
-function toggleSearch(){const next=!searchOn;document.getElementById('tc-search').classList.toggle('on',next);saveSetting('searchOn',next,'Search toggle').then(ok=>{if(ok){searchOn=next;}else{document.getElementById('tc-search').classList.toggle('on',searchOn);}});}
-function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye').classList.toggle('on',next);saveSetting('screenWatcher',next,'Screen AI toggle').then(ok=>{if(ok){eyeOn=next;document.getElementById('sw-eye')?.classList.toggle('on',next);}else{document.getElementById('tc-eye').classList.toggle('on',eyeOn);}});}
+function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');try{updateThinkingHint();updateStatusBar();renderCodeContext();updateShellChrome();}catch(_){}}
+function setMode(m,save=true){mode=m;document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));document.getElementById(`m-${m}`)?.classList.add('on');if(save)saveSetting('mode',m,'Mode');try{updateShellChrome();}catch(_){}}
+function cycleComposerMode(){
+  const order=['chat','agent','vision','code','focus','plan','coach','write','email','search','translate','roleplay'];
+  const idx=Math.max(0,order.indexOf(mode));
+  setMode(order[(idx+1)%order.length]);
+}
+function toggleSearch(){const next=!searchOn;document.getElementById('tc-search')?.classList.toggle('on',next);document.getElementById('composer-web-chip')?.classList.toggle('on',next);saveSetting('searchOn',next,'Search toggle').then(ok=>{if(ok){searchOn=next;}else{document.getElementById('tc-search')?.classList.toggle('on',searchOn);}updateShellChrome();});}
+function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye')?.classList.toggle('on',next);document.getElementById('composer-screen-chip')?.classList.toggle('on',next);saveSetting('screenWatcher',next,'Screen AI toggle').then(ok=>{if(ok){eyeOn=next;document.getElementById('sw-eye')?.classList.toggle('on',next);}else{document.getElementById('tc-eye')?.classList.toggle('on',eyeOn);}updateShellChrome();});}
 
 // ═══════════════════════════════════════════════════════════════
 // MAIN SEND
@@ -7260,6 +8367,7 @@ async function setPersona(id) {
   try { const sel = document.getElementById('persona-select'); if (sel && sel.value !== id) sel.value = id; } catch(_){}
   await saveSetting('persona', id, 'Persona');
   try { updateInspector(); } catch(_){}
+  try { updateShellChrome(); } catch(_){}
   try {
     const p = await H.getPersona(id);
     if (p) {
@@ -7827,13 +8935,13 @@ async function openMarketplaceWeb() {
 }
 
 function openStore() {
-  setActiveSurface('plugins', { keepPanels:['store-panel'] });
+  setActiveSurface('marketplace', { keepPanels:['store-panel'] });
   document.getElementById('store-panel').classList.add('show');
   storeTab('plugins');
 }
 function closeStore() {
   document.getElementById('store-panel').classList.remove('show');
-  if (isSurfaceActive('plugins')) closeActiveSurface();
+  if (isSurfaceActive('marketplace')) closeActiveSurface();
 }
 function storeTab(tab) {
   storeCurrentTab = tab;
@@ -9646,6 +10754,65 @@ function closeCmdKBar() {
 //     user can see what the model said (debug visibility).
 //   • User rejects diff → Monaco buffer untouched, opLog notes the
 //     rejection.
+// PR-D1.4 — parse a code-edit reply into per-file entries.
+//
+// The model can return either:
+//   (a) ONE fenced code block — single-file edit. Returns
+//       [{ filePath: 'current', content, language, isCurrent: true }]
+//       (filePath='current' means "the file currently open in the editor").
+//   (b) Multiple `===FILE: <path>===` headers each followed by a fenced
+//       block — multi-file edit. Returns one entry per file.
+//
+// Path normalisation: backslashes → forward slashes, leading `./` stripped,
+// leading `/` stripped. Workspace boundary check happens later in the
+// apply path (see _applyMultiFileEdits).
+function parseCodeEditReply(reply, currentFilePath, fallbackLanguage) {
+  const text = String(reply || '').trim();
+  if (!text) return [];
+  // Multi-file format: split on `===FILE: <path>===` markers.
+  const fileHdr = /^[ \t]*={3,}[ \t]*FILE:[ \t]*([^\n=]+?)[ \t]*={3,}[ \t]*$/m;
+  if (fileHdr.test(text)) {
+    const parts = text.split(/^[ \t]*={3,}[ \t]*FILE:[ \t]*([^\n=]+?)[ \t]*={3,}[ \t]*$/m);
+    const out = [];
+    // After split: parts[0] = preamble (ignored), then alternating
+    //   parts[1] = path, parts[2] = body, parts[3] = path, parts[4] = body, …
+    for (let i = 1; i < parts.length; i += 2) {
+      const rawPath = String(parts[i] || '').trim();
+      const body = String(parts[i + 1] || '');
+      if (!rawPath) continue;
+      const m = body.match(/```([a-zA-Z0-9_-]*)\s*\n([\s\S]*?)```/);
+      if (!m) continue;
+      const lang = m[1] || (typeof inferCodeLang === 'function' ? inferCodeLang(rawPath) : fallbackLanguage || 'plaintext');
+      const content = m[2].replace(/\n$/, '');
+      const filePath = rawPath
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .replace(/^\/+/, '');
+      out.push({ filePath, content, language: lang, isCurrent: false });
+    }
+    if (out.length) return out;
+  }
+  // Single-file fallback — the existing extractCodeFence behaviour.
+  const single = (typeof extractCodeFence === 'function') ? extractCodeFence(text) : '';
+  if (single) {
+    return [{ filePath: 'current', content: single, language: fallbackLanguage || 'plaintext', isCurrent: true }];
+  }
+  return [];
+}
+
+// Workspace boundary check. Rejects absolute paths, `..` traversal, and
+// paths outside `codeWorkspace`. Returns the absolute path joined with
+// the workspace root, or null on rejection. Uses `codeJoin` for the
+// existing slash-style normalisation.
+function _ensureWithinWorkspace(relPath) {
+  if (!codeWorkspace) return null;
+  const clean = String(relPath || '').replace(/\\/g, '/').trim();
+  if (!clean) return null;
+  if (clean.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(clean)) return null; // absolute
+  if (clean.split('/').some(seg => seg === '..' || seg === '~')) return null;
+  return codeJoin(codeWorkspace, clean);
+}
+
 async function submitCmdKBar() {
   const input = document.getElementById('cek-bar-input');
   const prompt = (input?.value || '').trim();
@@ -9666,15 +10833,20 @@ async function submitCmdKBar() {
   }
   const opRunId = (typeof opStartRun === 'function') ? opStartRun('ai.cmdk', `${prompt.slice(0, 60)} → ${fileLabel}`) : null;
 
-  // Build LLM messages. The system prompt tells the model EXACTLY what
-  // to return so `extractCodeFence` can pull it out reliably. Include
-  // file context only when the user is editing a selection (whole-file
-  // edits get the entire file as the "before"; no need to repeat it).
+  // PR-D1.4 — system prompt now allows multi-file output. Single-file
+  // mode is preserved (one fenced block) — the model only fans out
+  // when the instruction obviously affects multiple files (extract
+  // helper, rename across imports, refactor with a new file, etc).
+  const workspaceHint = codeWorkspace ? `Workspace root: ${codeWorkspace}` : '(no workspace open — file paths are buffer-only)';
   const sys = [
-    `You are a code editor assistant. Apply the user's instruction to the ${hasSelection ? 'SELECTED CODE BLOCK' : 'CODE FILE'} below.`,
-    `Return ONLY the rewritten code in a single fenced code block (\`\`\`${language || ''}\\n…\\n\`\`\`). NO explanation, NO comments outside the block. Preserve original indentation style. Keep line endings consistent.`,
+    `You are a code editor assistant. Apply the user's instruction to the ${hasSelection ? 'SELECTED CODE BLOCK' : 'CODE FILE'} shown.`,
+    `${workspaceHint}\n\nIf the instruction CAN BE applied to ONE file → return the rewritten code in a SINGLE fenced code block, no headers, no prose:\n\`\`\`${language || ''}\n<entire new file or selection>\n\`\`\``,
+    `If the instruction REQUIRES multiple files (extract helper into utils.ts, rename across imports, split a class, add a new file, etc) → return EACH file as a separate block in this exact format:\n===FILE: path/relative/to/workspace.ext===\n\`\`\`<language>\n<entire new content of that file>\n\`\`\`\n\nRules for multi-file mode:\n  • Every file path MUST be relative to the workspace root, no \`..\`, no absolute paths.\n  • Always include the FULL new content of each file (not a diff).\n  • For new files, pick a sensible relative path inside the workspace.\n  • The CURRENTLY EDITED file's path is: ${codeCurrentFile || '(unsaved)'} — refer to it by that path.\n  • NO prose outside the FILE blocks.`,
     `If the instruction can't be applied (ambiguous, destructive, would break the file), return the ORIGINAL code unchanged inside the fence — do not return prose.`,
-    hasSelection ? `File: ${fileLabel} (${language})\nLines ${sel.startLineNumber}-${sel.endLineNumber} selected. Return the replacement for those lines only.` : `File: ${fileLabel} (${language})\nReturn the rewritten WHOLE FILE.`,
+    `Preserve original indentation. Keep line endings consistent.`,
+    hasSelection
+      ? `Currently editing ${fileLabel} (${language}), lines ${sel.startLineNumber}-${sel.endLineNumber} are selected.\nIn single-file mode return the replacement for THOSE LINES ONLY.`
+      : `Currently editing ${fileLabel} (${language}), no selection — single-file mode means rewrite the WHOLE FILE.`,
   ].join('\n\n');
   const userMsg = `${prompt}\n\n\`\`\`${language || ''}\n${hasSelection ? selectedText : fullText}\n\`\`\``;
 
@@ -9701,8 +10873,15 @@ async function submitCmdKBar() {
     return;
   }
   const reply = res.reply || '';
-  const replacement = (typeof extractCodeFence === 'function') ? extractCodeFence(reply) : '';
-  if (!replacement) {
+
+  // Token accounting (so the Inspector's Cost tab + chat-status-bar
+  // pill register the cost of the ⌘K turn).
+  try { if (typeof trackTokens === 'function') trackTokens(reply, 'assistant', (typeof prov !== 'undefined' ? prov : 'claude'), res.usage); } catch(_){}
+
+  // Parse — single-file or multi-file? parseCodeEditReply returns
+  // [] if neither pattern matched.
+  const parsedFiles = parseCodeEditReply(reply, codeCurrentFile, language);
+  if (!parsedFiles.length) {
     if (typeof opLog === 'function') opLog(`⌘K AI returned no fenced code (${reply.length} chars)`, 'error');
     if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'error');
     if (typeof addMsg === 'function') addMsg('bot', `⚠️ ⌘K: AI didn't return a code block. Raw reply:\n\n${reply.slice(0, 1500)}`);
@@ -9710,13 +10889,17 @@ async function submitCmdKBar() {
     return;
   }
 
-  // Token accounting (so the Inspector's Cost tab + chat-status-bar
-  // pill register the cost of the ⌘K turn).
-  try { if (typeof trackTokens === 'function') trackTokens(reply, 'assistant', (typeof prov !== 'undefined' ? prov : 'claude'), res.usage); } catch(_){}
-
   // Hide the bar before showing the modal so they don't visually stack.
   closeCmdKBar();
 
+  // ── Multi-file branch (D1.4) ─────────────────────────────────────
+  if (parsedFiles.length > 1 || (parsedFiles[0] && !parsedFiles[0].isCurrent)) {
+    await _runMultiFileEdit(parsedFiles, prompt, opRunId);
+    return;
+  }
+
+  // ── Single-file branch (D1.2 + D1.3) ─────────────────────────────
+  const replacement = parsedFiles[0].content;
   const before = hasSelection ? selectedText : fullText;
   const after = replacement;
   if (before === after) {
@@ -10135,6 +11318,348 @@ async function requestDiffPermissionPerHunk({ title='Review changes', descriptio
       }
       cleanup({ ok: true, mergedAfter: result.join('\n'), accepted: accepted.length });
     };
+  });
+}
+
+// PR-D1.4 — multi-file edit orchestrator. See parseCodeEditReply +
+// _ensureWithinWorkspace + submitCmdKBar dispatch above.
+async function _runMultiFileEdit(parsedFiles, prompt, opRunId) {
+  if (!codeWorkspace && parsedFiles.length > 1) {
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ ⌘K: AI returned multi-file edits but no workspace is open. Open a workspace first (Code Mode → Choose folder).`);
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'error');
+    return;
+  }
+  const resolved = [];
+  for (const f of parsedFiles) {
+    let absPath = '';
+    let relPath = f.filePath;
+    if (f.isCurrent) {
+      absPath = codeCurrentFile || '';
+      relPath = codeCurrentFile && codeWorkspace
+        ? codeCurrentFile.replace(codeWorkspace, '').replace(/^[\\/]+/, '')
+        : '(current buffer)';
+    } else {
+      absPath = _ensureWithinWorkspace(f.filePath);
+      if (!absPath) {
+        if (typeof addMsg === 'function') addMsg('bot', `⚠️ ⌘K: AI tried to edit a file outside the workspace: \`${f.filePath}\`. Aborted (no files changed).`);
+        if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'error');
+        return;
+      }
+    }
+    let before = '';
+    let isNew = false;
+    if (f.isCurrent && codeEditor) {
+      before = codeEditor.getModel()?.getValue() || '';
+    } else if (absPath) {
+      try {
+        const r = await H.wsRead?.(absPath);
+        if (r && r.ok && typeof r.content === 'string') {
+          before = r.content;
+        } else {
+          isNew = true; before = '';
+        }
+      } catch (_) { isNew = true; before = ''; }
+    }
+    resolved.push({
+      relPath: relPath || f.filePath,
+      absPath,
+      isCurrent: !!f.isCurrent,
+      isNew,
+      before,
+      after: f.content,
+      language: f.language || (typeof inferCodeLang === 'function' ? inferCodeLang(absPath || f.filePath) : 'plaintext'),
+    });
+  }
+  const meaningful = resolved.filter(f => f.before !== f.after);
+  if (!meaningful.length) {
+    if (typeof addMsg === 'function') addMsg('bot', `🪄 ⌘K: AI returned identical content for all ${resolved.length} files — nothing to change.`);
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'done');
+    return;
+  }
+
+  const modalResult = await requestMultiFileDiff({
+    title: `⌘K · ${resolved.length} ${resolved.length === 1 ? 'file' : 'files'}`,
+    description: prompt,
+    files: resolved,
+  });
+  if (!modalResult || !modalResult.ok) {
+    if (typeof opLog === 'function') opLog(`⌘K multi-file rejected by user`, 'error');
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'cancelled');
+    return;
+  }
+
+  // Atomic apply with rollback on failure.
+  const snapshots = modalResult.applied.map(f => ({ absPath: f.absPath, isCurrent: f.isCurrent, snapshot: f.before }));
+  const written = [];
+  let writeError = null;
+  for (const f of modalResult.applied) {
+    if (f.skipped) continue;
+    try {
+      if (f.isCurrent && codeEditor) {
+        const m = codeEditor.getModel();
+        if (m) {
+          codeEditor.executeEdits('cmdk-d1.4', [{ range: m.getFullModelRange(), text: f.mergedAfter }]);
+        }
+      } else if (f.absPath) {
+        const r = await H.wsWrite?.(f.absPath, f.mergedAfter);
+        if (!r || r.ok === false) throw new Error(r?.error || 'wsWrite returned no result');
+      }
+      written.push(f);
+    } catch (e) {
+      writeError = { file: f.relPath, error: e?.message || String(e) };
+      break;
+    }
+  }
+  if (writeError) {
+    for (const w of written) {
+      try {
+        const snap = snapshots.find(s => s.absPath === w.absPath || (s.isCurrent && w.isCurrent));
+        if (!snap) continue;
+        if (snap.isCurrent && codeEditor) {
+          const m = codeEditor.getModel();
+          if (m) codeEditor.executeEdits('cmdk-d1.4-rollback', [{ range: m.getFullModelRange(), text: snap.snapshot }]);
+        } else if (snap.absPath) {
+          await H.wsWrite?.(snap.absPath, snap.snapshot).catch(() => {});
+        }
+      } catch (_) {}
+    }
+    if (typeof opLog === 'function') opLog(`⌘K multi-file FAILED on ${writeError.file}: ${writeError.error}. Rolled back ${written.length} earlier files.`, 'error');
+    if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'error');
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ ⌘K multi-file apply failed on \`${writeError.file}\`: ${writeError.error}. ${written.length} earlier file(s) rolled back.`);
+    return;
+  }
+
+  const totalHunks = modalResult.applied.reduce((sum, f) => sum + (f.accepted || 0), 0);
+  const filesChanged = modalResult.applied.filter(f => !f.skipped && (f.accepted || 0) > 0).length;
+  if (typeof opLog === 'function') opLog(`⌘K multi-file applied: ${totalHunks} hunk(s) across ${filesChanged} file(s) — ${prompt.slice(0, 80)}`, 'tool');
+  if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'done');
+  if (typeof codeSetStatus === 'function') codeSetStatus(`⌘K applied across ${filesChanged} file(s) (${totalHunks} hunks). Disk-written files saved; current-buffer changes need 💾 Save.`);
+  if (typeof addMsg === 'function') addMsg('bot', `🪄 ⌘K applied **${totalHunks}** hunk${totalHunks === 1 ? '' : 's'} across **${filesChanged}** file${filesChanged === 1 ? '' : 's'}.`);
+  try { if (typeof refreshCodeWorkspace === 'function') refreshCodeWorkspace(); } catch (_) {}
+}
+
+// Multi-file diff modal with file tabs at top + per-hunk picker per file.
+async function requestMultiFileDiff({ title='Review changes', description='', files=[] } = {}) {
+  await initCodeEditor().catch(() => false);
+  if (!window.monaco || !files.length) return { ok: false };
+
+  return await new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'diff-overlay';
+    overlay.innerHTML = `
+      <div class="diff-card cek-mf-card">
+        <div class="diff-head">
+          <span class="diff-title">${esc(title)}</span>
+          <span class="diff-desc">${esc(description)}</span>
+        </div>
+        <div class="cek-mf-tabs" id="cek-mf-tabs"></div>
+        <div class="cek-mf-body">
+          <aside class="cek-hunk-list" id="cek-hunk-list">
+            <div class="cek-hunk-list-header">
+              <span class="cek-hunk-list-title">HUNKS</span>
+              <span class="cek-hunk-list-summary" id="cek-hunk-summary">—</span>
+            </div>
+            <div class="cek-hunk-list-actions">
+              <button class="btn btn-sm" id="cek-hunk-all">Accept all in file</button>
+              <button class="btn btn-sm" id="cek-hunk-none">Reject all in file</button>
+            </div>
+            <ul class="cek-hunk-items" id="cek-hunk-items"></ul>
+          </aside>
+          <div class="diff-host cek-hunk-diff" id="cek-mf-diff-host"></div>
+        </div>
+        <div class="diff-actions">
+          <button class="perm-btn deny" data-act="deny">Cancel</button>
+          <button class="perm-btn allow" data-act="apply">Apply all</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const state = files.map((f, idx) => ({
+      idx, relPath: f.relPath, absPath: f.absPath,
+      isCurrent: f.isCurrent, isNew: f.isNew, language: f.language,
+      before: f.before || '', after: f.after || '',
+      lineChanges: null, acceptedFlags: null,
+    }));
+    let activeIdx = 0;
+    let diff = null, original = null, modified = null;
+
+    const cleanup = (value) => {
+      try { diff?.dispose?.(); } catch (_) {}
+      try { overlay.remove(); } catch (_) {}
+      resolve(value);
+    };
+
+    function fmtRange(start, end) {
+      if (!end) return `+${start}`;
+      if (!start) return `-${end}`;
+      if (start === end) return `${start}`;
+      return `${start}-${end}`;
+    }
+    function snippet(lines, startLn, endLn, max = 2) {
+      if (!startLn || !endLn || endLn < startLn) return '';
+      const slice = lines.slice(startLn - 1, Math.min(endLn, startLn - 1 + max));
+      return slice.join(' ⏎ ').trim().slice(0, 80);
+    }
+
+    function renderTabs() {
+      const tabs = document.getElementById('cek-mf-tabs');
+      if (!tabs) return;
+      tabs.innerHTML = state.map((s, i) => {
+        const acc = Array.isArray(s.acceptedFlags) ? s.acceptedFlags.filter(Boolean).length : null;
+        const tot = Array.isArray(s.lineChanges) ? s.lineChanges.length : null;
+        const badge = tot === null
+          ? '<span class="cek-mf-tab-badge cek-mf-tab-badge-pending">…</span>'
+          : `<span class="cek-mf-tab-badge${acc === 0 ? ' cek-mf-tab-badge-zero' : ''}">${acc}/${tot}</span>`;
+        const newPill = s.isNew ? '<span class="cek-mf-tab-new">NEW</span>' : '';
+        const currentPill = s.isCurrent ? '<span class="cek-mf-tab-curr">EDITOR</span>' : '';
+        return `<button class="cek-mf-tab${i === activeIdx ? ' on' : ''}" data-idx="${i}" title="${esc(s.relPath)}">
+          <span class="cek-mf-tab-name">${esc(s.relPath)}</span>${newPill}${currentPill}${badge}
+        </button>`;
+      }).join('');
+      tabs.querySelectorAll('button[data-idx]').forEach(btn => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.idx);
+          if (i === activeIdx) return;
+          activeIdx = i;
+          renderTabs();
+          renderActiveTab();
+        };
+      });
+    }
+
+    function renderHunkItems() {
+      const items = document.getElementById('cek-hunk-items');
+      const summary = document.getElementById('cek-hunk-summary');
+      const s = state[activeIdx];
+      if (!items || !summary || !s) return;
+      const lcs = s.lineChanges || [];
+      const beforeLines = (s.before || '').split(/\r?\n/);
+      const afterLines = (s.after || '').split(/\r?\n/);
+      if (!lcs.length) {
+        items.innerHTML = '<li class="cek-hunk-empty">No changes detected for this file.</li>';
+        summary.textContent = '0 / 0';
+        return;
+      }
+      items.innerHTML = lcs.map((ch, i) => {
+        const isAdd = ch.originalEndLineNumber === 0;
+        const isDel = ch.modifiedEndLineNumber === 0;
+        const kind = isAdd ? 'add' : isDel ? 'del' : 'mod';
+        const kindLabel = isAdd ? 'ADD' : isDel ? 'DEL' : 'MOD';
+        const ofRange = fmtRange(ch.originalStartLineNumber, ch.originalEndLineNumber);
+        const mfRange = fmtRange(ch.modifiedStartLineNumber, ch.modifiedEndLineNumber);
+        const previewSrc = isAdd ? snippet(afterLines, ch.modifiedStartLineNumber, ch.modifiedEndLineNumber)
+                          : isDel ? snippet(beforeLines, ch.originalStartLineNumber, ch.originalEndLineNumber)
+                          : snippet(afterLines, ch.modifiedStartLineNumber, ch.modifiedEndLineNumber);
+        return `
+          <li class="cek-hunk-item ${s.acceptedFlags[i] ? 'on' : 'off'} kind-${kind}" data-idx="${i}">
+            <label class="cek-hunk-row">
+              <input type="checkbox" data-idx="${i}" ${s.acceptedFlags[i] ? 'checked' : ''}/>
+              <span class="cek-hunk-kind">${kindLabel}</span>
+              <span class="cek-hunk-range">L${ofRange} → L${mfRange}</span>
+            </label>
+            <div class="cek-hunk-preview" title="${esc(previewSrc)}">${esc(previewSrc) || '<i style="opacity:.5">(empty)</i>'}</div>
+          </li>`;
+      }).join('');
+      items.querySelectorAll('input[type=checkbox]').forEach((box) => {
+        box.onchange = () => {
+          const i = Number(box.dataset.idx);
+          s.acceptedFlags[i] = box.checked;
+          const li = items.querySelector(`li[data-idx="${i}"]`);
+          if (li) { li.classList.toggle('on', box.checked); li.classList.toggle('off', !box.checked); }
+          updateSummary();
+          renderTabs();
+        };
+      });
+      updateSummary();
+    }
+    function updateSummary() {
+      const summary = document.getElementById('cek-hunk-summary');
+      const s = state[activeIdx];
+      if (!summary || !s) return;
+      const accepted = (s.acceptedFlags || []).filter(Boolean).length;
+      const total = (s.lineChanges || []).length;
+      summary.textContent = `${accepted} / ${total}`;
+    }
+
+    function renderActiveTab() {
+      const host = document.getElementById('cek-mf-diff-host');
+      if (!host) return;
+      const s = state[activeIdx];
+      if (!s) return;
+      try { diff?.dispose?.(); } catch (_) {}
+      diff = null; original = null; modified = null;
+      host.innerHTML = '';
+      try {
+        original = monaco.editor.createModel(s.before, s.language || 'plaintext');
+        modified = monaco.editor.createModel(s.after, s.language || 'plaintext');
+        diff = monaco.editor.createDiffEditor(host, {
+          theme: 'vs-dark', automaticLayout: true, renderSideBySide: true,
+          minimap: { enabled: false }, scrollBeyondLastLine: false, readOnly: true,
+        });
+        diff.setModel({ original, modified });
+        const oldDispose = diff.dispose.bind(diff);
+        diff.dispose = () => { try { original.dispose(); modified.dispose(); } catch (_) {} oldDispose(); };
+        const onUpdate = () => {
+          try {
+            const changes = diff.getLineChanges() || [];
+            s.lineChanges = changes;
+            s.acceptedFlags = changes.map(() => true);
+            renderHunkItems();
+            renderTabs();
+          } catch (e) { console.warn('cek mf hunks build failed:', e?.message); }
+        };
+        diff.onDidUpdateDiff?.(onUpdate);
+        setTimeout(onUpdate, 200);
+      } catch (e) {
+        console.warn('cek mf diff render failed:', e?.message);
+        host.innerHTML = `<pre class="perm-detail" style="max-height:none;height:100%;box-sizing:border-box">${esc(buildDiffPreview(s.before, s.after, 200))}</pre>`;
+      }
+    }
+
+    overlay.querySelector('#cek-hunk-all').onclick = () => {
+      const s = state[activeIdx];
+      if (s && Array.isArray(s.lineChanges)) {
+        s.acceptedFlags = s.lineChanges.map(() => true);
+        renderHunkItems(); renderTabs();
+      }
+    };
+    overlay.querySelector('#cek-hunk-none').onclick = () => {
+      const s = state[activeIdx];
+      if (s && Array.isArray(s.lineChanges)) {
+        s.acceptedFlags = s.lineChanges.map(() => false);
+        renderHunkItems(); renderTabs();
+      }
+    };
+    overlay.querySelector('[data-act="deny"]').onclick = () => cleanup({ ok: false });
+    overlay.querySelector('[data-act="apply"]').onclick = () => {
+      const applied = state.map((s) => {
+        // Files the user never visited still default to accept-all.
+        if (s.lineChanges == null) {
+          return { relPath: s.relPath, absPath: s.absPath, isCurrent: s.isCurrent, isNew: s.isNew,
+                   before: s.before, mergedAfter: s.after, accepted: 1, skipped: false };
+        }
+        const beforeLines = (s.before || '').split(/\r?\n/);
+        const afterLines = (s.after || '').split(/\r?\n/);
+        const result = beforeLines.slice();
+        const acceptedHunks = s.lineChanges
+          .map((ch, i) => s.acceptedFlags[i] ? ch : null)
+          .filter(Boolean)
+          .sort((a, b) => b.originalStartLineNumber - a.originalStartLineNumber);
+        for (const ch of acceptedHunks) {
+          const oStart = ch.originalEndLineNumber === 0 ? ch.originalStartLineNumber : ch.originalStartLineNumber - 1;
+          const oCount = ch.originalEndLineNumber === 0 ? 0 : ch.originalEndLineNumber - ch.originalStartLineNumber + 1;
+          const mLines = ch.modifiedEndLineNumber === 0 ? [] : afterLines.slice(ch.modifiedStartLineNumber - 1, ch.modifiedEndLineNumber);
+          result.splice(oStart, oCount, ...mLines);
+        }
+        return { relPath: s.relPath, absPath: s.absPath, isCurrent: s.isCurrent, isNew: s.isNew,
+                 before: s.before, mergedAfter: result.join('\n'),
+                 accepted: acceptedHunks.length, skipped: acceptedHunks.length === 0 };
+      });
+      cleanup({ ok: true, applied });
+    };
+
+    renderTabs();
+    renderActiveTab();
   });
 }
 
@@ -11076,6 +12601,7 @@ let operatorModeActive = false;
 function toggleOperatorMode() {
   operatorModeActive = !operatorModeActive;
   if (operatorModeActive) {
+    if (activeSurface !== 'chat') closeActiveSurface();
     document.body.classList.add('operator-mode-active');
     document.getElementById('operator-mode-btn').classList.add('proc');
     ensureOperatorAgentListener();
@@ -11085,6 +12611,7 @@ function toggleOperatorMode() {
     document.body.classList.remove('operator-mode-active');
     document.getElementById('operator-mode-btn').classList.remove('proc');
   }
+  updateShellChrome('chat');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -11093,16 +12620,61 @@ function toggleOperatorMode() {
 let inspectorActive = false;
 let inspectorTab = 'context';
 
+function layoutInspectorDock(){
+  const pane = document.getElementById('inspector-pane');
+  if (!pane) return;
+  const root = document.documentElement;
+  const sidebar = document.body.classList.contains('with-sidebar')
+    ? (document.querySelector('.chatside')?.getBoundingClientRect().width || 280)
+    : 0;
+  const bottomOf = (selector) => {
+    const el = document.querySelector(selector);
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    if (r.height <= 0) return 0;
+    return r.bottom;
+  };
+  const chromeBottom = Math.max(
+    bottomOf('.tb'),
+    bottomOf('.wake-bar.show'),
+    bottomOf('.sb'),
+    bottomOf('.modes'),
+    bottomOf('.chat-status-bar')
+  );
+  const inputRect = document.querySelector('.inp-wrap')?.getBoundingClientRect();
+  const contentWidth = Math.max(0, window.innerWidth - sidebar);
+  const compact = contentWidth < 1010;
+  const dockW = compact
+    ? Math.max(302, Math.min(358, contentWidth - 28))
+    : Math.max(320, Math.min(356, Math.round(contentWidth * 0.255)));
+  let top = Math.max(86, Math.ceil(chromeBottom + 12));
+  let bottom = Math.max(14, Math.ceil(window.innerHeight - (inputRect?.top || (window.innerHeight - 92)) + 12));
+  const minDockH = Math.min(430, Math.max(300, window.innerHeight * 0.48));
+  if (window.innerHeight - top - bottom < minDockH) {
+    bottom = Math.max(14, Math.ceil(window.innerHeight - top - minDockH));
+  }
+  root.style.setProperty('--inspector-w', `${dockW}px`);
+  root.style.setProperty('--inspector-right', compact ? '12px' : '16px');
+  root.style.setProperty('--inspector-top', `${top}px`);
+  root.style.setProperty('--inspector-bottom', `${bottom}px`);
+  root.style.setProperty('--inspector-space', compact ? '0px' : `${dockW + 34}px`);
+  document.body.classList.toggle('inspector-compact', compact);
+}
+
 function toggleInspectorMode(){
   inspectorActive = !inspectorActive;
+  if (inspectorActive) layoutInspectorDock();
   document.body.classList.toggle('inspector-active', inspectorActive);
   document.getElementById('inspector-mode-btn')?.classList.toggle('proc', inspectorActive);
   if (inspectorActive) {
+    layoutInspectorDock();
     refreshInspector();
     try { H.set('inspectorActive', true); } catch(_){}
   } else {
+    document.body.classList.remove('inspector-compact');
     try { H.set('inspectorActive', false); } catch(_){}
   }
+  updateShellChrome();
 }
 
 function setInspectorTab(name){
@@ -11120,6 +12692,7 @@ function setInspectorTab(name){
 // pill, persona).
 function refreshInspector(){
   if (!inspectorActive) return;
+  layoutInspectorDock();
   // Context is cheap, always update.
   try {
     const p = prov || provider || 'gemini';
@@ -11253,6 +12826,10 @@ function formatCost(){
   // bill differently and local models may not report provider usage at all.
   return (sessionHasEstimatedUsage ? '~' : '') + formatTokens(sessionTokens) + ' tok';
 }
+
+window.addEventListener('resize', () => {
+  if (inspectorActive) layoutInspectorDock();
+});
 
 // ═══════════════════════════════════════════════════════════════
 // STEP RAIL — agent plan progress at top of chat
