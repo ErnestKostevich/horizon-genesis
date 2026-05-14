@@ -2206,6 +2206,85 @@ body.with-sidebar .chat-status-bar{display:flex}
   grid-template-columns: 252px minmax(0, 1fr);
   gap: 0;
 }
+
+/* PR-D1.5 — ⌘K history dropdown + auto-commit toggle.
+   Dropdown uses position:fixed (positioned in JS) so it floats above
+   the code-toolbar regardless of overflow. */
+.cek-history-pop {
+  display: none;
+  width: 360px;
+  max-height: 460px;
+  background: #0b0e16;
+  border: 1px solid var(--code-line, #1d2333);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 18px 40px -12px rgba(0,0,0,.7);
+  z-index: 240;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  display: none;
+  flex-direction: column;
+}
+.cek-history-pop.show { display: flex; }
+.cek-history-h {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--code-line, #1d2333);
+}
+.cek-history-h-t {
+  font: 700 var(--text-xs, 11px)/1 var(--mono);
+  letter-spacing: var(--tracking-extra, 1.6px);
+  color: var(--t3);
+  text-transform: uppercase;
+}
+.cek-history-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--t3);
+  font: var(--text-sm, 12px)/var(--lh-snug, 1.4) var(--font);
+  font-style: italic;
+}
+.cek-history-list {
+  list-style: none; margin: 0; padding: 6px;
+  overflow-y: auto;
+  flex: 1; min-height: 0;
+}
+.cek-history-item {
+  margin: 4px 0;
+  padding: 9px 10px;
+  border: 1px solid var(--b1);
+  border-radius: var(--radius-md, 8px);
+  background: rgba(255,255,255,.02);
+  transition: background .12s ease, border-color .12s ease;
+}
+.cek-history-item:hover { background: rgba(255,255,255,.04); border-color: var(--accent-300); }
+.cek-history-item-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.cek-history-item-prompt {
+  flex: 1; min-width: 0;
+  font: 600 var(--text-sm, 12px)/var(--lh-snug, 1.4) var(--font);
+  color: var(--tx);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cek-history-item-undo { flex-shrink: 0; }
+.cek-history-item-meta {
+  margin-top: 4px;
+  font: var(--text-xs, 11px)/1 var(--mono);
+  color: var(--t3);
+  letter-spacing: .3px;
+}
+
+/* Auto-commit toggle — visual ON state (cyan accent border + glow). */
+#cek-autocommit-btn.on {
+  border-color: var(--accent-cyan-300, rgba(86,210,255,.32));
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
+  color: var(--accent-cyan-500, #56d2ff);
+}
+
+/* Disabled state for Undo button when history is empty. */
+#cek-undo-btn:disabled {
+  opacity: .4; cursor: not-allowed;
+}
 </style>
 <link rel="stylesheet" href="apex-theme.css"/>
 <link rel="stylesheet" href="apex-alive.css"/>
@@ -3826,8 +3905,23 @@ textarea#inp{background:transparent!important}
       <button class="code-btn" onclick="askCodeAi('fix')">Fix</button>
       <button class="code-btn primary" onclick="applyLastCodeAi()">Apply AI</button>
       <span class="code-toolbar-sep"></span>
+      <!-- PR-D1.5: ⌘K history dropdown + Undo + auto-commit toggle. The
+           "🕐 ⌘K" button opens a dropdown of recent edits (last 10);
+           "Undo last AI edit" rolls back the most recent one in place;
+           "Auto-commit" toggles whether successful Apply triggers a git
+           commit (only if the workspace is a git repo, with a one-time
+           permission gate). All three are no-ops when no edits exist /
+           no workspace open. -->
+      <button class="code-btn" id="cek-history-btn" onclick="cekHistoryToggle(event)" title="Last 10 ⌘K edits">🕐 ⌘K <span id="cek-history-count" style="opacity:.6">(0)</span></button>
+      <button class="code-btn" id="cek-undo-btn" onclick="cekUndoLast()" title="Undo last AI edit (restores files from snapshot)">↶ Undo AI</button>
+      <button class="code-btn" id="cek-autocommit-btn" onclick="cekToggleAutoCommit()" title="Auto-commit accepted ⌘K edits (git workspaces only)">⚙ auto-commit: off</button>
+      <span class="code-toolbar-sep"></span>
       <span class="code-toolbar-status" id="code-editor-status">Workspace edits ask for permission before writing.</span>
     </div>
+    <!-- PR-D1.5: history dropdown shell. Anchored under #cek-history-btn
+         in JS; renders the LRU list with per-entry Undo + open-original
+         buttons. -->
+    <div class="cek-history-pop" id="cek-history-pop"></div>
   </main>
 
   <!-- Terminal: collapsed by default, toggles via top bar Terminal button -->
@@ -11089,6 +11183,30 @@ async function submitCmdKBar() {
   if (typeof opLog === 'function') opLog(`⌘K applied ${result.accepted} hunk${result.accepted === 1 ? '' : 's'}: "${prompt.slice(0, 80)}" → ${fileLabel}${hasSelection ? ` (L${sel.startLineNumber}-${sel.endLineNumber})` : ''}`, 'tool');
   if (opRunId && typeof opEndRun === 'function') opEndRun(opRunId, 'done');
   if (typeof codeSetStatus === 'function') codeSetStatus(`⌘K applied ${result.accepted} hunk${result.accepted === 1 ? '' : 's'}. Press 💾 Save (Ctrl+S) to write to disk, or Ctrl+Z to undo.`);
+  // PR-D1.5 — record this edit so it can be browsed / undone via the
+  // history dropdown. Single-file selection edit: snapshot is the
+  // pre-merge `before` (whole file content for whole-file mode, or
+  // the entire file content captured before the executeEdits for
+  // selection mode — we take the latter from `fullText`).
+  try {
+    cekRecordHistory({
+      prompt,
+      files: [{
+        relPath: fileLabel,
+        absPath: codeCurrentFile || '',
+        isCurrent: true,
+        before: fullText,           // entire file before the edit
+        mergedAfter: hasSelection
+          ? (fullText.slice(0, model.getOffsetAt(sel.getStartPosition()))
+             + merged
+             + fullText.slice(model.getOffsetAt(sel.getEndPosition())))
+          : merged,
+        accepted: result.accepted,
+      }],
+    });
+  } catch(_){}
+  // Auto-commit if enabled and the workspace is a git repo.
+  try { cekMaybeAutoCommit(prompt); } catch(_){}
 }
 
 // Global hotkey: also bind ⌘K at the document level when Code Mode is
@@ -11576,6 +11694,26 @@ async function _runMultiFileEdit(parsedFiles, prompt, opRunId) {
   if (typeof codeSetStatus === 'function') codeSetStatus(`⌘K applied across ${filesChanged} file(s) (${totalHunks} hunks). Disk-written files saved; current-buffer changes need 💾 Save.`);
   if (typeof addMsg === 'function') addMsg('bot', `🪄 ⌘K applied **${totalHunks}** hunk${totalHunks === 1 ? '' : 's'} across **${filesChanged}** file${filesChanged === 1 ? '' : 's'}.`);
   try { if (typeof refreshCodeWorkspace === 'function') refreshCodeWorkspace(); } catch (_) {}
+  // PR-D1.5 — record the multi-file edit so it's reachable from the
+  // history dropdown and can be undone in one click. We only record
+  // files that actually got writes (skipped=false, accepted>0) so
+  // Undo doesn't trip over no-op entries.
+  try {
+    const recordedFiles = modalResult.applied
+      .filter(f => !f.skipped && (f.accepted || 0) > 0)
+      .map(f => ({
+        relPath: f.relPath,
+        absPath: f.absPath || '',
+        isCurrent: !!f.isCurrent,
+        before: f.before,
+        mergedAfter: f.mergedAfter,
+        accepted: f.accepted,
+      }));
+    if (recordedFiles.length) {
+      cekRecordHistory({ prompt, files: recordedFiles });
+      cekMaybeAutoCommit(prompt);
+    }
+  } catch (_) {}
 }
 
 // Multi-file diff modal with file tabs at top + per-hunk picker per file.
@@ -11802,6 +11940,253 @@ async function requestMultiFileDiff({ title='Review changes', description='', fi
     renderActiveTab();
   });
 }
+
+// ═══ PR-D1.5 ⌘K HISTORY + UNDO + AUTO-COMMIT ═══════════════════════════
+// In-memory LRU mirror of `cmdKHistory` settingsStore key. Each entry:
+//   { id, ts, prompt,
+//     files: [{ relPath, absPath, isCurrent, before, mergedAfter, accepted }] }
+// Loaded on init, persisted on every push. Capped at CEK_HISTORY_MAX so
+// the settingsStore entry stays small (the `before` snapshot can be
+// large for whole-file edits; 10 × ~200KB worst case = 2MB which is
+// well within electron-store comfort).
+let _cekHistory = [];
+const CEK_HISTORY_MAX = 10;
+let _cekAutoCommit = false;
+
+(async function _cekBootHistory() {
+  try {
+    const raw = await H.get?.('cmdKHistory');
+    if (raw) {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(parsed)) _cekHistory = parsed.slice(0, CEK_HISTORY_MAX);
+    }
+  } catch (_) {}
+  try {
+    const flag = await H.get?.('cmdKAutoCommit');
+    _cekAutoCommit = !!flag;
+  } catch (_) {}
+  // Reflect into the toolbar buttons once everything's mounted.
+  try { cekRefreshToolbar(); } catch (_) {}
+})();
+
+function cekRefreshToolbar() {
+  const cnt = document.getElementById('cek-history-count');
+  if (cnt) cnt.textContent = `(${_cekHistory.length})`;
+  const ac = document.getElementById('cek-autocommit-btn');
+  if (ac) {
+    ac.textContent = `⚙ auto-commit: ${_cekAutoCommit ? 'on' : 'off'}`;
+    ac.classList.toggle('on', _cekAutoCommit);
+  }
+  const undo = document.getElementById('cek-undo-btn');
+  if (undo) undo.disabled = !_cekHistory.length;
+}
+
+function cekRecordHistory(entry) {
+  if (!entry || !Array.isArray(entry.files) || !entry.files.length) return;
+  const id = 'cek_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+  _cekHistory.unshift({
+    id,
+    ts: Date.now(),
+    prompt: String(entry.prompt || ''),
+    files: entry.files.map(f => ({
+      relPath: String(f.relPath || ''),
+      absPath: String(f.absPath || ''),
+      isCurrent: !!f.isCurrent,
+      before: String(f.before ?? ''),
+      mergedAfter: String(f.mergedAfter ?? ''),
+      accepted: Number(f.accepted || 0),
+    })),
+  });
+  if (_cekHistory.length > CEK_HISTORY_MAX) _cekHistory = _cekHistory.slice(0, CEK_HISTORY_MAX);
+  try { H.set?.('cmdKHistory', JSON.stringify(_cekHistory)); } catch (_) {}
+  cekRefreshToolbar();
+}
+
+// Undo: take the most recent (or specified) entry and restore each
+// file's `before` snapshot. Uses Monaco executeEdits for the open
+// buffer so Ctrl+Z still works after the undo, and H.wsWrite for
+// the rest. Removes the entry from history after a successful undo.
+async function cekUndoEntry(entryId = null) {
+  const entry = entryId
+    ? _cekHistory.find(e => e.id === entryId)
+    : _cekHistory[0];
+  if (!entry) {
+    if (typeof codeSetStatus === 'function') codeSetStatus('No ⌘K edits to undo.', true);
+    return false;
+  }
+  const written = [];
+  let err = null;
+  for (const f of entry.files) {
+    try {
+      if (f.isCurrent && codeEditor) {
+        const m = codeEditor.getModel();
+        if (m) codeEditor.executeEdits('cmdk-undo', [{ range: m.getFullModelRange(), text: f.before }]);
+      } else if (f.absPath) {
+        const r = await H.wsWrite?.(f.absPath, f.before);
+        if (!r || r.ok === false) throw new Error(r?.error || 'wsWrite returned no result');
+      }
+      written.push(f);
+    } catch (e) {
+      err = { file: f.relPath, error: e?.message || String(e) };
+      break;
+    }
+  }
+  if (err) {
+    // No clean rollback path here — the original `before` IS the
+    // restore target. Best we can do is surface the error.
+    if (typeof opLog === 'function') opLog(`⌘K Undo FAILED on ${err.file}: ${err.error}. Restored ${written.length} file(s).`, 'error');
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ Undo failed on \`${err.file}\`: ${err.error}. ${written.length} earlier file(s) restored.`);
+    return false;
+  }
+  // Drop the entry from history + persist.
+  _cekHistory = _cekHistory.filter(e => e.id !== entry.id);
+  try { H.set?.('cmdKHistory', JSON.stringify(_cekHistory)); } catch (_) {}
+  cekRefreshToolbar();
+  if (typeof opLog === 'function') opLog(`⌘K Undo: restored ${entry.files.length} file(s) — "${entry.prompt.slice(0, 60)}"`, 'tool');
+  if (typeof codeSetStatus === 'function') codeSetStatus(`Undone: ${entry.files.length} file(s) restored. Press 💾 Save to persist current-buffer rollback.`);
+  if (typeof addMsg === 'function') addMsg('bot', `↶ ⌘K undone: **${entry.files.length}** file${entry.files.length === 1 ? '' : 's'} restored from snapshot of "${entry.prompt.slice(0, 80)}".`);
+  // Refresh workspace tree in case the undo restored a file the AI
+  // had created (we end up with empty content rather than removing
+  // the file — that's a known limitation; document it in the README).
+  try { if (typeof refreshCodeWorkspace === 'function') refreshCodeWorkspace(); } catch (_) {}
+  return true;
+}
+window.cekUndoLast = function () { return cekUndoEntry(null); };
+
+// Toggle the auto-commit setting + persist. The actual commit happens
+// in cekMaybeAutoCommit() at apply time.
+window.cekToggleAutoCommit = async function () {
+  _cekAutoCommit = !_cekAutoCommit;
+  try { await H.set?.('cmdKAutoCommit', _cekAutoCommit); } catch (_) {}
+  cekRefreshToolbar();
+  if (typeof codeSetStatus === 'function') {
+    codeSetStatus(_cekAutoCommit
+      ? '⌘K auto-commit ON — successful edits will run `git add -A && git commit -m "AI: …"` (asks permission first time).'
+      : '⌘K auto-commit OFF.');
+  }
+};
+
+// Fire a git commit after a successful ⌘K apply, if:
+//   - _cekAutoCommit is true
+//   - workspace is open
+//   - workspace is a git repo (we check via H.wsRead `.git/HEAD`)
+//   - permission gate accepted (uses existing requestPermission)
+// First-time use prompts; subsequent commits run silently.
+async function cekMaybeAutoCommit(prompt) {
+  if (!_cekAutoCommit) return;
+  if (!codeWorkspace) return;
+  // Cheap check: does .git/HEAD exist?
+  try {
+    const headPath = codeJoin(codeWorkspace, '.git/HEAD');
+    const head = await H.wsRead?.(headPath);
+    if (!head || head.ok === false) return; // not a git repo
+  } catch (_) { return; }
+  // First-time permission gate. We persist the answer in
+  // `permissionAllowlist` via the existing helper if available;
+  // simpler ad-hoc gate using window.confirm as a fallback.
+  if (typeof window._cekAutoCommitConfirmed !== 'boolean') {
+    const ok = typeof requestPermission === 'function'
+      ? await requestPermission({
+          eyebrow: 'AUTO-COMMIT',
+          title: 'Run `git add -A && git commit -m "AI: …"` after every ⌘K?',
+          description: 'You enabled auto-commit. Horizon will commit each successful AI edit so you have an undo trail in git history. Disable it any time via the toolbar toggle.',
+          detail: `git add -A\ngit commit -m "AI: ${(prompt || '').slice(0, 60)}"`,
+        })
+      : confirm('Auto-commit AI edits to git?');
+    if (!ok) {
+      _cekAutoCommit = false;
+      try { await H.set?.('cmdKAutoCommit', false); } catch (_) {}
+      cekRefreshToolbar();
+      return;
+    }
+    window._cekAutoCommitConfirmed = true;
+  }
+  const safePrompt = String(prompt || '').replace(/"/g, '\\"').slice(0, 60);
+  const cmd = `git add -A && git commit -m "AI: ${safePrompt || 'edit'}"`;
+  try {
+    const r = await H.wsShell?.(cmd);
+    if (r && r.ok) {
+      if (typeof opLog === 'function') opLog(`⌘K auto-commit: ${safePrompt}`, 'tool');
+    } else if (r && r.err) {
+      if (typeof opLog === 'function') opLog(`⌘K auto-commit failed: ${(r.err || '').slice(0, 200)}`, 'error');
+    }
+  } catch (e) {
+    if (typeof opLog === 'function') opLog(`⌘K auto-commit threw: ${e?.message || e}`, 'error');
+  }
+}
+
+// History dropdown — toggles the .cek-history-pop popover anchored
+// under the toolbar button. Renders the LRU as a card list with per-
+// entry Undo button.
+window.cekHistoryToggle = function (ev) {
+  try { ev?.stopPropagation(); } catch(_){}
+  const pop = document.getElementById('cek-history-pop');
+  const btn = document.getElementById('cek-history-btn');
+  if (!pop || !btn) return;
+  if (pop.classList.contains('show')) { pop.classList.remove('show'); return; }
+  if (!_cekHistory.length) {
+    pop.innerHTML = `<div class="cek-history-empty">No ⌘K edits yet. Try selecting code and pressing ⌘K.</div>`;
+  } else {
+    pop.innerHTML = `
+      <div class="cek-history-h">
+        <span class="cek-history-h-t">⌘K HISTORY · ${_cekHistory.length}</span>
+        <button class="btn btn-sm cek-history-clear" onclick="cekClearHistory()">Clear</button>
+      </div>
+      <ul class="cek-history-list">
+        ${_cekHistory.map(e => {
+          const ago = (() => {
+            const dt = Date.now() - e.ts;
+            if (dt < 60_000) return 'just now';
+            if (dt < 3600_000) return Math.floor(dt / 60_000) + 'm ago';
+            if (dt < 86400_000) return Math.floor(dt / 3600_000) + 'h ago';
+            return Math.floor(dt / 86400_000) + 'd ago';
+          })();
+          const fileNames = e.files.map(f => f.relPath || '?').join(', ');
+          const totalHunks = e.files.reduce((s, f) => s + (f.accepted || 0), 0);
+          return `<li class="cek-history-item" title="${esc(fileNames)}">
+            <div class="cek-history-item-row">
+              <span class="cek-history-item-prompt">${esc(e.prompt || '(no prompt)')}</span>
+              <button class="btn btn-sm cek-history-item-undo" onclick="cekUndoEntry('${e.id}').then(()=>cekHistoryToggle(event))">↶ Undo</button>
+            </div>
+            <div class="cek-history-item-meta">${e.files.length} file${e.files.length === 1 ? '' : 's'} · ${totalHunks} hunk${totalHunks === 1 ? '' : 's'} · ${ago}</div>
+          </li>`;
+        }).join('')}
+      </ul>`;
+  }
+  // Position: anchored under the button, right-aligned to the toolbar's
+  // edge so the popover doesn't go off-screen on narrow windows.
+  const r = btn.getBoundingClientRect();
+  pop.style.position = 'fixed';
+  pop.style.top = (r.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - 360, r.left)) + 'px';
+  pop.classList.add('show');
+  // Outside-click / Esc to close.
+  const offClick = (e) => {
+    if (pop.contains(e.target) || btn.contains(e.target)) return;
+    pop.classList.remove('show');
+    document.removeEventListener('mousedown', offClick);
+    document.removeEventListener('keydown', offEsc);
+  };
+  const offEsc = (e) => {
+    if (e.key !== 'Escape') return;
+    pop.classList.remove('show');
+    document.removeEventListener('mousedown', offClick);
+    document.removeEventListener('keydown', offEsc);
+  };
+  setTimeout(() => {
+    document.addEventListener('mousedown', offClick);
+    document.addEventListener('keydown', offEsc);
+  }, 0);
+};
+window.cekClearHistory = function () {
+  if (!confirm('Clear all ⌘K history? Undo data will be lost.')) return;
+  _cekHistory = [];
+  try { H.set?.('cmdKHistory', '[]'); } catch (_) {}
+  cekRefreshToolbar();
+  const pop = document.getElementById('cek-history-pop');
+  if (pop) pop.classList.remove('show');
+};
+window.cekUndoEntry = cekUndoEntry; // expose so dropdown onclick works
 
 async function requestDiffPermission({ title='Review changes', description='', before='', after='', language='plaintext' } = {}){
   await initCodeEditor().catch(()=>false);
