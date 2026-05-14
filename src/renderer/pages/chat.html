@@ -241,6 +241,14 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 .mt .licon{width:13px;height:13px;stroke-width:1.85;margin-right:2px}
 .wbtn{width:12px;height:12px;border-radius:50%;border:none;cursor:pointer;-webkit-app-region:no-drag}
 .wy{background:#FEBC2E}.wr{background:#FF5F57}
+/* PR-B5 — when the platform supplies native window controls (macOS
+   traffic-lights or Win11 titleBarOverlay), the custom .wbtn buttons
+   become redundant. Hide them via the body class set by the renderer
+   on boot. macOS additionally needs left padding so the logo cluster
+   doesn't overlap the inset traffic-lights. */
+body.os-mac .wbtn,
+body.os-win .wbtn { display: none !important; }
+body.os-mac .tb-l { padding-left: 80px !important; }
 
 /* ═══ WAKE BAR ═══ */
 .wake-bar{overflow:hidden;transition:height .25s;height:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid transparent;position:relative;z-index:9}
@@ -1256,6 +1264,15 @@ textarea::placeholder{color:var(--t3)}
 
 /* ═══ COMMAND PALETTE ═══ */
 .cmd-palette{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);align-items:flex-start;justify-content:center;padding-top:15vh}
+/* PR-U2 — group headers in the cmd palette (Linear/Raycast style). */
+.cmd-group-header {
+  padding: 10px 14px 6px;
+  font: 700 10px/1 var(--mono);
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+.cmd-group-header:first-child { padding-top: 4px; }
 .cmd-palette.show{display:flex}
 .cmd-box{width:420px;max-width:90vw;background:var(--bg2);border:1px solid var(--b2);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden}
 .cmd-input{width:100%;background:none;border:none;border-bottom:1px solid var(--b1);padding:14px 16px;color:var(--tx);font-size:14px;font-family:var(--font);outline:none}
@@ -2668,71 +2685,142 @@ body.surface-active .inspector-pane{display:none!important}
 }
 .shell-chip:hover{filter:brightness(1.08);transform:translateY(-1px)}
 
-/* PR-C4 — git branch chip (in the .tb-center cluster) + dropdown
-   popover. Detached-HEAD state gets an amber tint to flag the user
-   that they're not on a regular branch. */
-#shell-git-branch { display:inline-flex; align-items:center; }
-#shell-git-branch.detached {
-  border-color: var(--warn-300, rgba(251,191,36,.30));
-  background: var(--warn-50, rgba(251,191,36,.06));
-  color: var(--warn-500, #fbbf24);
-}
-.git-branch-pop {
+/* PR-D2 — @-mention dropdown over chat input. position:fixed,
+   anchored above the textarea via JS bottom-offset. */
+.at-mention-pop {
   display: none;
-  width: 280px;
-  max-height: 360px;
-  background: #0b0e16;
-  border: 1px solid var(--code-line, #1d2333);
+  width: 360px;
+  max-height: 280px;
+  background: rgba(11,14,22,.97);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--accent-cyan-300, rgba(86,210,255,.32));
   border-radius: var(--radius-lg, 12px);
   box-shadow: 0 18px 40px -12px rgba(0,0,0,.7);
-  z-index: 240;
+  z-index: 260;
   overflow: hidden;
   flex-direction: column;
   -webkit-app-region: no-drag;
 }
-.git-branch-pop.show { display: flex; }
-.git-branch-pop-h {
-  padding: 10px 12px;
+.at-mention-pop.show { display: flex; }
+.at-mention-head {
+  padding: 8px 12px;
   border-bottom: 1px solid var(--code-line, #1d2333);
   font: 700 var(--text-xs, 11px)/1 var(--mono);
   letter-spacing: var(--tracking-extra, 1.6px);
-  color: var(--t3);
+  color: var(--accent-cyan-500, #56d2ff);
   text-transform: uppercase;
 }
-.git-branch-pop-empty {
-  padding: 22px 14px;
-  text-align: center;
-  color: var(--t3);
-  font: var(--text-sm, 12px)/var(--lh-snug, 1.4) var(--font);
-  font-style: italic;
-}
-.git-branch-pop-list {
-  list-style: none; margin: 0; padding: 6px;
+.at-mention-list {
+  list-style: none; margin: 0; padding: 4px;
   overflow-y: auto;
+  flex: 1;
 }
-.git-branch-pop-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 10px;
+.at-mention-item {
+  display: flex; flex-direction: column;
+  padding: 7px 10px;
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  font: 600 var(--text-sm, 12px)/1 var(--mono);
-  color: var(--t2);
-  transition: background .12s ease, color .12s ease;
+  transition: background .08s ease;
+  gap: 2px;
 }
-.git-branch-pop-item:hover { background: rgba(255,255,255,.04); color: var(--tx); }
-.git-branch-pop-item.on { color: var(--accent-cyan-500, #56d2ff); }
-.git-branch-pop-icon {
-  display: inline-flex; width: 12px; justify-content: center;
-  font-size: 10px;
-  color: inherit;
+.at-mention-item:hover, .at-mention-item.on {
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
 }
-.git-branch-pop-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.git-branch-pop-foot {
-  padding: 8px 12px;
-  border-top: 1px solid var(--code-line, #1d2333);
-  font: var(--text-xs, 11px)/1.4 var(--font);
+.at-mention-name {
+  font: 600 var(--text-sm, 12px)/1.2 var(--mono);
+  color: var(--tx);
+}
+.at-mention-sub {
+  font: var(--text-xs, 11px)/1.2 var(--mono);
   color: var(--t3);
-  font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.at-mention-item.kind-symbol .at-mention-name { color: var(--accent-cyan-500, #56d2ff); }
+.at-mention-item.kind-file   .at-mention-name { color: var(--special-500, #a78bfa); }
+.at-mention-item.kind-info   .at-mention-name { color: var(--warn-500, #fbbf24); font-style: italic; }
+.at-mention-foot {
+  padding: 6px 12px;
+  border-top: 1px solid var(--code-line, #1d2333);
+  font: var(--text-xs, 11px)/1 var(--font);
+  color: var(--t3);
+}
+.at-mention-kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 16px; padding: 0 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 4px;
+  font: 9.5px/1 var(--mono);
+  color: var(--t2);
+  margin: 0 2px;
+}
+
+/* PR-C1 — slash-command popover. Same anchor model as at-mention but
+   a different accent color (purple) so the user instantly sees they're
+   in command mode vs context-injection mode. */
+.slash-pop {
+  display: none;
+  width: 440px;
+  max-height: 360px;
+  background: rgba(11,14,22,.97);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--special-500, #a78bfa);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 18px 40px -12px rgba(0,0,0,.7);
+  z-index: 261;
+  overflow: hidden;
+  flex-direction: column;
+  -webkit-app-region: no-drag;
+}
+.slash-pop.show { display: flex; }
+.slash-pop-h {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--code-line, #1d2333);
+  font: 700 var(--text-xs, 11px)/1 var(--mono);
+  letter-spacing: var(--tracking-extra, 1.6px);
+  color: var(--special-500, #a78bfa);
+  text-transform: uppercase;
+}
+.slash-pop-list { list-style: none; margin: 0; padding: 4px; overflow-y: auto; flex: 1; }
+.slash-pop-item {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: background .08s ease;
+}
+.slash-pop-item:hover, .slash-pop-item.on {
+  background: rgba(167,139,250,.10);
+}
+.slash-pop-label {
+  font: 600 var(--text-sm, 12px)/1 var(--mono);
+  color: var(--special-500, #a78bfa);
+  flex-shrink: 0;
+  min-width: 140px;
+}
+.slash-pop-hint {
+  flex: 1;
+  font: var(--text-xs, 11px)/1.3 var(--font);
+  color: var(--t2);
+  text-align: right;
+}
+.slash-pop-foot {
+  padding: 6px 12px;
+  border-top: 1px solid var(--code-line, #1d2333);
+  font: var(--text-xs, 11px)/1 var(--font);
+  color: var(--t3);
+}
+.slash-pop-kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 16px; padding: 0 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 4px;
+  font: 9.5px/1 var(--mono);
+  color: var(--t2);
+  margin: 0 2px;
 }
 .tb-r{
   max-width:none;
@@ -6193,6 +6281,24 @@ function stopGitBranchPoll() {
 // Auto-start poll once the renderer + IPC are ready.
 window.addEventListener('DOMContentLoaded', () => { startGitBranchPoll(); });
 
+// PR-B5 — set body class so per-OS CSS rules can hide the custom
+// .wbtn buttons in favour of native window controls. Detection is
+// best-effort (renderer can't read process.platform directly because
+// nodeIntegration:false; we sniff via navigator.userAgent which is
+// stable enough for this single decision).
+(function _detectPlatform() {
+  try {
+    const ua = (navigator.userAgent || '').toLowerCase();
+    if (ua.includes('mac os x') || ua.includes('darwin')) {
+      document.body.classList.add('os-mac');
+    } else if (ua.includes('windows') || ua.includes('win64') || ua.includes('win32')) {
+      document.body.classList.add('os-win');
+    } else {
+      document.body.classList.add('os-linux');
+    }
+  } catch (_) { /* default to no-class behaviour (Linux-style custom .wbtn) */ }
+})();
+
 // Recent-branches dropdown (click on the chip).
 window.toggleGitBranchDropdown = async function (ev) {
   try { ev?.stopPropagation(); } catch (_) {}
@@ -7938,8 +8044,328 @@ function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye')?.classL
 // MAIN SEND
 // ═══════════════════════════════════════════════════════════════
 const q=text=>{const inp=document.getElementById('inp');inp.value=text;ar(inp);sendMsg();};
-const kd=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}};
-const ar=el=>{el.style.height='auto';el.style.height=Math.min(el.scrollHeight,110)+'px';};
+// PR-D2 — `kd` now also forwards keys to the @-mention dropdown when
+// it's open (Tab/↓/↑ navigate, Enter inserts, Esc closes). The Enter→
+// sendMsg path remains the default when the dropdown is hidden.
+const kd=e=>{
+  // Order matters: slash-commands check first (they have their own
+  // dropdown handling), then @-mentions, then default Enter→send.
+  if (typeof slashKeyDown === 'function' && slashKeyDown(e)) return;
+  if (typeof atMentionKeyDown === 'function' && atMentionKeyDown(e)) return;
+  if(e.key==='Enter'&&!e.shiftKey){
+    // PR-C1 — if the input starts with `/`, route to a slash command
+    // before falling through to sendMsg(). slashExecuteFromInput
+    // returns true if it handled the line.
+    if (typeof slashExecuteFromInput === 'function') {
+      const inp = e.target;
+      if (inp && /^\s*\//.test(inp.value || '')) {
+        e.preventDefault();
+        slashExecuteFromInput(inp);
+        return;
+      }
+    }
+    e.preventDefault();sendMsg();
+  }
+};
+// `ar` autosizes the textarea AND triggers @-mention detection + slash
+// detection. Order: slash first (it owns the input when it fires).
+const ar=el=>{
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,110)+'px';
+  try { if (typeof slashMaybeOpen === 'function') slashMaybeOpen(el); } catch(_){}
+  try { if (typeof atMentionMaybeOpen === 'function') atMentionMaybeOpen(el); } catch(_){}
+};
+
+// ═══ PR-C1 — Slash commands ═══════════════════════════════════════════
+// Type `/foo` at the start of the chat input → autocomplete dropdown
+// with matching commands. Tab/Enter executes; Esc closes. Each command
+// is { id, label, hint, exec(arg) }. Designed to mirror Claude Code /
+// Cursor / ChatGPT-codex slash conventions.
+const SLASH_COMMANDS = [
+  { id: 'help',     label: '/help',           hint: 'Show all slash commands',                           exec: () => slashShowHelp() },
+  { id: 'clear',    label: '/clear',          hint: 'Clear current chat history',                       exec: () => { try { clearHist?.(); } catch(_){} } },
+  { id: 'new',      label: '/new',            hint: 'Start a new chat',                                 exec: () => { try { createNewChat?.(); } catch(_){} } },
+  { id: 'persona',  label: '/persona <id>',   hint: 'Switch persona (jarvis|friday|alfred|sage|pixel)', exec: (arg) => { try { setPersona?.(arg || 'jarvis'); } catch(_){} } },
+  { id: 'model',    label: '/model <name>',   hint: 'Switch active provider model',                     exec: (arg) => { try { saveModelSetting?.(prov, arg); } catch(_){} } },
+  { id: 'mode',     label: '/mode <name>',    hint: 'Switch chat mode (chat|code|agent|vision|...)',    exec: (arg) => { try { setMode?.(arg || 'chat'); } catch(_){} } },
+  { id: 'code',     label: '/code',           hint: 'Open Code Mode IDE',                               exec: () => { try { toggleCodeMode?.(); } catch(_){} } },
+  { id: 'agent',    label: '/agent',          hint: 'Switch to Agent mode',                             exec: () => { try { setMode?.('agent'); } catch(_){} } },
+  { id: 'settings', label: '/settings [tab]', hint: 'Open settings panel (account|models|providers|…)', exec: (arg) => { try { openPanel?.(arg || ''); } catch(_){} } },
+  { id: 'voice',    label: '/voice',          hint: 'Toggle voice (TTS) on/off',                        exec: () => { try { togSw?.('tts','sw-tts'); } catch(_){} } },
+  { id: 'wake',     label: '/wake',           hint: 'Toggle wake-word on/off',                          exec: () => { try { document.getElementById('tc-wake')?.click(); } catch(_){} } },
+  { id: 'eye',      label: '/eye',            hint: 'Toggle screen-watcher on/off',                     exec: () => { try { togSw?.('screenWatcher','sw-eye'); } catch(_){} } },
+  { id: 'workflows',label: '/workflows',      hint: 'Open Workflows panel',                             exec: () => { try { openWorkflows?.(); } catch(_){} } },
+  { id: 'plugins',  label: '/plugins',        hint: 'Open Plugin Hub',                                  exec: () => { try { openHub?.(); } catch(_){} } },
+  { id: 'store',    label: '/store',          hint: 'Open Marketplace',                                 exec: () => { try { openStore?.(); } catch(_){} } },
+  { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                    exec: () => { try { openCmdPalette?.(); } catch(_){} } },
+];
+let _slashState = null; // { items, activeIdx, inputEl, query } when open
+
+function slashMaybeOpen(inputEl) {
+  if (!inputEl) return;
+  const value = inputEl.value || '';
+  // Only trigger when the entire current line starts with `/`.
+  const m = value.match(/^\s*\/([A-Za-z0-9_-]*)$/);
+  if (!m) {
+    if (_slashState) slashClose();
+    return;
+  }
+  const query = m[1].toLowerCase();
+  const items = SLASH_COMMANDS.filter(c =>
+    !query || c.id.startsWith(query) || c.label.toLowerCase().includes('/' + query)
+  ).slice(0, 12);
+  if (!items.length) {
+    if (_slashState) slashClose();
+    return;
+  }
+  _slashState = { items, activeIdx: 0, inputEl, query };
+  slashRender();
+}
+function slashClose() {
+  _slashState = null;
+  document.getElementById('slash-pop')?.classList.remove('show');
+}
+function slashRender() {
+  let pop = document.getElementById('slash-pop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'slash-pop';
+    pop.className = 'slash-pop';
+    document.body.appendChild(pop);
+  }
+  const s = _slashState;
+  if (!s || !s.items.length) { pop.classList.remove('show'); return; }
+  pop.innerHTML = `
+    <div class="slash-pop-h">SLASH${s.query ? ' · /' + esc(s.query) : ''}</div>
+    <ul class="slash-pop-list">
+      ${s.items.map((it, i) => `
+        <li class="slash-pop-item${i === s.activeIdx ? ' on' : ''}" data-idx="${i}" onmousedown="slashApply(${i});event.preventDefault()">
+          <span class="slash-pop-label">${esc(it.label)}</span>
+          <span class="slash-pop-hint">${esc(it.hint)}</span>
+        </li>`).join('')}
+    </ul>
+    <div class="slash-pop-foot"><span class="slash-pop-kbd">↵</span>/<span class="slash-pop-kbd">Tab</span> run · <span class="slash-pop-kbd">esc</span> close</div>
+  `;
+  // Anchor above textarea.
+  const inp = s.inputEl || document.getElementById('inp');
+  if (inp) {
+    const r = inp.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.left = Math.max(8, r.left) + 'px';
+    pop.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+    pop.style.maxWidth = Math.min(440, window.innerWidth - 16) + 'px';
+  }
+  pop.classList.add('show');
+}
+function slashKeyDown(e) {
+  const s = _slashState;
+  if (!s || !s.items.length) return false;
+  if (e.key === 'ArrowDown') { s.activeIdx = (s.activeIdx + 1) % s.items.length; slashRender(); e.preventDefault(); return true; }
+  if (e.key === 'ArrowUp')   { s.activeIdx = (s.activeIdx - 1 + s.items.length) % s.items.length; slashRender(); e.preventDefault(); return true; }
+  if (e.key === 'Tab' || e.key === 'Enter') { slashApply(s.activeIdx); e.preventDefault(); return true; }
+  if (e.key === 'Escape')    { slashClose(); e.preventDefault(); return true; }
+  return false;
+}
+window.slashApply = function (idx) {
+  const s = _slashState;
+  if (!s || !s.items[idx]) return;
+  const cmd = s.items[idx];
+  const inp = s.inputEl || document.getElementById('inp');
+  if (!inp) { slashClose(); return; }
+  // If the user typed exactly `/foo` (no args), execute immediately.
+  // Otherwise pre-fill `/foo ` so they can append an argument and hit Enter.
+  if (cmd.label.includes('<') || cmd.label.includes('[')) {
+    inp.value = cmd.label.split(/\s/)[0] + ' ';
+    slashClose();
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+    return;
+  }
+  // No-arg command — execute now.
+  slashClose();
+  inp.value = '';
+  ar(inp);
+  try { cmd.exec(); } catch (e) { if (typeof addMsg === 'function') addMsg('bot', `⚠️ /${cmd.id} failed: ${e?.message || e}`); }
+};
+
+// Called from kd() when Enter is pressed and the input starts with `/`.
+// Parses `/cmd arg1 arg2 ...` and routes to the matching command.
+function slashExecuteFromInput(inp) {
+  const value = (inp?.value || '').trim();
+  const m = value.match(/^\/([A-Za-z0-9_-]+)(?:\s+(.+))?$/);
+  if (!m) return false;
+  const cmdId = m[1].toLowerCase();
+  const arg = (m[2] || '').trim();
+  const cmd = SLASH_COMMANDS.find(c => c.id === cmdId);
+  slashClose();
+  if (!cmd) {
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ Unknown slash command: /${cmdId}. Type /help for the list.`);
+    return true;
+  }
+  inp.value = '';
+  ar(inp);
+  try { cmd.exec(arg); }
+  catch (e) { if (typeof addMsg === 'function') addMsg('bot', `⚠️ /${cmd.id} failed: ${e?.message || e}`); }
+  return true;
+}
+
+function slashShowHelp() {
+  if (typeof addMsg !== 'function') return;
+  const lines = SLASH_COMMANDS.map(c => `\`${c.label}\` — ${c.hint}`);
+  addMsg('bot', '**Slash commands:**\n\n' + lines.join('\n'));
+}
+
+// ═══ PR-D2 — @-mention autocomplete (workspace symbols) ═══════════════
+// Detects an `@` token at the caret position, queries the workspace
+// indexer (or falls back to wsList for `@file`), shows a small popover
+// anchored above the input. Tab / Enter inserts; Esc closes.
+const _AT_MENTION_TYPES = ['symbol', 'file'];
+let _atMentionState = null; // { kind, query, items, activeIdx } when open
+
+function atMentionMaybeOpen(inputEl) {
+  if (!inputEl) return;
+  const value = inputEl.value || '';
+  const caret = inputEl.selectionStart || 0;
+  // Find the start of the current token by walking back from caret.
+  // Token = `@` followed by 0+ non-whitespace chars.
+  const before = value.slice(0, caret);
+  const m = before.match(/(^|\s)@([A-Za-z0-9_./\-:]*)$/);
+  if (!m) {
+    if (_atMentionState) atMentionClose();
+    return;
+  }
+  const queryRaw = m[2];
+  // Determine kind: explicit prefix `file:foo` or `sym:bar`, otherwise
+  // default to symbol query.
+  let kind = 'symbol';
+  let q = queryRaw;
+  if (queryRaw.startsWith('file:')) { kind = 'file'; q = queryRaw.slice(5); }
+  else if (queryRaw.startsWith('sym:'))  { kind = 'symbol'; q = queryRaw.slice(4); }
+  atMentionPopulate(kind, q, inputEl);
+}
+function atMentionClose() {
+  _atMentionState = null;
+  const pop = document.getElementById('at-mention-pop');
+  if (pop) pop.classList.remove('show');
+}
+async function atMentionPopulate(kind, query, inputEl) {
+  let items = [];
+  try {
+    if (kind === 'symbol') {
+      const r = await H.wsIndexQuery?.(query, { limit: 20 });
+      if (r && r.ok) items = (r.results || []).map(s => ({
+        kind: 'symbol',
+        label: s.name,
+        sub: `${s.kind} · ${s.file}:${s.line}`,
+        insert: '@' + s.name,
+      }));
+      // If the index isn't built yet, kick a build (don't await — user
+      // will retry). Show a helpful empty-state.
+      if (r && !r.hasIndex && !r.building) {
+        H.wsIndexBuild?.().catch(() => {});
+        items = [{ kind: 'info', label: 'Building workspace index…', sub: 'Try again in a second.', insert: '' }];
+      }
+    } else if (kind === 'file') {
+      const r = await H.wsList?.('');
+      if (r && r.ok && Array.isArray(r.entries)) {
+        const ql = query.toLowerCase();
+        items = r.entries
+          .filter(e => !e.isDir && e.name.toLowerCase().includes(ql))
+          .slice(0, 20)
+          .map(e => ({
+            kind: 'file',
+            label: e.name,
+            sub: e.rel || '',
+            insert: '@file:' + (e.rel || e.name),
+          }));
+      }
+    }
+  } catch (_) { /* dropdown stays empty */ }
+  _atMentionState = { kind, query, items, activeIdx: 0, inputEl };
+  atMentionRender();
+}
+function atMentionRender() {
+  let pop = document.getElementById('at-mention-pop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'at-mention-pop';
+    pop.className = 'at-mention-pop';
+    document.body.appendChild(pop);
+  }
+  const s = _atMentionState;
+  if (!s || !s.items?.length) {
+    pop.classList.remove('show');
+    return;
+  }
+  pop.innerHTML = `
+    <div class="at-mention-head">${esc(s.kind.toUpperCase())} · ${esc(s.query || '(empty)')}</div>
+    <ul class="at-mention-list">
+      ${s.items.map((it, i) => `
+        <li class="at-mention-item${i === s.activeIdx ? ' on' : ''} kind-${esc(it.kind)}" data-idx="${i}" onmousedown="atMentionInsert(${i});event.preventDefault()">
+          <span class="at-mention-name">${esc(it.label)}</span>
+          <span class="at-mention-sub">${esc(it.sub || '')}</span>
+        </li>`).join('')}
+    </ul>
+    <div class="at-mention-foot"><span class="at-mention-kbd">Tab</span>/<span class="at-mention-kbd">↵</span> insert · <span class="at-mention-kbd">↑↓</span> nav · <span class="at-mention-kbd">esc</span> close</div>
+  `;
+  // Anchor above the textarea.
+  const inp = s.inputEl || document.getElementById('inp');
+  if (inp) {
+    const r = inp.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.left = Math.max(8, r.left) + 'px';
+    pop.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+    pop.style.maxWidth = Math.min(420, window.innerWidth - 16) + 'px';
+  }
+  pop.classList.add('show');
+}
+function atMentionKeyDown(e) {
+  const s = _atMentionState;
+  if (!s || !s.items?.length) return false;
+  const len = s.items.length;
+  if (e.key === 'ArrowDown') {
+    s.activeIdx = (s.activeIdx + 1) % len;
+    atMentionRender();
+    e.preventDefault(); return true;
+  }
+  if (e.key === 'ArrowUp') {
+    s.activeIdx = (s.activeIdx - 1 + len) % len;
+    atMentionRender();
+    e.preventDefault(); return true;
+  }
+  if (e.key === 'Tab' || e.key === 'Enter') {
+    atMentionInsert(s.activeIdx);
+    e.preventDefault(); return true;
+  }
+  if (e.key === 'Escape') {
+    atMentionClose();
+    e.preventDefault(); return true;
+  }
+  return false;
+}
+window.atMentionInsert = function (idx) {
+  const s = _atMentionState;
+  if (!s || !s.items?.[idx]) return;
+  const item = s.items[idx];
+  if (!item.insert) { atMentionClose(); return; }
+  const inp = s.inputEl || document.getElementById('inp');
+  if (!inp) { atMentionClose(); return; }
+  const value = inp.value || '';
+  const caret = inp.selectionStart || 0;
+  // Replace the partial @-token before the caret.
+  const before = value.slice(0, caret);
+  const after = value.slice(caret);
+  const m = before.match(/(^|\s)@[A-Za-z0-9_./\-:]*$/);
+  if (!m) { atMentionClose(); return; }
+  const tokenStart = m.index + m[1].length;
+  const newValue = value.slice(0, tokenStart) + item.insert + ' ' + after;
+  inp.value = newValue;
+  const newCaret = tokenStart + item.insert.length + 1;
+  inp.setSelectionRange(newCaret, newCaret);
+  ar(inp);
+  atMentionClose();
+  inp.focus();
+};
 
 // -- File/Photo upload handling ------------------------------------------------
 function onFilesSelected(e){
@@ -8458,22 +8884,155 @@ function closeCmdPalette() {
   document.getElementById('cmd-palette').classList.remove('show');
 }
 
+// PR-U2 — dynamic palette items (built per-open so model lists /
+// chat list / personas always reflect current state). Grouped under
+// section headers when no query is active; flat ranked list when the
+// user types. Each item is { group, icon, text, hint, action }.
+function _paletteDynamicItems() {
+  const dyn = [];
+  // ── Models (per provider, current 4 + Claude/OpenAI/Gemini groups) ──
+  try {
+    const provs = ['claude','openai','gemini','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','ollama','lmstudio'];
+    for (const p of provs) {
+      const reg = (typeof MODEL_PICKER_REGISTRY !== 'undefined' && MODEL_PICKER_REGISTRY[p]) || [];
+      for (const [val, label] of reg) {
+        const pricing = (typeof getModelPricing === 'function') ? getModelPricing(p, val) : null;
+        const priceHint = pricing ? `${fmtPrice(pricing.in)}/${fmtPrice(pricing.out)} per Mtok` : '';
+        dyn.push({
+          group: 'Switch model',
+          icon: '🧠',
+          text: `${p} · ${label}`,
+          hint: priceHint,
+          action: () => { try { saveModelSetting(p, val); } catch(_){} }
+        });
+      }
+    }
+  } catch(_){}
+  // ── Personas ──
+  try {
+    H.getPersonas?.().then(list => {
+      // We've already returned the dyn array — reading async items here
+      // doesn't help for THIS render. Persona dyn items are added via
+      // filterCommands cache. Skip.
+    }).catch(()=>{});
+  } catch(_){}
+  // Static persona list (fallback if H.getPersonas async-loads later).
+  for (const pid of ['jarvis','friday','alfred','sage','pixel']) {
+    dyn.push({
+      group: 'Switch persona',
+      icon: '🎭',
+      text: `Persona · ${pid}`,
+      hint: 'apply this persona',
+      action: () => { try { setPersona?.(pid); } catch(_){} }
+    });
+  }
+  // ── Chat list (last 8) ──
+  try {
+    if (Array.isArray(window.chatList)) {
+      for (const c of window.chatList.slice(0, 8)) {
+        const title = c?.title || 'New chat';
+        dyn.push({
+          group: 'Switch chat',
+          icon: '💬',
+          text: title.slice(0, 60),
+          hint: c?.id ? `chat-${c.id.slice(0, 8)}` : '',
+          action: () => { try { switchChat?.(c.id); } catch(_){} }
+        });
+      }
+    }
+  } catch(_){}
+  // ── Settings tabs ──
+  for (const [tab, lbl] of [
+    ['account','Account'], ['profile','Profile'], ['models','Models'],
+    ['providers','Providers'], ['connections','Connections'], ['voice','Voice & Wake'],
+    ['features','Features'], ['personas','Personas'], ['plugins','Plugins'], ['data','Data & Health']
+  ]) {
+    dyn.push({
+      group: 'Open settings',
+      icon: '⚙',
+      text: `Settings · ${lbl}`,
+      hint: `open ${tab} tab`,
+      action: () => { try { openPanel(tab); } catch(_){} }
+    });
+  }
+  return dyn;
+}
+
 function filterCommands(query) {
-  const q = query.toLowerCase();
-  const filtered = q ? COMMANDS.filter(c => 
-    c.text.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)
-  ) : COMMANDS;
-  
+  const q = query.toLowerCase().trim();
+  const allItems = COMMANDS.map(c => ({ ...c, group: c.group || 'Action' }))
+    .concat(_paletteDynamicItems());
+
+  let filtered;
+  if (q) {
+    // Ranked: prefix > substring in text > substring in hint
+    const scored = allItems.map(c => {
+      const tlc = c.text.toLowerCase();
+      const hlc = (c.hint || '').toLowerCase();
+      const glc = (c.group || '').toLowerCase();
+      let score = 0;
+      if (tlc.startsWith(q)) score = 1000;
+      else if (tlc.includes(q)) score = 500 - tlc.indexOf(q);
+      else if (hlc.includes(q)) score = 200;
+      else if (glc.includes(q)) score = 100;
+      return { c, score };
+    }).filter(x => x.score > 0);
+    scored.sort((a, b) => b.score - a.score);
+    filtered = scored.slice(0, 60).map(x => x.c);
+  } else {
+    // No query → group by section, cap each to 6 entries.
+    const groups = new Map();
+    for (const c of allItems) {
+      const g = c.group || 'Action';
+      if (!groups.has(g)) groups.set(g, []);
+      const arr = groups.get(g);
+      if (arr.length < 6) arr.push(c);
+    }
+    // Order: Mode → Switch model → Switch persona → Switch chat → Action → Open settings
+    const groupOrder = ['Mode', 'Switch model', 'Switch persona', 'Switch chat', 'Action', 'Open settings'];
+    filtered = [];
+    for (const g of groupOrder) {
+      if (groups.has(g)) {
+        filtered.push({ __header: g });
+        for (const it of groups.get(g)) filtered.push(it);
+      }
+    }
+    // Anything left in unknown groups appended.
+    for (const [g, arr] of groups.entries()) {
+      if (!groupOrder.includes(g)) {
+        filtered.push({ __header: g });
+        for (const it of arr) filtered.push(it);
+      }
+    }
+  }
+
+  // Build runnable index — only non-header items get an index.
+  const runnable = filtered.filter(x => !x.__header);
   cmdActiveIdx = 0;
   const container = document.getElementById('cmd-results');
-  container.innerHTML = filtered.map((c, i) => 
-    `<div class="cmd-item${i===0?' active':''}" onclick="runCommand(${COMMANDS.indexOf(c)})" onmouseenter="cmdActiveIdx=${i};highlightCmd()">
-      <span class="cmd-item-icon">${c.icon}</span>
-      <span class="cmd-item-text">${c.text}</span>
-      <span class="cmd-item-hint">${c.hint}</span>
-    </div>`
-  ).join('');
+  let runIdx = -1;
+  container.innerHTML = filtered.map(c => {
+    if (c.__header) {
+      return `<div class="cmd-group-header">${esc(c.__header)}</div>`;
+    }
+    runIdx++;
+    const i = runIdx;
+    // Cache the item on a data-index for runCommand().
+    return `<div class="cmd-item${i===0?' active':''}" data-runidx="${i}" onclick="runDynamicCommand(${i})" onmouseenter="cmdActiveIdx=${i};highlightCmd()">
+      <span class="cmd-item-icon">${c.icon || ''}</span>
+      <span class="cmd-item-text">${esc(c.text)}</span>
+      <span class="cmd-item-hint">${esc(c.hint || '')}</span>
+    </div>`;
+  }).join('');
+  // Stash the runnable list so runDynamicCommand can resolve it.
+  window._cmdRunnable = runnable;
 }
+
+window.runDynamicCommand = function (idx) {
+  closeCmdPalette();
+  const list = window._cmdRunnable || [];
+  list[idx]?.action?.();
+};
 
 function highlightCmd() {
   document.querySelectorAll('.cmd-item').forEach((el, i) => {
@@ -8482,15 +9041,21 @@ function highlightCmd() {
 }
 
 function cmdKeyDown(e) {
+  // PR-U2 — items now skip group headers; use the runnable list cache
+  // to keep arrow nav in sync.
   const items = document.querySelectorAll('.cmd-item');
   if (e.key === 'Escape') { closeCmdPalette(); return; }
-  if (e.key === 'ArrowDown') { e.preventDefault(); cmdActiveIdx = Math.min(cmdActiveIdx + 1, items.length - 1); highlightCmd(); }
-  if (e.key === 'ArrowUp') { e.preventDefault(); cmdActiveIdx = Math.max(cmdActiveIdx - 1, 0); highlightCmd(); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmdActiveIdx = Math.min(cmdActiveIdx + 1, items.length - 1); highlightCmd(); scrollActiveCmdIntoView(); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); cmdActiveIdx = Math.max(cmdActiveIdx - 1, 0); highlightCmd(); scrollActiveCmdIntoView(); }
   if (e.key === 'Enter') {
     e.preventDefault();
     const active = items[cmdActiveIdx];
     if (active) active.click();
   }
+}
+function scrollActiveCmdIntoView() {
+  const active = document.querySelectorAll('.cmd-item')[cmdActiveIdx];
+  active?.scrollIntoView({ block: 'nearest' });
 }
 
 function runCommand(idx) {
@@ -8503,6 +9068,23 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
     openCmdPalette();
+  }
+  // PR-U2 — chord shortcuts that pre-fill the palette with a section.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+    e.preventDefault();
+    openCmdPalette();
+    setTimeout(() => {
+      const inp = document.getElementById('cmd-input');
+      if (inp) { inp.value = 'switch model'; filterCommands(inp.value); }
+    }, 0);
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+    e.preventDefault();
+    openCmdPalette();
+    setTimeout(() => {
+      const inp = document.getElementById('cmd-input');
+      if (inp) { inp.value = 'switch persona'; filterCommands(inp.value); }
+    }, 0);
   }
   if (e.key === 'Escape') closeCmdPalette();
 });
