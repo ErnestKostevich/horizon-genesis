@@ -1,0 +1,29 @@
+{
+  "id": "crypto-pulse",
+  "name": "Crypto Pulse",
+  "version": "1.0.0",
+  "author": "Horizon Team",
+  "description": "Live crypto prices via the public CoinGecko API. No API key, no rate-limited tier.",
+  "category": "finance",
+  "tier": "built_in",
+  "icon": "TrendingUp",
+  "permissions": ["network:api.coingecko.com"],
+  "settings": [],
+  "tools": [
+    {
+      "name": "price",
+      "description": "Get current price of a coin in USD. Pass a CoinGecko id (e.g. 'bitcoin', 'ethereum', 'solana').",
+      "params": { "coin": "string" }
+    },
+    {
+      "name": "top_movers",
+      "description": "Top 10 gainers in the last 24h (USD-denominated).",
+      "params": {}
+    },
+    {
+      "name": "global",
+      "description": "Global crypto market stats: total market cap, BTC dominance, active coins.",
+      "params": {}
+    }
+  ]
+}

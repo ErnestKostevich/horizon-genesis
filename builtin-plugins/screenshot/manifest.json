@@ -1,0 +1,24 @@
+{
+  "id": "screenshot",
+  "name": "Screenshot",
+  "version": "1.0.0",
+  "author": "Horizon Team",
+  "description": "Capture the primary display and save as PNG. Useful for visual debugging and AI vision prompts.",
+  "category": "system",
+  "tier": "built_in",
+  "icon": "Camera",
+  "permissions": ["screen:read", "fs:write:userdata"],
+  "settings": [],
+  "tools": [
+    {
+      "name": "capture",
+      "description": "Take a screenshot of the primary display, save to a temp PNG, return the absolute path.",
+      "params": {}
+    },
+    {
+      "name": "capture_base64",
+      "description": "Take a screenshot and return base64 data URL (no file written) — for direct vision prompt feeds.",
+      "params": {}
+    }
+  ]
+}
