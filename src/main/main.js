@@ -76,6 +76,7 @@ const PRO_HANDLERS = new Set([
   'pcType', 'pcKeyPress', 'pcVolume',
   'pcReadFile', 'pcWriteFile', 'pcListDir', 'pcChooseFolder',
   'wsChooseFolder', 'wsGetWorkspace', 'wsList', 'wsRead', 'wsWrite', 'wsSearch', 'wsShell',
+  'projectConfigWriteRules', 'projectConfigWriteHooks',
   'terminalCreate', 'terminalWrite', 'terminalResize', 'terminalKill',
   'pcMouseMove', 'pcMouseClick', 'pcMouseDoubleClick',
   'pcMouseScroll', 'pcMouseDrag',
@@ -563,19 +564,53 @@ function createWindow(page = 'chat') {
   const initW = Math.min(1600, Math.max(1280, Math.round(work.width  * 0.85)));
   const initH = Math.min(980,  Math.max(800,  Math.round(work.height * 0.88)));
 
-  win = new BrowserWindow({
+  // PR-B5 — native window-control treatment per platform.
+  //   • macOS: titleBarStyle: 'hiddenInset' shows the native traffic-
+  //     lights in the top-left while the rest of the title bar stays
+  //     transparent for our custom drag region. trafficLightPosition
+  //     pushes them down 18px so they sit centered in our 52px .tb
+  //     bar instead of clipping at the very top.
+  //   • Windows 11+: titleBarOverlay puts the native min/max/close
+  //     in the top-right with our brand colours so it composes with
+  //     the dark UI. Falls back gracefully on Win10 where the API
+  //     ignores `color` but still draws the native buttons.
+  //   • Linux: no native equivalent → keep frame: false + custom
+  //     .wbtn buttons (rendered in the title bar itself).
+  // The renderer's existing `body { -webkit-app-region: drag }` +
+  // `.no-drag` markers continue to work unchanged.
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  const winOpts = {
     width: initW, height: initH,
     minWidth: 1280, minHeight: 760,
     center: true,
-    frame: false, transparent: true,
+    transparent: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
       allowRunningInsecureContent: false,
-    }
-  });
+    },
+  };
+  if (isMac) {
+    winOpts.frame = false;
+    winOpts.titleBarStyle = 'hiddenInset';
+    winOpts.trafficLightPosition = { x: 14, y: 18 }; // centre in 52px .tb
+  } else if (isWin) {
+    winOpts.frame = false;
+    // titleBarOverlay requires titleBarStyle: 'hidden' on Win.
+    winOpts.titleBarStyle = 'hidden';
+    winOpts.titleBarOverlay = {
+      color: '#08090c',         // matches --bg
+      symbolColor: '#8b95a8',   // matches --t2
+      height: 52,               // matches .tb height
+    };
+  } else {
+    // Linux fallback — unchanged.
+    winOpts.frame = false;
+  }
+  win = new BrowserWindow(winOpts);
 
   const isLocalRenderer = (wc) => {
     try {
@@ -1335,6 +1370,12 @@ ipcMain.handle('wsChooseFolder', async () => {
     if (r.canceled || !r.filePaths?.[0]) return { ok:false, canceled:true };
     const root = path.resolve(r.filePaths[0]);
     settingsStore.set('codeWorkspace', root);
+    // PR-D2 — kick off symbol indexing in the background. Doesn't
+    // block the IPC response; renderer can poll wsIndexStatus to know
+    // when @symbol autocomplete becomes useful.
+    setImmediate(() => {
+      try { _getWsIndexer().build(root).catch(() => {}); } catch (_) {}
+    });
     return { ok:true, path:root };
   } catch(e) { return { ok:false, err:e.message }; }
 });
@@ -1428,6 +1469,41 @@ ipcMain.handle('projectConfigWriteHooks', (_, hooks) => {
     if (!root) return { ok: false, error: 'no workspace open' };
     return _getProjectConfig().writeHooks(root, hooks || {});
   } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// PR-D2 — Workspace symbol indexer (lazy singleton). Build runs in
+// the main process; caps inside workspaceIndexer.js keep it bounded
+// on huge monorepos (returns truncated:true at the file/symbol cap).
+let _wsIndexer = null;
+function _getWsIndexer() {
+  if (!_wsIndexer) {
+    const { WorkspaceIndexer } = require('./workspaceIndexer');
+    _wsIndexer = new WorkspaceIndexer();
+  }
+  return _wsIndexer;
+}
+
+ipcMain.handle('wsIndexBuild', async (_, opts = {}) => {
+  try {
+    const root = currentWorkspaceRoot();
+    if (!root) return { ok: false, err: 'no workspace open' };
+    return await _getWsIndexer().build(root, opts || {});
+  } catch (e) { return { ok: false, err: e.message }; }
+});
+
+ipcMain.handle('wsIndexStatus', () => {
+  try { return _getWsIndexer().status(); }
+  catch (e) { return { ok: false, err: e.message }; }
+});
+
+ipcMain.handle('wsIndexQuery', (_, q = '', opts = {}) => {
+  try { return _getWsIndexer().query(q, opts || {}); }
+  catch (e) { return { ok: false, err: e.message }; }
+});
+
+ipcMain.handle('wsIndexClear', () => {
+  try { _getWsIndexer().clear(); return { ok: true }; }
+  catch (e) { return { ok: false, err: e.message }; }
 });
 
 ipcMain.handle('wsShell', async (event, cmd) => {

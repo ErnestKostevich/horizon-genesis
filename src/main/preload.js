@@ -67,6 +67,11 @@ contextBridge.exposeInMainWorld('H', {
   projectConfigGet:        ()         => ipcRenderer.invoke('projectConfigGet'),
   projectConfigWriteRules: (content)  => ipcRenderer.invoke('projectConfigWriteRules', content),
   projectConfigWriteHooks: (hooks)    => ipcRenderer.invoke('projectConfigWriteHooks', hooks),
+  // PR-D2 — workspace symbol index (built lazily on workspace open).
+  wsIndexBuild:         (opts)       => ipcRenderer.invoke('wsIndexBuild', opts),
+  wsIndexStatus:        ()           => ipcRenderer.invoke('wsIndexStatus'),
+  wsIndexQuery:         (q, opts)    => ipcRenderer.invoke('wsIndexQuery', q, opts),
+  wsIndexClear:         ()           => ipcRenderer.invoke('wsIndexClear'),
   terminalCreate:       (id, rel, c, r) => ipcRenderer.invoke('terminalCreate', id, rel, c, r),
   terminalWrite:        (id, data)   => ipcRenderer.invoke('terminalWrite', id, data),
   terminalResize:       (id, c, r)   => ipcRenderer.invoke('terminalResize', id, c, r),
