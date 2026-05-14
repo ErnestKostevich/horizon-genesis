@@ -165,6 +165,8 @@ const ALLOWED_SETTING_KEYS = new Set([
   'inspectorActive',
   'customPersonas',
   'permissionAllowlist',
+  // PR-D1.5 — ⌘K edit history (LRU 10) + auto-commit toggle.
+  'cmdKHistory', 'cmdKAutoCommit',
 ]);
 
 const DEFAULT_PROVIDER_MODELS = {
