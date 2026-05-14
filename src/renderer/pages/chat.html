@@ -1365,7 +1365,7 @@ body.code-mode-active .modes { display: none; }
    This is a real reserved side surface, not a floating overlay. It begins
    below the titlebar, owns the right edge, and every chat row reserves width
    for it so status pills, messages and composer controls stay visible. */
-:root { --inspector-w: 328px; --inspector-gap: 0px; }
+:root { --inspector-w: 352px; --inspector-gap: 0px; }
 .inspector-pane {
   display: none;
   position: fixed;
@@ -1374,12 +1374,12 @@ body.code-mode-active .modes { display: none; }
   bottom: 0;
   width: var(--inspector-w);
   background: linear-gradient(180deg, var(--code-bg-2,#0c1018) 0%, var(--code-bg,#07090f) 100%);
-  border: 0;
+  border: 1px solid var(--code-line, #1d2333);
   border-top: 0;
   border-right: 0;
   border-bottom: 0;
   border-radius: 0;
-  box-shadow: -18px 0 42px rgba(0,0,0,.30), inset 1px 0 0 var(--code-line, #1d2333);
+  box-shadow: -22px 0 60px rgba(0,0,0,.34), inset 1px 0 0 rgba(255,255,255,.035);
   z-index: 85;
   flex-direction: column;
   -webkit-app-region: no-drag;
@@ -1389,6 +1389,7 @@ body.inspector-active .inspector-pane { display: flex; }
 /* The dock is no longer an overlay: every chat bar below the titlebar
    reserves real room so provider chips, mode buttons, messages and composer
    never sit underneath Context / Tools / Cost / Log. */
+body.inspector-active > .tb,
 body.inspector-active .wake-bar,
 body.inspector-active .sb,
 body.inspector-active .modes,
@@ -1397,7 +1398,6 @@ body.inspector-active .msgs,
 body.inspector-active .inp-wrap {
   margin-right: calc(var(--inspector-w) + var(--inspector-gap));
 }
-body.inspector-active > .tb { margin-right: 0; }
 /* Code Mode owns the canvas and its own right column. */
 body.code-mode-active .inspector-pane { display: none !important; }
 body.code-mode-active.inspector-active > .tb,
@@ -1555,7 +1555,7 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
 }
 .insp-byok strong { color: var(--code-cyan, #56d2ff); }
 @media (max-width: 1280px) {
-  :root { --inspector-w: 304px; --inspector-gap: 0px; }
+  :root { --inspector-w: 320px; --inspector-gap: 0px; }
 }
 @media (max-width: 980px) {
   .inspector-pane { left: 0; right: 0; width: auto; top: 52px; bottom: 0; }
@@ -3924,6 +3924,54 @@ function customConfirm(message) {
   });
 }
 
+const CHAT_DELETE_ALLOW_ID = 'ui.chat.delete.global';
+async function getSavedPermissionAllowlist(){
+  try {
+    const r = await H.permissionAllowlistList?.();
+    if (Array.isArray(r?.entries)) return r.entries;
+  } catch(_) {}
+  try {
+    const raw = await H.get?.('permissionAllowlist');
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    if (raw && typeof raw === 'object') return Object.values(raw).filter(Boolean);
+  } catch(_) {}
+  return [];
+}
+async function hasAlwaysAllowChatDelete(){
+  const entries = await getSavedPermissionAllowlist();
+  return entries.some(e => e && (e.id === CHAT_DELETE_ALLOW_ID || (e.tool === 'ui.chat.delete' && e.operation === 'delete_chat')));
+}
+async function rememberAlwaysAllowChatDelete(){
+  const entries = await getSavedPermissionAllowlist();
+  if (entries.some(e => e && e.id === CHAT_DELETE_ALLOW_ID)) return;
+  entries.push({
+    id: CHAT_DELETE_ALLOW_ID,
+    workspace: '*',
+    persona: '*',
+    tool: 'ui.chat.delete',
+    operation: 'delete_chat',
+    scope: '*',
+    title: 'Delete chats',
+    createdAt: new Date().toISOString()
+  });
+  await H.set?.('permissionAllowlist', entries);
+}
+async function confirmChatDeletePermission(){
+  if (await hasAlwaysAllowChatDelete()) return true;
+  const decision = await requestPermission({
+    returnDecision: true,
+    eyebrow: 'Human-in-the-loop approval',
+    title: 'Delete chat',
+    description: t('confirmDeleteChat'),
+    detail: 'This removes one local chat from Horizon history.'
+  });
+  if (decision === 'always_allow') {
+    await rememberAlwaysAllowChatDelete();
+    return true;
+  }
+  return decision === 'allow_once';
+}
+
 async function renameChatPrompt(id){
   try {
     const cur = chatsCache.find(c => c.id === id);
@@ -3939,7 +3987,7 @@ async function renameChatPrompt(id){
 }
 async function deleteChatConfirm(id){
   try {
-    const ok = await customConfirm(t('confirmDeleteChat'));
+    const ok = await confirmChatDeletePermission();
     if (!ok) return;
     const res = await H.chatDelete(id);
     if (id === currentChatId) {
@@ -7306,10 +7354,7 @@ async function renderStoreBody() {
       body.innerHTML = `<div style="color:var(--red);font-size:11px">Error: ${e.message}</div>`;
     }
   } else if (storeCurrentTab === 'workflows') {
-    body.innerHTML = `
-      <div class="empty-state"><div class="es-icon">&#9889;</div><h3>Workflows stay local</h3>
-      <p>Workflows are your own automations. They live in <b>Workflows</b> panel, not in the marketplace. Publish to community from the web dashboard.</p></div>
-    `;
+    await renderStoreWorkflows(body);
   } else if (storeCurrentTab === 'publish') {
     const url = await H.marketGetWebUrl();
     body.innerHTML = `
@@ -7329,6 +7374,117 @@ async function renderStoreBody() {
       </div></div>
     `;
   }
+}
+
+async function renderStoreWorkflows(body) {
+  body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading workflows...</div>';
+  let items = [];
+  let activeRuns = [];
+  let error = '';
+  try {
+    const list = await H.workflowList?.();
+    items = Array.isArray(list) ? list : [];
+  } catch(e) {
+    error = e?.message || 'workflow list failed';
+  }
+  try {
+    const live = await H.workflowActiveRuns?.();
+    activeRuns = Array.isArray(live) ? live : [];
+  } catch(_) {}
+
+  if (error) {
+    body.innerHTML = `<div style="color:var(--red);font-size:11px;padding:16px;border:1px solid rgba(255,80,80,.3);border-radius:10px">
+      <b>Cannot load workflows</b><br/>${_escHtml(error)}
+    </div>`;
+    return;
+  }
+
+  const enabledCount = items.filter(w => w.enabled !== false).length;
+  const scheduledCount = items.filter(w => w.trigger && w.trigger !== 'manual').length;
+  const runCount = items.reduce((sum, w) => sum + Number(w.runCount || 0), 0);
+  const lastRun = items.map(w => w.lastRun).filter(Boolean).sort().at(-1);
+  const rows = items.map(w => {
+    const id = _escAttr(w.id || '');
+    const steps = Array.isArray(w.steps) ? w.steps.length : 0;
+    const runs = Number(w.runCount || 0);
+    const ok = Number(w.successCount || 0);
+    const fail = Number(w.failCount || 0);
+    const rate = runs ? Math.round((ok / Math.max(1, ok + fail)) * 100) : null;
+    const trigger = _wfTriggerKind(String(w.trigger || 'manual'));
+    return `
+      <div class="wf-card" style="margin-bottom:10px">
+        <div class="wf-head">
+          <div>
+            <div class="wf-name">${_escHtml(w.name || 'Untitled workflow')}</div>
+            <div class="wf-desc">${_escHtml(w.description || 'No description yet')}</div>
+          </div>
+          <div class="wf-trigger-badge" style="${w.enabled === false ? 'color:var(--t3);border-color:var(--b1)' : 'color:var(--green);border-color:rgba(52,211,153,.28);background:rgba(52,211,153,.08)'}">${w.enabled === false ? 'paused' : 'enabled'}</div>
+        </div>
+        <div class="wf-steps">
+          <div class="wf-step"><span class="wf-step-icon">&#9889;</span>${steps} ${steps === 1 ? 'step' : 'steps'}</div>
+          <div class="wf-step"><span class="wf-step-icon">&#9654;</span>${runs} ${runs === 1 ? 'run' : 'runs'}</div>
+          <div class="wf-step"><span class="wf-step-icon">&#10003;</span>${rate === null ? 'no success data' : `${rate}% success`}</div>
+          <div class="wf-step"><span class="wf-step-icon">&#8987;</span>${_escHtml(w.lastRun ? _wfFmtRel(w.lastRun) : 'never run')}</div>
+        </div>
+        <div class="wf-footer">
+          <div class="wf-trigger">Trigger: <span class="wf-trigger-badge ${trigger.cls || ''}">${_escHtml(trigger.label)}</span></div>
+          <div class="wf-actions">
+            <button class="wf-btn run" onclick="runStoreWorkflow('${id}')">&#9654; Run</button>
+            <button class="wf-btn" onclick="openWorkflowPanelFromStore('overview')">Open</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const liveBlock = activeRuns.length ? `
+    <div class="wfp-live" style="margin-bottom:14px">
+      <div class="wfp-live-h">
+        <div class="wfp-live-title"><span class="wfp-live-eyebrow">running</span>${_escHtml(activeRuns[0].name || activeRuns[0].workflowId || 'Workflow')}</div>
+        <div class="wfp-live-meta">${Number(activeRuns[0].currentStep || 0) + 1}/${Number(activeRuns[0].totalSteps || 0)} steps</div>
+      </div>
+      <div class="wfp-graph">${(activeRuns[0].steps || []).map((s, i) => `
+        <div class="wfp-node ${s.status || 'pending'}">
+          <div class="wfp-node-kind">${_escHtml(_wfStepKind(s.action))}</div>
+          <div class="wfp-node-label">${_escHtml(_wfStepLabel(s.action))}</div>
+        </div>${i < (activeRuns[0].steps || []).length - 1 ? '<div class="wfp-link"></div>' : ''}
+      `).join('')}</div>
+    </div>` : '';
+
+  body.innerHTML = `
+    <div class="wfp-kpis" style="margin-bottom:14px">
+      <div class="wfp-kpi"><div class="wfp-kpi-label">Stored</div><div class="wfp-kpi-value">${items.length}</div><div class="wfp-kpi-trend flat">local workflows</div></div>
+      <div class="wfp-kpi"><div class="wfp-kpi-label">Enabled</div><div class="wfp-kpi-value">${enabledCount}</div><div class="wfp-kpi-trend ${enabledCount ? 'up' : 'flat'}">ready to run</div></div>
+      <div class="wfp-kpi"><div class="wfp-kpi-label">Scheduled</div><div class="wfp-kpi-value">${scheduledCount}</div><div class="wfp-kpi-trend flat">timers / wake</div></div>
+      <div class="wfp-kpi"><div class="wfp-kpi-label">Last run</div><div class="wfp-kpi-value" style="font-size:18px">${_escHtml(_wfFmtRel(lastRun))}</div><div class="wfp-kpi-trend flat">${runCount} total runs</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="sc-btn primary" onclick="openWorkflowPanelFromStore('overview')">Open Workflows</button>
+      <button class="sc-btn" onclick="openWorkflowPanelFromStore('create')">Create workflow</button>
+      <button class="sc-btn" onclick="renderStoreBody()">Refresh</button>
+    </div>
+    ${liveBlock}
+    ${items.length ? rows : `
+      <div class="empty-state">
+        <div class="es-icon">&#9889;</div>
+        <h3>No workflows created yet</h3>
+        <p>This tab now reads the real local workflow engine. Create a workflow and it will appear here with real run data.</p>
+        <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">
+          <button class="sc-btn primary" onclick="openWorkflowPanelFromStore('create')">Create workflow</button>
+          <button class="sc-btn" onclick="openWorkflowPanelFromStore('overview')">Open Workflows</button>
+        </div>
+      </div>`}
+  `;
+}
+
+function openWorkflowPanelFromStore(tab = 'overview') {
+  closeStore();
+  openWorkflows();
+  if (tab && tab !== 'overview') wfTab(tab);
+}
+
+async function runStoreWorkflow(id) {
+  closeStore();
+  await runWorkflowById(id);
 }
 
 function renderStorePlugins(items, installed) {
