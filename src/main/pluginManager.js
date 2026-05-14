@@ -371,14 +371,26 @@ class PluginManager {
   }
 
   /**
-   * Install the bundled Spotify Control demo plugin from disk.
-   * Called on launch. It also repairs older installs that have a manifest but
-   * no handler.js, which caused "spotify-control has no handler" at runtime.
+   * Generic loader for any directory under `builtin-plugins/`. Reads the
+   * directory's manifest.json + handler.js, materialises them into the
+   * user's pluginsDir (so uninstall / settings persistence work the same
+   * as for marketplace installs), and registers the handler in
+   * this.handlers.
+   *
+   * Idempotent — running it on an existing install repairs missing files
+   * and refreshes the manifest with whatever ships in the latest app
+   * release. User-tweaked fields (`enabled`, `price`, `rating`,
+   * `downloads`, `config`) are preserved on top.
+   *
+   * @param {string} pluginId   directory name under builtin-plugins/
+   * @param {object} [opts]     overrides for default tier ('built_in') and author
    */
-  installBundledSpotify() {
+  installBuiltinFromDir(pluginId, opts = {}) {
     try {
-      const pluginId = 'spotify-control';
-      const bundle = path.join(__dirname, '..', '..', 'builtin-plugins', 'spotify-control');
+      const bundle = path.join(__dirname, '..', '..', 'builtin-plugins', pluginId);
+      if (!fs.existsSync(bundle)) {
+        return { ok: false, error: `builtin-plugins/${pluginId} not found` };
+      }
       const manifest = JSON.parse(fs.readFileSync(path.join(bundle, 'manifest.json'), 'utf8'));
       const handler = fs.readFileSync(path.join(bundle, 'handler.js'), 'utf8');
       const pluginDir = path.join(this.pluginsDir, pluginId);
@@ -398,17 +410,19 @@ class PluginManager {
         name: manifest.name,
         version: manifest.version,
         description: manifest.description,
-        author: 'Ernest Kostevich',
+        author: opts.author || manifest.author || 'Horizon Team',
         category: manifest.category,
-        tier: 'demo',
+        tier: opts.tier || manifest.tier || 'built_in',
         icon: manifest.icon,
         tools: manifest.tools,
         settings: manifest.settings || [],
-        permissions: manifest.permissions,
+        permissions: manifest.permissions || [],
         price: existing.price || 0,
         rating: existing.rating || 5,
         downloads: existing.downloads || 0,
         enabled: existing.enabled !== false,
+        // Preserve any user-edited config (e.g. Spotify client_id).
+        config: existing.config || {},
       };
 
       const toSave = { ...installedManifest };
@@ -422,13 +436,54 @@ class PluginManager {
       if (installedManifest.enabled !== false && this.isTrusted(installedManifest)) {
         this.enabled.add(pluginId);
       }
-      delete require.cache[require.resolve(handlerPath)];
+      try { delete require.cache[require.resolve(handlerPath)]; } catch (_) {}
       this.handlers.set(pluginId, require(handlerPath));
       return { ok: true, id: pluginId, repaired };
     } catch (e) {
-      console.error('Bundled Spotify install failed:', e.message);
+      console.error(`Builtin install failed for "${pluginId}":`, e.message);
       return { ok: false, error: e.message };
     }
+  }
+
+  /**
+   * Legacy shim — keeps existing main.js call site working until the
+   * caller switches to installAllBuiltins(). Spotify keeps its
+   * 'demo' tier (it's the showcase plugin, not a "built-in utility").
+   */
+  installBundledSpotify() {
+    return this.installBuiltinFromDir('spotify-control', {
+      tier: 'demo',
+      author: 'Ernest Kostevich',
+    });
+  }
+
+  /**
+   * Walk every directory under `builtin-plugins/` and install each via
+   * installBuiltinFromDir. Called once at app boot from main.js so the
+   * fresh install ships with a working set of utilities (system-monitor
+   * / web-fetch / clipboard / screenshot / crypto-pulse) plus the
+   * Spotify demo. None of these need credentials or external API keys.
+   */
+  installAllBuiltins() {
+    const root = path.join(__dirname, '..', '..', 'builtin-plugins');
+    let entries = [];
+    try { entries = fs.readdirSync(root, { withFileTypes: true }); }
+    catch (_) { return { ok: false, error: 'builtin-plugins/ not found' }; }
+    const installed = [];
+    const failed = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const id = entry.name;
+      // Spotify keeps tier='demo' — everything else defaults to built_in
+      // via the manifest's tier field.
+      const opts = id === 'spotify-control'
+        ? { tier: 'demo', author: 'Ernest Kostevich' }
+        : {};
+      const r = this.installBuiltinFromDir(id, opts);
+      if (r.ok) installed.push(r.id);
+      else failed.push({ id, error: r.error });
+    }
+    return { ok: true, installed, failed };
   }
 
   /**

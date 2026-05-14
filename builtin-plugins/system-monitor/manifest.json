@@ -1,0 +1,18 @@
+{
+  "id": "system-monitor",
+  "name": "System Monitor",
+  "version": "1.0.0",
+  "author": "Horizon Team",
+  "description": "CPU / RAM / disk snapshot, top processes, OS info — no credentials needed.",
+  "category": "system",
+  "tier": "built_in",
+  "icon": "Cpu",
+  "permissions": ["system:read", "shell:exec"],
+  "settings": [],
+  "tools": [
+    { "name": "status",    "description": "CPU + RAM + uptime snapshot.",                    "params": {} },
+    { "name": "top_procs", "description": "Top processes by CPU usage.",                     "params": {} },
+    { "name": "disk_info", "description": "Per-drive disk usage (free / used / total).",     "params": {} },
+    { "name": "network",   "description": "Network interfaces + addresses.",                 "params": {} }
+  ]
+}

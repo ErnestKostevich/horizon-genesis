@@ -1,0 +1,17 @@
+{
+  "id": "clipboard",
+  "name": "Clipboard",
+  "version": "1.0.0",
+  "author": "Horizon Team",
+  "description": "Read and write the system clipboard. Useful for chaining workflows: fetch → process → copy.",
+  "category": "utility",
+  "tier": "built_in",
+  "icon": "Clipboard",
+  "permissions": ["clipboard:read", "clipboard:write"],
+  "settings": [],
+  "tools": [
+    { "name": "read",  "description": "Read current clipboard text content.",      "params": {} },
+    { "name": "write", "description": "Write text to the clipboard.",              "params": { "text": "string" } },
+    { "name": "clear", "description": "Empty the clipboard.",                      "params": {} }
+  ]
+}
