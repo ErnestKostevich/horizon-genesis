@@ -8774,17 +8774,174 @@ async function loadPluginList() {
       el.innerHTML = '<div style="font-size:11px;color:var(--t3);padding:4px 0">No plugins installed</div>';
       return;
     }
-    el.innerHTML = plugins.map(p => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--b1)">
-        <div>
-          <div style="font-size:12px;color:var(--tx)">${p.name} <span style="font-size:9px;color:var(--t3)">v${p.version}</span></div>
-          <div style="font-size:10px;color:var(--t3)">${p.description} · ${p.tools} tools</div>
+    // For each plugin we now render a collapsible row that exposes:
+    //   • Name / version / description (always visible)
+    //   • Configure button — opens an inline form for every entry in
+    //     manifest.settings[]. Without this the user had no place to
+    //     paste a Spotify Client ID, OpenAI key, etc — every plugin
+    //     that needed credentials looked broken even though the
+    //     handler code was fully wired. (Reported by owner: "у спотифай
+    //     контрол буквально некуда вставить ключ".)
+    //   • Connect button — appears when the plugin exposes a `connect`
+    //     tool (Spotify-class OAuth plugins). Routes through
+    //     pluginExecTool so the handler's PKCE flow runs and tokens
+    //     get persisted.
+    //   • Status button — calls `status` tool when present.
+    //   • Disconnect / Enable / Remove (always available).
+    el.innerHTML = plugins.map(p => {
+      const id = String(p.id || '').replace(/'/g, "\\'");
+      const safeName = String(p.name || 'Untitled').replace(/[<>]/g, '');
+      const safeDesc = String(p.description || '').replace(/[<>]/g, '');
+      const settings = Array.isArray(p.settings) ? p.settings : [];
+      const cfg = p.config || {};
+      const tools = Array.isArray(p.toolList) ? p.toolList : [];
+      const hasConnect = tools.some(t => t && t.name === 'connect');
+      const hasStatus = tools.some(t => t && t.name === 'status');
+      const hasDisconnect = tools.some(t => t && t.name === 'disconnect');
+      const enabled = p.enabled !== false;
+      const requiredMissing = settings.some(s => s && s.required && !cfg[s.key]);
+      const settingsForm = settings.length ? `
+        <div id="pl-cfg-${id}" class="pl-cfg" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--b1);border-radius:8px">
+          ${settings.map(s => {
+            const k = String(s.key || '').replace(/'/g, "\\'");
+            const lbl = String(s.label || s.key || 'Setting').replace(/[<>]/g, '');
+            const hint = s.hint ? `<div style="font-size:10px;color:var(--t3);margin-top:3px;line-height:1.4">${String(s.hint).replace(/[<>]/g, '')}</div>` : '';
+            const val = String(cfg[s.key] != null ? cfg[s.key] : '').replace(/"/g, '&quot;');
+            const inputType = (s.type === 'secret' || /secret|key|token|password/i.test(s.key || ''))
+              ? 'password'
+              : (s.type === 'number' ? 'number' : (s.type === 'boolean' ? 'checkbox' : 'text'));
+            const requiredMark = s.required ? ' <span style="color:#fbbf24">*</span>' : '';
+            if (inputType === 'checkbox') {
+              return `<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
+                <input type="checkbox" id="pl-${id}-${k}" data-key="${k}" ${cfg[s.key] ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer"/>
+                <label for="pl-${id}-${k}" style="font-size:11px;color:var(--t2);cursor:pointer">${lbl}${requiredMark}</label>
+                ${hint}
+              </div>`;
+            }
+            return `<div style="margin:8px 0">
+              <label style="font-size:11px;color:var(--t2);display:block;margin-bottom:4px">${lbl}${requiredMark}</label>
+              <input type="${inputType}" id="pl-${id}-${k}" data-key="${k}" value="${val}" placeholder="${String(s.placeholder || '').replace(/"/g, '&quot;')}"
+                style="width:100%;background:rgba(255,255,255,.04);border:1px solid var(--b1);border-radius:7px;padding:7px 10px;color:var(--tx);font-size:12px;font-family:var(--mono);outline:none"/>
+              ${hint}
+            </div>`;
+          }).join('')}
+          <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">
+            <button class="psv" onclick="savePluginConfig('${id}')" style="font-size:10px;color:var(--acc);border-color:rgba(108,140,255,.35);background:rgba(108,140,255,.08)">Save settings</button>
+          </div>
+        </div>` : '';
+      const warnBanner = requiredMissing ? `
+        <div style="margin-top:6px;padding:6px 9px;font-size:10.5px;color:#fcd34d;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.25);border-radius:7px">
+          Missing required setting${settings.filter(s => s.required && !cfg[s.key]).length > 1 ? 's' : ''} — click <b>Configure</b> to fill in.
+        </div>` : '';
+      return `
+        <div style="padding:10px 0;border-bottom:1px solid var(--b1)" id="pl-row-${id}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;color:var(--tx);font-weight:600">
+                ${safeName}
+                <span style="font-size:9px;color:var(--t3);font-weight:400;margin-left:4px">v${String(p.version||'1.0.0').replace(/[<>]/g,'')}</span>
+                ${enabled ? '' : '<span style="font-size:9px;color:#fcd34d;margin-left:6px;padding:1px 6px;border:1px solid rgba(251,191,36,.3);border-radius:999px">DISABLED</span>'}
+              </div>
+              <div style="font-size:10px;color:var(--t3);margin-top:2px">${safeDesc} · ${(p.tools||0)} tools</div>
+            </div>
+            <div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+              ${settings.length ? `<button class="psv" onclick="togglePluginConfig('${id}')" style="font-size:10px${requiredMissing ? ';color:#fcd34d;border-color:rgba(251,191,36,.4)' : ''}">${requiredMissing ? '⚠ Configure' : 'Configure'}</button>` : ''}
+              ${hasConnect ? `<button class="psv" onclick="connectPlugin('${id}')" style="font-size:10px;color:var(--green);border-color:rgba(52,211,153,.3)">Connect</button>` : ''}
+              ${hasStatus  ? `<button class="psv" onclick="statusPlugin('${id}')" style="font-size:10px">Status</button>` : ''}
+              ${hasDisconnect ? `<button class="psv" onclick="disconnectPlugin('${id}')" style="font-size:10px;color:var(--t3)">Disconnect</button>` : ''}
+              <button class="psv" onclick="togglePluginEnabled('${id}')" style="font-size:10px;color:${enabled ? 'var(--t2)' : 'var(--green)'};border-color:${enabled ? 'var(--b1)' : 'rgba(52,211,153,.3)'}">${enabled ? 'Disable' : 'Enable'}</button>
+              <button class="psv" onclick="uninstallPlugin('${id}')" style="font-size:10px;color:var(--red);border-color:rgba(248,113,113,.3)">Remove</button>
+            </div>
+          </div>
+          ${warnBanner}
+          ${settingsForm}
         </div>
-        <button class="psv" onclick="uninstallPlugin('${p.id}')" style="color:var(--red);border-color:rgba(248,113,113,.3);font-size:10px">Remove</button>
-      </div>
-    `).join('');
-  } catch(_) {}
+      `;
+    }).join('');
+  } catch (e) {
+    console.warn('loadPluginList failed:', e?.message || e);
+  }
 }
+
+window.togglePluginConfig = function (id) {
+  const el = document.getElementById('pl-cfg-' + id);
+  if (!el) return;
+  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+};
+
+window.savePluginConfig = async function (id) {
+  const root = document.getElementById('pl-cfg-' + id);
+  if (!root) return;
+  const cfg = {};
+  root.querySelectorAll('input[data-key]').forEach(inp => {
+    const key = inp.dataset.key;
+    if (inp.type === 'checkbox') cfg[key] = inp.checked;
+    else if (inp.type === 'number') cfg[key] = inp.value === '' ? null : Number(inp.value);
+    else cfg[key] = inp.value;
+  });
+  try {
+    const r = await H.pluginSetConfig(id, cfg);
+    if (r && r.ok !== false) {
+      H.notify?.('Plugin', 'Settings saved');
+      loadPluginList();
+    } else {
+      alert('Save failed: ' + (r?.error || 'unknown'));
+    }
+  } catch (e) {
+    alert('Save failed: ' + (e?.message || e));
+  }
+};
+
+window.connectPlugin = async function (id) {
+  try {
+    const r = await H.pluginExecTool(id, 'connect', {});
+    if (r && r.ok === false) {
+      alert('Connect failed: ' + (r.error || 'see operator console for details'));
+      return;
+    }
+    const msg = (r && (r.out || r.message)) || 'Connection started — follow the prompts in your browser.';
+    H.notify?.('Plugin', String(msg).slice(0, 200));
+    try { addMsg('bot', `🔌 ${id}: ${String(msg).slice(0, 400)}`); } catch (_) {}
+  } catch (e) {
+    alert('Connect failed: ' + (e?.message || e));
+  }
+};
+
+window.statusPlugin = async function (id) {
+  try {
+    const r = await H.pluginExecTool(id, 'status', {});
+    const text = (r && (r.out || r.message)) || JSON.stringify(r);
+    try { addMsg('bot', `🔌 ${id} status: ${String(text).slice(0, 600)}`); } catch (_) {}
+  } catch (e) {
+    alert('Status failed: ' + (e?.message || e));
+  }
+};
+
+window.disconnectPlugin = async function (id) {
+  if (!confirm('Disconnect ' + id + '? Stored tokens will be wiped.')) return;
+  try {
+    const r = await H.pluginExecTool(id, 'disconnect', {});
+    if (r && r.ok === false) {
+      alert('Disconnect failed: ' + (r.error || 'unknown'));
+      return;
+    }
+    H.notify?.('Plugin', 'Disconnected');
+    loadPluginList();
+  } catch (e) {
+    alert('Disconnect failed: ' + (e?.message || e));
+  }
+};
+
+window.togglePluginEnabled = async function (id) {
+  try {
+    // Preload exposes this as `pluginToggle` (not `pluginToggleEnabled`).
+    const r = await H.pluginToggle?.(id);
+    if (r && r.ok === false) alert('Toggle failed: ' + (r.error || 'unknown'));
+    loadPluginList();
+  } catch (e) {
+    alert('Toggle failed: ' + (e?.message || e));
+  }
+};
 
 async function showPluginStore() {
   const el = document.getElementById('plugin-store');
