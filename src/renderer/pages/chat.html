@@ -353,10 +353,28 @@ textarea::placeholder{color:var(--t3)}
 .model-popover{display:none;position:fixed;background:var(--bg2,#14121a);border:1px solid var(--b1);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.55);padding:6px;min-width:300px;max-width:420px;max-height:420px;z-index:300;overflow-y:auto;-webkit-app-region:no-drag}
 .model-popover.show{display:block}
 .model-popover-h{font-size:9px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--t3);padding:8px 10px;border-bottom:1px solid var(--b1);margin-bottom:4px}
-.model-popover-opt{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:11.5px;color:var(--tx);transition:background .12s;line-height:1.4;font-family:var(--mono)}
+.model-popover-opt{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:11.5px;color:var(--tx);transition:background .12s;line-height:1.4;font-family:var(--mono);display:flex;align-items:center;gap:8px}
 .model-popover-opt:hover{background:rgba(255,255,255,.05)}
 .model-popover-opt.on{background:rgba(232,160,80,.12);color:var(--acc)}
 .model-popover-empty{padding:10px;font-size:11px;color:var(--t3);font-style:italic}
+/* PR-C3 — pricing chip in model picker rows. Right-aligned, mono,
+   muted. Tooltip on hover shows the full per-Mtok in/out + context
+   window. */
+.model-popover-opt-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.model-popover-opt-price{
+  flex-shrink:0;
+  font: 600 9.5px/1 var(--mono);
+  letter-spacing:.4px;
+  color: var(--t3);
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--b1);
+  background: rgba(255,255,255,.02);
+  white-space: nowrap;
+}
+.model-popover-opt:hover .model-popover-opt-price { color: var(--t2); border-color: var(--accent-300); }
+.model-popover-opt.on .model-popover-opt-price { color: var(--accent-500); border-color: var(--accent-300); background: var(--accent-100); }
+.model-popover-opt-price.free { color: var(--success-500); border-color: var(--success-300); }
 .mic-test-btn{width:100%;padding:10px;background:rgba(255,255,255,.03);border:1px solid rgba(232,160,80,.3);border-radius:9px;color:var(--acc);font-size:12px;cursor:pointer;transition:all .2s;margin-top:4px}
 .mic-test-btn:hover{background:var(--acc3)}
 .mic-st{font-size:10px;color:var(--t3);margin-top:5px;text-align:center}
@@ -4584,6 +4602,115 @@ const MODEL_PICKER_REGISTRY = {
   ],
 };
 
+// PR-C3 — model pricing table for the popover badge. USD per 1M tokens
+// (input / output). Numbers reflect public pricing as of 2026-Q1; if a
+// provider changes them the worst case is the badge being stale by a
+// percent or two — the agent still uses the right model. ctx is the
+// nominal context window in K tokens. OpenRouter pricing is fetched
+// dynamically (see _openrouterAllModels), so we only ship a default
+// here for the curated 4 entries in MODEL_PICKER_REGISTRY.openrouter.
+const MODEL_PRICING = {
+  claude: {
+    'claude-sonnet-4-6':       { in: 3.00,  out: 15.00, ctx: 200 },
+    'claude-opus-4-5':         { in: 15.00, out: 75.00, ctx: 200 },
+    'claude-3-7-sonnet-latest':{ in: 3.00,  out: 15.00, ctx: 200 },
+    'claude-3-5-haiku-latest': { in: 0.80,  out: 4.00,  ctx: 200 },
+  },
+  openai: {
+    'gpt-4o':       { in: 2.50, out: 10.00, ctx: 128 },
+    'gpt-4o-mini':  { in: 0.15, out: 0.60,  ctx: 128 },
+    'gpt-4.1':      { in: 2.00, out: 8.00,  ctx: 128 },
+    'gpt-5':        { in: 5.00, out: 15.00, ctx: 256 },
+    'gpt-5-mini':   { in: 0.25, out: 2.00,  ctx: 128 },
+    'o3':           { in: 20.00,out: 80.00, ctx: 200 },
+    'o4-mini':      { in: 1.10, out: 4.40,  ctx: 128 },
+  },
+  gemini: {
+    'gemini-2.5-flash':      { in: 0.30, out: 2.50, ctx: 1000 },
+    'gemini-2.5-pro':        { in: 1.25, out: 5.00, ctx: 2000 },
+    'gemini-2.5-flash-lite': { in: 0.10, out: 0.40, ctx: 1000 },
+    'gemini-2.0-flash':      { in: 0.075,out: 0.30, ctx: 1000 },
+    'gemini-3-flash':        { in: 0.30, out: 2.50, ctx: 1000 },
+    'gemini-3-pro':          { in: 1.50, out: 6.00, ctx: 2000 },
+  },
+  groq: {
+    'llama-3.3-70b-versatile':       { in: 0.59, out: 0.79, ctx: 128 },
+    'llama-3.1-8b-instant':          { in: 0.05, out: 0.08, ctx: 128 },
+    'qwen/qwen3-32b':                { in: 0.29, out: 0.59, ctx: 128 },
+    'moonshotai/kimi-k2-instruct':   { in: 1.00, out: 3.00, ctx: 128 },
+    'openai/gpt-oss-120b':           { in: 0.15, out: 0.60, ctx: 128 },
+  },
+  deepseek: {
+    'deepseek-chat':     { in: 0.27, out: 1.10, ctx: 128 },
+    'deepseek-reasoner': { in: 0.55, out: 2.19, ctx: 128 },
+  },
+  grok: {
+    'grok-4':                { in: 5.00, out: 15.00, ctx: 256 },
+    'grok-4-fast-reasoning': { in: 1.00, out: 4.00,  ctx: 256 },
+    'grok-4-mini':           { in: 0.30, out: 1.20,  ctx: 128 },
+    'grok-code-fast-1':      { in: 1.00, out: 4.00,  ctx: 256 },
+  },
+  mistral: {
+    'mistral-large-latest':  { in: 2.00, out: 6.00, ctx: 128 },
+    'mistral-medium-latest': { in: 0.40, out: 2.00, ctx: 128 },
+    'mistral-small-latest':  { in: 0.20, out: 0.60, ctx: 128 },
+    'codestral-latest':      { in: 0.30, out: 0.90, ctx: 256 },
+  },
+  qwen: {
+    'qwen-plus':       { in: 0.40, out: 1.20, ctx: 1000 },
+    'qwen3-max':       { in: 1.20, out: 6.00, ctx: 256 },
+    'qwen3.5-plus':    { in: 0.40, out: 1.20, ctx: 1000 },
+    'qwen3.5-flash':   { in: 0.10, out: 0.30, ctx: 1000 },
+    'qwen3-coder-plus':{ in: 0.50, out: 1.50, ctx: 256 },
+  },
+  perplexity: {
+    'sonar-pro':            { in: 3.00, out: 15.00, ctx: 200 },
+    'sonar':                { in: 1.00, out: 1.00,  ctx: 128 },
+    'sonar-reasoning':      { in: 1.00, out: 5.00,  ctx: 128 },
+    'sonar-reasoning-pro':  { in: 2.00, out: 8.00,  ctx: 128 },
+  },
+  cohere: {
+    'command-a-03-2025':  { in: 2.50, out: 10.00, ctx: 256 },
+    'command-r-plus':     { in: 2.50, out: 10.00, ctx: 128 },
+    'command-r':          { in: 0.15, out: 0.60,  ctx: 128 },
+  },
+};
+
+// Look up pricing for a provider+model. For OpenRouter, prefer the
+// per-model data fetched via openrouterListModels() (cached on
+// _openrouterAllModels). Returns null when no data exists — callers
+// should hide the badge in that case.
+function getModelPricing(provider, model) {
+  if (!provider || !model) return null;
+  if (provider === 'openrouter' && Array.isArray(_openrouterAllModels)) {
+    const entry = _openrouterAllModels.find(m => (typeof m === 'string' ? m : m.id) === model);
+    const p = entry && entry.pricing;
+    if (p && (p.prompt != null || p.completion != null)) {
+      // OpenRouter pricing is in USD per token (decimal). Convert to per-Mtok.
+      const inN  = Number(p.prompt) * 1_000_000;
+      const outN = Number(p.completion) * 1_000_000;
+      const ctxN = Number(entry.context_length || 0) / 1000;
+      return { in: inN, out: outN, ctx: Math.round(ctxN) };
+    }
+    return null;
+  }
+  const table = MODEL_PRICING[provider];
+  if (!table) return null;
+  return table[model] || null;
+}
+
+function fmtPrice(n) {
+  if (n == null || !isFinite(n)) return '—';
+  if (n === 0) return 'free';
+  if (n < 1) return '$' + n.toFixed(2);
+  return '$' + (n >= 10 ? Math.round(n) : n.toFixed(2));
+}
+function fmtCtxK(k) {
+  if (!k || !isFinite(k)) return '';
+  if (k >= 1000) return `${(k / 1000).toFixed(k % 1000 === 0 ? 0 : 1)}M ctx`;
+  return `${k}K ctx`;
+}
+
 async function _bootModelCache() {
   const known = ['claude','openai','gemini','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','ollama','lmstudio','localai'];
   await Promise.all(known.map(async (p) => {
@@ -4741,7 +4868,20 @@ function openModelPicker(ev){
       const escVal = item.value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       const handler = isLocalProvider ? `pickLocalModel('${currentProv}','${escVal}')` : `pickModel('${currentProv}','${escVal}')`;
       const onClass = (item.value === current) ? ' on' : '';
-      html += `<div class="model-popover-opt${onClass}" onclick="${handler}" title="${_escHtml(item.value)}">${_escHtml(item.label)}</div>`;
+      // PR-C3 — pricing chip. Local providers (Ollama / LM Studio /
+      // LocalAI) are always free → render a green "free" pill.
+      // Otherwise use MODEL_PRICING table; missing data → no chip.
+      let priceChip = '';
+      if (isLocalProvider) {
+        priceChip = `<span class="model-popover-opt-price free" title="Local model — no API cost">free</span>`;
+      } else {
+        const pr = getModelPricing(currentProv, item.value);
+        if (pr) {
+          const tip = `Input ${fmtPrice(pr.in)} / Output ${fmtPrice(pr.out)} per 1M tokens · ${fmtCtxK(pr.ctx)}`;
+          priceChip = `<span class="model-popover-opt-price" title="${_escHtml(tip)}">${_escHtml(fmtPrice(pr.in))}/${_escHtml(fmtPrice(pr.out))}</span>`;
+        }
+      }
+      html += `<div class="model-popover-opt${onClass}" onclick="${handler}" title="${_escHtml(item.value)}"><span class="model-popover-opt-name">${_escHtml(item.label)}</span>${priceChip}</div>`;
     }
   }
   pop.innerHTML = html;
