@@ -63,6 +63,11 @@ contextBridge.exposeInMainWorld('H', {
   // PR-C4 — git branch indicator + recent-branch dropdown.
   gitBranch:            (abs)        => ipcRenderer.invoke('gitBranch', abs),
   gitRecentBranches:    (abs)        => ipcRenderer.invoke('gitRecentBranches', abs),
+  // PR-D2 — workspace symbol index (built lazily on workspace open).
+  wsIndexBuild:         (opts)       => ipcRenderer.invoke('wsIndexBuild', opts),
+  wsIndexStatus:        ()           => ipcRenderer.invoke('wsIndexStatus'),
+  wsIndexQuery:         (q, opts)    => ipcRenderer.invoke('wsIndexQuery', q, opts),
+  wsIndexClear:         ()           => ipcRenderer.invoke('wsIndexClear'),
   terminalCreate:       (id, rel, c, r) => ipcRenderer.invoke('terminalCreate', id, rel, c, r),
   terminalWrite:        (id, data)   => ipcRenderer.invoke('terminalWrite', id, data),
   terminalResize:       (id, c, r)   => ipcRenderer.invoke('terminalResize', id, c, r),

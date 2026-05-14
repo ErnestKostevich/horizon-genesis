@@ -1335,6 +1335,12 @@ ipcMain.handle('wsChooseFolder', async () => {
     if (r.canceled || !r.filePaths?.[0]) return { ok:false, canceled:true };
     const root = path.resolve(r.filePaths[0]);
     settingsStore.set('codeWorkspace', root);
+    // PR-D2 — kick off symbol indexing in the background. Doesn't
+    // block the IPC response; renderer can poll wsIndexStatus to know
+    // when @symbol autocomplete becomes useful.
+    setImmediate(() => {
+      try { _getWsIndexer().build(root).catch(() => {}); } catch (_) {}
+    });
     return { ok:true, path:root };
   } catch(e) { return { ok:false, err:e.message }; }
 });
@@ -1393,54 +1399,39 @@ ipcMain.handle('wsSearch', (_, query = '', rel = '') => {
   } catch(e) { return { ok:false, err:e.message }; }
 });
 
-// PR-C4 — git branch indicator. Reads .git/HEAD, parses either:
-//   "ref: refs/heads/<branch>\n"           → branch name
-//   "<40-char SHA>\n"                       → "(detached at <short>)"
-// Optionally lists recent branches for the dropdown via `git branch
-// --sort=-committerdate` if requested. Cheap, no `git` shell-out for
-// the common branch-name read — just a fs read of HEAD.
-ipcMain.handle('gitBranch', async (_, absPath = '') => {
+// PR-D2 — Workspace symbol indexer (lazy singleton). Build runs in
+// the main process; caps inside workspaceIndexer.js keep it bounded
+// on huge monorepos (returns truncated:true at the file/symbol cap).
+let _wsIndexer = null;
+function _getWsIndexer() {
+  if (!_wsIndexer) {
+    const { WorkspaceIndexer } = require('./workspaceIndexer');
+    _wsIndexer = new WorkspaceIndexer();
+  }
+  return _wsIndexer;
+}
+
+ipcMain.handle('wsIndexBuild', async (_, opts = {}) => {
   try {
-    const root = (absPath && typeof absPath === 'string') ? absPath : currentWorkspaceRoot();
-    if (!root) return { ok: false, err: 'no workspace' };
-    const fsmod = require('fs');
-    const pathmod = require('path');
-    const headPath = pathmod.join(root, '.git', 'HEAD');
-    if (!fsmod.existsSync(headPath)) return { ok: false, err: 'not a git repo' };
-    const head = fsmod.readFileSync(headPath, 'utf8').trim();
-    if (head.startsWith('ref:')) {
-      const ref = head.slice(4).trim();
-      const branch = ref.replace(/^refs\/heads\//, '');
-      return { ok: true, branch, detached: false, ref };
-    }
-    // 40-char SHA → detached HEAD
-    if (/^[0-9a-f]{40}$/i.test(head)) {
-      return { ok: true, branch: '(detached at ' + head.slice(0, 7) + ')', detached: true, sha: head };
-    }
-    return { ok: false, err: 'unparseable HEAD: ' + head.slice(0, 40) };
+    const root = currentWorkspaceRoot();
+    if (!root) return { ok: false, err: 'no workspace open' };
+    return await _getWsIndexer().build(root, opts || {});
   } catch (e) { return { ok: false, err: e.message }; }
 });
 
-// Recent branches via `git for-each-ref` (faster than `git branch --sort`
-// and doesn't depend on a TTY). Returns the 10 most-recently-touched
-// local branches. Used by the branch dropdown.
-ipcMain.handle('gitRecentBranches', async (_, absPath = '') => {
-  try {
-    const root = (absPath && typeof absPath === 'string') ? absPath : currentWorkspaceRoot();
-    if (!root) return { ok: false, err: 'no workspace', branches: [] };
-    const { exec } = require('child_process');
-    return await new Promise((resolve) => {
-      exec(
-        'git for-each-ref --sort=-committerdate refs/heads/ --format=%(refname:short) --count=10',
-        { cwd: root, timeout: 4000, windowsHide: true },
-        (err, stdout) => {
-          if (err) { resolve({ ok: false, err: err.message, branches: [] }); return; }
-          const branches = (stdout || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-          resolve({ ok: true, branches });
-        }
-      );
-    });
-  } catch (e) { return { ok: false, err: e.message, branches: [] }; }
+ipcMain.handle('wsIndexStatus', () => {
+  try { return _getWsIndexer().status(); }
+  catch (e) { return { ok: false, err: e.message }; }
+});
+
+ipcMain.handle('wsIndexQuery', (_, q = '', opts = {}) => {
+  try { return _getWsIndexer().query(q, opts || {}); }
+  catch (e) { return { ok: false, err: e.message }; }
+});
+
+ipcMain.handle('wsIndexClear', () => {
+  try { _getWsIndexer().clear(); return { ok: true }; }
+  catch (e) { return { ok: false, err: e.message }; }
 });
 
 ipcMain.handle('wsShell', async (event, cmd) => {
