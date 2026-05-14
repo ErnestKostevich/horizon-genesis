@@ -63,6 +63,10 @@ contextBridge.exposeInMainWorld('H', {
   // PR-C4 — git branch indicator + recent-branch dropdown.
   gitBranch:            (abs)        => ipcRenderer.invoke('gitBranch', abs),
   gitRecentBranches:    (abs)        => ipcRenderer.invoke('gitRecentBranches', abs),
+  // PR-D3 — project config (.horizon/rules.md + hooks.json).
+  projectConfigGet:        ()         => ipcRenderer.invoke('projectConfigGet'),
+  projectConfigWriteRules: (content)  => ipcRenderer.invoke('projectConfigWriteRules', content),
+  projectConfigWriteHooks: (hooks)    => ipcRenderer.invoke('projectConfigWriteHooks', hooks),
   terminalCreate:       (id, rel, c, r) => ipcRenderer.invoke('terminalCreate', id, rel, c, r),
   terminalWrite:        (id, data)   => ipcRenderer.invoke('terminalWrite', id, data),
   terminalResize:       (id, c, r)   => ipcRenderer.invoke('terminalResize', id, c, r),
