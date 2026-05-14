@@ -1264,6 +1264,15 @@ textarea::placeholder{color:var(--t3)}
 
 /* ═══ COMMAND PALETTE ═══ */
 .cmd-palette{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);align-items:flex-start;justify-content:center;padding-top:15vh}
+/* PR-U2 — group headers in the cmd palette (Linear/Raycast style). */
+.cmd-group-header {
+  padding: 10px 14px 6px;
+  font: 700 10px/1 var(--mono);
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+.cmd-group-header:first-child { padding-top: 4px; }
 .cmd-palette.show{display:flex}
 .cmd-box{width:420px;max-width:90vw;background:var(--bg2);border:1px solid var(--b2);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden}
 .cmd-input{width:100%;background:none;border:none;border-bottom:1px solid var(--b1);padding:14px 16px;color:var(--tx);font-size:14px;font-family:var(--font);outline:none}
@@ -8875,22 +8884,155 @@ function closeCmdPalette() {
   document.getElementById('cmd-palette').classList.remove('show');
 }
 
+// PR-U2 — dynamic palette items (built per-open so model lists /
+// chat list / personas always reflect current state). Grouped under
+// section headers when no query is active; flat ranked list when the
+// user types. Each item is { group, icon, text, hint, action }.
+function _paletteDynamicItems() {
+  const dyn = [];
+  // ── Models (per provider, current 4 + Claude/OpenAI/Gemini groups) ──
+  try {
+    const provs = ['claude','openai','gemini','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','ollama','lmstudio'];
+    for (const p of provs) {
+      const reg = (typeof MODEL_PICKER_REGISTRY !== 'undefined' && MODEL_PICKER_REGISTRY[p]) || [];
+      for (const [val, label] of reg) {
+        const pricing = (typeof getModelPricing === 'function') ? getModelPricing(p, val) : null;
+        const priceHint = pricing ? `${fmtPrice(pricing.in)}/${fmtPrice(pricing.out)} per Mtok` : '';
+        dyn.push({
+          group: 'Switch model',
+          icon: '🧠',
+          text: `${p} · ${label}`,
+          hint: priceHint,
+          action: () => { try { saveModelSetting(p, val); } catch(_){} }
+        });
+      }
+    }
+  } catch(_){}
+  // ── Personas ──
+  try {
+    H.getPersonas?.().then(list => {
+      // We've already returned the dyn array — reading async items here
+      // doesn't help for THIS render. Persona dyn items are added via
+      // filterCommands cache. Skip.
+    }).catch(()=>{});
+  } catch(_){}
+  // Static persona list (fallback if H.getPersonas async-loads later).
+  for (const pid of ['jarvis','friday','alfred','sage','pixel']) {
+    dyn.push({
+      group: 'Switch persona',
+      icon: '🎭',
+      text: `Persona · ${pid}`,
+      hint: 'apply this persona',
+      action: () => { try { setPersona?.(pid); } catch(_){} }
+    });
+  }
+  // ── Chat list (last 8) ──
+  try {
+    if (Array.isArray(window.chatList)) {
+      for (const c of window.chatList.slice(0, 8)) {
+        const title = c?.title || 'New chat';
+        dyn.push({
+          group: 'Switch chat',
+          icon: '💬',
+          text: title.slice(0, 60),
+          hint: c?.id ? `chat-${c.id.slice(0, 8)}` : '',
+          action: () => { try { switchChat?.(c.id); } catch(_){} }
+        });
+      }
+    }
+  } catch(_){}
+  // ── Settings tabs ──
+  for (const [tab, lbl] of [
+    ['account','Account'], ['profile','Profile'], ['models','Models'],
+    ['providers','Providers'], ['connections','Connections'], ['voice','Voice & Wake'],
+    ['features','Features'], ['personas','Personas'], ['plugins','Plugins'], ['data','Data & Health']
+  ]) {
+    dyn.push({
+      group: 'Open settings',
+      icon: '⚙',
+      text: `Settings · ${lbl}`,
+      hint: `open ${tab} tab`,
+      action: () => { try { openPanel(tab); } catch(_){} }
+    });
+  }
+  return dyn;
+}
+
 function filterCommands(query) {
-  const q = query.toLowerCase();
-  const filtered = q ? COMMANDS.filter(c => 
-    c.text.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)
-  ) : COMMANDS;
-  
+  const q = query.toLowerCase().trim();
+  const allItems = COMMANDS.map(c => ({ ...c, group: c.group || 'Action' }))
+    .concat(_paletteDynamicItems());
+
+  let filtered;
+  if (q) {
+    // Ranked: prefix > substring in text > substring in hint
+    const scored = allItems.map(c => {
+      const tlc = c.text.toLowerCase();
+      const hlc = (c.hint || '').toLowerCase();
+      const glc = (c.group || '').toLowerCase();
+      let score = 0;
+      if (tlc.startsWith(q)) score = 1000;
+      else if (tlc.includes(q)) score = 500 - tlc.indexOf(q);
+      else if (hlc.includes(q)) score = 200;
+      else if (glc.includes(q)) score = 100;
+      return { c, score };
+    }).filter(x => x.score > 0);
+    scored.sort((a, b) => b.score - a.score);
+    filtered = scored.slice(0, 60).map(x => x.c);
+  } else {
+    // No query → group by section, cap each to 6 entries.
+    const groups = new Map();
+    for (const c of allItems) {
+      const g = c.group || 'Action';
+      if (!groups.has(g)) groups.set(g, []);
+      const arr = groups.get(g);
+      if (arr.length < 6) arr.push(c);
+    }
+    // Order: Mode → Switch model → Switch persona → Switch chat → Action → Open settings
+    const groupOrder = ['Mode', 'Switch model', 'Switch persona', 'Switch chat', 'Action', 'Open settings'];
+    filtered = [];
+    for (const g of groupOrder) {
+      if (groups.has(g)) {
+        filtered.push({ __header: g });
+        for (const it of groups.get(g)) filtered.push(it);
+      }
+    }
+    // Anything left in unknown groups appended.
+    for (const [g, arr] of groups.entries()) {
+      if (!groupOrder.includes(g)) {
+        filtered.push({ __header: g });
+        for (const it of arr) filtered.push(it);
+      }
+    }
+  }
+
+  // Build runnable index — only non-header items get an index.
+  const runnable = filtered.filter(x => !x.__header);
   cmdActiveIdx = 0;
   const container = document.getElementById('cmd-results');
-  container.innerHTML = filtered.map((c, i) => 
-    `<div class="cmd-item${i===0?' active':''}" onclick="runCommand(${COMMANDS.indexOf(c)})" onmouseenter="cmdActiveIdx=${i};highlightCmd()">
-      <span class="cmd-item-icon">${c.icon}</span>
-      <span class="cmd-item-text">${c.text}</span>
-      <span class="cmd-item-hint">${c.hint}</span>
-    </div>`
-  ).join('');
+  let runIdx = -1;
+  container.innerHTML = filtered.map(c => {
+    if (c.__header) {
+      return `<div class="cmd-group-header">${esc(c.__header)}</div>`;
+    }
+    runIdx++;
+    const i = runIdx;
+    // Cache the item on a data-index for runCommand().
+    return `<div class="cmd-item${i===0?' active':''}" data-runidx="${i}" onclick="runDynamicCommand(${i})" onmouseenter="cmdActiveIdx=${i};highlightCmd()">
+      <span class="cmd-item-icon">${c.icon || ''}</span>
+      <span class="cmd-item-text">${esc(c.text)}</span>
+      <span class="cmd-item-hint">${esc(c.hint || '')}</span>
+    </div>`;
+  }).join('');
+  // Stash the runnable list so runDynamicCommand can resolve it.
+  window._cmdRunnable = runnable;
 }
+
+window.runDynamicCommand = function (idx) {
+  closeCmdPalette();
+  const list = window._cmdRunnable || [];
+  list[idx]?.action?.();
+};
 
 function highlightCmd() {
   document.querySelectorAll('.cmd-item').forEach((el, i) => {
@@ -8899,15 +9041,21 @@ function highlightCmd() {
 }
 
 function cmdKeyDown(e) {
+  // PR-U2 — items now skip group headers; use the runnable list cache
+  // to keep arrow nav in sync.
   const items = document.querySelectorAll('.cmd-item');
   if (e.key === 'Escape') { closeCmdPalette(); return; }
-  if (e.key === 'ArrowDown') { e.preventDefault(); cmdActiveIdx = Math.min(cmdActiveIdx + 1, items.length - 1); highlightCmd(); }
-  if (e.key === 'ArrowUp') { e.preventDefault(); cmdActiveIdx = Math.max(cmdActiveIdx - 1, 0); highlightCmd(); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmdActiveIdx = Math.min(cmdActiveIdx + 1, items.length - 1); highlightCmd(); scrollActiveCmdIntoView(); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); cmdActiveIdx = Math.max(cmdActiveIdx - 1, 0); highlightCmd(); scrollActiveCmdIntoView(); }
   if (e.key === 'Enter') {
     e.preventDefault();
     const active = items[cmdActiveIdx];
     if (active) active.click();
   }
+}
+function scrollActiveCmdIntoView() {
+  const active = document.querySelectorAll('.cmd-item')[cmdActiveIdx];
+  active?.scrollIntoView({ block: 'nearest' });
 }
 
 function runCommand(idx) {
@@ -8920,6 +9068,23 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
     openCmdPalette();
+  }
+  // PR-U2 — chord shortcuts that pre-fill the palette with a section.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+    e.preventDefault();
+    openCmdPalette();
+    setTimeout(() => {
+      const inp = document.getElementById('cmd-input');
+      if (inp) { inp.value = 'switch model'; filterCommands(inp.value); }
+    }, 0);
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+    e.preventDefault();
+    openCmdPalette();
+    setTimeout(() => {
+      const inp = document.getElementById('cmd-input');
+      if (inp) { inp.value = 'switch persona'; filterCommands(inp.value); }
+    }, 0);
   }
   if (e.key === 'Escape') closeCmdPalette();
 });
