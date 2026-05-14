@@ -2668,71 +2668,75 @@ body.surface-active .inspector-pane{display:none!important}
 }
 .shell-chip:hover{filter:brightness(1.08);transform:translateY(-1px)}
 
-/* PR-C4 — git branch chip (in the .tb-center cluster) + dropdown
-   popover. Detached-HEAD state gets an amber tint to flag the user
-   that they're not on a regular branch. */
-#shell-git-branch { display:inline-flex; align-items:center; }
-#shell-git-branch.detached {
-  border-color: var(--warn-300, rgba(251,191,36,.30));
-  background: var(--warn-50, rgba(251,191,36,.06));
-  color: var(--warn-500, #fbbf24);
-}
-.git-branch-pop {
+/* PR-D2 — @-mention dropdown over chat input. position:fixed,
+   anchored above the textarea via JS bottom-offset. */
+.at-mention-pop {
   display: none;
-  width: 280px;
-  max-height: 360px;
-  background: #0b0e16;
-  border: 1px solid var(--code-line, #1d2333);
+  width: 360px;
+  max-height: 280px;
+  background: rgba(11,14,22,.97);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--accent-cyan-300, rgba(86,210,255,.32));
   border-radius: var(--radius-lg, 12px);
   box-shadow: 0 18px 40px -12px rgba(0,0,0,.7);
-  z-index: 240;
+  z-index: 260;
   overflow: hidden;
   flex-direction: column;
   -webkit-app-region: no-drag;
 }
-.git-branch-pop.show { display: flex; }
-.git-branch-pop-h {
-  padding: 10px 12px;
+.at-mention-pop.show { display: flex; }
+.at-mention-head {
+  padding: 8px 12px;
   border-bottom: 1px solid var(--code-line, #1d2333);
   font: 700 var(--text-xs, 11px)/1 var(--mono);
   letter-spacing: var(--tracking-extra, 1.6px);
-  color: var(--t3);
+  color: var(--accent-cyan-500, #56d2ff);
   text-transform: uppercase;
 }
-.git-branch-pop-empty {
-  padding: 22px 14px;
-  text-align: center;
-  color: var(--t3);
-  font: var(--text-sm, 12px)/var(--lh-snug, 1.4) var(--font);
-  font-style: italic;
-}
-.git-branch-pop-list {
-  list-style: none; margin: 0; padding: 6px;
+.at-mention-list {
+  list-style: none; margin: 0; padding: 4px;
   overflow-y: auto;
+  flex: 1;
 }
-.git-branch-pop-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 10px;
+.at-mention-item {
+  display: flex; flex-direction: column;
+  padding: 7px 10px;
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  font: 600 var(--text-sm, 12px)/1 var(--mono);
-  color: var(--t2);
-  transition: background .12s ease, color .12s ease;
+  transition: background .08s ease;
+  gap: 2px;
 }
-.git-branch-pop-item:hover { background: rgba(255,255,255,.04); color: var(--tx); }
-.git-branch-pop-item.on { color: var(--accent-cyan-500, #56d2ff); }
-.git-branch-pop-icon {
-  display: inline-flex; width: 12px; justify-content: center;
-  font-size: 10px;
-  color: inherit;
+.at-mention-item:hover, .at-mention-item.on {
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
 }
-.git-branch-pop-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.git-branch-pop-foot {
-  padding: 8px 12px;
-  border-top: 1px solid var(--code-line, #1d2333);
-  font: var(--text-xs, 11px)/1.4 var(--font);
+.at-mention-name {
+  font: 600 var(--text-sm, 12px)/1.2 var(--mono);
+  color: var(--tx);
+}
+.at-mention-sub {
+  font: var(--text-xs, 11px)/1.2 var(--mono);
   color: var(--t3);
-  font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.at-mention-item.kind-symbol .at-mention-name { color: var(--accent-cyan-500, #56d2ff); }
+.at-mention-item.kind-file   .at-mention-name { color: var(--special-500, #a78bfa); }
+.at-mention-item.kind-info   .at-mention-name { color: var(--warn-500, #fbbf24); font-style: italic; }
+.at-mention-foot {
+  padding: 6px 12px;
+  border-top: 1px solid var(--code-line, #1d2333);
+  font: var(--text-xs, 11px)/1 var(--font);
+  color: var(--t3);
+}
+.at-mention-kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 16px; padding: 0 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 4px;
+  font: 9.5px/1 var(--mono);
+  color: var(--t2);
+  margin: 0 2px;
 }
 .tb-r{
   max-width:none;
@@ -7938,8 +7942,173 @@ function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye')?.classL
 // MAIN SEND
 // ═══════════════════════════════════════════════════════════════
 const q=text=>{const inp=document.getElementById('inp');inp.value=text;ar(inp);sendMsg();};
-const kd=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}};
-const ar=el=>{el.style.height='auto';el.style.height=Math.min(el.scrollHeight,110)+'px';};
+// PR-D2 — `kd` now also forwards keys to the @-mention dropdown when
+// it's open (Tab/↓/↑ navigate, Enter inserts, Esc closes). The Enter→
+// sendMsg path remains the default when the dropdown is hidden.
+const kd=e=>{
+  if (typeof atMentionKeyDown === 'function' && atMentionKeyDown(e)) return;
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}
+};
+// `ar` autosizes the textarea AND triggers @-mention detection. The
+// detection runs after autosize so the dropdown's anchor position
+// reflects the current textarea height.
+const ar=el=>{
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,110)+'px';
+  try { if (typeof atMentionMaybeOpen === 'function') atMentionMaybeOpen(el); } catch(_){}
+};
+
+// ═══ PR-D2 — @-mention autocomplete (workspace symbols) ═══════════════
+// Detects an `@` token at the caret position, queries the workspace
+// indexer (or falls back to wsList for `@file`), shows a small popover
+// anchored above the input. Tab / Enter inserts; Esc closes.
+const _AT_MENTION_TYPES = ['symbol', 'file'];
+let _atMentionState = null; // { kind, query, items, activeIdx } when open
+
+function atMentionMaybeOpen(inputEl) {
+  if (!inputEl) return;
+  const value = inputEl.value || '';
+  const caret = inputEl.selectionStart || 0;
+  // Find the start of the current token by walking back from caret.
+  // Token = `@` followed by 0+ non-whitespace chars.
+  const before = value.slice(0, caret);
+  const m = before.match(/(^|\s)@([A-Za-z0-9_./\-:]*)$/);
+  if (!m) {
+    if (_atMentionState) atMentionClose();
+    return;
+  }
+  const queryRaw = m[2];
+  // Determine kind: explicit prefix `file:foo` or `sym:bar`, otherwise
+  // default to symbol query.
+  let kind = 'symbol';
+  let q = queryRaw;
+  if (queryRaw.startsWith('file:')) { kind = 'file'; q = queryRaw.slice(5); }
+  else if (queryRaw.startsWith('sym:'))  { kind = 'symbol'; q = queryRaw.slice(4); }
+  atMentionPopulate(kind, q, inputEl);
+}
+function atMentionClose() {
+  _atMentionState = null;
+  const pop = document.getElementById('at-mention-pop');
+  if (pop) pop.classList.remove('show');
+}
+async function atMentionPopulate(kind, query, inputEl) {
+  let items = [];
+  try {
+    if (kind === 'symbol') {
+      const r = await H.wsIndexQuery?.(query, { limit: 20 });
+      if (r && r.ok) items = (r.results || []).map(s => ({
+        kind: 'symbol',
+        label: s.name,
+        sub: `${s.kind} · ${s.file}:${s.line}`,
+        insert: '@' + s.name,
+      }));
+      // If the index isn't built yet, kick a build (don't await — user
+      // will retry). Show a helpful empty-state.
+      if (r && !r.hasIndex && !r.building) {
+        H.wsIndexBuild?.().catch(() => {});
+        items = [{ kind: 'info', label: 'Building workspace index…', sub: 'Try again in a second.', insert: '' }];
+      }
+    } else if (kind === 'file') {
+      const r = await H.wsList?.('');
+      if (r && r.ok && Array.isArray(r.entries)) {
+        const ql = query.toLowerCase();
+        items = r.entries
+          .filter(e => !e.isDir && e.name.toLowerCase().includes(ql))
+          .slice(0, 20)
+          .map(e => ({
+            kind: 'file',
+            label: e.name,
+            sub: e.rel || '',
+            insert: '@file:' + (e.rel || e.name),
+          }));
+      }
+    }
+  } catch (_) { /* dropdown stays empty */ }
+  _atMentionState = { kind, query, items, activeIdx: 0, inputEl };
+  atMentionRender();
+}
+function atMentionRender() {
+  let pop = document.getElementById('at-mention-pop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'at-mention-pop';
+    pop.className = 'at-mention-pop';
+    document.body.appendChild(pop);
+  }
+  const s = _atMentionState;
+  if (!s || !s.items?.length) {
+    pop.classList.remove('show');
+    return;
+  }
+  pop.innerHTML = `
+    <div class="at-mention-head">${esc(s.kind.toUpperCase())} · ${esc(s.query || '(empty)')}</div>
+    <ul class="at-mention-list">
+      ${s.items.map((it, i) => `
+        <li class="at-mention-item${i === s.activeIdx ? ' on' : ''} kind-${esc(it.kind)}" data-idx="${i}" onmousedown="atMentionInsert(${i});event.preventDefault()">
+          <span class="at-mention-name">${esc(it.label)}</span>
+          <span class="at-mention-sub">${esc(it.sub || '')}</span>
+        </li>`).join('')}
+    </ul>
+    <div class="at-mention-foot"><span class="at-mention-kbd">Tab</span>/<span class="at-mention-kbd">↵</span> insert · <span class="at-mention-kbd">↑↓</span> nav · <span class="at-mention-kbd">esc</span> close</div>
+  `;
+  // Anchor above the textarea.
+  const inp = s.inputEl || document.getElementById('inp');
+  if (inp) {
+    const r = inp.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.left = Math.max(8, r.left) + 'px';
+    pop.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+    pop.style.maxWidth = Math.min(420, window.innerWidth - 16) + 'px';
+  }
+  pop.classList.add('show');
+}
+function atMentionKeyDown(e) {
+  const s = _atMentionState;
+  if (!s || !s.items?.length) return false;
+  const len = s.items.length;
+  if (e.key === 'ArrowDown') {
+    s.activeIdx = (s.activeIdx + 1) % len;
+    atMentionRender();
+    e.preventDefault(); return true;
+  }
+  if (e.key === 'ArrowUp') {
+    s.activeIdx = (s.activeIdx - 1 + len) % len;
+    atMentionRender();
+    e.preventDefault(); return true;
+  }
+  if (e.key === 'Tab' || e.key === 'Enter') {
+    atMentionInsert(s.activeIdx);
+    e.preventDefault(); return true;
+  }
+  if (e.key === 'Escape') {
+    atMentionClose();
+    e.preventDefault(); return true;
+  }
+  return false;
+}
+window.atMentionInsert = function (idx) {
+  const s = _atMentionState;
+  if (!s || !s.items?.[idx]) return;
+  const item = s.items[idx];
+  if (!item.insert) { atMentionClose(); return; }
+  const inp = s.inputEl || document.getElementById('inp');
+  if (!inp) { atMentionClose(); return; }
+  const value = inp.value || '';
+  const caret = inp.selectionStart || 0;
+  // Replace the partial @-token before the caret.
+  const before = value.slice(0, caret);
+  const after = value.slice(caret);
+  const m = before.match(/(^|\s)@[A-Za-z0-9_./\-:]*$/);
+  if (!m) { atMentionClose(); return; }
+  const tokenStart = m.index + m[1].length;
+  const newValue = value.slice(0, tokenStart) + item.insert + ' ' + after;
+  inp.value = newValue;
+  const newCaret = tokenStart + item.insert.length + 1;
+  inp.setSelectionRange(newCaret, newCaret);
+  ar(inp);
+  atMentionClose();
+  inp.focus();
+};
 
 // -- File/Photo upload handling ------------------------------------------------
 function onFilesSelected(e){
