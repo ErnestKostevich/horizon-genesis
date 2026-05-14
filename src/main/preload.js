@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('H', {
   wsWrite:              (rel, c)     => ipcRenderer.invoke('wsWrite', rel, c),
   wsSearch:             (q, rel)     => ipcRenderer.invoke('wsSearch', q, rel),
   wsShell:              (cmd)        => ipcRenderer.invoke('wsShell', cmd),
+  // PR-C4 — git branch indicator + recent-branch dropdown.
+  gitBranch:            (abs)        => ipcRenderer.invoke('gitBranch', abs),
+  gitRecentBranches:    (abs)        => ipcRenderer.invoke('gitRecentBranches', abs),
   terminalCreate:       (id, rel, c, r) => ipcRenderer.invoke('terminalCreate', id, rel, c, r),
   terminalWrite:        (id, data)   => ipcRenderer.invoke('terminalWrite', id, data),
   terminalResize:       (id, c, r)   => ipcRenderer.invoke('terminalResize', id, c, r),
