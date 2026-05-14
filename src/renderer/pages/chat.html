@@ -84,8 +84,83 @@
   --btn-radius: 8px;
   --btn-radius-sm: 6px;
 
+  /* ─── PR-B3: Typography scale ────────────────────────────────────────
+     Replaces the ad-hoc 9/10/11/12/13/14/16/18/22 px sprawl with a
+     6-step scale. Tokens are paired with line-height / weight / letter-
+     spacing helpers so utility classes (.t-xs/.t-sm/.t-base/.t-lg/.t-xl)
+     can drop them in one go. Existing inline `font-size: Npx` rules
+     stay (we deliberately don't break-rewrite the file in this PR);
+     new code uses these tokens / helper classes. */
+  --text-xs:    11px;   /* labels, eyebrows, kbd hints */
+  --text-sm:    12px;   /* body small, secondary buttons */
+  --text-base:  13px;   /* default body, .btn, status pills */
+  --text-md:    14px;   /* card titles, section headings */
+  --text-lg:    16px;   /* modal titles, panel headers */
+  --text-xl:    18px;   /* page titles */
+  --text-2xl:   22px;   /* hero numbers (KPI cards) */
+  /* Line-height multipliers — applied as line-height:var(--lh-tight)
+     etc, not as text-size-modifiers. */
+  --lh-tight:   1.2;
+  --lh-snug:    1.4;
+  --lh-base:    1.55;
+  --lh-loose:   1.7;
+  /* Letter-spacing scale for caps eyebrows. */
+  --tracking-wide: 1.2px;
+  --tracking-extra: 1.6px;
+
+  /* ─── PR-B3: 4px spacing grid ────────────────────────────────────────
+     Standardises gap / padding / margin around a 4px base unit. Six
+     steps cover almost every UI rhythm need. As with type, existing
+     inline padding / margin stays; new code uses the tokens. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+
+  /* Radii scale — paired with the button radii from B2. */
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-pill: 999px;
+
   --font:'Plus Jakarta Sans',system-ui,sans-serif;
   --mono:'JetBrains Mono','Cascadia Code',monospace;
+}
+
+/* ═══ TYPOGRAPHY HELPERS (PR-B3) ══════════════════════════════════════
+   Drop-in classes that pair the scale tokens with sensible defaults
+   so new markup doesn't have to repeat font-size+line-height+weight
+   in every selector. Only applied when an element opts in — does NOT
+   override existing `.foo { font: 12px var(--mono) }` rules. */
+.t-xs   { font-size: var(--text-xs);   line-height: var(--lh-snug); }
+.t-sm   { font-size: var(--text-sm);   line-height: var(--lh-snug); }
+.t-base { font-size: var(--text-base); line-height: var(--lh-base); }
+.t-md   { font-size: var(--text-md);   line-height: var(--lh-snug); }
+.t-lg   { font-size: var(--text-lg);   line-height: var(--lh-tight); font-weight: 600; }
+.t-xl   { font-size: var(--text-xl);   line-height: var(--lh-tight); font-weight: 700; }
+.t-2xl  { font-size: var(--text-2xl);  line-height: var(--lh-tight); font-weight: 700; }
+.t-mono   { font-family: var(--mono); }
+.t-mute   { color: var(--t3); }
+.t-dim    { color: var(--t2); }
+.t-eyebrow {
+  font: 700 var(--text-xs)/1 var(--mono);
+  letter-spacing: var(--tracking-extra);
+  text-transform: uppercase;
+  color: var(--t3);
+}
+
+/* Inspector tabs were the worst offender in the audit:
+   `.insp-tab { font: 800 9px var(--mono) }` — overweight + cramped.
+   Bump them to the typography scale: `--text-xs` (11px) at 600 weight,
+   tight tracking. Doesn't touch any other surface. */
+.insp-tab {
+  font-size: var(--text-xs) !important;
+  font-weight: 600 !important;
+  letter-spacing: var(--tracking-wide) !important;
+  line-height: var(--lh-tight) !important;
 }
 
 /* ═══ UNIFIED BUTTON SYSTEM (PR-B2) ═══════════════════════════════════
