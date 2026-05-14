@@ -4990,7 +4990,8 @@ window.peSave = async function () {
 };
 
 window.peReset = async function () {
-  if (!confirm('Discard your overlay and restore default for this built-in persona?')) return;
+  const ok = await customConfirm('Discard your overlay and restore default for this built-in persona?');
+  if (!ok) return;
   try {
     await H.personaDelete(_peActiveId);
     delete _peCache.full[_peActiveId];
@@ -5003,7 +5004,8 @@ window.peReset = async function () {
 };
 
 window.peDelete = async function () {
-  if (!confirm('Delete this custom persona? This cannot be undone.')) return;
+  const ok = await customConfirm('Delete this custom persona? This cannot be undone.');
+  if (!ok) return;
   try {
     await H.personaDelete(_peActiveId);
     delete _peCache.full[_peActiveId];
@@ -5017,9 +5019,11 @@ window.peDelete = async function () {
 };
 
 window.peCreateCustom = async function () {
-  const name = (prompt('Name for the new persona') || '').trim();
+  const entered = await customPrompt('Name for the new persona', '');
+  const name = String(entered || '').trim();
   if (!name) return;
-  const id = 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now().toString(36);
+  const slug = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'persona';
+  const id = 'custom_' + slug + '_' + Date.now().toString(36);
   try {
     await H.personaUpsert(id, {
       name,
@@ -5760,8 +5764,8 @@ function initWakeCalibrationUI(){
   if (slider) slider.value = vol;
   if (lbl)    lbl.textContent = vol;
 }
-function clearHist(){if(!confirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
-async function clearKeys(){if(!confirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','groq_voice','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','openrouter','tavily','elevenlabs','deepgram','localai','github','google_client_secret'])await H.deleteKey(s);await loadPanel();}
+async function clearHist(){if(!await customConfirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
+async function clearKeys(){if(!await customConfirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','groq_voice','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','openrouter','tavily','elevenlabs','deepgram','localai','github','google_client_secret'])await H.deleteKey(s);await loadPanel();}
 
 // ═══════════════════════════════════════════════════════════════
 // PROVIDER / MODE / TOGGLES
@@ -6970,7 +6974,7 @@ async function execPluginToolInteractive(pluginId, toolName) {
       : Object.entries(spec);
     for (const [name, kind] of entries) {
       const hint = typeof kind === 'string' ? kind : (kind?.description || kind?.type || 'value');
-      const value = window.prompt(`${plugin?.name || pluginId} / ${toolName}\n${name} (${hint})`, '');
+      const value = await customPrompt(`${plugin?.name || pluginId} / ${toolName} - ${name} (${hint})`, '');
       if (value == null) return;
       const trimmed = String(value).trim();
       if (!trimmed) continue;
@@ -9240,7 +9244,7 @@ async function closeCodeTab(idx){
   const tab = codeOpenFiles[idx];
   if (!tab) return;
   if (tab.dirty) {
-    const ok = confirm(`"${tab.rel}" has unsaved changes. Close without saving?`);
+    const ok = await customConfirm(`"${tab.rel}" has unsaved changes. Close without saving?`);
     if (!ok) return;
   }
   codeOpenFiles.splice(idx, 1);
