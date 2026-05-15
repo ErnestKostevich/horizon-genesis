@@ -442,6 +442,65 @@ textarea::placeholder{color:var(--t3)}
 .psview > section{display:none;max-width:1100px;width:100%}
 .psview > section.on{display:block;animation:psFade .15s ease}
 @keyframes psFade{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
+
+/* PR-U4 — Settings as a single scroll page (Linear / Vercel pattern).
+   `body.settings-scroll` (default ON) hides the left .psnav rail
+   entirely and shows ALL sections at once. A sticky right-side TOC
+   replaces the tab list — clicking a section anchor scrolls smoothly,
+   and an IntersectionObserver highlights the section currently in
+   view. The setSettingsTab() handler still works (it just calls
+   scrollIntoView in this mode), so deep-link URL hashes
+   (#settings/personas) and the persisted "last tab" still navigate
+   to the right section. */
+body.settings-scroll .psnav { display: none !important; }
+body.settings-scroll .psview > section { display: block !important; max-width: 760px; margin: 0 auto; padding-bottom: 36px; border-bottom: 1px solid var(--b1); }
+body.settings-scroll .psview > section:last-of-type { border-bottom: none; }
+body.settings-scroll .psview { padding: 22px 32px 80px; scroll-behavior: smooth; }
+body.settings-scroll .pbody-tabbed { position: relative; }
+body.settings-scroll .ps-toc {
+  display: flex; flex-direction: column; gap: 4px;
+  position: absolute; top: 22px; right: 24px;
+  width: 180px;
+  padding: 14px 10px;
+  background: rgba(8,9,12,.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--b1);
+  border-radius: var(--radius-lg, 12px);
+  z-index: 5;
+}
+body:not(.settings-scroll) .ps-toc { display: none !important; }
+.ps-toc-h {
+  font: 700 9.5px/1 var(--mono);
+  letter-spacing: 1.6px;
+  color: var(--t3);
+  text-transform: uppercase;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--b1);
+  margin-bottom: 4px;
+}
+.ps-toc-link {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md, 8px);
+  color: var(--t2);
+  font: 600 var(--text-sm, 12px)/1 var(--font);
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background .12s ease, color .12s ease;
+}
+.ps-toc-link:hover { background: rgba(255,255,255,.04); color: var(--tx); }
+.ps-toc-link.on {
+  color: var(--accent-cyan-500, #56d2ff);
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
+  border-color: var(--accent-cyan-300, rgba(86,210,255,.32));
+}
+.ps-toc-link .licon { width: 13px; height: 13px; flex-shrink: 0; }
+@media (max-width: 1100px) {
+  body.settings-scroll .ps-toc { display: none !important; }
+  body.settings-scroll .psview > section { max-width: 100%; }
+}
 .psview-h{font-size:18px;font-weight:600;color:var(--tx);margin-bottom:4px;font-family:var(--font)}
 .psview-sub{font-size:12px;color:var(--t3);margin-bottom:18px;line-height:1.5}
 .ps{margin-bottom:22px}
@@ -3623,6 +3682,24 @@ textarea#inp{background:transparent!important}
       <button class="psnav-tab"    onclick="setSettingsTab('personas')" data-tab="personas"><span class="psn-i"><svg class="licon"><use href="#i-drama"/></svg></span><span>Personas</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('plugins')"  data-tab="plugins"><span class="psn-i"><svg class="licon"><use href="#i-puzzle"/></svg></span><span>Plugins</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('data')"     data-tab="data"><span class="psn-i"><svg class="licon"><use href="#i-trash"/></svg></span><span>Data &amp; Health</span></button>
+    </nav>
+    <!-- PR-U4 — sticky right-side TOC (Linear / Vercel pattern). Only
+         visible when body.settings-scroll is on (default). Replaces the
+         left-side .psnav rail; clicking an entry scrolls smoothly to
+         the matching <section data-pane="…"> + highlights via the
+         IntersectionObserver wired in JS. -->
+    <nav class="ps-toc" id="ps-toc">
+      <div class="ps-toc-h">SETTINGS · 10</div>
+      <a class="ps-toc-link on" data-target="account"     onclick="setSettingsTab('account');return false"><svg class="licon"><use href="#i-user"/></svg>Account</a>
+      <a class="ps-toc-link"    data-target="profile"     onclick="setSettingsTab('profile');return false"><svg class="licon"><use href="#i-file-text"/></svg>Profile</a>
+      <a class="ps-toc-link"    data-target="models"      onclick="setSettingsTab('models');return false"><svg class="licon"><use href="#i-brain"/></svg>Models</a>
+      <a class="ps-toc-link"    data-target="providers"   onclick="setSettingsTab('providers');return false"><svg class="licon"><use href="#i-key"/></svg>Providers</a>
+      <a class="ps-toc-link"    data-target="connections" onclick="setSettingsTab('connections');return false"><svg class="licon"><use href="#i-plug"/></svg>Connections</a>
+      <a class="ps-toc-link"    data-target="voice"       onclick="setSettingsTab('voice');return false"><svg class="licon"><use href="#i-mic"/></svg>Voice</a>
+      <a class="ps-toc-link"    data-target="features"    onclick="setSettingsTab('features');return false"><svg class="licon"><use href="#i-sparkles"/></svg>Features</a>
+      <a class="ps-toc-link"    data-target="personas"    onclick="setSettingsTab('personas');return false"><svg class="licon"><use href="#i-drama"/></svg>Personas</a>
+      <a class="ps-toc-link"    data-target="plugins"     onclick="setSettingsTab('plugins');return false"><svg class="licon"><use href="#i-puzzle"/></svg>Plugins</a>
+      <a class="ps-toc-link"    data-target="data"        onclick="setSettingsTab('data');return false"><svg class="licon"><use href="#i-trash"/></svg>Data &amp; Health</a>
     </nav>
     <div class="psview" id="psview">
 
@@ -7449,10 +7526,21 @@ function closePanel(){
 // tab). Both are safe-no-ops on failure.
 function setSettingsTab(name){
   if (!name) return;
+  // PR-U4 — in single-scroll mode, instead of toggling .on classes
+  // (which would hide other sections), we scroll-snap the requested
+  // section into view. Both .psnav-tab AND .ps-toc-link get the .on
+  // visual marker so the legacy + new navigations stay in sync.
   document.querySelectorAll('#psnav .psnav-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
-  document.querySelectorAll('#psview > section').forEach(s => s.classList.toggle('on', s.dataset.pane === name));
+  document.querySelectorAll('.ps-toc-link').forEach(b => b.classList.toggle('on', b.dataset.target === name));
+  if (document.body.classList.contains('settings-scroll')) {
+    const target = document.querySelector(`#psview > section[data-pane="${name}"]`);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    // Legacy tabbed mode — keep the original behaviour.
+    document.querySelectorAll('#psview > section').forEach(s => s.classList.toggle('on', s.dataset.pane === name));
+    try { document.getElementById('psview').scrollTop = 0; } catch(_) {}
+  }
   try { H.set('settingsTab', name); } catch(_) {}
-  try { document.getElementById('psview').scrollTop = 0; } catch(_) {}
   try {
     if (location.hash !== '#settings/' + name) {
       history.replaceState(null, '', '#settings/' + name);
@@ -7461,6 +7549,39 @@ function setSettingsTab(name){
   if (name === 'features') refreshPermissionAllowlist().catch(()=>{});
   if (name === 'personas') renderPersonasEditor().catch(()=>{});
 }
+
+// PR-U4 — boot single-scroll settings + wire IntersectionObserver
+// so the right-side TOC highlights whichever section is in view
+// while the user scrolls naturally (no need to click anything).
+(async function _bootSettingsScroll() {
+  // Default ON unless explicitly disabled.
+  try {
+    const v = await H.get?.('settingsScroll');
+    document.body.classList.toggle('settings-scroll', v !== false);
+  } catch (_) {
+    document.body.classList.add('settings-scroll');
+  }
+  // Wait until the panel exists, then observe sections.
+  setTimeout(() => {
+    if (!document.body.classList.contains('settings-scroll')) return;
+    const sections = document.querySelectorAll('#psview > section[data-pane]');
+    if (!sections.length) return;
+    const obs = new IntersectionObserver((entries) => {
+      // Find the entry closest to the top that's intersecting.
+      const visible = entries.filter(e => e.isIntersecting);
+      if (!visible.length) return;
+      const top = visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      const name = top?.target?.dataset?.pane;
+      if (!name) return;
+      document.querySelectorAll('.ps-toc-link').forEach(b => b.classList.toggle('on', b.dataset.target === name));
+    }, {
+      // Trigger when the section's top is in the upper third of the viewport.
+      rootMargin: '-10% 0px -70% 0px',
+      threshold: 0,
+    });
+    sections.forEach(s => obs.observe(s));
+  }, 600);
+})();
 
 // ═══ PERSONAS EDITOR ═══════════════════════════════════════════════════
 // Renders the two-column editor inside #pe-mount. Left: list of all
