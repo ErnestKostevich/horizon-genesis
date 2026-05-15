@@ -3429,8 +3429,9 @@ body.chat-sidebar-collapsed .cs-collapse svg{
   border-bottom:1px solid var(--shell-line)!important;
   box-shadow:none!important;
 }
-.chat-status-bar #csb-provider,
-.chat-status-bar #csb-model,
+/* PR-TECHDEBT — #csb-provider and #csb-model were removed in
+   PR-U-MEGA. The selectors used to hide them are now dead weight;
+   #csb-byok still exists and continues to be hidden in this surface. */
 .chat-status-bar #csb-byok{display:none!important}
 .chat-status-bar .csb-title{
   flex:1 1 auto!important;
@@ -7248,9 +7249,11 @@ function openModelPicker(ev){
 
 async function pickModel(provider, model){
   try { await saveModelSetting(provider, model); } catch(_) {}
-  // PR-U1 — old csb-model is gone; saveModelSetting + updateShellChrome
-  // already update the surviving surfaces. Wrap defensively.
-  try { document.getElementById('csb-model')?.textContent && (document.getElementById('csb-model').textContent = model); } catch(_) {}
+  // PR-TECHDEBT — csb-model removed in PR-U-MEGA; saveModelSetting +
+  // updateShellChrome already update the surviving surfaces. Keep a
+  // null-guarded write for any future reincarnation of the element.
+  const cm = document.getElementById('csb-model');
+  if (cm) cm.textContent = model;
   try { H.notify?.('Model selected', `${provider}: ${model}`); } catch(_) {}
   closeModelPicker();
 }
@@ -7271,10 +7274,17 @@ function closeModelPicker(){
 }
 
 // Outside-click closes the popover. Escape too.
+// PR-TECHDEBT — #csb-model was retired in PR-U-MEGA; the picker
+// anchor is now the composer-toolbar Model chip. Allow clicks on
+// either the (legacy) csb-model OR the new #composer-model-chip
+// without closing the popover.
 document.addEventListener('click', (e) => {
   const pop = document.getElementById('model-popover');
   if (!pop?.classList.contains('show')) return;
-  if (e.target.closest('#model-popover') || e.target.closest('#csb-model')) return;
+  if (e.target.closest('#model-popover')) return;
+  if (e.target.closest('#csb-model')) return;
+  if (e.target.closest('#composer-model-chip')) return;
+  if (e.target.closest('.composer-chip.strong')) return;
   closeModelPicker();
 });
 document.addEventListener('keydown', (e) => {
