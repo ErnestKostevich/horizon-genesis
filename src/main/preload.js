@@ -37,6 +37,14 @@ contextBridge.exposeInMainWorld('H', {
   analyzeScreen:        (q)          => ipcRenderer.invoke('analyzeScreen', q),
   // ── AI & Web Search ───────────────────────────────────────────────────────────
   ai:                   (m, p, s, o) => ipcRenderer.invoke('ai', m, p, s, o),
+  // PR-C5 — streaming AI (Claude + OpenAI SSE).
+  // aiStream returns { ok, runId } immediately; chunks arrive via
+  // ai:chunk events, completion via ai:done. aiAbort cancels the
+  // in-flight request.
+  aiStream:             (m, p, s, o) => ipcRenderer.invoke('aiStream', m, p, s, o),
+  aiAbort:              (runId)      => ipcRenderer.invoke('aiAbort', runId),
+  onAiChunk:            (cb)         => ipcRenderer.on('ai:chunk', (_, payload) => cb(payload)),
+  onAiDone:             (cb)         => ipcRenderer.on('ai:done',  (_, payload) => cb(payload)),
   search:               (q)          => ipcRenderer.invoke('search', q),
   // ── PC Apps & URLs ────────────────────────────────────────────────────────────
   pcOpen:               (a)          => ipcRenderer.invoke('pcOpen', a),
