@@ -250,6 +250,60 @@ body.os-mac .wbtn,
 body.os-win .wbtn { display: none !important; }
 body.os-mac .tb-l { padding-left: 80px !important; }
 
+/* PR-FIX-OVERLAP — reserve space on the right edge for native window
+   controls so they never sit on top of our buttons (⌘K, settings cog,
+   panel close, focus-timer chip). Windows titleBarOverlay reserves
+   ~138px × 52px in the top-right; we pad 150px for safety. macOS
+   traffic-lights are top-LEFT so .tb-r stays free (only .tb-l above
+   gets padding), but panel headers .ph / .fph need similar treatment
+   because they're at the top of every modal. */
+body.os-win .tb { padding-right: 150px !important; }
+body.os-win .ph,
+body.os-win .fph { padding-right: 162px !important; }
+/* On macOS the traffic-lights take top-LEFT, so panel headers need
+   left padding to keep the title clear of them. */
+body.os-mac .ph,
+body.os-mac .fph { padding-left: 92px !important; }
+
+/* PR-FIX-OVERLAP — the .ph-x / .fph-x close buttons SHOULD sit on
+   the right of their header, but on Windows the native overlay is
+   already there. Push them to the left edge so they're always
+   reachable. We use flex-order to flip without touching markup. */
+body.os-win .ph { justify-content: flex-start; gap: 12px; }
+body.os-win .ph-x { order: -1; }
+body.os-win .fph { justify-content: flex-start; gap: 14px; }
+body.os-win .fph-r { order: -1; margin-right: 8px; }
+
+/* PR-FIX-OVERLAP — sidebar collapse propagation. The PR-U-MEGA layout
+   put the chat on margin-left:280px to clear the sidebar; when the
+   sidebar collapses to a 46px rail, several elements still hold the
+   280px margin and leave a huge dead band on the left. Fix in one
+   block so it never regresses. */
+body.with-sidebar.chat-sidebar-collapsed > .tb,
+body.with-sidebar.chat-sidebar-collapsed > .modes,
+body.with-sidebar.chat-sidebar-collapsed > .chat-status-bar,
+body.with-sidebar.chat-sidebar-collapsed > .msgs,
+body.with-sidebar.chat-sidebar-collapsed > .inp-wrap,
+body.with-sidebar.chat-sidebar-collapsed > .wake-bar,
+body.with-sidebar.chat-sidebar-collapsed > .sb,
+body.with-sidebar.chat-sidebar-collapsed > .panel,
+body.with-sidebar.chat-sidebar-collapsed > #fractalBg {
+  margin-left: 46px !important;
+}
+/* Code Mode shell — same correction. The IDE grid spans the whole
+   space once sidebar collapses. */
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed .apex-right-pane.code-shell {
+  left: 46px !important;
+}
+
+/* PR-FIX-OVERLAP — when a panel is fully open (.fpanel.show) on
+   Windows, we DON'T move it under the native overlay (panel already
+   has padding-right via .fph above). Instead, ensure the panel body
+   scroll area itself doesn't underflow the overlay area — adds 12px
+   right padding so content keeps clear. */
+body.os-win .fpanel .fbody,
+body.os-win .panel .pbody-tabbed { padding-right: 12px; }
+
 /* ═══ WAKE BAR ═══ */
 .wake-bar{overflow:hidden;transition:height .25s;height:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid transparent;position:relative;z-index:9}
 .wake-bar.show{height:28px}
@@ -422,6 +476,27 @@ textarea::placeholder{color:var(--t3)}
 .ph h2{font-size:13px;font-weight:700;color:var(--tx);-webkit-app-region:no-drag;font-family:var(--font)}
 .ph-x{-webkit-app-region:no-drag;background:var(--b1);border:1px solid var(--b1);color:var(--t3);font-size:18px;cursor:pointer;width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .ph-x:hover{color:var(--tx);background:var(--b2)}
+/* PR-FIX-OVERLAP — explicit "Back" affordance on the LEFT of panel
+   headers. Always visible regardless of OS overlay placement. */
+.ph-back, .fph-back {
+  -webkit-app-region: no-drag;
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 30px; padding: 0 12px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--b1);
+  border-radius: 8px;
+  color: var(--t2);
+  font: 600 12px/1 var(--font);
+  cursor: pointer;
+  transition: all .15s ease;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+.ph-back:hover, .fph-back:hover {
+  background: rgba(255,255,255,.08);
+  border-color: var(--accent-300, rgba(108,140,255,.30));
+  color: var(--tx);
+}
 .pbody{flex:1;overflow-y:auto;padding:16px}
 /* Tabbed Settings layout: left rail of sections, right scroll area for the
    active section. Mirrors the Cursor / ChatGPT settings pattern so unrelated
@@ -3669,7 +3744,14 @@ textarea#inp{background:transparent!important}
      drop-date. Every existing input id stays the same so saveModelSetting,
      psvk, saveLocalProvider, etc. continue to work without renaming. -->
 <div class="panel" id="panel">
-  <div class="ph"><h2>◈ Settings — Horizon AI</h2><button class="ph-x" onclick="closePanel()">×</button></div>
+  <div class="ph">
+    <!-- PR-FIX-OVERLAP — explicit Back button on the LEFT of the
+         header so the user always has a clear escape route, even when
+         the top-right ×  is hidden behind Windows native overlay. -->
+    <button class="ph-back" onclick="closePanel()" title="Back to chat (Esc)">← Back</button>
+    <h2>◈ Settings — Horizon AI</h2>
+    <button class="ph-x" onclick="closePanel()" title="Close (Esc)">×</button>
+  </div>
   <div class="pbody-tabbed">
     <nav class="psnav" id="psnav">
       <button class="psnav-tab on" onclick="setSettingsTab('account')"  data-tab="account"><span class="psn-i"><svg class="licon"><use href="#i-user"/></svg></span><span>Account</span></button>
@@ -7519,6 +7601,64 @@ function closePanel(){
   if (isSurfaceActive('settings') || isSurfaceActive('personas')) closeActiveSurface();
 }
 
+// PR-FIX-OVERLAP — auto-inject a "← Back" button into every .fph
+// panel header so users always have a visible left-side escape route.
+// Looks for the existing .fph-x close button and infers which close
+// function to call from its onclick attribute. Idempotent — checks
+// for existing .fph-back before adding.
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    document.querySelectorAll('.fph').forEach(header => {
+      if (header.querySelector('.fph-back')) return;
+      const xBtn = header.querySelector('.fph-x');
+      if (!xBtn) return;
+      const onclick = xBtn.getAttribute('onclick') || '';
+      // Extract the close function name (e.g. "closeWorkflows()").
+      const m = onclick.match(/(\w+)\s*\(\s*\)/);
+      if (!m) return;
+      const fnName = m[1];
+      const back = document.createElement('button');
+      back.className = 'fph-back';
+      back.textContent = '← Back';
+      back.title = 'Back to chat (Esc)';
+      back.setAttribute('onclick', `${fnName}()`);
+      // Insert as the first child of the header so it sits on the LEFT.
+      header.insertBefore(back, header.firstChild);
+    });
+  }, 100);
+});
+
+// PR-FIX-OVERLAP — global Esc listener as a back-nav fallback when
+// the top-right close button is hidden behind native window controls
+// on Windows. Closes whichever panel is open in priority order.
+// Skips when an input/textarea/contenteditable has focus so it
+// doesn't interrupt typing.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const t = e.target;
+  const tag = (t?.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || t?.isContentEditable) return;
+  // Don't fight the cmd-palette / quick-open / picker overlays — they
+  // own Esc handling on their own input fields.
+  if (document.getElementById('cmd-palette')?.classList.contains('show')) return;
+  if (document.getElementById('quickopen-palette')?.classList.contains('show')) return;
+  // Try each panel in priority order — only close the topmost.
+  const panels = [
+    ['recorder-panel', 'closeRecorder'],
+    ['wf-panel', 'closeWorkflows'],
+    ['hub-panel', 'closeHub'],
+    ['store-panel', 'closeStore'],
+    ['acct-panel', 'closeAccount'],
+    ['panel', 'closePanel'],
+  ];
+  for (const [id, fn] of panels) {
+    if (document.getElementById(id)?.classList.contains('show')) {
+      try { window[fn]?.(); } catch (_) {}
+      return;
+    }
+  }
+});
+
 // Switch the active Settings tab. Updates the left-rail button styling and
 // shows the matching <section data-pane="…">. Persists last tab via two
 // channels: (1) electron settings (cross-restart persistence), (2) URL
@@ -8317,8 +8457,10 @@ async function saveModelSetting(provider, model){
       }
     } catch(_){}
     // Refresh the chat status-bar pill if the active provider matches.
+    // Element was removed in PR-U-MEGA — guard defensively.
     if (typeof prov !== 'undefined' && prov === provider) {
-      try { document.getElementById('csb-model').textContent = model; } catch(_){}
+      const cm = document.getElementById('csb-model');
+      if (cm) { try { cm.textContent = model; } catch(_){} }
     }
     try { updateThinkingHint(); updateStatusBar(); renderCodeContext(); } catch(_){}
   } catch(e) { console.warn('saveModelSetting failed:', e?.message); }
@@ -8348,7 +8490,9 @@ async function saveLocalProvider(kind){
     try { await H.set('model.' + kind, selectedModel); } catch(e) { console.warn('save local model setting failed:', e?.message); }
     try { _modelCache[kind] = selectedModel; } catch(_){}
     if (typeof prov !== 'undefined' && prov === kind) {
-      try { document.getElementById('csb-model').textContent = selectedModel; updateStatusBar(); } catch(_){}
+      // csb-model was removed in PR-U-MEGA; updateStatusBar() handles
+      // any surviving status bar elements safely.
+      try { updateStatusBar(); } catch(_){}
     }
   }
   H.notify?.('Local models', 'Saved local provider settings.');
