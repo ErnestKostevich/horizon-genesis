@@ -2918,8 +2918,98 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
 .composer-chip.strong{
   background:rgba(86,210,255,.095);
   border-color:rgba(86,210,255,.24);
+  position:relative;
 }
 .composer-chip.strong b{color:#8eeaff}
+
+/* PR-U-MEGA — provider-health traffic-light dot on the Model chip.
+   Tiny 6px circle that turns amber on rate-limit / red on auth fail
+   / green on a recent fast reply. Defaults to subtle gray so it
+   doesn't yell when everything's fine. Set by setProviderHealth(). */
+.composer-chip.strong::after {
+  content: '';
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.35);
+}
+.composer-chip.strong.ph-ok::after   { background: var(--success-500, #34d399); }
+.composer-chip.strong.ph-slow::after { background: var(--warn-500, #fbbf24); }
+.composer-chip.strong.ph-fail::after { background: var(--danger-500, #f87171); }
+
+/* PR-U-MEGA — composer footer: cost preview + agent activity HUD.
+   Sits directly under the .irow input, before the .hint. Two-row
+   layout: tokens / cost / BYOK on the left, agent activity on right. */
+.composer-foot {
+  max-width: 1080px;
+  width: 100%;
+  margin: 4px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 4px 6px;
+  font: 600 10.5px/1 var(--mono);
+  letter-spacing: .3px;
+  color: var(--t3);
+}
+.composer-foot-l, .composer-foot-r {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.composer-foot-sep { color: var(--t3); opacity: .4; }
+.composer-foot-tokens {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--t2);
+}
+.composer-foot-tokens .licon { width: 11px; height: 11px; }
+.composer-foot-cost { color: var(--t2); }
+.composer-foot-byok { color: var(--success-500, #34d399); font-weight: 700; letter-spacing: .6px; }
+.composer-foot-agent {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--b1);
+  background: rgba(255,255,255,.02);
+  color: var(--t2);
+}
+.composer-foot-agent-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,.15);
+  transition: background .15s ease;
+}
+.composer-foot-agent.running .composer-foot-agent-dot {
+  background: var(--accent-cyan-500, #56d2ff);
+  box-shadow: 0 0 8px var(--accent-cyan-500, #56d2ff);
+  animation: agent-pulse 1.4s ease-in-out infinite;
+}
+.composer-foot-agent.done .composer-foot-agent-dot   { background: var(--success-500, #34d399); }
+.composer-foot-agent.error .composer-foot-agent-dot  { background: var(--danger-500, #f87171); }
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .4; }
+}
+
+/* PR-U-MEGA — shell-clean overrides. Default ON via body class set at
+   boot in _detectPlatform / init. Hides the duplicate strips the audit
+   flagged so the visible chrome is: title bar (logo + git branch +
+   cmd-K + settings + window controls) → messages → composer (model /
+   persona / mode / tools / web / screen) → input → cost-preview.
+   Mode strip is hidden because mode-switching happens via the
+   composer Mode chip (or ⌘K). chat-status-bar is hidden because its
+   info has moved to composer-foot. */
+body.shell-clean .modes { display: none !important; }
+body.shell-clean .chat-status-bar { display: none !important; }
+/* But keep the modes strip available in code-mode where it controls
+   editor-specific things — wait, currently it doesn't, so hide
+   uniformly. If a sub-mode chip is needed inside Code Mode, that'll
+   come in a follow-up PR. */
+body.shell-clean.code-mode-active .modes { display: none !important; }
+
+/* Tighten msgs top padding since the mode strip is gone — saves 38px
+   of dead space at the top of every chat. */
+body.shell-clean .msgs { padding-top: 14px; }
 .composer-chip.on{
   background:rgba(251,191,36,.12);
   border-color:rgba(251,191,36,.28);
@@ -4331,7 +4421,30 @@ textarea#inp{background:transparent!important}
     <textarea id="inp" rows="1" placeholder="Спроси Хорайзон… или прикрепи 📎 файл/фото" onkeydown="kd(event)" oninput="ar(this)" style="-webkit-app-region:no-drag"></textarea>
     <button class="ibtn btn-send" id="btn-send" onclick="sendMsg()">↑</button>
   </div>
-  <div class="hint">Enter · Shift+Enter · 🎤 голос · ✋ диктовка · 📎 файл · 🌅 Wake</div>
+  <!-- PR-U-MEGA — cost preview + agent activity strip below the input.
+       Replaces the noisy chat-status-bar above. Updates live as the
+       user types (every keystroke), so the cost-of-this-turn signal
+       is the canonical place to look — not buried in 5 different
+       pills across 3 different surfaces. -->
+  <div class="composer-foot">
+    <span class="composer-foot-l">
+      <span class="composer-foot-tokens" id="composer-foot-tokens" title="Estimated tokens for this turn (input + system context)">
+        <svg class="licon"><use href="#i-trending-up"/></svg>
+        <span id="composer-foot-tokens-n">0</span> tok
+      </span>
+      <span class="composer-foot-sep">·</span>
+      <span class="composer-foot-cost" id="composer-foot-cost" title="Estimated cost of this turn (input + output) at the active model's pricing">$0.0000</span>
+      <span class="composer-foot-sep">·</span>
+      <span class="composer-foot-byok" title="BYOK · calls go directly from your machine to the provider — Horizon never sees prompts">🔒 BYOK</span>
+    </span>
+    <span class="composer-foot-r">
+      <span class="composer-foot-agent" id="composer-foot-agent" title="Agent activity">
+        <span class="composer-foot-agent-dot" id="composer-foot-agent-dot"></span>
+        <span id="composer-foot-agent-text">idle</span>
+      </span>
+    </span>
+  </div>
+  <div class="hint">Enter · Shift+Enter · / commands · @ files / symbols · ⌘K palette</div>
 </div>
 
 <script src="/vendor/monaco/loader.js"></script>
@@ -6297,6 +6410,154 @@ window.addEventListener('DOMContentLoaded', () => { startGitBranchPoll(); });
       document.body.classList.add('os-linux');
     }
   } catch (_) { /* default to no-class behaviour (Linux-style custom .wbtn) */ }
+})();
+
+// PR-U-MEGA — single source of truth for layout cleanup. The
+// `body.shell-clean` class hides the duplicated mode strip + chat
+// status bar; composer-toolbar + composer-foot become the only
+// ambient controls. Default ON for all users; can be toggled off
+// via `H.set('shellClean', false)` for diagnostics.
+(async function _bootShellClean() {
+  try {
+    const v = await H.get?.('shellClean');
+    // Default ON unless explicitly disabled.
+    document.body.classList.toggle('shell-clean', v !== false);
+  } catch (_) {
+    document.body.classList.add('shell-clean');
+  }
+})();
+
+// PR-U-MEGA — cost preview line below the composer. Updates live
+// as the user types so they SEE the cost-of-this-turn before sending.
+// Estimate: input.length / 4 (≈ tokens) + a fixed 1500-token
+// overhead for system prompt + persona + recent history. Uses the
+// active provider's pricing from MODEL_PRICING (PR-C3).
+function _estimateInputTokens(text) {
+  // Rough char→token: 4 chars/token average for English code+prose.
+  // Cyrillic averages closer to 2.5; we average to 3.5 → conservative.
+  const chars = String(text || '').length;
+  return Math.ceil(chars / 3.5);
+}
+function _estimateContextOverhead() {
+  // System prompt + persona + recent history estimate.
+  // History contributes ~150 tok per message; cap at 12 messages.
+  try {
+    const recent = Array.isArray(history) ? history.slice(-12) : [];
+    const histTok = recent.reduce((s, m) => s + Math.ceil((m.content || '').length / 3.5), 0);
+    return 800 + histTok; // 800 = system + persona baseline
+  } catch (_) { return 800; }
+}
+function refreshCostPreview() {
+  try {
+    const inp = document.getElementById('inp');
+    const tokEl = document.getElementById('composer-foot-tokens-n');
+    const costEl = document.getElementById('composer-foot-cost');
+    if (!tokEl || !costEl) return;
+    const inputTok = _estimateInputTokens(inp?.value || '');
+    const ctxTok = _estimateContextOverhead();
+    const totalTok = inputTok + ctxTok;
+    tokEl.textContent = totalTok > 1000 ? (totalTok / 1000).toFixed(1) + 'k' : String(totalTok);
+    // Cost: input × $/Mtok + assumed 600-token output × $/Mtok
+    const activeProv = (typeof prov !== 'undefined' && prov) ? prov : 'gemini';
+    const activeModel = typeof getSelectedModelForProvider === 'function'
+      ? getSelectedModelForProvider(activeProv)
+      : '';
+    const pricing = (typeof getModelPricing === 'function') ? getModelPricing(activeProv, activeModel) : null;
+    if (pricing && pricing.in != null && pricing.out != null) {
+      const costIn  = (totalTok / 1_000_000) * pricing.in;
+      const costOut = (600       / 1_000_000) * pricing.out;
+      const total = costIn + costOut;
+      costEl.textContent = total === 0 ? 'free' : (total < 0.001 ? '< $0.001' : '$' + total.toFixed(4));
+      costEl.title = `Input: $${costIn.toFixed(5)} (${totalTok} tok @ $${pricing.in}/Mtok) · Output est: $${costOut.toFixed(5)} (600 tok @ $${pricing.out}/Mtok)`;
+    } else {
+      // Local provider or no pricing data → show "free" or "—".
+      const isLocal = ['ollama','lmstudio','localai'].includes(activeProv);
+      costEl.textContent = isLocal ? 'free' : '—';
+      costEl.title = isLocal ? 'Local model — no API cost' : 'Pricing data unavailable for this model';
+    }
+  } catch (_) { /* best-effort */ }
+}
+// Hook the existing `ar()` autosize handler (called on every keystroke)
+// to also refresh the cost preview. We can't modify ar in-place
+// because it's used everywhere — instead, install a MutationObserver-
+// like input listener once.
+window.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('inp');
+  if (inp) {
+    inp.addEventListener('input', () => { refreshCostPreview(); });
+    refreshCostPreview();
+  }
+});
+
+// PR-U-MEGA — agent activity HUD wired to the existing onAgentStep
+// stream. Three states: idle / running / done|error. Auto-fades back
+// to idle 3s after completion so the chip doesn't permanently glow.
+let _agentHudTimer = null;
+function setAgentHud(state, text) {
+  const el = document.getElementById('composer-foot-agent');
+  const txt = document.getElementById('composer-foot-agent-text');
+  if (!el || !txt) return;
+  el.classList.remove('running', 'done', 'error');
+  if (state) el.classList.add(state);
+  if (text) txt.textContent = text;
+  if (_agentHudTimer) { clearTimeout(_agentHudTimer); _agentHudTimer = null; }
+  if (state === 'done' || state === 'error') {
+    _agentHudTimer = setTimeout(() => setAgentHud('', 'idle'), 3000);
+  }
+}
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof H?.onAgentStep === 'function') {
+    H.onAgentStep((step) => {
+      try {
+        if (!step) return;
+        if (step.type === 'run-start') {
+          setAgentHud('running', 'starting…');
+        } else if (step.type === 'thinking' || step.type === 'plan') {
+          setAgentHud('running', 'thinking…');
+        } else if (step.type === 'executing') {
+          setAgentHud('running', String(step.tool || 'tool').slice(0, 24));
+        } else if (step.type === 'result') {
+          // Keep running label until run-end fires.
+        } else if (step.type === 'run-end') {
+          const ok = step.status === 'done' || step.result?.ok;
+          setAgentHud(ok ? 'done' : 'error', ok ? 'done' : (step.result?.error || 'error').toString().slice(0, 24));
+        }
+      } catch (_) {}
+    });
+  }
+});
+
+// PR-U-MEGA — provider-health traffic-light on the Model chip.
+// setProviderHealth('ok' | 'slow' | 'fail'). Drives the .ph-* CSS
+// modifier classes on .composer-chip.strong. Wired to the AI send
+// path: latency < 3s → ok, 3-10s → slow, error → fail.
+function setProviderHealth(state) {
+  const chip = document.getElementById('composer-model-chip')?.closest('.composer-chip');
+  if (!chip) return;
+  chip.classList.remove('ph-ok', 'ph-slow', 'ph-fail');
+  if (state) chip.classList.add('ph-' + state);
+}
+// Wrap H.ai once to intercept timing and set the dot. Idempotent —
+// only wraps if not already wrapped.
+(function _wrapAiForHealth() {
+  if (!window.H || !H.ai || H.__aiWrapped) return;
+  const orig = H.ai.bind(H);
+  H.ai = async function (...args) {
+    const t0 = performance.now();
+    try {
+      const r = await orig(...args);
+      const dt = performance.now() - t0;
+      if (r && r.error) setProviderHealth('fail');
+      else if (dt > 10000) setProviderHealth('slow');
+      else if (dt > 3000) setProviderHealth('slow');
+      else setProviderHealth('ok');
+      return r;
+    } catch (e) {
+      setProviderHealth('fail');
+      throw e;
+    }
+  };
+  H.__aiWrapped = true;
 })();
 
 // Recent-branches dropdown (click on the chip).
