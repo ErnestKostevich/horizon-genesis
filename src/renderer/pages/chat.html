@@ -3201,7 +3201,13 @@ body.shell-clean .msgs { padding-top: 14px; }
   border-color:rgba(86,210,255,.28);
   transform:translateY(-1px);
 }
-body.surface-active .composer-toolbar{display:none}
+/* PR-LAYOUT-V2 — line 3204 used to be
+   `body.surface-active .composer-toolbar{display:none}`
+   but it was redundant: the parent .inp-wrap is already display:none
+   on every surface that's not chat (see .surface-active > .inp-wrap rule
+   above), so the toolbar disappears with its parent. Removing the
+   stand-alone rule clears one of FOUR layered rules that competed for
+   the .composer-toolbar selector and made the chip layout unpredictable. */
 @media (max-width:1360px){
   .tb{grid-template-columns:minmax(160px,auto) minmax(200px,1fr) auto}
   .shell-chip.subtle{display:none}
@@ -3211,7 +3217,14 @@ body.surface-active .composer-toolbar{display:none}
   .tb{grid-template-columns:minmax(150px,auto) 1fr auto}
   .tb-center{justify-self:start}
   .shell-chip:not(.primary){display:none}
-  .cs-activity,.cs-utility{display:none}
+  /* PR-LAYOUT-V2 — DO NOT hide .cs-activity / .cs-utility here.
+     Earlier this media query carried `display:none` for both, which
+     stripped EVERY navigation entry point (Chat / Agent / Code /
+     Flows / Plugins / Store / Inspect + Account / Settings) at any
+     width below 1040px. The sidebar icon rail is the *only* primary
+     navigation, so hiding it is what the owner meant by "к большинству
+     функций нет нормального доступа". The rail is only 46px wide —
+     it fits at every viewport. */
 }
 
 /* Research-aligned correction pass.
@@ -3586,9 +3599,10 @@ textarea#inp{background:transparent!important}
   border-color:var(--shell-line)!important;
 }
 .fbody{background:#07090f!important}
-@media (max-width:1040px){
-  .cs-activity,.cs-utility{display:none!important}
-}
+/* PR-LAYOUT-V2 — same fix as the media block above. The duplicate
+   "research-aligned" pass was hiding navigation a second time with
+   !important, which made the bug stick even after a partial fix.
+   Removed entirely; the sidebar rail is always-visible by design. */
 
 /* ═══ PR-U3 — Diff-first message bubble + Plan/Act gate ═════════════
    When an assistant message includes a ```diff fenced block, the
@@ -3712,18 +3726,44 @@ body.os-win .fph-r { order: initial !important; margin-right: 0 !important; }
 .chat-status-bar { display: none !important; }
 .msgs { padding-top: 18px !important; }
 
+/* PR-LAYOUT-V2 — Cursor-style composer toolbar. The previous design
+   had FOUR competing CSS rules (lines 3034 / 3204 / 3513 / 3715 / 4024)
+   for `.composer-toolbar`, each adding `!important` overrides. The
+   final visible result was a six-column grid where the last THREE
+   chips (Tools / Web / Screen) were squashed into 38px squares with
+   single-letter K / W / S labels — completely undiscoverable, the
+   exact thing the owner called out as "не те размеры, не те места".
+   This is the canonical declaration; the 4024-4081 block below is now
+   removed in favour of a single clean Cursor-class layout. */
 .composer-toolbar {
   display: grid !important;
-  grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 1fr) repeat(4, minmax(92px, .68fr));
+  grid-template-columns:
+    minmax(170px, 1.55fr) /* Model — widest, primary signal */
+    minmax(135px, 1.05fr) /* Persona */
+    minmax(105px, .85fr)  /* Mode */
+    minmax(110px, .85fr)  /* Tools */
+    minmax(95px,  .8fr)   /* Web */
+    minmax(105px, .8fr);  /* Screen */
   gap: 8px !important;
   overflow: visible !important;
+  align-items: center !important;
 }
 .composer-chip {
   justify-content: space-between !important;
   min-width: 0 !important;
-  height: 34px !important;
+  height: 36px !important;
   border-radius: 10px !important;
-  padding: 0 11px !important;
+  padding: 0 12px !important;
+  background: rgba(15,23,42,.62) !important;
+  border: 1px solid rgba(148,163,184,.14) !important;
+  color: #d7e1ef !important;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .08s ease !important;
+}
+.composer-chip:hover {
+  background: rgba(30,41,59,.78) !important;
+  border-color: rgba(125,211,252,.32) !important;
+  color: #fff !important;
+  transform: translateY(-1px) !important;
 }
 .composer-chip span,
 .composer-chip b {
@@ -3731,6 +3771,54 @@ body.os-win .fph-r { order: initial !important; margin-right: 0 !important; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.composer-chip span { font: 800 9.5px/1 var(--mono) !important; letter-spacing: .8px !important; color: #6f7b94 !important; text-transform: uppercase !important; }
+.composer-chip b    { font: 700 12px/1 var(--font) !important; color: #e9eef8 !important; max-width: 100% !important; }
+/* The Model chip is the primary signal — accent border + tinted bg. */
+.composer-chip.strong {
+  background: linear-gradient(180deg, rgba(125,211,252,.13), rgba(56,189,248,.05)) !important;
+  border-color: rgba(125,211,252,.34) !important;
+}
+.composer-chip.strong b { color: #b8eaff !important; }
+/* Toggle-style chips (Web/Screen) when ON — use accent amber so it
+   reads as "active state" without competing with the cyan accent. */
+.composer-chip.on {
+  background: rgba(251,191,36,.13) !important;
+  border-color: rgba(251,191,36,.36) !important;
+  color: #fbbf24 !important;
+}
+.composer-chip.on b { color: #fcd34d !important; }
+/* Add a subtle chevron after openable pickers so they look obviously
+   clickable (Cursor pattern). Tools/Web/Screen are toggles, not
+   pickers — they get a dot indicator instead, defined below. */
+.composer-chip[onclick*="openModelPicker"]::after,
+.composer-chip[onclick*="openPersonaPicker"]::after,
+.composer-chip[onclick*="cycleComposerMode"]::after,
+.composer-chip[onclick*="openCmdPalette"]::after {
+  content: '';
+  width: 8px; height: 8px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  background: currentColor;
+  opacity: .42;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23fff' d='M7 10l5 5 5-5z'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23fff' d='M7 10l5 5 5-5z'/></svg>") center/contain no-repeat;
+}
+/* Web/Screen get a dot indicator coloured by state. */
+.composer-chip#composer-web-chip::after,
+.composer-chip#composer-screen-chip::after {
+  content: '';
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-left: 4px;
+  flex-shrink: 0;
+  background: rgba(255,255,255,.18);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+}
+.composer-chip#composer-web-chip.on::after,
+.composer-chip#composer-screen-chip.on::after {
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251,191,36,.55);
 }
 .irow { align-items: center !important; gap: 8px !important; }
 .ibtn {
@@ -4021,30 +4109,15 @@ body.inspector-active .inp-wrap {
 body.chat-sidebar-collapsed .inp-wrap {
   left: 70px !important;
 }
-.composer-toolbar {
-  grid-template-columns: 1.25fr 1fr .8fr repeat(3, 38px) !important;
-  align-items: center !important;
-  gap: 7px !important;
-}
-.composer-chip {
-  height: 32px !important;
-  border-radius: 9px !important;
-  background: rgba(15,23,42,.62) !important;
-  border-color: rgba(148,163,184,.12) !important;
-  color: #d7e1ef !important;
-}
-.composer-chip:nth-last-child(-n+3) {
-  width: 38px !important;
-  padding: 0 !important;
-  justify-content: center !important;
-}
-.composer-chip:nth-last-child(-n+3) span { display: none !important; }
-.composer-chip:nth-last-child(-n+3) b {
-  font-size: 0 !important;
-}
-.composer-chip:nth-last-child(3)::before { content: 'K'; font: 800 11px/1 var(--mono); }
-.composer-chip:nth-last-child(2)::before { content: 'W'; font: 800 11px/1 var(--mono); }
-.composer-chip:nth-last-child(1)::before { content: 'S'; font: 800 11px/1 var(--mono); }
+/* PR-LAYOUT-V2 — the previous override here forced the last 3 chips
+   (Tools / Web / Screen) to be 38px squares with cryptic single-letter
+   labels K / W / S via ::before. That was the single most-broken bit
+   of the composer ergonomics — users genuinely could not tell what
+   those squares did. The new canonical .composer-toolbar rule above
+   already gives all 6 chips a balanced 6-column grid with readable
+   "LABEL · value" pairs and a chevron / dot indicator. The remaining
+   rules in this block are the unrelated polish (input buttons, popover
+   width, persona row width). */
 .btn-attach::before,
 .btn-mic::before { content: none !important; }
 .btn-attach,
@@ -4072,12 +4145,29 @@ textarea#inp {
 .wfp-btn {
   border-radius: 9px !important;
 }
+/* PR-LAYOUT-V2 — graceful responsive collapse for the composer
+   toolbar. Cursor handles small windows by wrapping chips into two
+   rows rather than shrinking individual chips into squares; we follow
+   the same pattern. The chip text/value stays readable at every width. */
+@media (max-width: 1180px) {
+  .composer-toolbar {
+    grid-template-columns: minmax(150px, 1.4fr) minmax(120px, 1fr) repeat(4, minmax(96px, .82fr)) !important;
+  }
+}
 @media (max-width: 980px) {
   body { --sidebar-w: 260px; }
-  .composer-toolbar { grid-template-columns: 1fr 1fr 1fr !important; }
-  .composer-chip:nth-last-child(-n+3) { width: auto !important; padding: 0 10px !important; }
-  .composer-chip:nth-last-child(-n+3) span { display: inline !important; }
-  .composer-chip:nth-last-child(-n+3) b { font-size: 10px !important; }
+  .composer-toolbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-auto-rows: 36px !important;
+  }
+  .composer-chip { height: 34px !important; padding: 0 10px !important; }
+  .composer-chip span { font-size: 9px !important; }
+  .composer-chip b    { font-size: 11.5px !important; }
+}
+@media (max-width: 720px) {
+  .composer-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
 </style>
 </head>
@@ -7911,6 +8001,10 @@ async function pickLocalModel(provider, model){
     await saveLocalProvider(provider);
     const cm = document.getElementById('csb-model');
     if (cm) cm.textContent = model;
+    // PR-LAYOUT-V2 — same root cause as saveModelSetting; the composer
+    // Model chip wasn't refreshing after selecting a local model.
+    try { updateShellChrome(); } catch(_) {}
+    try { H.notify?.('Model selected', `${provider}: ${model}`); } catch(_) {}
   } catch(_) {}
   closeModelPicker();
 }
@@ -9210,7 +9304,12 @@ async function saveModelSetting(provider, model){
       const cm = document.getElementById('csb-model');
       if (cm) { try { cm.textContent = model; } catch(_){} }
     }
-    try { updateThinkingHint(); updateStatusBar(); renderCodeContext(); } catch(_){}
+    // PR-LAYOUT-V2 — composer chip text was stale after model selection
+    // because updateShellChrome wasn't being called from this path.
+    // Pickers in the composer-toolbar read their value from the chip
+    // text, so without this call switching model didn't visibly update
+    // anything → user thought "models can't be selected".
+    try { updateThinkingHint(); updateStatusBar(); renderCodeContext(); updateShellChrome(); } catch(_){}
   } catch(e) { console.warn('saveModelSetting failed:', e?.message); }
 }
 async function saveLang(){const next=document.getElementById('pi-lang').value;if(await saveSetting('lang',next,'Language')){lang=next;applyLang();showGreeting();}}
@@ -9240,7 +9339,9 @@ async function saveLocalProvider(kind){
     if (typeof prov !== 'undefined' && prov === kind) {
       // csb-model was removed in PR-U-MEGA; updateStatusBar() handles
       // any surviving status bar elements safely.
-      try { updateStatusBar(); } catch(_){}
+      // PR-LAYOUT-V2 — also refresh the composer-toolbar chip so users
+      // see the local model name they just selected.
+      try { updateStatusBar(); updateShellChrome(); } catch(_){}
     }
   }
   H.notify?.('Local models', 'Saved local provider settings.');
