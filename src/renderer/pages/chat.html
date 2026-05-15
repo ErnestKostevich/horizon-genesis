@@ -3130,6 +3130,44 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
 }
 .composer-foot-agent.done .composer-foot-agent-dot   { background: var(--success-500, #34d399); }
 .composer-foot-agent.error .composer-foot-agent-dot  { background: var(--danger-500, #f87171); }
+
+/* PR-Plan-Act — toggle pill (lives in composer-foot right side). */
+.composer-foot-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--b1);
+  border-radius: 999px;
+  color: var(--t3);
+  font: 600 10px/1 var(--mono);
+  letter-spacing: .4px;
+  cursor: pointer;
+  transition: all .12s ease;
+}
+.composer-foot-toggle:hover {
+  background: rgba(255,255,255,.05);
+  color: var(--t2);
+}
+.composer-foot-toggle.on {
+  background: var(--accent-cyan-100, rgba(86,210,255,.10));
+  border-color: var(--accent-cyan-300, rgba(86,210,255,.32));
+  color: var(--accent-cyan-500, #56d2ff);
+}
+.composer-foot-toggle-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--t3);
+  transition: background .12s ease;
+}
+.composer-foot-toggle.on .composer-foot-toggle-dot {
+  background: var(--accent-cyan-500, #56d2ff);
+  box-shadow: 0 0 6px var(--accent-cyan-500, #56d2ff);
+}
+
+/* PR-Plan-Act — when a plan-pending step is broadcast, expand the
+   step-rail-gate (CSS scaffold from PR-U3) with a visible Approve /
+   Reject CTA above the messages. */
+.step-rail-gate.show { display: flex !important; }
+.step-rail-gate-actions .btn { min-width: 88px; }
 @keyframes agent-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: .4; }
@@ -4552,6 +4590,19 @@ textarea#inp{background:transparent!important}
      Auto-shows when an agent run reports a plan. Pulses the active step,
      ✓-marks completed ones. Hidden in chat-only turns. -->
 <div class="step-rail" id="step-rail"></div>
+<!-- PR-Plan-Act — gate that expands when an agent run is pending the
+     user's first-tool approval. JS shows/hides via .show class on
+     plan-pending / plan-decision events. -->
+<div class="step-rail-gate" id="step-rail-gate">
+  <div class="step-rail-gate-body">
+    <strong>Approve plan?</strong>
+    <span style="opacity:.8" id="plan-act-gate-detail">First tool: <code id="plan-act-gate-tool">tool</code></span>
+  </div>
+  <div class="step-rail-gate-actions">
+    <button class="btn btn-sm" onclick="planActReject()">Reject</button>
+    <button class="btn btn-sm primary" onclick="planActApprove()">Approve plan</button>
+  </div>
+</div>
 
 <!-- ═══════════ INSPECTOR (chat-mode right dock) ═══════════
      Toggled via title-bar 🪟 button. Mirrors the premium inspector pattern
@@ -4692,6 +4743,14 @@ textarea#inp{background:transparent!important}
       <span class="composer-foot-byok" title="BYOK · calls go directly from your machine to the provider — Horizon never sees prompts">🔒 BYOK</span>
     </span>
     <span class="composer-foot-r">
+      <!-- PR-Plan-Act — toggle that gates the first agent tool execution
+           behind an "Approve plan" CTA. Persists via H.set('planActGate'). -->
+      <button class="composer-foot-toggle" id="plan-act-toggle"
+              onclick="togglePlanActGate()"
+              title="Plan/Act gate — when on, agent runs pause for your approval before executing the first tool">
+        <span class="composer-foot-toggle-dot" id="plan-act-toggle-dot"></span>
+        <span id="plan-act-toggle-label">Plan-Act</span>
+      </button>
       <span class="composer-foot-agent" id="composer-foot-agent" title="Agent activity">
         <span class="composer-foot-agent-dot" id="composer-foot-agent-dot"></span>
         <span id="composer-foot-agent-text">idle</span>
@@ -6950,11 +7009,75 @@ window.addEventListener('DOMContentLoaded', () => {
         } else if (step.type === 'run-end') {
           const ok = step.status === 'done' || step.result?.ok;
           setAgentHud(ok ? 'done' : 'error', ok ? 'done' : (step.result?.error || 'error').toString().slice(0, 24));
+          // Plan-Act: hide gate on run end (covers stopped runs).
+          planActHideGate();
+        } else if (step.type === 'plan-pending') {
+          // PR-Plan-Act — first executing step intercepted by main.
+          // Show the Approve/Reject gate above the messages.
+          setAgentHud('running', 'awaiting approval…');
+          planActShowGate(step);
+        } else if (step.type === 'plan-decision') {
+          // User clicked → main echoed the decision back to us.
+          planActHideGate();
+        } else if (step.type === 'plan-rejected') {
+          planActHideGate();
+          setAgentHud('error', 'plan rejected');
         }
       } catch (_) {}
     });
   }
 });
+
+// PR-Plan-Act — gate UI controllers + persisted toggle.
+let _planActActiveRunId = null;
+function planActShowGate(step) {
+  const gate = document.getElementById('step-rail-gate');
+  if (!gate) return;
+  _planActActiveRunId = step?.runId || null;
+  const tool = document.getElementById('plan-act-gate-tool');
+  if (tool) tool.textContent = String(step?.firstTool || 'unknown');
+  const detail = document.getElementById('plan-act-gate-detail');
+  if (detail && step?.reason) {
+    detail.textContent = String(step.reason).slice(0, 140);
+  }
+  gate.classList.add('show');
+}
+function planActHideGate() {
+  document.getElementById('step-rail-gate')?.classList.remove('show');
+  _planActActiveRunId = null;
+}
+window.planActApprove = async function () {
+  if (!_planActActiveRunId) { planActHideGate(); return; }
+  try { await H.agentControl?.(_planActActiveRunId, 'approve-plan'); } catch (_) {}
+  planActHideGate();
+};
+window.planActReject = async function () {
+  if (!_planActActiveRunId) { planActHideGate(); return; }
+  try { await H.agentControl?.(_planActActiveRunId, 'reject-plan'); } catch (_) {}
+  planActHideGate();
+};
+
+// Toggle pill in composer-foot — persisted via H.set('planActGate').
+window.togglePlanActGate = async function () {
+  let cur = false;
+  try { cur = await H.get?.('planActGate'); } catch (_) {}
+  const next = !cur;
+  try { await H.set?.('planActGate', next); } catch (_) {}
+  _planActApplyToggleVisuals(next);
+};
+function _planActApplyToggleVisuals(on) {
+  const btn = document.getElementById('plan-act-toggle');
+  if (!btn) return;
+  btn.classList.toggle('on', !!on);
+  const lbl = document.getElementById('plan-act-toggle-label');
+  if (lbl) lbl.textContent = on ? 'Plan-Act ON' : 'Plan-Act';
+}
+(async function _bootPlanActToggle() {
+  try {
+    const cur = await H.get?.('planActGate');
+    _planActApplyToggleVisuals(!!cur);
+  } catch (_) { _planActApplyToggleVisuals(false); }
+})();
 
 // PR-U-MEGA — provider-health traffic-light on the Model chip.
 // setProviderHealth('ok' | 'slow' | 'fail'). Drives the .ph-* CSS
