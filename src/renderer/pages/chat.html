@@ -2763,17 +2763,30 @@ body.surface-active .inspector-pane{display:none!important}
   .csb-title{max-width:240px}
 }
 @media (max-width:1040px){
-  body.with-sidebar > .tb,
-  body.with-sidebar > .wake-bar,
-  body.with-sidebar > .sb,
-  body.with-sidebar > .modes,
-  body.with-sidebar > .msgs,
-  body.with-sidebar > .inp-wrap,
-  body.with-sidebar > #fractalBg,
-  body.with-sidebar > .chat-status-bar{margin-left:0}
-  .chatside{display:none}
-  .tb-r{max-width:calc(100vw - 230px)}
-  .inspector-pane{max-width:calc(100vw - 28px)}
+  /* PR-LAYOUT-V3 — was `body.with-sidebar > * { margin-left: 0 }`
+     plus `.chatside { display: none }`. That stripped the entire
+     navigation rail at any window narrower than 1040px (typical 13"
+     laptop is fine but Electron resize is often ≤1024). Now the
+     sidebar collapses to its 46px icon-rail at narrow widths and
+     content shifts to that 46px offset — navigation never disappears.
+     Selectors carry an extra qualifier (body.with-sidebar / html) so
+     specificity beats the unqualified .chatside rule that lives later
+     in source (line ~3460 — old "horizon-cursor-layout-v3" pass). */
+  html body.with-sidebar > .tb,
+  html body.with-sidebar > .wake-bar,
+  html body.with-sidebar > .sb,
+  html body.with-sidebar > .modes,
+  html body.with-sidebar > .msgs,
+  html body.with-sidebar > .inp-wrap,
+  html body.with-sidebar > #fractalBg,
+  html body.with-sidebar > .chat-status-bar{margin-left:46px!important}
+  html body .chatside{width:46px!important}
+  html body .chatside .cs-head,
+  html body .chatside .cs-search,
+  html body .chatside .cs-list,
+  html body .chatside .cs-stats{opacity:0!important;pointer-events:none!important}
+  .tb-r{max-width:calc(100vw - 184px)}
+  .inspector-pane{max-width:calc(100vw - 74px)}
 }
 @media (prefers-reduced-motion:reduce){
   .logo{animation:none}
@@ -3208,6 +3221,33 @@ body.shell-clean .msgs { padding-top: 14px; }
    above), so the toolbar disappears with its parent. Removing the
    stand-alone rule clears one of FOUR layered rules that competed for
    the .composer-toolbar selector and made the chip layout unpredictable. */
+
+/* PR-LAYOUT-V3 — TITLEBAR ROW WRAP BUG.
+   .tb is display:grid with three columns (logo / center / actions).
+   #git-branch-pop is an empty <div> rendered between .tb-center and
+   .tb-r in DOM. Without any CSS, it defaulted to display:block,
+   becoming a grid item that took column 3 of row 1 — and pushed
+   .tb-r (⌘K + Settings + window controls) into row 2 of the grid,
+   where it floated awkwardly at x≈90 below the titlebar, overlapping
+   with the wake-bar. That is the visible "buttons floating below
+   titlebar" bug the owner called out on the screenshot.
+   Fix: take it out of grid flow with position:absolute. The popover
+   is anchored relative to the body anyway (positionPicker / git
+   branch dropdown set top/left explicitly when shown). */
+.git-branch-pop {
+  position: absolute !important;
+  z-index: 800;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.git-branch-pop.show {
+  width: auto;
+  height: auto;
+  pointer-events: auto;
+}
 @media (max-width:1360px){
   .tb{grid-template-columns:minmax(160px,auto) minmax(200px,1fr) auto}
   .shell-chip.subtle{display:none}
@@ -3738,12 +3778,13 @@ body.os-win .fph-r { order: initial !important; margin-right: 0 !important; }
 .composer-toolbar {
   display: grid !important;
   grid-template-columns:
-    minmax(170px, 1.55fr) /* Model — widest, primary signal */
-    minmax(135px, 1.05fr) /* Persona */
-    minmax(105px, .85fr)  /* Mode */
-    minmax(110px, .85fr)  /* Tools */
-    minmax(95px,  .8fr)   /* Web */
-    minmax(105px, .8fr);  /* Screen */
+    minmax(155px, 1.5fr) /* Model — widest, primary signal */
+    minmax(120px, 1fr)   /* Persona */
+    minmax(100px, .85fr) /* Mode */
+    minmax(95px,  .8fr)  /* Wake */
+    minmax(95px,  .8fr)  /* Web */
+    minmax(100px, .8fr)  /* Screen */
+    minmax(80px,  .65fr); /* Tools (⌘K) */
   gap: 8px !important;
   overflow: visible !important;
   align-items: center !important;
@@ -3788,22 +3829,10 @@ body.os-win .fph-r { order: initial !important; margin-right: 0 !important; }
   color: #fbbf24 !important;
 }
 .composer-chip.on b { color: #fcd34d !important; }
-/* Add a subtle chevron after openable pickers so they look obviously
-   clickable (Cursor pattern). Tools/Web/Screen are toggles, not
-   pickers — they get a dot indicator instead, defined below. */
-.composer-chip[onclick*="openModelPicker"]::after,
-.composer-chip[onclick*="openPersonaPicker"]::after,
-.composer-chip[onclick*="cycleComposerMode"]::after,
-.composer-chip[onclick*="openCmdPalette"]::after {
-  content: '';
-  width: 8px; height: 8px;
-  margin-left: 4px;
-  flex-shrink: 0;
-  background: currentColor;
-  opacity: .42;
-  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23fff' d='M7 10l5 5 5-5z'/></svg>") center/contain no-repeat;
-          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23fff' d='M7 10l5 5 5-5z'/></svg>") center/contain no-repeat;
-}
+/* PR-LAYOUT-V3 — was a chevron ::after for openable pickers, but with
+   the new ::before icon prefix the chevron became redundant and ate
+   ~14px of room that values like "gpt-4-turbo-preview" needed. The
+   leading icon + tooltip already signals "click to change". */
 /* Web/Screen get a dot indicator coloured by state. */
 .composer-chip#composer-web-chip::after,
 .composer-chip#composer-screen-chip::after {
@@ -3838,7 +3867,8 @@ textarea#inp {
 }
 
 .model-popover,
-.persona-popover {
+.persona-popover,
+.mode-popover {
   position: fixed;
   display: none;
   z-index: 900;
@@ -3853,8 +3883,12 @@ textarea#inp {
   backdrop-filter: blur(28px);
   -webkit-app-region: no-drag;
 }
+/* PR-LAYOUT-V3 — Mode picker is narrower than Model picker (only 12
+   items, no per-provider columns). */
+.mode-popover { width: min(480px, calc(100vw - 32px)) !important; }
 .model-popover.show,
-.persona-popover.show { display: flex !important; flex-direction: column; }
+.persona-popover.show,
+.mode-popover.show { display: flex !important; flex-direction: column; }
 .picker-head {
   display:flex;
   align-items:center;
@@ -4145,13 +4179,110 @@ textarea#inp {
 .wfp-btn {
   border-radius: 9px !important;
 }
-/* PR-LAYOUT-V2 — graceful responsive collapse for the composer
-   toolbar. Cursor handles small windows by wrapping chips into two
-   rows rather than shrinking individual chips into squares; we follow
-   the same pattern. The chip text/value stays readable at every width. */
+
+/* PR-LAYOUT-V3 — composer "island" fix. The owner described the
+   bottom area as "small island at the bottom of the screen, even not
+   in the middle, ugly". Cause: composer-toolbar (max-width 980),
+   .irow (max-width 1080), .composer-foot all stacked centered inside
+   a full-width .inp-wrap dock, so the COMPOSER content felt off-center
+   (because of the left sidebar shifting horizontal centre rightward)
+   and visually disconnected from each other. Fix: wider, more
+   generous inner content (max-width 1180), unified panel treatment
+   under the toolbar + input + footer so they read as ONE component
+   ("a dock"), subtle accent border + shadow lifting it from the
+   messages area. */
+.inp-wrap {
+  padding-top: 14px !important;
+  padding-bottom: 16px !important;
+  background: linear-gradient(180deg, rgba(8,12,20,.62) 0%, rgba(5,8,14,.96) 60%) !important;
+  border-top: 1px solid rgba(125,211,252,.10) !important;
+  box-shadow: 0 -16px 48px rgba(0,0,0,.32) !important;
+}
+.inp-wrap .composer-toolbar,
+.inp-wrap .irow,
+.inp-wrap .composer-foot,
+.inp-wrap .hint {
+  max-width: 1180px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding-left: 18px !important;
+  padding-right: 18px !important;
+}
+/* Wrap toolbar + irow in a visual "card" via box-shadow on the
+   middle (.irow) element — the toolbar sits flush above it, the
+   footer sits flush below it. This is the Cursor / Linear dock
+   pattern — one rounded panel, clear inner padding. */
+.inp-wrap .irow {
+  background: rgba(15,23,42,.42) !important;
+  border: 1px solid rgba(148,163,184,.12) !important;
+  border-radius: 14px !important;
+  padding: 6px 8px !important;
+}
+.inp-wrap textarea#inp {
+  border: 0 !important;
+  background: transparent !important;
+  min-height: 42px !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+.inp-wrap .composer-toolbar { margin-bottom: 10px !important; }
+.inp-wrap .composer-foot { margin-top: 8px !important; }
+
+/* PR-LAYOUT-V3 — CURSOR-STYLE COMPOSER CHIPS.
+   The owner's screenshot showed labels truncating to "MO… Ag…",
+   "TOO… Ct…", "SCRE… O…". Root cause: each chip was trying to render
+   "LABEL · VALUE · ▾" in <110px of horizontal space, which is
+   impossible. Cursor / Claude Code / Linear all solve this the same
+   way — drop the label entirely, show only the *value* (and a tiny
+   leading icon if the chip type isn't obvious from context). The
+   chip's tooltip already explains what it does.
+   - On all widths: hide the .composer-chip > span (the LABEL)
+   - On all widths: chip becomes [icon] value [chevron], left-aligned
+   - 6 chips fit comfortably in 980px with room to spare */
+.composer-chip > span {
+  display: none !important;
+}
+.composer-chip {
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 0 12px !important;
+}
+.composer-chip > b {
+  flex: 1 1 auto !important;
+  text-align: left !important;
+  max-width: 100% !important;
+  font: 700 12.5px/1 var(--font) !important;
+  color: #e9eef8 !important;
+}
+/* Inline lucide icon prefix for chip type recognition. The ::before
+   uses inline SVG via background mask so it inherits the chip color
+   and stays crisp. */
+.composer-chip::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background: currentColor;
+  opacity: .82;
+  -webkit-mask: var(--chip-icon, none) center/contain no-repeat;
+          mask: var(--chip-icon, none) center/contain no-repeat;
+}
+.composer-chip[onclick*="openModelPicker"]   { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z'/><path d='M12 2a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z'/></svg>"); }
+.composer-chip[onclick*="openPersonaPicker"] { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"); }
+.composer-chip[onclick*="openModePicker"]    { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/></svg>"); }
+.composer-chip#composer-wake-chip            { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z'/><path d='M19 10v2a7 7 0 0 1-14 0v-2'/><line x1='12' y1='19' x2='12' y2='22'/></svg>"); }
+.composer-chip[onclick*="openCmdPalette"]    { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z'/></svg>"); }
+.composer-chip#composer-web-chip             { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='2' y1='12' x2='22' y2='12'/><path d='M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z'/></svg>"); }
+.composer-chip#composer-screen-chip          { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='3' width='20' height='14' rx='2'/><line x1='8' y1='21' x2='16' y2='21'/><line x1='12' y1='17' x2='12' y2='21'/></svg>"); }
+
+/* PR-LAYOUT-V3 — graceful collapse: chips wrap into rows rather than
+   shrinking. The 6-column grid still applies above 1180; below it,
+   the column count drops in steps so the value text never truncates. */
 @media (max-width: 1180px) {
   .composer-toolbar {
-    grid-template-columns: minmax(150px, 1.4fr) minmax(120px, 1fr) repeat(4, minmax(96px, .82fr)) !important;
+    grid-template-columns: repeat(6, minmax(105px, 1fr)) !important;
   }
 }
 @media (max-width: 980px) {
@@ -4161,8 +4292,7 @@ textarea#inp {
     grid-auto-rows: 36px !important;
   }
   .composer-chip { height: 34px !important; padding: 0 10px !important; }
-  .composer-chip span { font-size: 9px !important; }
-  .composer-chip b    { font-size: 11.5px !important; }
+  .composer-chip > b { font-size: 12px !important; }
 }
 @media (max-width: 720px) {
   .composer-toolbar {
@@ -4236,7 +4366,14 @@ textarea#inp {
 </svg>
 
 <!-- ═══════════ MULTI-CHAT SIDEBAR (mounted at boot) ═══════════ -->
-<aside id="chatside" class="chatside" hidden>
+<!-- PR-LAYOUT-V3 — was `<aside ... hidden>`. The `hidden` attribute was
+     removed in JS only after `bootCurrentChat()` resolved successfully
+     (line 7084). On a slow IPC or any error in the boot chain the
+     sidebar — the entire primary navigation — would never become
+     visible. Now the sidebar is always in DOM; CSS gates its visual
+     state via `body.with-sidebar` and `body.chat-sidebar-collapsed`,
+     and we add `with-sidebar` synchronously below as a safety net. -->
+<aside id="chatside" class="chatside">
   <div class="cs-head">
     <button class="cs-new" id="cs-new-btn" onclick="createNewChat()">+ New chat</button>
   </div>
@@ -5200,19 +5337,34 @@ textarea#inp {
     <button class="composer-chip" onclick="openPersonaPicker(event)" title="Choose persona">
       <span>Persona</span><b id="composer-persona-chip">Default</b>
     </button>
-    <button class="composer-chip" onclick="cycleComposerMode()" title="Switch chat mode">
+    <!-- PR-LAYOUT-V3 — Mode chip was cycle-on-click (clicked through
+         Chat → Code → Agent → Vision → Chat). Switched to a real picker
+         that surfaces all 12 modes (4 core + 8 niche: Focus / Plan /
+         Coach / Write / Email / Search / Translate / Roleplay) which
+         used to be reachable only via the now-hidden .modes strip. -->
+    <button class="composer-chip" onclick="openModePicker(event)" title="Choose chat mode">
       <span>Mode</span><b id="composer-mode-chip">Chat</b>
     </button>
-    <button class="composer-chip" onclick="openCmdPalette()" title="Commands and actions">
-      <span>Tools</span><b>Ctrl K</b>
+    <!-- PR-LAYOUT-V3 — Wake (JARVIS-style voice activation) lived in
+         the .sb provider bar (#tc-wake) which is `display:none` since
+         shell-clean shipped. The feature was wired and worked but had
+         no reachable UI. Re-surfaced here as a first-class composer
+         toggle so users can flip wake mode without opening Settings. -->
+    <button class="composer-chip" id="composer-wake-chip" onclick="toggleWake()" title="Wake word — say «Горизонт» / «Horizon» to invoke">
+      <span>Wake</span><b id="composer-wake-state">Off</b>
     </button>
     <button class="composer-chip" id="composer-web-chip" onclick="toggleSearch()" title="Toggle web/search grounding">
       <span>Web</span><b id="composer-web-state">Off</b>
     </button>
-    <button class="composer-chip" id="composer-screen-chip" onclick="toggleEye()" title="Toggle screen context">
+    <button class="composer-chip" id="composer-screen-chip" onclick="toggleEye()" title="Toggle screen context (Vision)">
       <span>Screen</span><b id="composer-screen-state">Off</b>
     </button>
+    <button class="composer-chip" onclick="openCmdPalette()" title="Command palette · ⌘K">
+      <span>Tools</span><b>⌘K</b>
+    </button>
   </div>
+  <!-- PR-LAYOUT-V3 — Mode picker popover (same pattern as Model/Persona). -->
+  <div class="mode-popover" id="mode-popover"></div>
   <div class="irow">
     <input type="file" id="file-input" accept="image/*,.txt,.md,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.csv,.xml,.yaml,.yml,.sh,.sql,.zip,.pdf" multiple onchange="onFilesSelected(event)"/>
     <button class="ibtn btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл или фото">📎</button>
@@ -5262,6 +5414,12 @@ textarea#inp {
 <script src="/vendor/monaco/loader.js"></script>
 <script src="/vendor/xterm/lib/xterm.js"></script>
 <script>
+// PR-LAYOUT-V3 — synchronous sidebar visibility. The async bootCurrentChat
+// chain used to be the *only* thing that added body.with-sidebar; if the
+// IPC was slow or threw, the entire layout stayed in "no sidebar" mode
+// and the user lost all primary navigation. Add the class here, before
+// any async work, so the layout is correct from the very first paint.
+try { document.body.classList.add('with-sidebar'); } catch(_) {}
 // ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
@@ -5453,6 +5611,10 @@ function updateShellChrome(surface = activeSurface){
     document.getElementById('composer-screen-state')?.replaceChildren(document.createTextNode(eyeOn ? 'On' : 'Off'));
     document.getElementById('composer-web-chip')?.classList.toggle('on', !!searchOn);
     document.getElementById('composer-screen-chip')?.classList.toggle('on', !!eyeOn);
+    // PR-LAYOUT-V3 — Wake chip state sync (was nowhere because Wake had
+    // no composer chip before this PR).
+    document.getElementById('composer-wake-state')?.replaceChildren(document.createTextNode(wakeOn ? 'On' : 'Off'));
+    document.getElementById('composer-wake-chip')?.classList.toggle('on', !!wakeOn);
   } catch(_) {}
 }
 function showChatSurface(){
@@ -6101,12 +6263,16 @@ function setWakeBar(state){
 
 function toggleWake(){
   const next=!wakeOn;
-  const btn=document.getElementById('tc-wake');
-  btn.classList.toggle('on', next);
+  // PR-LAYOUT-V3 — legacy `tc-wake` lives in the hidden .sb provider
+  // bar (display:none). Null-guard so toggleWake works whether the
+  // legacy chip exists or not — composer chip is the canonical UI now.
+  const legacyBtn=document.getElementById('tc-wake');
+  legacyBtn?.classList.toggle('on', next);
   saveSetting('wakeOn', next, 'Wake mode').then(ok=>{
-    if(!ok){btn.classList.toggle('on', wakeOn);return;}
+    if(!ok){legacyBtn?.classList.toggle('on', wakeOn);return;}
     wakeOn=next;
     if(wakeOn) startWakeMode(); else stopWakeMode();
+    try { updateShellChrome(); } catch(_){}
   });
 }
 
@@ -8105,6 +8271,86 @@ document.addEventListener('click', (e) => {
   }
   closePersonaPicker();
 });
+
+// PR-LAYOUT-V3 — Mode picker. Surfaces ALL 12 chat modes (4 core +
+// 8 niche) in one popover. The .modes strip used to host these as a
+// flat horizontal bar but was hidden by `body.shell-clean` so the
+// niche modes (Focus/Plan/Coach/Write/Email/Search/Translate/Roleplay)
+// became unreachable. Replaces the previous "cycle on click" behaviour
+// of the Mode chip — discoverable + skips past inactive states.
+const _MODE_PICKER_ITEMS = [
+  // Core: each gets a short subtitle so the picker explains the mode
+  // rather than relying on the user to memorise what "Plan" means.
+  { id: 'chat',      label: 'Chat',      group: 'Core',   hint: 'Default conversation' },
+  { id: 'code',      label: 'Code',      group: 'Core',   hint: 'Programming + IDE workspace' },
+  { id: 'agent',     label: 'Agent',     group: 'Core',   hint: 'Autonomous tool-use (Operator)' },
+  { id: 'vision',    label: 'Vision',    group: 'Core',   hint: 'Screen-aware replies (use with Screen toggle)' },
+  { id: 'focus',     label: 'Focus',     group: 'Niche',  hint: 'Pomodoro + deep work cues' },
+  { id: 'plan',      label: 'Plan',      group: 'Niche',  hint: 'Plan-only — no execution' },
+  { id: 'coach',     label: 'Coach',     group: 'Niche',  hint: 'Coaching tone, Socratic' },
+  { id: 'write',     label: 'Write',     group: 'Niche',  hint: 'Long-form writing assistant' },
+  { id: 'email',     label: 'Email',     group: 'Niche',  hint: 'Draft / triage messages' },
+  { id: 'search',    label: 'Search',    group: 'Niche',  hint: 'Web-first answers (forces Web on)' },
+  { id: 'translate', label: 'Translate', group: 'Niche',  hint: 'Cross-language reply' },
+  { id: 'roleplay',  label: 'Roleplay',  group: 'Niche',  hint: 'Character / persona simulation' },
+];
+function openModePicker(ev) {
+  try { ev?.stopPropagation(); } catch (_) {}
+  closeModelPicker();
+  closePersonaPicker();
+  const pop = document.getElementById('mode-popover');
+  if (!pop) return;
+  const active = String(mode || 'chat').toLowerCase();
+  const groups = ['Core', 'Niche'];
+  const sections = groups.map(g => {
+    const items = _MODE_PICKER_ITEMS.filter(m => m.group === g);
+    const rows = items.map(m => {
+      const on = m.id === active;
+      const initials = m.label.slice(0, 2).toUpperCase();
+      return `
+        <button class="persona-picker-row${on ? ' on' : ''}" onclick="pickMode('${m.id}')" title="${_escHtml(m.hint)}">
+          <span class="persona-picker-avatar">${_escHtml(initials)}</span>
+          <span class="persona-picker-name">${_escHtml(m.label)}<small style="display:block;color:#778aa6;font-weight:600;font-size:10px;margin-top:2px">${_escHtml(m.hint)}</small></span>
+          <span class="persona-picker-meta">${g === 'Core' ? 'core' : 'niche'}</span>
+        </button>`;
+    }).join('');
+    return `
+      <div class="model-provider-title"><b>${g}</b><span>${items.length} modes</span></div>
+      ${rows}`;
+  }).join('');
+  pop.innerHTML = `
+    <div class="picker-head">
+      <div>
+        <div class="picker-title">Choose Mode</div>
+        <div class="picker-sub">Core + niche modes. Vision/Web/Screen are independent toggles below.</div>
+      </div>
+    </div>
+    <div class="picker-body">${sections}</div>
+  `;
+  positionPicker(pop, ev?.currentTarget || document.getElementById('composer-mode-chip'));
+}
+function closeModePicker() {
+  document.getElementById('mode-popover')?.classList.remove('show');
+}
+function pickMode(id) {
+  try { setMode(id, true); } finally { closeModePicker(); }
+}
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('mode-popover');
+  if (!pop?.classList.contains('show')) return;
+  if (e.target.closest('#mode-popover')) return;
+  if (e.target.closest('#composer-mode-chip')) return;
+  if (e.target.closest('.composer-chip')) {
+    const btn = e.target.closest('.composer-chip');
+    if (String(btn?.textContent || '').toLowerCase().includes('mode')) return;
+  }
+  closeModePicker();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModePicker(); });
+
+// PR-LAYOUT-V3 — .mode-popover inherits .persona-popover visual style.
+// Wired as a sibling selector so any tweaks to .persona-popover stay
+// in sync. (No JS injection — pure CSS in the <style> block.)
 
 // ═══ FOCUS TIMER — pomodoro (P1) ═══
 // NOTE: the actual timer state and `startFocusTimer / toggleFocusTimer /
@@ -10647,42 +10893,35 @@ function closeCmdPalette() {
 // user types. Each item is { group, icon, text, hint, action }.
 function _paletteDynamicItems() {
   const dyn = [];
-  // ── Models (per provider, current 4 + Claude/OpenAI/Gemini groups) ──
-  try {
-    const provs = ['claude','openai','gemini','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','ollama','lmstudio'];
-    for (const p of provs) {
-      const reg = (typeof MODEL_PICKER_REGISTRY !== 'undefined' && MODEL_PICKER_REGISTRY[p]) || [];
-      for (const [val, label] of reg) {
-        const pricing = (typeof getModelPricing === 'function') ? getModelPricing(p, val) : null;
-        const priceHint = pricing ? `${fmtPrice(pricing.in)}/${fmtPrice(pricing.out)} per Mtok` : '';
-        dyn.push({
-          group: 'Switch model',
-          icon: '🧠',
-          text: `${p} · ${label}`,
-          hint: priceHint,
-          action: () => { try { saveModelSetting(p, val); } catch(_){} }
-        });
-      }
-    }
-  } catch(_){}
-  // ── Personas ──
-  try {
-    H.getPersonas?.().then(list => {
-      // We've already returned the dyn array — reading async items here
-      // doesn't help for THIS render. Persona dyn items are added via
-      // filterCommands cache. Skip.
-    }).catch(()=>{});
-  } catch(_){}
-  // Static persona list (fallback if H.getPersonas async-loads later).
-  for (const pid of ['jarvis','friday','alfred','sage','pixel']) {
-    dyn.push({
-      group: 'Switch persona',
-      icon: '🎭',
-      text: `Persona · ${pid}`,
-      hint: 'apply this persona',
-      action: () => { try { setPersona?.(pid); } catch(_){} }
-    });
-  }
+  // PR-LAYOUT-V3 — was: dump EVERY provider × EVERY model combo as a
+  // flat list (~100+ rows, OpenRouter alone has 200+ models). This made
+  // the palette unusable for anything else because the model rows
+  // dominated the result list, and the popover stretched to the bottom
+  // of the screen with no way to switch model intelligently. Now: ONE
+  // "Switch model…" entry that defers to the dedicated model picker
+  // (full search, grouped by provider, the right UI for 200+ items).
+  // Same approach for personas — the persona picker handles selection.
+  dyn.push({
+    group: 'Switch',
+    icon: '🧠',
+    text: 'Switch model…',
+    hint: 'open the model picker (one switcher for every provider)',
+    action: () => { try { closeCmdPalette(); openModelPicker({ stopPropagation: ()=>{}, currentTarget: document.getElementById('composer-model-chip') }); } catch(_){} }
+  });
+  dyn.push({
+    group: 'Switch',
+    icon: '🎭',
+    text: 'Switch persona…',
+    hint: 'open the persona picker',
+    action: () => { try { closeCmdPalette(); openPersonaPicker({ stopPropagation: ()=>{}, currentTarget: document.getElementById('composer-persona-chip') }); } catch(_){} }
+  });
+  dyn.push({
+    group: 'Switch',
+    icon: '⚡',
+    text: 'Switch mode…',
+    hint: 'open the mode picker (Chat / Code / Agent / Vision / 8 niche)',
+    action: () => { try { closeCmdPalette(); openModePicker({ stopPropagation: ()=>{}, currentTarget: document.getElementById('composer-mode-chip') }); } catch(_){} }
+  });
   // ── Chat list (last 8) ──
   try {
     if (Array.isArray(window.chatList)) {
