@@ -38,10 +38,25 @@ contextBridge.exposeInMainWorld('H', {
   // ── AI & Web Search ───────────────────────────────────────────────────────────
   ai:                   (m, p, s, o) => ipcRenderer.invoke('ai', m, p, s, o),
   aiStream:             (m, p, s, o) => ipcRenderer.invoke('aiStream', m, p, s, o),
+  aiAbort:              (runId)      => ipcRenderer.invoke('aiAbort', runId),
   onAIStreamChunk:      (cb)         => {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('aiStreamChunk', handler);
     return () => ipcRenderer.removeListener('aiStreamChunk', handler);
+  },
+  // PR-C5 — streaming AI (Claude + OpenAI SSE).
+  // aiStream returns { ok, runId } immediately; chunks arrive via
+  // ai:chunk events, completion via ai:done. aiAbort cancels the
+  // in-flight request.
+  onAiChunk:            (cb)         => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('ai:chunk', handler);
+    return () => ipcRenderer.removeListener('ai:chunk', handler);
+  },
+  onAiDone:             (cb)         => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('ai:done', handler);
+    return () => ipcRenderer.removeListener('ai:done', handler);
   },
   search:               (q)          => ipcRenderer.invoke('search', q),
   // ── PC Apps & URLs ────────────────────────────────────────────────────────────
