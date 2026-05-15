@@ -2049,12 +2049,45 @@ ipcMain.handle('ttsOpenAI', async (_, text, voice) => {
 // ── AI Providers ──────────────────────────────────────────────────────────────
 ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) => {
   const fetch = require('node-fetch');
-  const runId = opts.streamId || `stream-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  const runId = opts.streamId || _streamRunId();
+  const abort = new AbortController();
   const p = provider || settingsStore.get('provider') || 'gemini';
   const sysMsg = String(system || '').trim() || 'You are Horizon AI. Use Markdown.';
+  let reply = '';
+  let reasoning = '';
+  let usage = null;
+  let model = '';
   const emit = (type, payload = {}) => {
     try { event.sender.send('aiStreamChunk', { runId, type, provider: p, ...payload }); } catch (_) {}
+    try {
+      if (type === 'delta' && payload.delta) _broadcast('ai:chunk', { runId, delta: payload.delta });
+      if (type === 'reasoning' && payload.delta) _broadcast('ai:chunk', { runId, delta: payload.delta, reasoning: true });
+      if (type === 'done') _broadcast('ai:done', {
+        runId,
+        ok: true,
+        fullText: payload.reply || reply,
+        reply: payload.reply || reply,
+        model: payload.model || model,
+        usage: payload.usage || usage,
+        reasoning: payload.reasoning || reasoning,
+      });
+      if (type === 'error') _broadcast('ai:done', {
+        runId,
+        ok: false,
+        error: payload.error || 'Stream failed',
+        fullText: reply,
+        reply,
+        model,
+        usage,
+        reasoning,
+      });
+    } catch (_) {}
   };
+  const fail = (error) => {
+    emit('error', { error });
+    return { ok: false, error, runId, model };
+  };
+  _activeStreams.set(runId, abort);
   const openaiCompatible = {
     openai:     { url: 'https://api.openai.com/v1/chat/completions',                    model: selectedModel('openai', opts),     key: keysStore.get('k_openai') },
     groq:       { url: 'https://api.groq.com/openai/v1/chat/completions',               model: selectedModel('groq', opts),       key: keysStore.get('k_groq') },
@@ -2067,12 +2100,12 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
   };
 
   try {
-    let url, headers, body, model;
+    let url, headers, body;
     const localEp = localOpenAIEndpoint(p);
 
     if (p === 'gemini') {
       const k = keysStore.get('k_gemini');
-      if (!k) return { ok: false, error: 'Gemini key not set' };
+      if (!k) return fail('Gemini key not set');
       model = selectedModel('gemini', opts);
       const rawContents = (messages || []).map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
@@ -2102,7 +2135,7 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
       });
     } else if (p === 'cohere') {
       const k = keysStore.get('k_cohere');
-      if (!k) return { ok: false, error: 'Cohere key not set' };
+      if (!k) return fail('Cohere key not set');
       model = selectedModel('cohere', opts);
       url = 'https://api.cohere.com/v2/chat';
       headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k}` };
@@ -2110,7 +2143,7 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
     } else if (localEp || openaiCompatible[p]) {
       const ep = localEp || openaiCompatible[p];
       model = selectedModel(p, opts);
-      if (!localEp && !ep.key) return { ok: false, error: `${p} key not set` };
+      if (!localEp && !ep.key) return fail(`${p} key not set`);
       url = ep.url;
       headers = { 'Content-Type': 'application/json' };
       if (!localEp || ep.key) headers.Authorization = `Bearer ${ep.key}`;
@@ -2126,22 +2159,19 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
       });
       if (p === 'perplexity') body.stream_mode = 'concise';
     } else {
-      return { ok: false, error: `Streaming is not configured for ${p}` };
+      return fail(`Streaming is not configured for ${p}`);
     }
 
     emit('start', { model });
-    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: abort.signal });
     if (!response.ok || !response.body) {
       const d = await response.json().catch(async () => ({ error: await response.text().catch(() => '') }));
       const msg = d.error?.message || d.message || d.error || `${p} stream failed (${response.status})`;
-      emit('error', { error: msg });
-      return { ok: false, error: msg, runId, model };
+      return fail(msg);
     }
 
-    let reply = '';
-    let reasoning = '';
-    let usage = null;
     await readSseStream(response, async ({ event: eventName, data }) => {
+      if (abort.signal.aborted) throw new Error('aborted');
       const chunk = extractStreamPayload(p, eventName, data);
       if (chunk.error) {
         emit('error', { error: chunk.error });
@@ -2161,9 +2191,11 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
     emit('done', { reply, model, usage, reasoning });
     return { ok: true, reply, model, usage, reasoning, runId };
   } catch (e) {
-    const msg = e?.message || String(e);
+    const msg = abort.signal.aborted ? 'aborted' : (e?.message || String(e));
     emit('error', { error: msg });
     return { ok: false, error: msg, runId };
+  } finally {
+    _activeStreams.delete(runId);
   }
 });
 
@@ -2490,6 +2522,284 @@ ipcMain.handle('search', async (_, query) => {
   } catch(e) { return { error: e.message, results: [] }; }
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PR-C5 — STREAMING AI (Claude + OpenAI SSE)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Token-by-token rendering for Claude + OpenAI. Other providers fall back
+// to the legacy `ai` handler (no SSE = no streaming).
+//
+// Wire shape:
+//   const runId = await H.aiStream(messages, provider, system, opts);
+//   H.onAiChunk(({ runId, delta }) => append delta to bubble)
+//   H.onAiDone(({ runId, ok, error, fullText, usage, model }) => trackTokens etc)
+//   H.aiAbort(runId);  // user clicks Stop
+//
+// Renderer is responsible for:
+//   - allocating a placeholder <div> bubble before calling aiStream
+//   - threading runId so multiple sends can interleave (rare but safe)
+//   - calling H.aiAbort on send-button-as-stop click
+//
+// Parsing notes:
+//   - Anthropic emits SSE blocks with `event: ...\ndata: {...}\n\n`. We only
+//     act on `content_block_delta` (text body) and `message_delta` (usage).
+//   - OpenAI emits `data: {choices:[{delta:{content:...}}]}\n\n` lines and
+//     a final `data: [DONE]`. Usage is in the `usage` field of the LAST
+//     non-DONE chunk when stream_options.include_usage is true.
+const _activeStreams = new Map(); // runId → AbortController
+let _streamSeq = 0;
+
+function _streamRunId() {
+  _streamSeq++;
+  return 'stream_' + Date.now().toString(36) + '_' + _streamSeq;
+}
+function _broadcast(channel, payload) {
+  try {
+    const wins = require('electron').BrowserWindow.getAllWindows();
+    for (const w of wins) {
+      if (w && !w.isDestroyed() && w.webContents) {
+        w.webContents.send(channel, payload);
+      }
+    }
+  } catch (_) { /* best-effort */ }
+}
+
+async function _streamClaude({ runId, sysMsg, messages, opts, abort }) {
+  const model = selectedModel('claude', opts);
+  const respProfile = settingsStore.get('responseProfile') || 'balanced';
+  const k = keysStore.get('k_claude');
+  if (!k) {
+    _broadcast('ai:done', { runId, ok: false, error: 'Claude key not set → Settings' });
+    return;
+  }
+  const body = { model, max_tokens: 4096, system: sysMsg, messages, stream: true };
+  if (respProfile === 'deep') {
+    body.thinking = { type: 'enabled', budget_tokens: 8000 };
+    body.max_tokens = 16000;
+  }
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': k,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+      signal: abort.signal,
+    });
+  } catch (e) {
+    _broadcast('ai:done', { runId, ok: false, error: 'Network: ' + e.message });
+    return;
+  }
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    try { const j = await res.json(); errMsg = j.error?.message || errMsg; } catch (_) {}
+    _broadcast('ai:done', { runId, ok: false, error: errMsg });
+    return;
+  }
+  let fullText = '';
+  let usage = null;
+  let buf = '';
+  try {
+    for await (const chunk of res.body) {
+      if (abort.signal.aborted) break;
+      buf += chunk.toString('utf8');
+      // Anthropic frames are separated by `\n\n`.
+      const frames = buf.split(/\n\n/);
+      buf = frames.pop() || '';
+      for (const frame of frames) {
+        const lines = frame.split('\n');
+        let event = '';
+        let data = '';
+        for (const ln of lines) {
+          if (ln.startsWith('event: ')) event = ln.slice(7).trim();
+          else if (ln.startsWith('data: ')) data = ln.slice(6).trim();
+        }
+        if (!data) continue;
+        let parsed = null;
+        try { parsed = JSON.parse(data); } catch (_) { continue; }
+        if (event === 'content_block_delta') {
+          const delta = parsed?.delta?.text || '';
+          if (delta) {
+            fullText += delta;
+            _broadcast('ai:chunk', { runId, delta });
+          }
+        } else if (event === 'message_delta') {
+          const u = parsed?.usage;
+          if (u) {
+            usage = {
+              prompt: u.input_tokens || 0,
+              completion: u.output_tokens || 0,
+              total: (u.input_tokens || 0) + (u.output_tokens || 0),
+            };
+          }
+        } else if (event === 'message_start') {
+          const u = parsed?.message?.usage;
+          if (u) {
+            usage = {
+              prompt: u.input_tokens || 0,
+              completion: u.output_tokens || 0,
+              total: (u.input_tokens || 0) + (u.output_tokens || 0),
+            };
+          }
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      _broadcast('ai:done', { runId, ok: false, error: 'aborted', aborted: true, fullText, model, usage });
+      return;
+    }
+    _broadcast('ai:done', { runId, ok: false, error: 'Stream: ' + e.message, fullText, model, usage });
+    return;
+  }
+  _broadcast('ai:done', { runId, ok: true, fullText, usage, model });
+}
+
+async function _streamOpenAI({ runId, sysMsg, messages, opts, abort }) {
+  const model = selectedModel('openai', opts);
+  const respProfile = settingsStore.get('responseProfile') || 'balanced';
+  const k = keysStore.get('k_openai');
+  if (!k) {
+    _broadcast('ai:done', { runId, ok: false, error: 'OpenAI key not set' });
+    return;
+  }
+  const isReasoningModel = /^o[134]/.test(model) || /thinking|reasoning/.test(model);
+  const body = {
+    model,
+    max_tokens: 4096,
+    messages: [{ role: 'system', content: sysMsg }, ...messages],
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  if (isReasoningModel) {
+    if (respProfile === 'deep') body.reasoning_effort = 'high';
+    else if (respProfile === 'fast') body.reasoning_effort = 'low';
+  }
+  let res;
+  try {
+    res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + k },
+      body: JSON.stringify(body),
+      signal: abort.signal,
+    });
+  } catch (e) {
+    _broadcast('ai:done', { runId, ok: false, error: 'Network: ' + e.message });
+    return;
+  }
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    try { const j = await res.json(); errMsg = j.error?.message || errMsg; } catch (_) {}
+    _broadcast('ai:done', { runId, ok: false, error: errMsg });
+    return;
+  }
+  let fullText = '';
+  let usage = null;
+  let buf = '';
+  try {
+    for await (const chunk of res.body) {
+      if (abort.signal.aborted) break;
+      buf += chunk.toString('utf8');
+      const lines = buf.split(/\r?\n/);
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t || !t.startsWith('data: ')) continue;
+        const data = t.slice(6).trim();
+        if (data === '[DONE]') continue;
+        let parsed = null;
+        try { parsed = JSON.parse(data); } catch (_) { continue; }
+        const delta = parsed?.choices?.[0]?.delta?.content;
+        if (delta) {
+          fullText += delta;
+          _broadcast('ai:chunk', { runId, delta });
+        }
+        if (parsed?.usage) {
+          const u = parsed.usage;
+          usage = {
+            prompt: u.prompt_tokens || 0,
+            completion: u.completion_tokens || 0,
+            total: u.total_tokens || ((u.prompt_tokens || 0) + (u.completion_tokens || 0)),
+          };
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      _broadcast('ai:done', { runId, ok: false, error: 'aborted', aborted: true, fullText, model, usage });
+      return;
+    }
+    _broadcast('ai:done', { runId, ok: false, error: 'Stream: ' + e.message, fullText, model, usage });
+    return;
+  }
+  _broadcast('ai:done', { runId, ok: true, fullText, usage, model });
+}
+
+async function _disabledLegacyAiStreamHandler(_, messages, provider, system, opts) {
+  // Build sysMsg the same way the non-streaming `ai` handler does — both
+  // identity injection and persona injection must stay in sync. Cheapest
+  // approach: call our internal builder via shared helper that the `ai`
+  // handler also uses. Currently it's inline in `ai`, so duplicate the
+  // exact same logic here. (TODO: extract to a shared _buildSysMsg().)
+  const userName = settingsStore.get('userName') || 'user';
+  const lang = settingsStore.get('lang') || 'en';
+  const identity = lang === 'ru'
+    ? `Ты — Хорайзон (Horizon AI), продвинутый персональный AI-агент для ПК. Тебя создал Эрнест Костевич (Ernest Kostevich). Ты НЕ являешься Claude, ChatGPT, Gemini или любым другим AI — ты Хорайзон. Пользователь: ${userName}. Время: ${new Date().toLocaleString()}. Ты умный, дружелюбный, немного как Джарвис из Marvel. Можешь управлять ПК, видеть экран. Используй Markdown.`
+    : `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown.`;
+  let personaPrompt = '';
+  try {
+    loadAgentModules();
+    if (personas) {
+      const personaId = settingsStore.get('persona') || 'jarvis';
+      const pp = personas.getPersonaPrompt(personaId, lang);
+      if (pp && (!system || !system.includes(pp.slice(0, 32)))) personaPrompt = pp;
+    }
+  } catch (_) {}
+  const sysParts = [identity];
+  if (personaPrompt) sysParts.push(personaPrompt);
+  if (system && (!system.includes('Ты') && !system.includes('You are'))) sysParts.push(system);
+  else if (system) { sysParts.length = 0; sysParts.push(system); }
+  const sysMsg = sysParts.join('\n\n');
+
+  const runId = _streamRunId();
+  const abort = new AbortController();
+  _activeStreams.set(runId, abort);
+  // Cleanup on done.
+  const cleanup = () => _activeStreams.delete(runId);
+
+  // Don't await — the IPC call returns runId immediately so the renderer
+  // can wire up listeners and start rendering. The actual stream runs
+  // in the background and broadcasts via webContents.
+  const fn = provider === 'claude' ? _streamClaude
+            : provider === 'openai' ? _streamOpenAI
+            : null;
+  if (!fn) {
+    cleanup();
+    return { ok: false, error: `Streaming not supported for provider "${provider}". Use H.ai for non-streaming providers.` };
+  }
+  setImmediate(async () => {
+    try {
+      await fn({ runId, sysMsg, messages, opts: opts || {}, abort });
+    } catch (e) {
+      _broadcast('ai:done', { runId, ok: false, error: e?.message || String(e) });
+    } finally {
+      cleanup();
+    }
+  });
+  return { ok: true, runId };
+}
+
+ipcMain.handle('aiAbort', (_, runId) => {
+  const ctl = _activeStreams.get(runId);
+  if (!ctl) return { ok: false, error: 'no active stream for runId' };
+  try { ctl.abort(); } catch (_) {}
+  _activeStreams.delete(runId);
+  return { ok: true };
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HORIZON V12 — FULL AGENT CAPABILITIES
