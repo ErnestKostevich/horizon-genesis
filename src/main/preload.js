@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld('H', {
   analyzeScreen:        (q)          => ipcRenderer.invoke('analyzeScreen', q),
   // ── AI & Web Search ───────────────────────────────────────────────────────────
   ai:                   (m, p, s, o) => ipcRenderer.invoke('ai', m, p, s, o),
+  aiStream:             (m, p, s, o) => ipcRenderer.invoke('aiStream', m, p, s, o),
+  onAIStreamChunk:      (cb)         => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('aiStreamChunk', handler);
+    return () => ipcRenderer.removeListener('aiStreamChunk', handler);
+  },
   search:               (q)          => ipcRenderer.invoke('search', q),
   // ── PC Apps & URLs ────────────────────────────────────────────────────────────
   pcOpen:               (a)          => ipcRenderer.invoke('pcOpen', a),

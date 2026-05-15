@@ -279,6 +279,111 @@ function firstTextFromAnthropic(d) {
   return (d.content || []).find(b => b && b.type === 'text')?.text || d.content?.[0]?.text || 'No response';
 }
 
+function normaliseUsage(d, provider) {
+  try {
+    if (!d) return null;
+    if (provider === 'claude') {
+      const u = d.usage; if (!u) return null;
+      const p = u.input_tokens || 0, c = u.output_tokens || 0;
+      return { prompt: p, completion: c, total: p + c };
+    }
+    if (provider === 'gemini') {
+      const u = d.usageMetadata; if (!u) return null;
+      return {
+        prompt: u.promptTokenCount || 0,
+        completion: u.candidatesTokenCount || 0,
+        total: u.totalTokenCount || ((u.promptTokenCount || 0) + (u.candidatesTokenCount || 0)),
+      };
+    }
+    if (provider === 'cohere') {
+      const t = d.usage?.tokens || d.meta?.tokens || d.delta?.usage?.tokens;
+      if (!t) return null;
+      const p = t.input_tokens || 0, c = t.output_tokens || 0;
+      return { prompt: p, completion: c, total: p + c };
+    }
+    const u = d.usage; if (!u) return null;
+    return {
+      prompt: u.prompt_tokens || 0,
+      completion: u.completion_tokens || 0,
+      total: u.total_tokens || ((u.prompt_tokens || 0) + (u.completion_tokens || 0)),
+    };
+  } catch (_) { return null; }
+}
+
+async function readSseStream(response, onEvent) {
+  let buffer = '';
+  let eventName = 'message';
+  let dataLines = [];
+  const flush = async () => {
+    if (!dataLines.length) { eventName = 'message'; return; }
+    const data = dataLines.join('\n');
+    dataLines = [];
+    const ev = eventName || 'message';
+    eventName = 'message';
+    await onEvent({ event: ev, data });
+  };
+  for await (const chunk of response.body) {
+    buffer += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : Buffer.from(chunk).toString('utf8');
+    buffer = buffer.replace(/\r\n/g, '\n');
+    let idx;
+    while ((idx = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 1);
+      if (line === '') { await flush(); continue; }
+      if (line.startsWith(':')) continue;
+      if (line.startsWith('event:')) { eventName = line.slice(6).trim() || 'message'; continue; }
+      if (line.startsWith('data:')) { dataLines.push(line.slice(5).trimStart()); }
+    }
+  }
+  if (buffer.trim()) {
+    if (buffer.startsWith('data:')) dataLines.push(buffer.slice(5).trimStart());
+    else dataLines.push(buffer.trim());
+  }
+  await flush();
+}
+
+function extractStreamPayload(provider, eventName, rawData) {
+  if (!rawData || rawData === '[DONE]') return { done: true };
+  let d;
+  try { d = JSON.parse(rawData); }
+  catch (_) { return { text: '' }; }
+  if (d.error) return { error: d.error.message || d.error };
+
+  if (provider === 'gemini') {
+    const parts = d.candidates?.[0]?.content?.parts || [];
+    return {
+      text: parts.map(p => p?.text || '').join(''),
+      usage: normaliseUsage(d, 'gemini'),
+      done: Boolean(d.candidates?.[0]?.finishReason),
+    };
+  }
+
+  if (provider === 'cohere') {
+    const type = d.type || eventName;
+    if (type === 'content-delta') {
+      return { text: d.delta?.message?.content?.text || '' };
+    }
+    if (type === 'message-end') {
+      return { done: true, usage: normaliseUsage(d, 'cohere') };
+    }
+    return { text: '' };
+  }
+
+  const choice = d.choices?.[0] || {};
+  const delta = choice.delta || {};
+  const message = choice.message || {};
+  const text = delta.content || delta.text || '';
+  const reasoning = delta.reasoning_content || delta.reasoning || d.delta?.reasoning || '';
+  const fallbackFullText = !text && typeof message.content === 'string' ? message.content : '';
+  return {
+    text: text || fallbackFullText,
+    reasoning,
+    usage: normaliseUsage(d, provider),
+    done: rawData === '[DONE]' || Boolean(choice.finish_reason),
+    error: choice.finish_reason === 'error' ? (d.error?.message || `${provider} stream ended with error`) : null,
+  };
+}
+
 // ── Source-preview build check ────────────────────────────────────────────────
 // The CI release workflow (.github/workflows/release.yml) writes build-info.json
 // into this directory before packaging. When the app is run from a source clone
@@ -574,12 +679,9 @@ function createWindow(page = 'chat') {
   //     transparent for our custom drag region. trafficLightPosition
   //     pushes them down 18px so they sit centered in our 52px .tb
   //     bar instead of clipping at the very top.
-  //   • Windows 11+: titleBarOverlay puts the native min/max/close
-  //     in the top-right with our brand colours so it composes with
-  //     the dark UI. Falls back gracefully on Win10 where the API
-  //     ignores `color` but still draws the native buttons.
-  //   • Linux: no native equivalent → keep frame: false + custom
-  //     .wbtn buttons (rendered in the title bar itself).
+  //   • Windows/Linux: keep a frameless window and let the renderer draw
+  //     small controls. The native Windows titleBarOverlay looked oversized
+  //     and sat on top of Horizon's own toolbar at several widths.
   // The renderer's existing `body { -webkit-app-region: drag }` +
   // `.no-drag` markers continue to work unchanged.
   const isMac = process.platform === 'darwin';
@@ -603,13 +705,6 @@ function createWindow(page = 'chat') {
     winOpts.trafficLightPosition = { x: 14, y: 18 }; // centre in 52px .tb
   } else if (isWin) {
     winOpts.frame = false;
-    // titleBarOverlay requires titleBarStyle: 'hidden' on Win.
-    winOpts.titleBarStyle = 'hidden';
-    winOpts.titleBarOverlay = {
-      color: '#08090c',         // matches --bg
-      symbolColor: '#8b95a8',   // matches --t2
-      height: 52,               // matches .tb height
-    };
   } else {
     // Linux fallback — unchanged.
     winOpts.frame = false;
@@ -1952,6 +2047,126 @@ ipcMain.handle('ttsOpenAI', async (_, text, voice) => {
 
 
 // ── AI Providers ──────────────────────────────────────────────────────────────
+ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) => {
+  const fetch = require('node-fetch');
+  const runId = opts.streamId || `stream-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  const p = provider || settingsStore.get('provider') || 'gemini';
+  const sysMsg = String(system || '').trim() || 'You are Horizon AI. Use Markdown.';
+  const emit = (type, payload = {}) => {
+    try { event.sender.send('aiStreamChunk', { runId, type, provider: p, ...payload }); } catch (_) {}
+  };
+  const openaiCompatible = {
+    openai:     { url: 'https://api.openai.com/v1/chat/completions',                    model: selectedModel('openai', opts),     key: keysStore.get('k_openai') },
+    groq:       { url: 'https://api.groq.com/openai/v1/chat/completions',               model: selectedModel('groq', opts),       key: keysStore.get('k_groq') },
+    grok:       { url: 'https://api.x.ai/v1/chat/completions',                          model: selectedModel('grok', opts),       key: keysStore.get('k_grok') },
+    deepseek:   { url: 'https://api.deepseek.com/chat/completions',                      model: selectedModel('deepseek', opts),   key: keysStore.get('k_deepseek') },
+    mistral:    { url: 'https://api.mistral.ai/v1/chat/completions',                     model: selectedModel('mistral', opts),    key: keysStore.get('k_mistral') },
+    qwen:       { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: selectedModel('qwen', opts), key: keysStore.get('k_qwen') },
+    perplexity: { url: 'https://api.perplexity.ai/chat/completions',                     model: selectedModel('perplexity', opts), key: keysStore.get('k_perplexity') },
+    openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions',                  model: selectedModel('openrouter', opts), key: keysStore.get('k_openrouter') },
+  };
+
+  try {
+    let url, headers, body, model;
+    const localEp = localOpenAIEndpoint(p);
+
+    if (p === 'gemini') {
+      const k = keysStore.get('k_gemini');
+      if (!k) return { ok: false, error: 'Gemini key not set' };
+      model = selectedModel('gemini', opts);
+      const rawContents = (messages || []).map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content || '...' }],
+      }));
+      const contents = [];
+      for (const msg of rawContents) {
+        if (!contents.length) {
+          if (msg.role === 'user') contents.push(msg);
+        } else if (contents[contents.length - 1].role !== msg.role) {
+          contents.push(msg);
+        } else {
+          contents[contents.length - 1].parts[0].text += '\n' + msg.parts[0].text;
+        }
+      }
+      if (!contents.length) {
+        const lastMsg = Array.isArray(messages) && messages.length ? messages[messages.length - 1] : null;
+        contents.push({ role: 'user', parts: [{ text: lastMsg?.content || '...' }] });
+      }
+      if (contents[contents.length - 1].role !== 'user') contents.push({ role: 'user', parts: [{ text: 'continue' }] });
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+      headers = { 'Content-Type': 'application/json', 'x-goog-api-key': k };
+      body = applyReasoningProfile('gemini', model, {
+        system_instruction: { parts: [{ text: sysMsg }] },
+        contents,
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+      });
+    } else if (p === 'cohere') {
+      const k = keysStore.get('k_cohere');
+      if (!k) return { ok: false, error: 'Cohere key not set' };
+      model = selectedModel('cohere', opts);
+      url = 'https://api.cohere.com/v2/chat';
+      headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k}` };
+      body = { model, messages: [{ role: 'system', content: sysMsg }, ...(messages || [])], max_tokens: 4096, stream: true };
+    } else if (localEp || openaiCompatible[p]) {
+      const ep = localEp || openaiCompatible[p];
+      model = selectedModel(p, opts);
+      if (!localEp && !ep.key) return { ok: false, error: `${p} key not set` };
+      url = ep.url;
+      headers = { 'Content-Type': 'application/json' };
+      if (!localEp || ep.key) headers.Authorization = `Bearer ${ep.key}`;
+      if (p === 'openrouter') {
+        headers['HTTP-Referer'] = 'https://horizonaai.dev';
+        headers['X-Title'] = 'Horizon Genesis';
+      }
+      body = applyReasoningProfile(p, model, {
+        model,
+        max_tokens: 4096,
+        stream: true,
+        messages: [{ role: 'system', content: sysMsg }, ...(messages || [])],
+      });
+      if (p === 'perplexity') body.stream_mode = 'concise';
+    } else {
+      return { ok: false, error: `Streaming is not configured for ${p}` };
+    }
+
+    emit('start', { model });
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!response.ok || !response.body) {
+      const d = await response.json().catch(async () => ({ error: await response.text().catch(() => '') }));
+      const msg = d.error?.message || d.message || d.error || `${p} stream failed (${response.status})`;
+      emit('error', { error: msg });
+      return { ok: false, error: msg, runId, model };
+    }
+
+    let reply = '';
+    let reasoning = '';
+    let usage = null;
+    await readSseStream(response, async ({ event: eventName, data }) => {
+      const chunk = extractStreamPayload(p, eventName, data);
+      if (chunk.error) {
+        emit('error', { error: chunk.error });
+        throw new Error(chunk.error);
+      }
+      if (chunk.usage) usage = chunk.usage;
+      if (chunk.reasoning) {
+        reasoning += chunk.reasoning;
+        emit('reasoning', { delta: chunk.reasoning });
+      }
+      if (chunk.text) {
+        reply += chunk.text;
+        emit('delta', { delta: chunk.text });
+      }
+      if (chunk.done) emit('done-part', { usage });
+    });
+    emit('done', { reply, model, usage, reasoning });
+    return { ok: true, reply, model, usage, reasoning, runId };
+  } catch (e) {
+    const msg = e?.message || String(e);
+    emit('error', { error: msg });
+    return { ok: false, error: msg, runId };
+  }
+});
+
 ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';

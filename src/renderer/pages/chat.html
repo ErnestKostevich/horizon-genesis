@@ -3664,6 +3664,231 @@ textarea#inp{background:transparent!important}
 .step-rail-gate-body { flex: 1; min-width: 0; }
 .step-rail-gate-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>
+<style id="horizon-cursor-shell-v2">
+/* Cursor-class shell polish: one control lane, compact window controls,
+   viewport-safe pickers, and no provider button strip competing with the
+   composer. This block intentionally sits last in <head>. */
+body.os-win .wbtn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(148,163,184,.16) !important;
+  background: rgba(15,23,42,.72) !important;
+  color: #9aa6ba !important;
+  font: 700 14px/1 var(--font) !important;
+  box-shadow: none !important;
+}
+body.os-win .wbtn:hover { background: rgba(30,41,59,.86) !important; color:#f4f7fb !important; }
+body.os-win .wbtn.wr:hover { border-color: rgba(248,113,113,.38) !important; color:#ff8a8a !important; }
+body.os-win .wbtn.wy::before { content: '−'; transform: translateY(-1px); }
+body.os-win .wbtn.wr::before { content: '×'; }
+body.os-win .tb { padding-right: 14px !important; }
+body.os-win .ph,
+body.os-win .fph { padding-right: 14px !important; }
+body.os-win .ph { justify-content: space-between !important; gap: 12px !important; }
+body.os-win .fph { justify-content: space-between !important; gap: 12px !important; }
+body.os-win .ph-x,
+body.os-win .fph-r { order: initial !important; margin-right: 0 !important; }
+
+.tb { gap: 14px !important; }
+.tb-center { flex: 1 1 auto; min-width: 180px; justify-content: center; }
+.tb-r { flex: 0 0 auto; }
+.focus-timer { display: none !important; }
+.sb { display: none !important; }
+.modes { display: none !important; }
+.chat-status-bar { display: none !important; }
+.msgs { padding-top: 18px !important; }
+
+.composer-toolbar {
+  display: grid !important;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 1fr) repeat(4, minmax(92px, .68fr));
+  gap: 8px !important;
+  overflow: visible !important;
+}
+.composer-chip {
+  justify-content: space-between !important;
+  min-width: 0 !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+  padding: 0 11px !important;
+}
+.composer-chip span,
+.composer-chip b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.irow { align-items: center !important; gap: 8px !important; }
+.ibtn {
+  border-radius: 11px !important;
+  box-shadow: none !important;
+}
+.btn-attach,
+.btn-mic {
+  background: rgba(15,23,42,.66) !important;
+  border-color: rgba(148,163,184,.14) !important;
+}
+textarea#inp {
+  min-height: 46px !important;
+  border: 1px solid rgba(148,163,184,.14) !important;
+  background: rgba(15,23,42,.58) !important;
+  border-radius: 14px !important;
+}
+
+.model-popover,
+.persona-popover {
+  position: fixed;
+  display: none;
+  z-index: 900;
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(610px, calc(100vh - 96px));
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(125,211,252,.20);
+  border-radius: 16px;
+  background: rgba(7,11,18,.98);
+  box-shadow: 0 32px 90px rgba(0,0,0,.58), inset 0 1px 0 rgba(255,255,255,.035);
+  backdrop-filter: blur(28px);
+  -webkit-app-region: no-drag;
+}
+.model-popover.show,
+.persona-popover.show { display: flex !important; flex-direction: column; }
+.picker-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:14px 16px;
+  border-bottom:1px solid rgba(148,163,184,.10);
+}
+.picker-title {
+  font:800 12px/1 var(--mono);
+  letter-spacing:1.4px;
+  text-transform:uppercase;
+  color:#dbe8ff;
+}
+.picker-sub {
+  margin-top:5px;
+  font:600 11px/1.35 var(--font);
+  color:#748198;
+}
+.picker-search {
+  width: min(280px, 42vw);
+  height:34px;
+  border-radius:10px;
+  border:1px solid rgba(148,163,184,.14);
+  background:rgba(15,23,42,.78);
+  color:#e8eef8;
+  outline:none;
+  padding:0 11px;
+  font:600 12px/1 var(--font);
+}
+.picker-body {
+  overflow:auto;
+  padding:12px;
+}
+.model-provider-section + .model-provider-section,
+.persona-picker-row + .persona-picker-row { margin-top:8px; }
+.model-provider-title {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:8px 8px 6px;
+  color:#7f8da5;
+  font:800 10px/1 var(--mono);
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+}
+.model-provider-title b { color:#dce8f8; font-weight:800; }
+.model-provider-models {
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap:6px;
+}
+.model-popover-opt,
+.persona-picker-row {
+  min-height:42px;
+  border-radius:11px;
+  border:1px solid rgba(148,163,184,.10);
+  background:rgba(15,23,42,.44);
+  padding:10px 11px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:#cdd7e6;
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+}
+.model-popover-opt:hover,
+.persona-picker-row:hover {
+  background:rgba(30,41,59,.68);
+  border-color:rgba(125,211,252,.26);
+}
+.model-popover-opt.on,
+.persona-picker-row.on {
+  border-color:rgba(125,211,252,.44);
+  background:linear-gradient(135deg, rgba(56,189,248,.16), rgba(15,23,42,.72));
+}
+.model-popover-opt-name,
+.persona-picker-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:700 12px/1.2 var(--font); }
+.model-popover-opt-meta,
+.persona-picker-meta { color:#77869d; font:700 10px/1 var(--mono); white-space:nowrap; }
+.persona-picker-avatar {
+  width:28px;
+  height:28px;
+  border-radius:9px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(125,211,252,.11);
+  color:#9fe8ff;
+  font:800 11px/1 var(--mono);
+}
+.model-popover-empty {
+  padding:12px;
+  border:1px dashed rgba(148,163,184,.16);
+  border-radius:12px;
+  color:#8290a6;
+  background:rgba(15,23,42,.35);
+}
+.pe-item.active {
+  border-color: rgba(125,211,252,.34) !important;
+  background: rgba(56,189,248,.09) !important;
+}
+body.code-mode-active.code-chat-collapsed .apex-right-pane.code-shell {
+  right: 0 !important;
+}
+body.code-mode-active.code-chat-collapsed .msgs,
+body.code-mode-active.code-chat-collapsed .inp-wrap,
+body.code-mode-active.code-chat-collapsed .chat-status-bar {
+  display: none !important;
+}
+body.code-mode-active:not(.code-terminal-collapsed) .apex-right-pane.code-shell {
+  grid-template-rows: 44px minmax(0, 1fr) 220px !important;
+}
+.code-terminal-pane {
+  min-height: 0 !important;
+  max-height: 220px !important;
+}
+.code-xterm,
+.code-terminal-fallback {
+  min-height: 0 !important;
+}
+@media (max-width: 1160px) {
+  .composer-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .model-provider-models { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .composer-toolbar { grid-template-columns: 1fr 1fr; }
+  .tb-sub { display:none; }
+  .tb-center { justify-content:flex-start; }
+}
+</style>
 </head>
 <body>
 <canvas id="fractalBg" aria-hidden="true"></canvas>
@@ -3701,6 +3926,7 @@ textarea#inp{background:transparent!important}
     <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></symbol>
     <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v8"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M6 14v-2a2 2 0 1 0-4 0v3a8 8 0 0 0 8 8h3a7 7 0 0 0 7-7v-4a2 2 0 1 0-4 0v1"/></symbol>
     <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></symbol>
     <symbol id="i-drama" viewBox="0 0 24 24"><path d="M10 11h.01"/><path d="M14 6h.01"/><path d="M18 6h.01"/><path d="M6.5 13.1h.01"/><path d="M22 5c0 9-4 12-6 12s-6-3-6-12c0-2 2-3 6-3s6 1 6 3"/><path d="M17.4 9.9c-.8.8-2 .8-2.8 0"/><path d="M10.1 7.1C9 7.2 7.7 7.7 6 8.6c-3.5 2-4.7 3.9-3.7 5.6 4.5 7.8 9.5 8.4 11.2 7.4.9-.5 1.9-2.1 1.9-4.7"/><path d="M9.1 16.5c.3-1.1 1.4-1.7 2.4-1.4"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></symbol>
@@ -4423,6 +4649,7 @@ textarea#inp{background:transparent!important}
      options so you can switch without opening the full Settings panel.
      Like the model dropdown in ChatGPT / Claude. -->
 <div class="model-popover" id="model-popover"></div>
+<div class="persona-popover" id="persona-popover"></div>
 
 </div>
 
@@ -4450,10 +4677,11 @@ textarea#inp{background:transparent!important}
     </div>
     <div class="code-topbar-r">
       <span class="code-tag" id="code-context-title">Horizon Code Mode</span>
-      <button class="code-btn" onclick="chooseCodeWorkspace()" title="Open a folder as the workspace">📂 Open</button>
-      <button class="code-btn" onclick="refreshCodeWorkspace()" title="Reload file tree from disk">↻</button>
-      <button class="code-btn" onclick="toggleCodeTerminal()" id="code-terminal-toggle" title="Show / hide the terminal panel">⌨ Terminal</button>
-      <button class="code-btn" onclick="toggleCodeMode()" title="Close Code Mode">✕</button>
+      <button class="code-btn" onclick="chooseCodeWorkspace()" title="Open a folder as the workspace">Open</button>
+      <button class="code-btn" onclick="refreshCodeWorkspace()" title="Reload file tree from disk">Reload</button>
+      <button class="code-btn" onclick="toggleCodeChat()" id="code-chat-toggle" title="Show / hide the right chat column">Chat</button>
+      <button class="code-btn" onclick="toggleCodeTerminal()" id="code-terminal-toggle" title="Show / hide the terminal panel">Terminal</button>
+      <button class="code-btn" onclick="toggleCodeMode()" title="Close Code Mode">Close</button>
     </div>
   </div>
 
@@ -4688,7 +4916,7 @@ textarea#inp{background:transparent!important}
     <button class="composer-chip strong" onclick="openModelPicker(event)" title="Choose model">
       <span>Model</span><b id="composer-model-chip">Gemini</b>
     </button>
-    <button class="composer-chip" onclick="openPanel('personas')" title="Choose persona">
+    <button class="composer-chip" onclick="openPersonaPicker(event)" title="Choose persona">
       <span>Persona</span><b id="composer-persona-chip">Default</b>
     </button>
     <button class="composer-chip" onclick="cycleComposerMode()" title="Switch chat mode">
@@ -4871,6 +5099,7 @@ function _setCodeSurfaceVisible(on){
     if (typeof codeModeActive !== 'undefined') codeModeActive = Boolean(on);
     document.body.classList.toggle('code-mode-active', Boolean(on));
     document.body.classList.toggle('code-terminal-collapsed', Boolean(on));
+    if (!on) document.body.classList.remove('code-chat-collapsed');
     document.getElementById('code-mode-btn')?.classList.toggle('proc', Boolean(on));
   } catch(_) {}
 }
@@ -5646,7 +5875,7 @@ async function startRec(){
     mediaRec.onstop=()=>{audioStream.getTracks().forEach(t=>t.stop());stopLvl();processAudio(mt);};
     mediaRec.start();isRecording=true;
     const btn=document.getElementById('btn-mic');
-    btn.classList.add('rec');btn.innerHTML='⏹<span class="mlbl">STOP</span>';
+    btn.classList.add('rec');btn.innerHTML=controlHtml('i-stop','STOP');
     document.getElementById('vb').classList.add('show');
     document.getElementById('vtxt').textContent=t('recording');
     setStatus(t('recording'),true);startLvl(stream);
@@ -5658,7 +5887,7 @@ function stopRec(){
   if(mediaRec&&isRecording){
     mediaRec.stop();isRecording=false;isProcessing=true;
     const btn=document.getElementById('btn-mic');
-    btn.classList.remove('rec');btn.classList.add('proc');btn.innerHTML='⌛<span class="mlbl">…</span>';
+    btn.classList.remove('rec');btn.classList.add('proc');btn.innerHTML=controlHtml('i-loader','...');
     document.getElementById('vtxt').textContent=t('processing');
     setStatus(t('processing'),true);
     setVoiceButtonState('processing');
@@ -5669,7 +5898,7 @@ async function processAudio(mimeType){
   const blob=new Blob(audioChunks,{type:mimeType});
   isProcessing=false;
   const btn=document.getElementById('btn-mic');
-  btn.classList.remove('proc');btn.innerHTML='🎤<span class="mlbl">VOICE</span>';
+  btn.classList.remove('proc');btn.innerHTML=controlHtml('i-mic','VOICE');
   document.getElementById('vb').classList.remove('show');
   setVoiceButtonState('idle');
   setStatus(t('ready'));
@@ -5728,7 +5957,7 @@ async function startDictate() {
     
     const btn = document.getElementById('btn-dictate');
     btn.classList.add('rec');
-    btn.innerHTML = '🔴<span class="mlbl">REC</span>';
+    btn.innerHTML = controlHtml('i-stop','REC');
     
     document.getElementById('vb').classList.add('show');
     setDictateButtonState('recording');
@@ -5748,7 +5977,7 @@ function stopDictate() {
   const btn = document.getElementById('btn-dictate');
   btn.classList.remove('rec');
   btn.classList.add('proc');
-  btn.innerHTML = '⌛<span class="mlbl">…</span>';
+  btn.innerHTML = controlHtml('i-loader','...');
   
   document.getElementById('vtxt').textContent = t('processing');
   stopLvl();
@@ -5758,7 +5987,7 @@ function stopDictate() {
 async function processDictation(mimeType) {
   const btn = document.getElementById('btn-dictate');
   btn.classList.remove('proc');
-  btn.innerHTML = '✋<span class="mlbl">HOLD</span>';
+  btn.innerHTML = controlHtml('i-hand','HOLD');
   document.getElementById('vb').classList.remove('show');
   setDictateButtonState('idle');
   
@@ -6027,6 +6256,56 @@ function addMsg(role,text,extra={}){
   w.appendChild(d);w.scrollTop=w.scrollHeight;return d;
 }
 
+const STREAMING_CHAT_PROVIDERS = new Set([
+  'gemini', 'openai', 'groq', 'grok', 'deepseek', 'mistral', 'qwen',
+  'perplexity', 'cohere', 'openrouter', 'ollama', 'lmstudio', 'localai'
+]);
+
+async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
+  const p = providerName || prov || 'gemini';
+  if (!window.H?.aiStream || !window.H?.onAIStreamChunk || !STREAMING_CHAT_PROVIDERS.has(p)) {
+    return H.ai(messages, p, systemPrompt, opts);
+  }
+  const streamId = 'ui-' + Date.now().toString(36) + '-' + Math.random().toString(16).slice(2);
+  let text = '';
+  let reasoning = '';
+  let streamError = null;
+  rmTyping();
+  const msgEl = addMsg('bot', '', { model: getSelectedModelForProvider?.(p) || p });
+  const bubble = msgEl.querySelector('.bub');
+  const metaModel = msgEl.querySelector('.mtag');
+  const render = () => {
+    if (!bubble) return;
+    const body = text || (reasoning ? `<em>${lang === 'ru' ? 'Размышляю...' : 'Thinking...'}</em>` : '');
+    bubble.innerHTML = body ? md(body) : '<span class="muted">...</span>';
+    const w = document.getElementById('msgs');
+    if (w) w.scrollTop = w.scrollHeight;
+  };
+  const off = H.onAIStreamChunk((ev) => {
+    if (!ev || ev.runId !== streamId) return;
+    if (ev.model && metaModel) metaModel.textContent = ev.model;
+    if (ev.type === 'delta' && ev.delta) { text += ev.delta; render(); }
+    if (ev.type === 'reasoning' && ev.delta) { reasoning += ev.delta; if (!text) render(); }
+    if (ev.type === 'error') { streamError = ev.error || 'Stream failed'; }
+  });
+  try {
+    const res = await H.aiStream(messages, p, systemPrompt, { ...opts, streamId });
+    try { off?.(); } catch(_) {}
+    if (res?.reply && res.reply !== text) { text = res.reply; render(); }
+    if (streamError && !res?.ok) {
+      if (bubble) bubble.innerHTML = md(`⚠️ ${streamError}`);
+      return { ...(res || {}), error: streamError, _rendered: true };
+    }
+    try { _renderDiffsInBubble(msgEl, text, { model: res?.model || getSelectedModelForProvider?.(p) || p }); } catch(_) {}
+    return { ...(res || {}), _rendered: true };
+  } catch (e) {
+    try { off?.(); } catch(_) {}
+    const err = e?.message || String(e);
+    if (bubble) bubble.innerHTML = md(`⚠️ ${err}`);
+    return { error: err, _rendered: true };
+  }
+}
+
 // PR-U3 — find every ```diff <body> ``` block in the original markdown
 // text, locate the corresponding `<pre><code>` element rendered by md(),
 // and replace it with a compact diff-card UI: header (file path + ±N
@@ -6225,7 +6504,14 @@ function _chatGroupKey(u){
   return 'older';
 }
 function _escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function _escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _escHtml(s){
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 const esc = _escHtml;
 function _shortTs(iso){
   if (!iso) return '';
@@ -7319,55 +7605,94 @@ function openProviderSettings(){
 // Click on the model pill in the chat header → small floating popover with
 // the current provider's model dropdown. No need to open Settings for a
 // simple variant switch. Mirrors the ChatGPT / Claude pattern.
+const MODEL_PICKER_PROVIDERS = [
+  'gemini', 'claude', 'openai', 'openrouter',
+  'groq', 'deepseek', 'mistral', 'qwen',
+  'perplexity', 'cohere', 'grok',
+  'ollama', 'lmstudio', 'localai'
+];
+
+function providerPickerLabel(p) {
+  return ({
+    gemini: 'Gemini',
+    claude: 'Claude',
+    openai: 'OpenAI',
+    openrouter: 'OpenRouter',
+    groq: 'Groq',
+    deepseek: 'DeepSeek',
+    mistral: 'Mistral',
+    qwen: 'Qwen',
+    perplexity: 'Perplexity',
+    cohere: 'Cohere',
+    grok: 'Grok',
+    ollama: 'Ollama',
+    lmstudio: 'LM Studio',
+    localai: 'LocalAI'
+  })[p] || String(p || '').toUpperCase();
+}
+
+function positionPicker(pop, anchor) {
+  if (!pop) return;
+  const fallback = document.getElementById('inp') || document.body;
+  const target = anchor || fallback;
+  const r = target.getBoundingClientRect();
+  pop.style.left = '16px';
+  pop.style.top = '16px';
+  pop.classList.add('show');
+  requestAnimationFrame(() => {
+    const pr = pop.getBoundingClientRect();
+    const margin = 14;
+    const preferAbove = r.top > pr.height + 24;
+    const left = Math.min(Math.max(margin, r.left), Math.max(margin, window.innerWidth - pr.width - margin));
+    const topCandidate = preferAbove ? (r.top - pr.height - 10) : (r.bottom + 10);
+    const top = Math.min(Math.max(margin, topCandidate), Math.max(margin, window.innerHeight - pr.height - margin));
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  });
+}
+
 function openModelPicker(ev){
   try { ev?.stopPropagation(); } catch(_) {}
+  closePersonaPicker();
   const pop = document.getElementById('model-popover');
   if (!pop) return;
-  const currentProv = (typeof prov !== 'undefined' ? prov : null) || 'gemini';
-  const choices = modelChoicesForProvider(currentProv);
-  const current = getSelectedModelForProvider(currentProv) || '';
-  const isLocalProvider = currentProv === 'ollama' || currentProv === 'lmstudio' || currentProv === 'localai';
-  let html = `<div class="model-popover-h">${_escHtml(currentProv)} · active model</div>`;
-  if (!choices.length) {
-    html += `<div class="model-popover-empty">No models loaded for this provider yet. Open Settings → Models or refresh the local server list.</div>`;
-  } else {
-    for (const item of choices) {
+  const activeProv = (typeof prov !== 'undefined' ? prov : null) || 'gemini';
+  const sections = MODEL_PICKER_PROVIDERS.map(p => {
+    const choices = modelChoicesForProvider(p);
+    if (!choices.length) return '';
+    const selected = getSelectedModelForProvider(p) || '';
+    const providerOn = p === activeProv;
+    const local = p === 'ollama' || p === 'lmstudio' || p === 'localai';
+    const rows = choices.map(item => {
+      const escProv = p.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       const escVal = item.value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-      const handler = isLocalProvider ? `pickLocalModel('${currentProv}','${escVal}')` : `pickModel('${currentProv}','${escVal}')`;
-      const onClass = (item.value === current) ? ' on' : '';
-      // PR-C3 — pricing chip. Local providers (Ollama / LM Studio /
-      // LocalAI) are always free → render a green "free" pill.
-      // Otherwise use MODEL_PRICING table; missing data → no chip.
-      let priceChip = '';
-      if (isLocalProvider) {
-        priceChip = `<span class="model-popover-opt-price free" title="Local model — no API cost">free</span>`;
-      } else {
-        const pr = getModelPricing(currentProv, item.value);
-        if (pr) {
-          const tip = `Input ${fmtPrice(pr.in)} / Output ${fmtPrice(pr.out)} per 1M tokens · ${fmtCtxK(pr.ctx)}`;
-          priceChip = `<span class="model-popover-opt-price" title="${_escHtml(tip)}">${_escHtml(fmtPrice(pr.in))}/${_escHtml(fmtPrice(pr.out))}</span>`;
-        }
-      }
-      html += `<div class="model-popover-opt${onClass}" onclick="${handler}" title="${_escHtml(item.value)}"><span class="model-popover-opt-name">${_escHtml(item.label)}</span>${priceChip}</div>`;
-    }
-  }
-  pop.innerHTML = html;
-  // PR-U1 — anchor the popover. csb-model was retired, so fall back
-  // to the composer-toolbar model chip, then to the title-bar
-  // surface-label as the last resort. Whichever element triggered
-  // the click is the natural anchor (event.target on click), so
-  // prefer that when available.
-  const trigger = (typeof event !== 'undefined' && event && event.currentTarget) || null;
-  const pill = trigger
-    || document.getElementById('composer-model-chip')
-    || document.getElementById('csb-model')
-    || document.getElementById('shell-surface-label');
-  if (pill) {
-    const r = pill.getBoundingClientRect();
-    pop.style.left = Math.max(8, r.left) + 'px';
-    pop.style.top = (r.bottom + 6) + 'px';
-  }
-  pop.classList.add('show');
+      const on = providerOn && item.value === selected;
+      const meta = on ? 'active' : (local ? 'local' : providerPickerLabel(p));
+      return `
+        <button class="model-popover-opt${on ? ' on' : ''}" data-model-row data-provider="${_escHtml(p)}" data-label="${_escHtml((item.label || item.value) + ' ' + p)}" onclick="pickAnyModel('${escProv}','${escVal}')" title="${_escHtml(item.value)}">
+          <span class="model-popover-opt-name">${_escHtml(item.label || item.value)}</span>
+          <span class="model-popover-opt-meta">${_escHtml(meta)}</span>
+        </button>`;
+    }).join('');
+    return `
+      <section class="model-provider-section" data-provider-section data-label="${_escHtml(providerPickerLabel(p) + ' ' + p)}">
+        <div class="model-provider-title"><b>${_escHtml(providerPickerLabel(p))}</b><span>${choices.length} models</span></div>
+        <div class="model-provider-models">${rows}</div>
+      </section>`;
+  }).filter(Boolean).join('');
+
+  pop.innerHTML = `
+    <div class="picker-head">
+      <div>
+        <div class="picker-title">Choose Model</div>
+        <div class="picker-sub">One switcher for every connected provider. Prices are not guessed here.</div>
+      </div>
+      <input class="picker-search" id="model-picker-search" placeholder="Search models..." oninput="filterModelPicker(this.value)" />
+    </div>
+    <div class="picker-body">${sections || '<div class="model-popover-empty">No model lists are loaded yet. Open Settings → Models and refresh local providers.</div>'}</div>
+  `;
+  positionPicker(pop, ev?.currentTarget || document.getElementById('composer-model-chip'));
+  setTimeout(() => document.getElementById('model-picker-search')?.focus(), 30);
 }
 
 async function pickModel(provider, model){
@@ -7379,6 +7704,13 @@ async function pickModel(provider, model){
   if (cm) cm.textContent = model;
   try { H.notify?.('Model selected', `${provider}: ${model}`); } catch(_) {}
   closeModelPicker();
+}
+
+async function pickAnyModel(provider, model) {
+  try { setProv(provider); } catch (_) {}
+  const isLocalProvider = provider === 'ollama' || provider === 'lmstudio' || provider === 'localai';
+  if (isLocalProvider) return pickLocalModel(provider, model);
+  return pickModel(provider, model);
 }
 
 async function pickLocalModel(provider, model){
@@ -7396,6 +7728,21 @@ function closeModelPicker(){
   document.getElementById('model-popover')?.classList.remove('show');
 }
 
+function filterModelPicker(q) {
+  const query = String(q || '').trim().toLowerCase();
+  const pop = document.getElementById('model-popover');
+  if (!pop) return;
+  pop.querySelectorAll('[data-model-row]').forEach(row => {
+    const hit = !query || String(row.dataset.label || '').toLowerCase().includes(query);
+    row.style.display = hit ? '' : 'none';
+  });
+  pop.querySelectorAll('[data-provider-section]').forEach(section => {
+    const hasVisible = [...section.querySelectorAll('[data-model-row]')].some(row => row.style.display !== 'none');
+    const sectionHit = !query || String(section.dataset.label || '').toLowerCase().includes(query);
+    section.style.display = (hasVisible || sectionHit) ? '' : 'none';
+  });
+}
+
 // Outside-click closes the popover. Escape too.
 // PR-TECHDEBT — #csb-model was retired in PR-U-MEGA; the picker
 // anchor is now the composer-toolbar Model chip. Allow clicks on
@@ -7411,7 +7758,67 @@ document.addEventListener('click', (e) => {
   closeModelPicker();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModelPicker();
+  if (e.key === 'Escape') {
+    closeModelPicker();
+    closePersonaPicker();
+  }
+});
+
+async function openPersonaPicker(ev) {
+  try { ev?.stopPropagation(); } catch (_) {}
+  closeModelPicker();
+  const pop = document.getElementById('persona-popover');
+  if (!pop) return;
+  let list = [];
+  try { list = await H.getPersonas(); } catch (_) { list = []; }
+  if (!Array.isArray(list) || !list.length) {
+    openPanel('personas');
+    return;
+  }
+  const active = currentPersona || await H.get('persona').catch(() => '');
+  pop.innerHTML = `
+    <div class="picker-head">
+      <div>
+        <div class="picker-title">Choose Persona</div>
+        <div class="picker-sub">Switch behavior immediately, edit details from Personas.</div>
+      </div>
+      <button class="btn btn-sm ghost" onclick="closePersonaPicker();openPanel('personas')">Manage</button>
+    </div>
+    <div class="picker-body">
+      ${list.map(p => {
+        const id = String(p.id || '');
+        const initials = String(p.name || id || 'P').split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
+        const activeClass = id === active ? ' on' : '';
+        return `
+          <button class="persona-picker-row${activeClass}" onclick="pickPersona('${id.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')" title="${_escHtml(p.name || id)}">
+            <span class="persona-picker-avatar">${_escHtml(initials || 'P')}</span>
+            <span class="persona-picker-name">${_escHtml(p.name || id)}</span>
+            <span class="persona-picker-meta">${p.builtin ? 'built-in' : 'custom'}</span>
+          </button>`;
+      }).join('')}
+    </div>
+  `;
+  positionPicker(pop, ev?.currentTarget || document.getElementById('composer-persona-chip'));
+}
+
+function closePersonaPicker() {
+  document.getElementById('persona-popover')?.classList.remove('show');
+}
+
+async function pickPersona(id) {
+  try { await setPersona(id); } finally { closePersonaPicker(); }
+}
+
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('persona-popover');
+  if (!pop?.classList.contains('show')) return;
+  if (e.target.closest('#persona-popover')) return;
+  if (e.target.closest('#composer-persona-chip')) return;
+  if (e.target.closest('.composer-chip')) {
+    const btn = e.target.closest('.composer-chip');
+    if (String(btn?.textContent || '').toLowerCase().includes('persona')) return;
+  }
+  closePersonaPicker();
 });
 
 // ═══ FOCUS TIMER — pomodoro (P1) ═══
@@ -7938,13 +8345,17 @@ async function renderPersonasEditor() {
 function _renderPeList() {
   const body = document.getElementById('pe-list-body');
   if (!body) return;
-  body.innerHTML = _peCache.list.map(p => `
-    <div class="pe-item ${p.id === _peActiveId ? 'on' : ''}" onclick="peSelect('${p.id}')">
-      <div class="pe-item-icon">${p.icon || '🪪'}</div>
-      <div class="pe-item-name">${(p.name || p.id || 'Untitled').replace(/[<>]/g, '')}</div>
-      <span class="pe-item-tag">${p.builtin ? 'BUILTIN' : 'CUSTOM'}</span>
+  body.innerHTML = _peCache.list.map(p => {
+    const id = String(p.id || '');
+    const jsId = id.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const active = id && id === currentPersona;
+    return `
+    <div class="pe-item ${id === _peActiveId ? 'on' : ''} ${active ? 'active' : ''}" onclick="peSelect('${jsId}')">
+      <div class="pe-item-icon">${p.icon || 'P'}</div>
+      <div class="pe-item-name">${(p.name || id || 'Untitled').replace(/[<>]/g, '')}</div>
+      <span class="pe-item-tag">${active ? 'ACTIVE' : (p.builtin ? 'BUILTIN' : 'CUSTOM')}</span>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 async function _renderPeBody() {
@@ -7981,6 +8392,7 @@ async function _renderPeBody() {
           ? '<button class="wfp-btn" onclick="peReset()" title="Discard your overlay and restore the default">Reset</button>'
           : '<button class="wfp-btn del" onclick="peDelete()" title="Delete this persona">Delete</button>'
         }
+        <button class="wfp-btn" onclick="peActivate()" title="Use this persona in chat">Activate</button>
         <button class="wfp-btn run" onclick="peSave()">Save</button>
       </div>
     </div>
@@ -8029,6 +8441,17 @@ window.peSelect = async function (id) {
   _peActiveId = id;
   _renderPeList();
   await _renderPeBody();
+};
+
+window.peActivate = async function () {
+  if (!_peActiveId) return;
+  try {
+    await setPersona(_peActiveId);
+    _renderPeList();
+    H.notify('Personas', 'Activated');
+  } catch (e) {
+    H.notify('Personas', 'Activate failed: ' + (e.message || e));
+  }
 };
 
 window.peToggleTool = function (btn) {
@@ -9686,11 +10109,11 @@ ${fileContext}`}];
       const ctx=`Search: "${q2}"\n${sr.answer?'Answer: '+sr.answer+'\n\n':''}${sr.results.map((r,i)=>`[${i+1}] ${r.title}\n${r.url}\n${(r.content||'').slice(0,350)}`).join('\n\n')}\n\nUser: ${text}`;
       const sys2=lang==='ru'?`Ты Хорайзон. Синтезируй результаты. Дай чёткий ответ на русском. Ссылайся на [1],[2].`:`You are Horizon. Synthesize search results. Clear helpful answer. Cite [1],[2].`;
       let res;
-      try { res=await H.ai([...history.slice(0,-1),{role:'user',content:ctx}],prov,sys2,aiOptsForProvider(prov)); }
+      try { res=await runStreamingAI([...history.slice(0,-1),{role:'user',content:ctx}],prov,sys2,aiOptsForProvider(prov)); }
       catch(e){ res={error:e.message}; }
       rmTyping();
-      if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-      else{addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+      if(res.error){ if(!res._rendered) addMsg('bot',`⚠️ ${res.error}`); }
+      else{if(!res._rendered) addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     }else{
       rmTyping();
       addMsg('bot',lang==='ru'?`⚠️ Нет результатов. ${sr.error||'Добавь Tavily ключ в ⚙️ Настройках.'}`:`⚠️ No results. ${sr.error||'Add Tavily key in ⚙️ Settings.'}`);
@@ -9720,16 +10143,18 @@ ${fileContext}`}];
   
   const opts=aiOptsForProvider(prov);
   try {
-    const res=await H.ai(history,prov,sys,opts);
+    const res=await runStreamingAI(history,prov,sys,opts);
     rmTyping();
-    if(res.error) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
+    if(res.error) {
+      if (!res._rendered) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
+    }
     else{
       // Strip any [[ACTION:...]] / {"_action":...} suggestion tag from the
       // displayed text but keep the original reply for history persistence
       // and parsing.
       const action = _parseActionSuggestion(res.reply);
       const cleanReply = action ? res.reply.replace(/\[\[ACTION:[^\]]+\]\]\s*$/, '').replace(/\{"_action"[^\n]*\}\s*$/, '').trim() : res.reply;
-      addMsg('bot',cleanReply,{model:res.model||prov});
+      if (!res._rendered) addMsg('bot',cleanReply,{model:res.model||prov});
       history.push({role:'assistant',content:res.reply});
       _persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});
       trackTokens(res.reply,'assistant',prov,res.usage);
@@ -10471,6 +10896,8 @@ async function setPersona(id) {
   try {
     const p = await H.getPersona(id);
     if (p) {
+      const chip = document.getElementById('composer-persona-chip');
+      if (chip) chip.textContent = p.name || id;
       addMsg('bot', lang === 'ru' ? p.greeting.ru : p.greeting.en);
       speak(lang === 'ru' ? p.greeting.ru : p.greeting.en);
     }
@@ -14164,6 +14591,18 @@ function toggleCodeTerminal(){
     initWorkspaceTerminal(false).catch(()=>{});
   }
   // Force Monaco / xterm to re-measure their container after grid resize.
+  setTimeout(() => {
+    try { codeEditor?.layout?.(); } catch(_){}
+    try { window.codeXTermFit?.fit?.(); } catch(_){}
+    try { codeTerminal?.fit?.(); } catch(_){}
+  }, 80);
+}
+
+function toggleCodeChat(){
+  const collapsed = !document.body.classList.contains('code-chat-collapsed');
+  document.body.classList.toggle('code-chat-collapsed', collapsed);
+  const btn = document.getElementById('code-chat-toggle');
+  if (btn) btn.classList.toggle('on', !collapsed);
   setTimeout(() => {
     try { codeEditor?.layout?.(); } catch(_){}
     try { window.codeXTermFit?.fit?.(); } catch(_){}
