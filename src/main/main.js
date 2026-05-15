@@ -168,6 +168,10 @@ const ALLOWED_SETTING_KEYS = new Set([
   'permissionAllowlist',
   // PR-D1.5 — ⌘K edit history (LRU 10) + auto-commit toggle.
   'cmdKHistory', 'cmdKAutoCommit',
+  // PR-Plan-Act — toggle gates the first agent tool execution behind
+  // a user-visible "Approve plan" CTA. + shellClean / settingsScroll
+  // (set elsewhere but added here for completeness).
+  'planActGate', 'shellClean', 'settingsScroll',
 ]);
 
 const DEFAULT_PROVIDER_MODELS = {
@@ -2918,6 +2922,30 @@ ipcMain.handle('mcpToolsRefresh', async () => {
 ipcMain.handle('agentControl', async (event, runId, action) => {
   const run = findActiveRun(runId);
   if (!run) return { ok: false, error: 'No active agent run' };
+  // PR-Plan-Act — approve-plan / reject-plan resolve the pending
+  // plan-pending Promise stored in _planActPending for this run.
+  // approve-plan optionally takes a follow-up flag to make the run
+  // Always-approve for the rest of the session.
+  if (action === 'approve-plan' || action === 'reject-plan') {
+    const pending = _planActPending.get(runId);
+    if (!pending) return { ok: false, error: 'No plan-pending state for run' };
+    if (action === 'approve-plan') {
+      pending.resolve('approve');
+      _planActApprovedRuns.add(runId);
+      const payload = { type: 'plan-decision', runId, decision: 'approve' };
+      run.observe(payload);
+      broadcastAgentStep(payload, event.sender);
+      return { ok: true };
+    } else {
+      pending.resolve('reject');
+      const payload = { type: 'plan-decision', runId, decision: 'reject' };
+      run.observe(payload);
+      broadcastAgentStep(payload, event.sender);
+      // Also stop the run so no tools execute.
+      try { run.stop(); } catch (_) {}
+      return { ok: true };
+    }
+  }
   let result;
   if (action === 'pause') result = run.pause();
   else if (action === 'resume') result = run.resume();
@@ -2929,6 +2957,12 @@ ipcMain.handle('agentControl', async (event, runId, action) => {
   broadcastAgentStep(payload, event.sender);
   return result;
 });
+
+// PR-Plan-Act — registry of runs that have an outstanding plan-pending
+// gate, plus a per-session set of runs the user has Approved-All-Plans
+// on. Runs in the latter skip the gate for subsequent executing steps.
+const _planActPending = new Map(); // runId → { resolve, reject, broadcastedAt }
+const _planActApprovedRuns = new Set();
 
 ipcMain.handle('agentStep', async (_, stepId, decision) => {
   const run = pendingAgentSteps.get(stepId);
@@ -3190,8 +3224,46 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     return agentTools.dispatchTool(tool, args);
   };
 
-  // Send step updates to renderer via the event sender
-  const onStep = (step) => {
+  // Send step updates to renderer via the event sender.
+  // PR-Plan-Act — when planActGate setting is on AND this is the run's
+  // first 'executing' step, broadcast a `plan-pending` step instead
+  // and pause until the user clicks Approve plan / Reject plan in
+  // the renderer (resolves the Promise via agentControl IPC).
+  const planActGateOn = settingsStore.get('planActGate') === true;
+  let firstExecutingSeen = false;
+  const onStep = async (step) => {
+    if (planActGateOn
+        && step?.type === 'executing'
+        && !firstExecutingSeen
+        && !_planActApprovedRuns.has(runId)) {
+      firstExecutingSeen = true;
+      // Broadcast the first executing step as a `plan-pending` event
+      // so the renderer can render the step-rail-gate UI.
+      const planPending = {
+        type: 'plan-pending',
+        runId,
+        firstTool: step.tool,
+        firstArgs: step.args,
+        reason: step.reason,
+      };
+      controller.observe(planPending);
+      broadcastAgentStep(planPending, event.sender);
+      // Wait for the user's decision via agentControl(runId, 'approve-plan'|'reject-plan')
+      const decision = await new Promise((resolve) => {
+        _planActPending.set(runId, { resolve, broadcastedAt: Date.now() });
+      });
+      _planActPending.delete(runId);
+      if (decision === 'reject') {
+        // Run was already stop()'d by the IPC handler; emit a
+        // plan-rejected step so the renderer cleans up its UI, then
+        // bail without dispatching the original step.
+        const rejected = { type: 'plan-rejected', runId };
+        controller.observe(rejected);
+        broadcastAgentStep(rejected, event.sender);
+        return;
+      }
+      // approved → fall through to the normal observe + broadcast path.
+    }
     controller.observe(step);
     broadcastAgentStep(step, event.sender);
   };
