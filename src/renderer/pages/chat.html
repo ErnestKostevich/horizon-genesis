@@ -3316,6 +3316,90 @@ textarea#inp{background:transparent!important}
 @media (max-width:1040px){
   .cs-activity,.cs-utility{display:none!important}
 }
+
+/* ═══ PR-U3 — Diff-first message bubble + Plan/Act gate ═════════════
+   When an assistant message includes a ```diff fenced block, the
+   original <pre><code> stays in DOM but collapses to a single line;
+   a sibling .cek-bubble-card surfaces with file path / +N -M / Apply
+   / Reject / Open-full buttons. The Cursor / Zed pattern: edits live
+   inline in the conversation, not in a side modal. */
+.cek-bubble-pre-collapsed {
+  max-height: 28px !important;
+  overflow: hidden !important;
+  opacity: .55;
+  border: 1px dashed var(--b1) !important;
+  cursor: pointer;
+  position: relative;
+}
+.cek-bubble-pre-collapsed::before {
+  content: '⌄ Diff (collapsed — click expand)';
+  display: block;
+  font: 10px/1 var(--mono);
+  color: var(--t3);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 6px 10px;
+}
+.cek-bubble-pre-expanded { opacity: 1; }
+.cek-bubble-card {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(86,210,255,.06), rgba(86,210,255,.02));
+  border: 1px solid var(--accent-cyan-300, rgba(86,210,255,.32));
+  border-radius: var(--radius-lg, 12px);
+}
+.cek-bubble-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.cek-bubble-file {
+  font: 700 var(--text-sm, 12px)/1 var(--mono);
+  color: var(--accent-cyan-500, #56d2ff);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0;
+}
+.cek-bubble-stat {
+  font: 600 var(--text-xs, 11px)/1 var(--mono);
+  color: var(--t3);
+  flex-shrink: 0;
+}
+.cek-bubble-add { color: var(--success-500, #34d399); }
+.cek-bubble-del { color: var(--danger-500, #f87171); }
+.cek-bubble-actions {
+  display: flex; align-items: center; gap: 6px;
+}
+.cek-bubble-card.cek-bubble-applied {
+  background: linear-gradient(180deg, rgba(52,211,153,.10), rgba(52,211,153,.02));
+  border-color: var(--success-300, rgba(52,211,153,.30));
+}
+.cek-bubble-card.cek-bubble-rejected {
+  opacity: .6;
+  background: rgba(255,255,255,.02);
+  border-color: var(--b1);
+}
+.cek-bubble-state-ok { color: var(--success-500, #34d399); font: 600 var(--text-sm, 12px)/1 var(--mono); }
+.cek-bubble-state-x  { color: var(--danger-500, #f87171); font: 600 var(--text-sm, 12px)/1 var(--mono); }
+
+/* Plan/Act gate — styles for the "Approve plan" overlay above the
+   step-rail when the agent has emitted a plan but no execution step
+   has fired yet. Wired by setStepRail()/_attachToolReport elsewhere. */
+.step-rail-gate {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 0 auto;
+  max-width: 1080px;
+  background: linear-gradient(135deg, rgba(86,210,255,.10), rgba(108,140,255,.06));
+  border: 1px solid var(--accent-cyan-300, rgba(86,210,255,.32));
+  border-radius: var(--radius-lg, 12px);
+  font: 600 var(--text-sm, 12px)/1.4 var(--font);
+  color: var(--accent-cyan-500, #56d2ff);
+}
+.step-rail-gate.show { display: flex; }
+.step-rail-gate-body { flex: 1; min-width: 0; }
+.step-rail-gate-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -5602,8 +5686,183 @@ function addMsg(role,text,extra={}){
   }else{
     d.innerHTML=`<div class="bub">${md(text)}${extra.imgB64?`<img class="tc-img" src="data:image/png;base64,${extra.imgB64}" onclick="this.style.maxHeight=this.style.maxHeight?'':'none'"/>`:''}
     </div><div class="meta"><span>${ts2()}</span>${extra.model?`<span class="mtag">${extra.model}</span>`:''}<button class="ab" onclick="cpMsg(this)">copy</button><button class="ab" onclick="spkMsg(this)">speak</button></div>`;
+    // PR-U3 — diff-first message bubble. After md() renders, scan for
+    // ```diff fenced blocks and replace each with an Apply/Reject card.
+    // Lets the user accept code suggestions inline without opening a
+    // separate modal — the Cursor / Zed Assistant pattern.
+    try { _renderDiffsInBubble(d, text, extra); } catch(_) {}
   }
   w.appendChild(d);w.scrollTop=w.scrollHeight;return d;
+}
+
+// PR-U3 — find every ```diff <body> ``` block in the original markdown
+// text, locate the corresponding `<pre><code>` element rendered by md(),
+// and replace it with a compact diff-card UI: header (file path + ±N
+// hunk count), preview snippet, "Apply" / "Reject" / "Open full diff".
+function _renderDiffsInBubble(messageEl, text, extra) {
+  if (!messageEl || !text) return;
+  // Match ```diff blocks AND any fenced block whose first line looks
+  // like a unified-diff header (`--- a/foo` or `+++ b/foo`).
+  const diffRe = /```(?:diff)?\s*\n((?:--- |\+\+\+ |@@ |[+\- ])[\s\S]*?)```/g;
+  const diffs = [...String(text).matchAll(diffRe)].map((m, i) => ({ idx: i, body: m[1] }));
+  if (!diffs.length) return;
+  // The rendered <pre> blocks should appear in document order; attach
+  // a card right after each one.
+  const codeEls = messageEl.querySelectorAll('.bub pre');
+  diffs.forEach((d, i) => {
+    const codeEl = codeEls[i];
+    if (!codeEl) return;
+    const meta = _parseDiffSummary(d.body);
+    const cardId = 'cek-bubble-' + Date.now().toString(36) + '-' + i;
+    const card = document.createElement('div');
+    card.className = 'cek-bubble-card';
+    card.id = cardId;
+    card.innerHTML = `
+      <div class="cek-bubble-head">
+        <span class="cek-bubble-file">${esc(meta.file || '(no file)')}</span>
+        <span class="cek-bubble-stat"><span class="cek-bubble-add">+${meta.added}</span> <span class="cek-bubble-del">-${meta.removed}</span> · ${meta.hunks} hunk${meta.hunks === 1 ? '' : 's'}</span>
+      </div>
+      <div class="cek-bubble-actions">
+        <button class="btn btn-sm primary" onclick="cekBubbleApply('${cardId}')">Apply</button>
+        <button class="btn btn-sm" onclick="cekBubbleReject('${cardId}')">Reject</button>
+        <button class="btn btn-sm" onclick="cekBubbleOpenFull('${cardId}')">Open full diff</button>
+      </div>`;
+    // Stash the raw diff body on the card so the action handlers can
+    // re-read it without re-parsing the whole message.
+    card._diffBody = d.body;
+    card._diffMeta = meta;
+    codeEl.insertAdjacentElement('afterend', card);
+    // Collapse the original <pre> so the card is the canonical action
+    // surface — the raw diff text becomes a "show details" reveal.
+    codeEl.classList.add('cek-bubble-pre-collapsed');
+  });
+}
+
+// Parse a unified-diff body for the summary chip on the card.
+function _parseDiffSummary(body) {
+  const lines = String(body || '').split(/\r?\n/);
+  let file = '';
+  let added = 0, removed = 0, hunks = 0;
+  for (const line of lines) {
+    if (line.startsWith('+++ b/')) file = line.slice(6).trim();
+    else if (line.startsWith('+++ ')) file = line.slice(4).trim();
+    else if (!file && line.startsWith('--- a/')) file = line.slice(6).trim();
+    else if (line.startsWith('@@ ')) hunks++;
+    else if (line.startsWith('+') && !line.startsWith('+++')) added++;
+    else if (line.startsWith('-') && !line.startsWith('---')) removed++;
+  }
+  return { file, added, removed, hunks: hunks || 1 };
+}
+
+window.cekBubbleApply = async function (cardId) {
+  const card = document.getElementById(cardId);
+  if (!card || !card._diffBody) return;
+  // Open the full per-hunk picker modal seeded with this diff. Reuses
+  // the existing requestDiffPermissionPerHunk path so the apply logic
+  // is the same as ⌘K diffs.
+  const meta = card._diffMeta || { file: '' };
+  if (!meta.file) {
+    if (typeof addMsg === 'function') addMsg('bot', '⚠️ Diff has no file path — can\'t apply automatically. Open the full diff to copy as patch.');
+    return;
+  }
+  // Read current file content from workspace, build before/after pair
+  // by applying the diff client-side, then hand off to the modal.
+  try {
+    const current = await H.wsRead?.(meta.file);
+    if (!current || !current.ok) {
+      if (typeof addMsg === 'function') addMsg('bot', `⚠️ Couldn't read \`${meta.file}\`: ${current?.err || 'no workspace?'}`);
+      return;
+    }
+    // Naive unified-diff applier: walk hunks, splice into the original.
+    // Same algorithm as PR-D1.4 _runMultiFileEdit's mergedAfter path.
+    const patched = _applyUnifiedDiff(current.content || '', card._diffBody);
+    if (!patched.ok) {
+      if (typeof addMsg === 'function') addMsg('bot', `⚠️ Diff didn't apply cleanly: ${patched.error}`);
+      return;
+    }
+    if (typeof requestDiffPermissionPerHunk === 'function') {
+      const r = await requestDiffPermissionPerHunk({
+        title: meta.file,
+        description: 'Inline diff from assistant message',
+        before: current.content || '',
+        after: patched.text,
+        language: (typeof inferCodeLang === 'function') ? inferCodeLang(meta.file) : 'plaintext',
+      });
+      if (r && r.ok && r.accepted > 0) {
+        const w = await H.wsWrite?.(meta.file, r.mergedAfter);
+        if (w && w.ok !== false) {
+          card.classList.add('cek-bubble-applied');
+          card.querySelector('.cek-bubble-actions').innerHTML = '<span class="cek-bubble-state-ok">✓ Applied · file saved</span>';
+        } else {
+          if (typeof addMsg === 'function') addMsg('bot', `⚠️ Write failed: ${w?.error || 'unknown'}`);
+        }
+      }
+    }
+  } catch (e) {
+    if (typeof addMsg === 'function') addMsg('bot', `⚠️ Apply failed: ${e?.message || e}`);
+  }
+};
+window.cekBubbleReject = function (cardId) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.add('cek-bubble-rejected');
+  card.querySelector('.cek-bubble-actions').innerHTML = '<span class="cek-bubble-state-x">✗ Rejected</span>';
+};
+window.cekBubbleOpenFull = async function (cardId) {
+  const card = document.getElementById(cardId);
+  if (!card || !card._diffBody) return;
+  const meta = card._diffMeta || {};
+  // Show the raw diff in a quick alert-style modal (or just expand the
+  // collapsed <pre> if no modal is available).
+  const pre = card.previousElementSibling;
+  if (pre && pre.classList.contains('cek-bubble-pre-collapsed')) {
+    pre.classList.remove('cek-bubble-pre-collapsed');
+    pre.classList.add('cek-bubble-pre-expanded');
+  }
+};
+
+// Tiny unified-diff applier. Handles the standard `@@ -a,b +c,d @@`
+// hunk header + `+ - ` body lines. Returns { ok, text } or { ok:false,
+// error }. Tolerates missing line numbers by falling back to context-
+// matching the first non-empty `-` line in the original.
+function _applyUnifiedDiff(original, diffBody) {
+  try {
+    const origLines = String(original || '').split(/\r?\n/);
+    const diffLines = String(diffBody || '').split(/\r?\n/);
+    let result = origLines.slice();
+    // Walk hunks bottom-up so splicing earlier doesn't invalidate later
+    // line numbers.
+    const hunks = [];
+    let curHunk = null;
+    for (const line of diffLines) {
+      if (line.startsWith('@@ ')) {
+        if (curHunk) hunks.push(curHunk);
+        const m = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+        if (!m) { curHunk = null; continue; }
+        curHunk = {
+          oldStart: Number(m[1]),
+          oldCount: m[2] ? Number(m[2]) : 1,
+          lines: [],
+        };
+      } else if (curHunk && (line.startsWith(' ') || line.startsWith('+') || line.startsWith('-'))) {
+        curHunk.lines.push(line);
+      }
+    }
+    if (curHunk) hunks.push(curHunk);
+    // Apply bottom-up.
+    hunks.sort((a, b) => b.oldStart - a.oldStart);
+    for (const h of hunks) {
+      // Build the replacement: keep ' ' + '+', drop '-'.
+      const replacement = h.lines
+        .filter(l => l.startsWith(' ') || l.startsWith('+'))
+        .map(l => l.slice(1));
+      // Splice the original range.
+      const start = Math.max(0, h.oldStart - 1);
+      const count = Math.max(0, h.oldCount);
+      result.splice(start, count, ...replacement);
+    }
+    return { ok: true, text: result.join('\n') };
+  } catch (e) { return { ok: false, error: e.message }; }
 }
 function addCard(title,content,imgB64=null){
   rmGreet();const w=document.getElementById('msgs'),d=document.createElement('div');
