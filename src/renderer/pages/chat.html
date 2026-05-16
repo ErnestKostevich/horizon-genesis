@@ -238,18 +238,38 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 #tb-sub { display: none !important; }
 /* Old centered chat-status-bar license — kept hidden (covered in V4). */
 #csb-license { display: none !important; }
-/* PR-LAYOUT-V8 — center greeting + messages in the CONTENT area, not
-   the body. Without this, .msgs uses `margin:auto` in body (which is
-   full viewport), so visually the greeting sits to the LEFT of true
-   content-area centre by half the sidebar width. Owner: "текст в чате
-   на главной странице не посередине а немного левее". Shift right
-   by half the sidebar so .msgs reads centered against the visible
-   content (sidebar-end → viewport-right). */
+/* PR-LAYOUT-V9 — V8 transform-shift didn't work: .msgs is a flex
+   container that shrinks to its CONTENT width (e.g. 288px for the
+   bare greeting), not the 1040px max-width. So shifting by half the
+   sidebar moved the shrunken container only partway to true centre.
+   V9 fix: stretch .msgs to fill the entire content area (full viewport
+   minus sidebar), then centre the children inside via align-items.
+   Owner: "Не по середине текст в главном меню он чуть левее ... пусть
+   будет по середине". */
 body.with-sidebar > .msgs {
-  transform: translateX(calc(var(--sidebar-w, 280px) / 2)) !important;
+  margin-left: var(--sidebar-w, 280px) !important;
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 280px)) !important;
+  max-width: none !important;
+  align-items: center !important;
+  transform: none !important;
 }
 body.with-sidebar.chat-sidebar-collapsed > .msgs {
-  transform: translateX(23px) !important; /* half of 46px rail */
+  margin-left: 46px !important;
+  width: calc(100vw - 46px) !important;
+}
+/* Each direct child of .msgs (greeting + message bubbles) now lives
+   inside the full-width flex column. Constrain their inner width and
+   let align-items:center handle the horizontal centering. Bubbles
+   that explicitly use align-self (.msg.user → flex-end, .msg.bot →
+   flex-start) override align-items so they keep their right/left
+   anchoring as before. */
+body.with-sidebar > .msgs > .greet {
+  width: 100% !important;
+  max-width: min(1040px, calc(100vw - var(--sidebar-w, 280px) - 64px)) !important;
+}
+body.with-sidebar.chat-sidebar-collapsed > .msgs > .greet {
+  max-width: min(1040px, calc(100vw - 46px - 64px)) !important;
 }
 .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--purple));display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;box-shadow:var(--glow);font-weight:700;color:#fff;font-family:var(--mono)}
 .tb-name{font-size:14px;font-weight:700;color:var(--tx);letter-spacing:.5px;font-family:var(--font)}
