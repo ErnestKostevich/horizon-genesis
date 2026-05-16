@@ -16,9 +16,41 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+// Phase 2 fix — block fetches to private/loopback addresses (basic SSRF
+// protection). Without this, an agent prompt-injected by a hostile web
+// page could be steered to read http://127.0.0.1:<port> or internal
+// network IPs (10.x / 172.16-31.x / 192.168.x) to exfiltrate data.
+// Allows public DNS hostnames; rejects literal private IPs.
+function isPrivateOrLoopback(hostname) {
+  const h = String(hostname || '').toLowerCase().trim();
+  if (!h) return true;
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (h === '::1' || h === '0:0:0:0:0:0:0:1') return true;
+  if (h.startsWith('fe80:')) return true; // IPv6 link-local
+  if (h.startsWith('fc') || h.startsWith('fd')) return true; // IPv6 ULA
+  // IPv4 literal checks
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false; // hostname (DNS) — allow; resolution is the OS's call
+  const [, a, b] = m.map(Number);
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true; // link-local
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+  return false;
+}
+
 async function safeFetch(url) {
   if (!/^https?:\/\//i.test(String(url || ''))) {
     throw new Error('URL must start with http:// or https://');
+  }
+  let parsed;
+  try { parsed = new URL(url); }
+  catch (_) { throw new Error('Invalid URL'); }
+  if (isPrivateOrLoopback(parsed.hostname)) {
+    throw new Error(`Blocked: ${parsed.hostname} is a private/loopback address (SSRF protection)`);
   }
   const res = await withTimeout(fetch(url, {
     redirect: 'follow',
