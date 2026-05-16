@@ -5112,10 +5112,14 @@ body.with-sidebar.chat-sidebar-collapsed > .inp-wrap { margin-left: 46px !import
      Translate / Roleplay). The button IDs are PRESERVED so existing
      handlers and `setMode()` calls keep working. -->
 <div class="modes">
+  <!-- PR-LAYOUT-V4 Phase 2.A — Vision button removed (duplicate of Screen
+       toggle in composer). #m-vision kept in DOM as `display:none` below
+       (line ~5092 in original modes-strip) so setMode('vision') still has
+       a valid target if any code path references it. -->
   <button class="mt on" id="m-chat"   onclick="setMode('chat')"><svg class="licon"><use href="#i-message"/></svg> Chat</button>
   <button class="mt"    id="m-code"   onclick="setMode('code')"><svg class="licon"><use href="#i-code"/></svg> Code</button>
   <button class="mt"    id="m-agent"  onclick="setMode('agent')"><svg class="licon"><use href="#i-bot"/></svg> Agent</button>
-  <button class="mt"    id="m-vision" onclick="setMode('vision')"><svg class="licon"><use href="#i-eye"/></svg> Vision</button>
+  <button class="mt mt-hidden" id="m-vision" onclick="setMode('vision')" style="display:none">Vision</button>
   <button class="mt mt-more" id="m-more" onclick="toggleModesMore(event)" title="Other modes">
     More <span style="opacity:.6;margin-left:4px">▾</span>
   </button>
@@ -8382,10 +8386,12 @@ document.addEventListener('click', (e) => {
 const _MODE_PICKER_ITEMS = [
   // Core: each gets a short subtitle so the picker explains the mode
   // rather than relying on the user to memorise what "Plan" means.
+  // PR-LAYOUT-V4 Phase 2.A — Vision removed from Core. It was a
+  // duplicate of the Screen toggle in the composer toolbar. setMode('vision')
+  // still works for back-compat (redirects to Chat + Screen ON).
   { id: 'chat',      label: 'Chat',      group: 'Core',   hint: 'Default conversation' },
-  { id: 'code',      label: 'Code',      group: 'Core',   hint: 'Programming + IDE workspace' },
+  { id: 'code',      label: 'Code',      group: 'Core',   hint: 'Programming + IDE workspace (opens code editor)' },
   { id: 'agent',     label: 'Agent',     group: 'Core',   hint: 'Autonomous tool-use (Operator)' },
-  { id: 'vision',    label: 'Vision',    group: 'Core',   hint: 'Screen-aware replies (use with Screen toggle)' },
   { id: 'focus',     label: 'Focus',     group: 'Niche',  hint: 'Pomodoro + deep work cues' },
   { id: 'plan',      label: 'Plan',      group: 'Niche',  hint: 'Plan-only — no execution' },
   { id: 'coach',     label: 'Coach',     group: 'Niche',  hint: 'Coaching tone, Socratic' },
@@ -9951,6 +9957,37 @@ async function clearKeys(){if(!await customConfirm(lang==='ru'?'Удалить �
 // ═══════════════════════════════════════════════════════════════
 function setProv(p,save=true){prov=p;provider=p;document.querySelectorAll('[id^="pc-"]').forEach(c=>c.classList.remove('on'));document.getElementById(`pc-${p}`)?.classList.add('on');if(save)saveSetting('provider',p,'Provider');try{updateThinkingHint();updateStatusBar();renderCodeContext();updateShellChrome();}catch(_){}}
 function setMode(m,save=true){
+  // PR-LAYOUT-V4 Phase 2.A — Vision mode is now an alias for the Screen
+  // toggle. Architectural cleanup: `setMode('vision')` AND `toggleEye(true)`
+  // were doing the same thing (sending the user's screen as context).
+  // Now: 'vision' = 'chat' mode + screen toggle ON. Single source of
+  // truth. setMode('vision') still works for back-compat — any old code
+  // path / persona / shortcut that calls it will transparently redirect.
+  if (m === 'vision') {
+    if (typeof eyeOn !== 'undefined' && !eyeOn) {
+      try { toggleEye(); } catch(_) {}
+    }
+    m = 'chat';
+    try { H.notify?.('Vision', 'Vision is now the Screen toggle (chip in composer). Turned ON.'); } catch(_) {}
+  }
+  // PR-LAYOUT-V4 Phase 2.C — `setMode('code')` no longer just changes
+  // the system prompt — it also OPENS the IDE workspace. They were
+  // de-coupled before, so `m-code` chip and the Code Mode IDE button
+  // were two separate toggles users had to know about. Now: one
+  // setMode('code') call → both flip on. closeCodeMode() resets to
+  // 'chat'. Existing toggleCodeMode() still works for the IDE button.
+  if (m === 'code') {
+    try {
+      const codeOn = (typeof codeModeActive !== 'undefined') ? codeModeActive : document.body.classList.contains('code-mode-active');
+      if (!codeOn && typeof toggleCodeMode === 'function') toggleCodeMode();
+    } catch(_) {}
+  } else {
+    // Leaving code mode by switching to chat/agent/etc → close IDE too.
+    try {
+      const codeOn = (typeof codeModeActive !== 'undefined') ? codeModeActive : document.body.classList.contains('code-mode-active');
+      if (codeOn && typeof toggleCodeMode === 'function') toggleCodeMode();
+    } catch(_) {}
+  }
   mode=m;
   document.querySelectorAll('.mt').forEach(c=>c.classList.remove('on'));
   document.getElementById(`m-${m}`)?.classList.add('on');
