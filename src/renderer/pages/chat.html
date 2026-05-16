@@ -217,46 +217,22 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 /* ═══ TITLE BAR ═══ */
 .tb{position:relative;z-index:10;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;background:rgba(8,9,12,.95);border-bottom:1px solid var(--b1);backdrop-filter:blur(40px);-webkit-app-region:drag}
 .tb-l{display:flex;align-items:center;gap:11px;-webkit-app-region:drag}
-/* PR-LAYOUT-V6 — restore the license-pill to its ORIGINAL (V3-ish)
-   rounded-pill size (height 30 / border-radius 999 / larger paddings)
-   and push it ~130px to the right of the ERNEST badge so it doesn't
-   crowd the identity area. apex-alive.css line 547 positions it
-   absolute center; we override into normal flow with a left margin. */
+/* PR-LAYOUT-V7 — owner clarified: keep license-pill at its ORIGINAL
+   size + position (absolute-centered in .tb), just SHIFT it slightly
+   right so it doesn't overlap the "Chat" surface button which is also
+   centered. The previous V6 attempt moved it into .tb-l flow, which
+   he didn't want ("вернул как было все опять криво ... я просил ту
+   штуку просто совсем чуть подвинуть в право"). All other styling
+   (size / shape / colors) inherits from apex-alive.css unchanged. */
 #license-pill-host {
   -webkit-app-region: no-drag !important;
   pointer-events: auto !important;
-  position: relative !important;
-  left: auto !important;
-  transform: none !important;
-  margin-left: 130px !important;
-}
-#license-pill-host .license-pill {
-  display: inline-flex !important;
-  align-items: center !important;
-  height: 30px !important;
-  padding: 0 4px 0 14px !important;
-  border-radius: 999px !important;
-  border: 1px solid rgba(130,236,255,.30) !important;
-  background: rgba(10,20,30,.78) !important;
-  box-shadow: 0 10px 34px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.06) !important;
-  color: #a7e8ff !important;
-  font: 700 11px/1 var(--mono, ui-monospace, monospace) !important;
-  letter-spacing: .8px !important;
-  text-transform: uppercase !important;
-  cursor: pointer !important;
-  gap: 8px !important;
-}
-#license-pill-host .license-pill.trial   { border-color: rgba(251,191,36,.40) !important; background: rgba(40,30,5,.78) !important; color: #fcd34d !important; }
-#license-pill-host .license-pill.expired { border-color: rgba(248,113,113,.40) !important; background: rgba(40,10,10,.78) !important; color: #fca5a5 !important; }
-#license-pill-host .license-pill .lp-cta {
-  margin-left: 6px !important;
-  padding: 4px 11px !important;
-  border-radius: 999px !important;
-  background: linear-gradient(135deg, rgba(130,236,255,.28), rgba(255,184,112,.22)) !important;
-  font: 700 10px/1 var(--mono, ui-monospace, monospace) !important;
-  letter-spacing: .5px !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
-  color: #fff !important;
+  /* apex-alive.css sets position:absolute; left:50%; transform:translateX(-50%).
+     Override left to shift the centered pill ~120px right of the
+     title-bar centre line, so it sits AFTER the Chat surface chip and
+     doesn't overlap it. transform stays at -50% so the pill still
+     anchors by its own centre. */
+  left: calc(50% + 120px) !important;
 }
 /* Old centered chat-status-bar license — kept hidden (covered in V4). */
 #csb-license { display: none !important; }
@@ -15540,6 +15516,24 @@ function toggleCodeChat(){
   document.body.classList.toggle('code-chat-collapsed', collapsed);
   const btn = document.getElementById('code-chat-toggle');
   if (btn) btn.classList.toggle('on', !collapsed);
+  // PR-LAYOUT-V7 — when user OPENS chat in code-mode (collapsed=false),
+  // make sure the .msgs DOM actually has content. The chat column is
+  // the same #msgs element used in main chat — messages persist across
+  // mode switches. But if there are NO messages yet (fresh session),
+  // the floating right column is just an empty black pane (owner's
+  // complaint: "должен открываться мини версия чата ... а там все
+  // еще просто пятно"). Show greeting + scroll to bottom so the
+  // column reads as a working chat surface.
+  if (!collapsed) {
+    const m = document.getElementById('msgs');
+    if (m && !m.children.length) {
+      try { showGreeting?.(); } catch(_) {}
+    }
+    setTimeout(() => {
+      try { m.scrollTop = m.scrollHeight; } catch(_) {}
+      try { document.getElementById('inp')?.focus(); } catch(_) {}
+    }, 60);
+  }
   setTimeout(() => {
     try { codeEditor?.layout?.(); } catch(_){}
     try { window.codeXTermFit?.fit?.(); } catch(_){}
