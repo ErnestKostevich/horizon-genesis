@@ -68,6 +68,30 @@ var codeEditorReady = null;
 var codeLastAiPatch = null;
 var codeTerminal = null;
 var codeTerminalId = '';
+
+function opLogStorageKey() {
+  const id = (typeof currentChatId !== 'undefined' && currentChatId) ? currentChatId : 'scratch';
+  return `horizon.operatorLog.${id}`;
+}
+
+function opPersistLogForCurrentChat() {
+  try {
+    const trimmed = (operatorLogLines || []).slice(-300);
+    localStorage.setItem(opLogStorageKey(), JSON.stringify(trimmed));
+  } catch (_) {}
+}
+
+function loadOperatorLogForCurrentChat() {
+  try {
+    const raw = localStorage.getItem(opLogStorageKey());
+    const rows = raw ? JSON.parse(raw) : [];
+    operatorLogLines = Array.isArray(rows) ? rows.slice(-300) : [];
+  } catch (_) {
+    operatorLogLines = [];
+  }
+  try { opRender(); } catch (_) {}
+  try { if (inspectorTab === 'log') refreshInspectorLog(); } catch (_) {}
+}
 var codeTerminalListenerInstalled = false;
 var codeTerminalResizeInstalled = false;
 
@@ -2140,7 +2164,7 @@ function opRefresh(){
   if(pauseBtn) pauseBtn.textContent=operatorPaused ? 'Resume' : 'Pause';
   opRender();
 }
-function opClear(){ operatorLogLines=[]; opRender(); }
+function opClear(){ operatorLogLines=[]; opPersistLogForCurrentChat(); opRender(); }
 async function opCopy(){
   // Copy log as a structured JSON payload — easier to paste into a bug
   // report / share with another developer than the rendered DOM text.
@@ -2497,7 +2521,9 @@ function toggleOperatorMode() {
 
 function opLog(msg, type='info') {
   operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type});
+  opPersistLogForCurrentChat();
   opRender();
+  try { if (inspectorTab === 'log') refreshInspectorLog(); } catch (_) {}
 }
 var origLog = console.log;
 console.log = function(...args) {
