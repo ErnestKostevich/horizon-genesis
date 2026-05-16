@@ -1,0 +1,72 @@
+/* PR-LAYOUT-V11 -- final dock contract for Inspector + Code/Operator.
+   Older patches fought each other: some centered the composer as a card,
+   others pushed it with right/max-width, and Code Mode kept reserving a
+   hidden 380px chat lane. Keep this block late so the shell has one truth.
+   PR-V — extracted to chat-emergency-dock.css from inline <style> at
+   chat.html:4460. Behaviour identical; only the load mechanism changed
+   (inline → external link). Cascade order preserved. */
+body.with-sidebar:not(.code-mode-active) > .msgs {
+  margin-left: var(--sidebar-w, 300px) !important;
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px)) !important;
+  max-width: none !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+body.with-sidebar.chat-sidebar-collapsed:not(.code-mode-active) > .msgs {
+  margin-left: 46px !important;
+  width: calc(100vw - 46px) !important;
+}
+body.with-sidebar.inspector-active:not(.code-mode-active) > .msgs {
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px) - var(--inspector-space, 356px)) !important;
+}
+body.with-sidebar.chat-sidebar-collapsed.inspector-active:not(.code-mode-active) > .msgs {
+  width: calc(100vw - 46px - var(--inspector-space, 356px)) !important;
+}
+body.with-sidebar:not(.code-mode-active) > .inp-wrap {
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  margin-left: var(--sidebar-w, 300px) !important;
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px)) !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+body.with-sidebar.chat-sidebar-collapsed:not(.code-mode-active) > .inp-wrap {
+  margin-left: 46px !important;
+  width: calc(100vw - 46px) !important;
+}
+body.with-sidebar.inspector-active:not(.code-mode-active) > .inp-wrap {
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px) - var(--inspector-space, 356px)) !important;
+  max-width: none !important;
+}
+body.with-sidebar.chat-sidebar-collapsed.inspector-active:not(.code-mode-active) > .inp-wrap {
+  width: calc(100vw - 46px - var(--inspector-space, 356px)) !important;
+}
+body.inspector-active:not(.code-mode-active) > .inp-wrap .composer-toolbar,
+body.inspector-active:not(.code-mode-active) > .inp-wrap .irow,
+body.inspector-active:not(.code-mode-active) > .inp-wrap .composer-foot,
+body.inspector-active:not(.code-mode-active) > .inp-wrap .hint,
+body.inspector-active:not(.code-mode-active) > .msgs > .greet,
+body.inspector-active:not(.code-mode-active) > .msgs > .msg {
+  max-width: min(1040px, calc(100% - 48px)) !important;
+}
+body.code-mode-active.code-chat-collapsed .apex-right-pane.code-shell {
+  right: 0 !important;
+}
+body.code-mode-active.code-chat-collapsed .msgs,
+body.code-mode-active.code-chat-collapsed .inp-wrap,
+body.code-mode-active.code-chat-collapsed .chat-status-bar {
+  display: none !important;
+}
+body.code-mode-active.code-chat-collapsed.operator-mode-active .apex-right-pane.code-shell {
+  right: 0 !important;
+  bottom: 220px !important;
+}
+body.code-mode-active.code-chat-collapsed.operator-mode-active .operator-pane {
+  left: 0 !important;
+  right: 0 !important;
+}

@@ -1,0 +1,292 @@
+/* PR-V — extracted from chat.html inline <style id="horizon-cursor-layout-v3">.
+   Contains: composer/dock V3-V5 layout, chip Cursor-style hide-label
+   pattern, lucide icon prefixes, responsive breakpoints. Cascade order
+   preserved (loads after cursor-shell-v2.css, before emergency-dock.css). */
+
+/* V3 shell: fewer lanes, Cursor-like hierarchy, serious controls. */
+body {
+  --sidebar-w: 300px;
+  --shell-top-h: 56px;
+  --composer-max: 1040px;
+}
+body.with-sidebar > .tb {
+  margin-left: var(--sidebar-w) !important;
+}
+.tb {
+  height: var(--shell-top-h) !important;
+  padding: 0 18px !important;
+  border-bottom: 1px solid rgba(148,163,184,.10) !important;
+  background: rgba(6,10,16,.82) !important;
+  backdrop-filter: blur(24px) saturate(1.15) !important;
+}
+.tb-brand { min-width: 214px !important; }
+.tb-name { font: 760 17px/1 var(--font) !important; letter-spacing: .1px !important; }
+.tb-sub {
+  height: 22px !important;
+  padding: 0 8px !important;
+  border-radius: 7px !important;
+  border: 1px solid rgba(249,168,91,.26) !important;
+  background: rgba(249,168,91,.08) !important;
+  color: #f4b46d !important;
+  font: 800 10px/22px var(--mono) !important;
+}
+.tb-center { justify-content: flex-start !important; }
+.shell-chip {
+  height: 32px !important;
+  border-radius: 10px !important;
+  padding: 0 12px !important;
+  background: rgba(15,23,42,.72) !important;
+  border: 1px solid rgba(148,163,184,.13) !important;
+  color: #cdd7e6 !important;
+  box-shadow: none !important;
+}
+.shell-chip.primary {
+  min-width: 116px !important;
+  justify-content: center !important;
+  color: #eaf2ff !important;
+  border-color: rgba(125,211,252,.28) !important;
+  background: linear-gradient(180deg, rgba(14,26,38,.86), rgba(9,14,24,.86)) !important;
+}
+.tb-r {
+  gap: 6px !important;
+  padding: 3px !important;
+  border: 1px solid rgba(148,163,184,.10) !important;
+  border-radius: 13px !important;
+  background: rgba(8,12,20,.64) !important;
+}
+.ic-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #9ba8bd !important;
+}
+.ic-btn:hover {
+  background: rgba(148,163,184,.09) !important;
+  border-color: rgba(148,163,184,.12) !important;
+  color: #eef5ff !important;
+}
+body.os-win .wbtn {
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: #f5b35f !important;
+  color: transparent !important;
+  box-shadow: none !important;
+}
+body.os-win .wbtn::before { content: '' !important; }
+body.os-win .wbtn.wr { background: #f87171 !important; }
+body.os-win .wbtn:hover { transform: scale(1.08); filter: brightness(1.08); }
+.chatside {
+  background: rgba(5,8,14,.96) !important;
+  border-right: 1px solid rgba(148,163,184,.10) !important;
+}
+.cs-new {
+  height: 38px !important;
+  border-radius: 11px !important;
+  background: rgba(79,113,255,.12) !important;
+  border-color: rgba(125,151,255,.24) !important;
+}
+.cs-new::before { content: none !important; }
+.cs-search-icon,
+.cs-stat > span:first-child { display:none !important; }
+.cs-act span,
+.cs-util span { font-size: 11px !important; letter-spacing: .05px !important; }
+.msgs {
+  max-width: min(1040px, calc(100vw - var(--sidebar-w) - 64px)) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-bottom: 186px !important;
+}
+body.inspector-active .msgs {
+  max-width: min(980px, calc(100vw - var(--sidebar-w) - var(--inspector-space) - 74px)) !important;
+  margin-left: auto !important;
+  margin-right: calc(var(--inspector-space) + 24px) !important;
+}
+body.inspector-active .inp-wrap {
+  right: calc(var(--inspector-space) + 24px) !important;
+  max-width: min(var(--composer-max), calc(100vw - var(--sidebar-w) - var(--inspector-space) - 72px)) !important;
+}
+/* PR-LAYOUT-V5 — was a centered-card treatment (max-width var(--composer-max),
+   margin 0 auto, border-radius 18px). That made the composer feel like a
+   tiny floating island in the lower-right, not aligned with the messages
+   above. V5 removes the centering / card chrome and lets .inp-wrap behave
+   as a normal bottom dock — the inner content (composer-toolbar / irow /
+   etc.) is centered to match messages width via the rules above. */
+.inp-wrap {
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  /* `left` / `right` were used by an older absolute-positioning attempt
+     that was never converted to true static flow. Force them inert. */
+  left: auto !important;
+  right: auto !important;
+  position: relative !important;
+}
+/* Override the legacy chat-sidebar-collapsed offset (was left:70px). */
+body.chat-sidebar-collapsed .inp-wrap { left: auto !important; }
+/* PR-LAYOUT-V2 — the previous override here forced the last 3 chips
+   (Tools / Web / Screen) to be 38px squares with cryptic single-letter
+   labels K / W / S via ::before. That was the single most-broken bit
+   of the composer ergonomics — users genuinely could not tell what
+   those squares did. The new canonical .composer-toolbar rule above
+   already gives all 6 chips a balanced 6-column grid with readable
+   "LABEL · value" pairs and a chevron / dot indicator. The remaining
+   rules in this block are the unrelated polish (input buttons, popover
+   width, persona row width). */
+.btn-attach::before,
+.btn-mic::before { content: none !important; }
+.btn-attach,
+.btn-mic,
+.btn-dictate {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 12px !important;
+  background: rgba(15,23,42,.72) !important;
+  border: 1px solid rgba(148,163,184,.12) !important;
+}
+.ibtn .mlbl { display:none !important; }
+textarea#inp {
+  min-height: 48px !important;
+  border-radius: 13px !important;
+}
+.persona-popover {
+  width: min(420px, calc(100vw - 32px)) !important;
+}
+.persona-picker-row {
+  width: 100% !important;
+  text-align: left !important;
+}
+.pe-list-add,
+.wfp-btn {
+  border-radius: 9px !important;
+}
+
+/* PR-LAYOUT-V4 Fix 5 — composer no longer feels like a floating
+   island. V3 used a 1180-max-width card on full-width dock that on
+   1920px viewports left visible "frame" around the composer. Owner
+   said it still looked like an island. Now: dock spans the full
+   content width (no max-width on inner items), input row is a flush
+   inline element (no card border), toolbar and footer hug the input
+   edges. Visual unity comes from spacing, not from boxes. */
+/* PR-LAYOUT-V5 — fix the "крив" (crooked) composer. V4 made the dock
+   full-width but messages above stayed max-width-centered, so the
+   composer extended past the messages horizontally — visual asymmetry
+   the owner correctly called crooked. V5: composer back to centered,
+   matching the messages width, but using the FULL message viewport
+   (1280px max) so it doesn't look like a tiny floating island. */
+.inp-wrap {
+  padding: 12px 24px 14px !important;
+  background: linear-gradient(180deg, rgba(8,12,20,.55) 0%, rgba(5,8,14,.96) 70%) !important;
+  border-top: 1px solid rgba(148,163,184,.10) !important;
+  box-shadow: 0 -16px 48px rgba(0,0,0,.28) !important;
+  max-width: none !important;
+  width: auto !important;
+  border-radius: 0 !important;
+}
+/* Dock spans the content area, but INNER content is centered to match
+   the .msgs reading width. No floating, no crooked offset. */
+.inp-wrap .composer-toolbar,
+.inp-wrap .irow,
+.inp-wrap .composer-foot,
+.inp-wrap .hint {
+  max-width: 1280px !important;
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box !important;
+}
+.inp-wrap .composer-toolbar { margin-bottom: 8px !important; padding: 0 !important; }
+.inp-wrap .composer-foot   { margin-top: 6px !important; padding: 0 !important; }
+.inp-wrap .hint            { margin-top: 4px !important; padding: 0 !important; }
+.inp-wrap .irow {
+  background: rgba(11,18,28,.62) !important;
+  border: 1px solid rgba(125,211,252,.16) !important;
+  border-radius: 12px !important;
+  padding: 4px 6px !important;
+}
+.inp-wrap textarea#inp {
+  border: 0 !important;
+  background: transparent !important;
+  min-height: 42px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* PR-LAYOUT-V3 — CURSOR-STYLE COMPOSER CHIPS.
+   The owner's screenshot showed labels truncating to "MO… Ag…",
+   "TOO… Ct…", "SCRE… O…". Root cause: each chip was trying to render
+   "LABEL · VALUE · ▾" in <110px of horizontal space, which is
+   impossible. Cursor / Claude Code / Linear all solve this the same
+   way — drop the label entirely, show only the *value* (and a tiny
+   leading icon if the chip type isn't obvious from context). The
+   chip's tooltip already explains what it does.
+   - On all widths: hide the .composer-chip > span (the LABEL)
+   - On all widths: chip becomes [icon] value [chevron], left-aligned
+   - 6 chips fit comfortably in 980px with room to spare */
+.composer-chip > span {
+  display: none !important;
+}
+.composer-chip {
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 0 12px !important;
+}
+.composer-chip > b {
+  flex: 1 1 auto !important;
+  text-align: left !important;
+  max-width: 100% !important;
+  font: 700 12.5px/1 var(--font) !important;
+  color: #e9eef8 !important;
+}
+/* Inline lucide icon prefix for chip type recognition. The ::before
+   uses inline SVG via background mask so it inherits the chip color
+   and stays crisp. */
+.composer-chip::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background: currentColor;
+  opacity: .82;
+  -webkit-mask: var(--chip-icon, none) center/contain no-repeat;
+          mask: var(--chip-icon, none) center/contain no-repeat;
+}
+.composer-chip[onclick*="openModelPicker"]   { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z'/><path d='M12 2a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z'/></svg>"); }
+.composer-chip[onclick*="openPersonaPicker"] { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"); }
+.composer-chip[onclick*="openModePicker"]    { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/></svg>"); }
+.composer-chip#composer-wake-chip            { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z'/><path d='M19 10v2a7 7 0 0 1-14 0v-2'/><line x1='12' y1='19' x2='12' y2='22'/></svg>"); }
+.composer-chip[onclick*="openCmdPalette"]    { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z'/></svg>"); }
+.composer-chip#composer-web-chip             { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='2' y1='12' x2='22' y2='12'/><path d='M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z'/></svg>"); }
+.composer-chip#composer-screen-chip          { --chip-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='3' width='20' height='14' rx='2'/><line x1='8' y1='21' x2='16' y2='21'/><line x1='12' y1='17' x2='12' y2='21'/></svg>"); }
+
+/* PR-LAYOUT-V3 — graceful collapse: chips wrap into rows rather than
+   shrinking. The 6-column grid still applies above 1180; below it,
+   the column count drops in steps so the value text never truncates. */
+@media (max-width: 1180px) {
+  .composer-toolbar {
+    grid-template-columns: repeat(6, minmax(105px, 1fr)) !important;
+  }
+}
+@media (max-width: 980px) {
+  body { --sidebar-w: 260px; }
+  .composer-toolbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-auto-rows: 36px !important;
+  }
+  .composer-chip { height: 34px !important; padding: 0 10px !important; }
+  .composer-chip > b { font-size: 12px !important; }
+}
+@media (max-width: 720px) {
+  .composer-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
