@@ -460,6 +460,15 @@
             <span>← more sensitive</span><span>quieter env / fewer FPs -></span>
           </div>
         </div>
+        <!-- Post-PR-V Phase 1.6 — Test Wake Word button. Records 3s of
+             the user saying "Horizon", runs it through the same Groq
+             Whisper path the live wake engine uses, and reports whether
+             the result would actually trigger the engine. Lets the user
+             tune sensitivity without trial-and-error. -->
+        <div style="margin-top:10px">
+          <button class="mic-test-btn" onclick="testWakeWord()" style="width:100%">🎯 Test Wake Word</button>
+          <div class="mic-st" id="wake-test-st" style="font-size:11px;margin-top:6px"></div>
+        </div>
       </div>
 
       <div class="info-box" style="margin-top:10px">
