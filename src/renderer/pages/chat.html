@@ -1161,7 +1161,9 @@ var geminiModel='gemini-2.5-flash', voiceProvider='groq', ttsProvider='system';
 var elevenLabsVoice='pNInz6obpgDQGcFmaJgB', openaiTtsVoice='onyx';
 var isRecording=false, isProcessing=false;
 var audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
-var history=[];
+// Do not name this `history`: in Electron/browser renderers that resolves to
+// window.history, so history.push(...) can crash before the AI request starts.
+var chatHistory=[];
 
 var SURFACE_NAMES = ['chat','code','workflows','plugins','marketplace','personas','settings','account','recorder'];
 var SURFACE_PANEL_IDS = ['hub-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
@@ -1757,373 +1759,14 @@ function _shortTs(iso){
     return hh+':'+mm;
   } catch { return ''; }
 }
-function renderChatSidebar(){
-  const list = document.getElementById('chatlist');
-  if (!list) return;
-  list.innerHTML = '';
-  // Filter by search
-  let filtered = chatsCache || [];
-  if (chatSearchQuery) {
-    const q = chatSearchQuery.toLowerCase();
-    filtered = filtered.filter(c => (c.title||'').toLowerCase().includes(q) || (c.preview||'').toLowerCase().includes(q));
-  }
-  if (!filtered.length) {
-    const empty = document.createElement('div');
-    empty.className = 'cs-empty';
-    empty.textContent = chatSearchQuery ? (lang==='ru'?'Ничего не найдено':'No matches') : t('noChatsYet');
-    list.appendChild(empty);
-    return;
-  }
-  const groups = { today: [], yesterday: [], thisWeek: [], thisMonth: [], older: [] };
-  for (const c of filtered) groups[_chatGroupKey(c.updated_at)].push(c);
-  const order = ['today','yesterday','thisWeek','thisMonth','older'];
-  for (const key of order) {
-    const arr = groups[key];
-    if (!arr.length) continue;
-    const h = document.createElement('div');
-    h.className = 'cs-group-heading';
-    h.textContent = t(key);
-    list.appendChild(h);
-    for (const c of arr) {
-      const item = document.createElement('div');
-      item.className = 'cs-item' + (c.id === currentChatId ? ' active' : '');
-      item.dataset.chatId = c.id;
-      const titleText = (c.title && c.title.trim()) ? c.title : t('untitledChat');
-      const preview = c.preview || '';
-      // Build DOM properly instead of innerHTML with escaped quotes
-      const titleDiv = document.createElement('div');
-      titleDiv.className = 'cs-title';
-      titleDiv.title = titleText;
-      titleDiv.textContent = titleText;
-      item.appendChild(titleDiv);
-      if (preview) {
-        const prevDiv = document.createElement('div');
-        prevDiv.className = 'cs-preview';
-        prevDiv.textContent = preview;
-        item.appendChild(prevDiv);
-      }
-      const metaDiv = document.createElement('div');
-      metaDiv.className = 'cs-meta';
-      metaDiv.textContent = _shortTs(c.updated_at) + ' · ' + (c.message_count||0) + ' msgs';
-      item.appendChild(metaDiv);
-      // Action buttons — built via DOM, not innerHTML
-      const actions = document.createElement('div');
-      actions.className = 'cs-actions';
-      const renBtn = document.createElement('button');
-      renBtn.className = 'cs-act-btn';
-      renBtn.title = t('renameChat');
-      renBtn.textContent = '✎';
-      renBtn.addEventListener('click', (e) => { e.stopPropagation(); renameChatPrompt(c.id); });
-      actions.appendChild(renBtn);
-      const delBtn = document.createElement('button');
-      delBtn.className = 'cs-act-btn danger';
-      delBtn.title = t('deleteChat');
-      delBtn.textContent = '×';
-      delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteChatConfirm(c.id); });
-      actions.appendChild(delBtn);
-      item.appendChild(actions);
-      item.addEventListener('click', () => switchChat(c.id));
-      list.appendChild(item);
-    }
-  }
-}
-function filterChats(query) {
-  chatSearchQuery = (query || '').trim();
-  renderChatSidebar();
-}
-async function loadChatList(){
-  try {
-    const list = await H.chatList();
-    chatsCache = Array.isArray(list) ? list : [];
-    renderChatSidebar();
-  } catch (e) { console.warn('chatList failed:', e?.message); }
-}
-function _replayMessages(messages){
-  const w = document.getElementById('msgs');
-  if (!w) return;
-  w.innerHTML = '';
-  history = [];
-  // Reset per-chat counters; they'll be re-accumulated as we replay.
-  sessionTokens = 0;
-  sessionMsgs = 0;
-  sessionUsageKnown = false;
-  sessionHasEstimatedUsage = false;
-  if (!messages || messages.length === 0) {
-    // Empty chat → restore the welcome greeting so the canvas isn't blank.
-    if (typeof showGreeting === 'function') {
-      try { showGreeting(); } catch(_){}
-    }
-    updateTokenDisplay();
-    return;
-  }
-  for (const m of messages) {
-    const role = m.role === 'assistant' ? 'bot' : 'user';
-    const meta = m.meta || {};
-    addMsg(role, m.content || '', { model: meta.model });
-    history.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' });
-    // Re-account tokens for this chat. If meta.usage is present (provider
-    // returned real token counts at send time and we persisted them), use
-    // it — the running session totals then survive chat-switch / reload
-    // instead of degrading to "usage unavailable" the moment you click
-    // away from a chat. Falls back to the heuristic when meta.usage is
-    // absent (e.g. messages persisted before this fix landed).
-    try {
-      trackTokens(
-        m.content || '',
-        m.role === 'assistant' ? 'assistant' : 'user',
-        meta.provider || prov,
-        meta.usage,
-        meta.estimatedTokens
-      );
-    } catch(_){}
-  }
-}
-async function switchChat(id){
-  if (!id || id === currentChatId) return;
-  try {
-    const chat = await H.chatSwitch(id);
-    if (!chat || !chat.id) return;
-    currentChatId = chat.id;
-    _replayMessages(chat.messages);
-    renderChatSidebar();
-    updateStatusBar(chat.title);
-  } catch (e) { console.warn('switchChat failed:', e?.message); }
-}
-async function createNewChat(){
-  try {
-    const chat = await H.chatCreate({});
-    if (!chat || !chat.id) return;
-    currentChatId = chat.id;
-    _replayMessages([]);
-    await loadChatList();
-    updateStatusBar(lang==='ru'?'Новый чат':'New chat');
-    setTimeout(()=>{ try { document.getElementById('inp')?.focus(); } catch(_){} }, 30);
-  } catch (e) { console.warn('createNewChat failed:', e?.message); }
-}
-// ═══ Custom prompt / confirm — window.prompt is disabled in Electron renderer
-// (returns immediately without showing UI), so we ship our own modals.
-function customPrompt(title, defaultValue) {
-  return new Promise(resolve => {
-    try {
-      const overlay = document.createElement('div');
-      overlay.className = 'perm-overlay';
-      const card = document.createElement('div');
-      card.className = 'perm-card';
-      card.style.maxWidth = '420px';
-      card.innerHTML =
-        '<div class="perm-eyebrow">'+_escHtml(lang==='ru'?'Ввод':'Input')+'</div>'+
-        '<div class="perm-title">'+_escHtml(title || '')+'</div>'+
-        '<input type="text" class="cprompt-input" style="width:100%;background:rgba(0,0,0,.4);border:1px solid var(--b1);border-radius:7px;padding:10px 12px;color:var(--tx);font:13px var(--font);margin-bottom:18px;outline:none;box-sizing:border-box" />'+
-        '<div class="perm-actions">'+
-          '<button class="perm-btn deny" data-act="cancel">'+_escHtml(lang==='ru'?'Отмена':'Cancel')+'</button>'+
-          '<button class="perm-btn allow" data-act="ok">'+_escHtml(lang==='ru'?'Сохранить':'Save')+' ⏎</button>'+
-        '</div>';
-      overlay.appendChild(card);
-      document.body.appendChild(overlay);
-      const input = card.querySelector('.cprompt-input');
-      input.value = defaultValue || '';
-      input.focus();
-      input.select();
-      const cleanup = (val) => {
-        try { document.removeEventListener('keydown', onKey); } catch(_){}
-        try { overlay.remove(); } catch(_){}
-        resolve(val);
-      };
-      const onKey = (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
-        else if (e.key === 'Enter') { e.preventDefault(); cleanup(input.value); }
-      };
-      document.addEventListener('keydown', onKey);
-      card.querySelector('[data-act="cancel"]').onclick = () => cleanup(null);
-      card.querySelector('[data-act="ok"]').onclick = () => cleanup(input.value);
-    } catch(_) { resolve(null); }
-  });
-}
-function customConfirm(message) {
-  return requestPermission({
-    eyebrow: lang==='ru'?'Подтверждение':'Confirm',
-    title: lang==='ru'?'Уверены?':'Are you sure?',
-    description: message || ''
-  });
-}
 
-var CHAT_DELETE_ALLOW_ID = 'ui.chat.delete.global';
-async function getSavedPermissionAllowlist(){
-  try {
-    const r = await H.permissionAllowlistList?.();
-    if (Array.isArray(r?.entries)) return r.entries;
-  } catch(_) {}
-  try {
-    const raw = await H.get?.('permissionAllowlist');
-    if (Array.isArray(raw)) return raw.filter(Boolean);
-    if (raw && typeof raw === 'object') return Object.values(raw).filter(Boolean);
-  } catch(_) {}
-  return [];
-}
-async function hasAlwaysAllowChatDelete(){
-  const entries = await getSavedPermissionAllowlist();
-  return entries.some(e => e && (e.id === CHAT_DELETE_ALLOW_ID || (e.tool === 'ui.chat.delete' && e.operation === 'delete_chat')));
-}
-async function rememberAlwaysAllowChatDelete(){
-  const entries = await getSavedPermissionAllowlist();
-  if (entries.some(e => e && e.id === CHAT_DELETE_ALLOW_ID)) return;
-  entries.push({
-    id: CHAT_DELETE_ALLOW_ID,
-    workspace: '*',
-    persona: '*',
-    tool: 'ui.chat.delete',
-    operation: 'delete_chat',
-    scope: '*',
-    title: 'Delete chats',
-    createdAt: new Date().toISOString()
-  });
-  await H.set?.('permissionAllowlist', entries);
-}
-async function confirmChatDeletePermission(){
-  if (await hasAlwaysAllowChatDelete()) return true;
-  const decision = await requestPermission({
-    returnDecision: true,
-    eyebrow: 'Human-in-the-loop approval',
-    title: 'Delete chat',
-    description: t('confirmDeleteChat'),
-    detail: 'This removes one local chat from Horizon history.'
-  });
-  if (decision === 'always_allow') {
-    await rememberAlwaysAllowChatDelete();
-    return true;
-  }
-  return decision === 'allow_once';
-}
+// PR-V Phase 3.18 — Multi-chat persistence extracted to chat-multichat.js.
+// renderChatSidebar, filterChats, loadChatList, _replayMessages,
+// switchChat, createNewChat, *PermissionAllowlist, *ChatDelete,
+// renameChatPrompt, deleteChatConfirm, bootCurrentChat,
+// _scheduleChatListRefresh, _persistChatMessage, _autoNameChat all
+// live there.
 
-async function renameChatPrompt(id){
-  try {
-    const cur = chatsCache.find(c => c.id === id);
-    const old = cur && cur.title ? cur.title : '';
-    const next = await customPrompt(t('chatRenamePrompt'), old);
-    if (next === null) return;
-    const trimmed = String(next).trim();
-    if (!trimmed) return;
-    await H.chatRename(id, trimmed);
-    await loadChatList();
-    if (id === currentChatId) updateStatusBar(trimmed);
-  } catch (e) { console.warn('renameChat failed:', e?.message); }
-}
-async function deleteChatConfirm(id){
-  try {
-    const ok = await confirmChatDeletePermission();
-    if (!ok) return;
-    const res = await H.chatDelete(id);
-    if (id === currentChatId) {
-      if (res && res.next_current_id) {
-        await switchChat(res.next_current_id);
-      } else {
-        await createNewChat();
-      }
-    } else {
-      await loadChatList();
-    }
-  } catch (e) { console.warn('deleteChat failed:', e?.message); }
-}
-async function bootCurrentChat(){
-  try {
-    const cur = await H.chatGetCurrent();
-    if (cur && cur.id) {
-      currentChatId = cur.id;
-      if (Array.isArray(cur.messages) && cur.messages.length) {
-        _replayMessages(cur.messages);
-      }
-      updateStatusBar(cur.title);
-    }
-    document.body.classList.add('with-sidebar');
-    document.getElementById('chatside')?.removeAttribute('hidden');
-    try { document.getElementById('cs-new-btn').textContent = t('newChat'); } catch(_){}
-    try { document.getElementById('cs-search').placeholder = lang==='ru'?'Поиск чатов…':'Search chats…'; } catch(_){}
-    await loadChatList();
-    refreshLicensePill();
-  } catch (e) { console.warn('bootCurrentChat failed:', e?.message); }
-}
-// Debounced sidebar refresh — persistChatMessage fires 2-4 times per turn
-// (user msg + assistant msg + tool / agent step messages). Coalesce them
-// into a single loadChatList() call after the burst settles, otherwise the
-// sidebar wastes IPC and re-renders mid-stream.
-var _chatListRefreshTimer = null;
-function _scheduleChatListRefresh(){
-  if (_chatListRefreshTimer) clearTimeout(_chatListRefreshTimer);
-  _chatListRefreshTimer = setTimeout(() => {
-    _chatListRefreshTimer = null;
-    try { loadChatList?.(); } catch(_){}
-  }, 350);
-}
-
-function _persistChatMessage(role, content, meta){
-  if (!currentChatId) {
-    console.warn('[chat] _persistChatMessage skipped — no currentChatId');
-    return;
-  }
-  // chatAddMessage is an IPC invoke — it returns a Promise. The previous
-  // try/catch only caught synchronous errors and silently dropped any IPC
-  // rejection. Log the rejection so persistence failures show up in
-  // DevTools instead of looking like a phantom "messages don't save" bug.
-  Promise.resolve(H.chatAddMessage(currentChatId, role, content, meta || {}))
-    .then(r => {
-      if (r && r.ok === false) console.warn('[chat] chatAddMessage rejected:', r.error || r);
-      // Refresh the sidebar so msg count + last-modified timestamp + the
-      // backend's stripPreview title (used as a fallback when AI auto-name
-      // hasn't fired yet) reflect on screen.
-      _scheduleChatListRefresh();
-    })
-    .catch(e => console.warn('[chat] chatAddMessage threw:', e?.message || e));
-  // After the first user message, trigger AI auto-naming. Use === 0
-  // (not <= 1): the previous gate fired on the first AND second message
-  // because trackTokens increments sessionMsgs AFTER this call. Firing
-  // twice meant a second model round-trip overwrote a perfectly good
-  // first title. Stick to once per chat.
-  if (role === 'user' && sessionMsgs === 0) {
-    _autoNameChat(content);
-  }
-}
-// AI auto-name: replace whatever placeholder/stripPreview title the backend
-// stuck on the chat with a 3–6 word AI-generated label. Mirrors how ChatGPT
-// and Cursor name new threads.
-//
-// Earlier code returned early if the chat had ANY non-empty title — but
-// agent.js:748 (chatStore.addMessage) auto-stamps the first 50 chars of the
-// user's message AS the title before this function ever gets called. That
-// made the early-return ALWAYS fire after the first message and AI naming
-// never ran. We trust the call-site gate (sessionMsgs <= 1) instead and
-// always overwrite when we have a real candidate title from the model.
-async function _autoNameChat(userMsg) {
-  if (!currentChatId) {
-    console.warn('[autoname] skipped — no currentChatId');
-    return;
-  }
-  try {
-    const sys = 'Generate a very short chat title (3-6 words max) for a conversation starting with the following message. Return ONLY the title, no quotes, no explanation.';
-    const opts = aiOptsForProvider(prov);
-    console.log('[autoname] requesting title via', prov, opts);
-    const res = await H.ai([{role:'user', content: userMsg}], prov, sys, opts);
-    if (res?.error) {
-      console.warn('[autoname] provider error:', res.error);
-      return;
-    }
-    if (res && res.reply) {
-      const title = res.reply.trim().replace(/^["']|["']$/g,'').slice(0,50);
-      if (title) {
-        const rr = await H.chatRename(currentChatId, title);
-        if (rr && rr.ok === false) console.warn('[autoname] chatRename rejected:', rr.error || rr);
-        updateStatusBar(title);
-        await loadChatList();
-        console.log('[autoname] renamed →', title);
-      } else {
-        console.warn('[autoname] empty title from model:', res.reply);
-      }
-    } else {
-      console.warn('[autoname] no reply field on response:', res);
-    }
-  } catch(e) {
-    console.warn('[autoname] threw:', e?.message || e);
-  }
-}
 function updateStatusBar(title) {
   try {
     const t = document.getElementById('csb-title');
@@ -2441,7 +2084,7 @@ function _estimateContextOverhead() {
   // System prompt + persona + recent history estimate.
   // History contributes ~150 tok per message; cap at 12 messages.
   try {
-    const recent = Array.isArray(history) ? history.slice(-12) : [];
+    const recent = Array.isArray(chatHistory) ? chatHistory.slice(-12) : [];
     const histTok = recent.reduce((s, m) => s + Math.ceil((m.content || '').length / 3.5), 0);
     return 800 + histTok; // 800 = system + persona baseline
   } catch (_) { return 800; }
@@ -2488,140 +2131,12 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// PR-U-MEGA — agent activity HUD wired to the existing onAgentStep
-// stream. Three states: ready / running / done|error. Auto-fades back
-// to ready 3s after completion so the chip doesn't permanently glow.
-var _agentHudTimer = null;
-function setAgentHud(state, text) {
-  const el = document.getElementById('composer-foot-agent');
-  const txt = document.getElementById('composer-foot-agent-text');
-  if (!el || !txt) return;
-  el.classList.remove('running', 'done', 'error');
-  if (state) el.classList.add(state);
-  if (text) txt.textContent = text;
-  if (_agentHudTimer) { clearTimeout(_agentHudTimer); _agentHudTimer = null; }
-  if (state === 'done' || state === 'error') {
-    _agentHudTimer = setTimeout(() => setAgentHud('', 'ready'), 3000);
-  }
-}
-window.addEventListener('DOMContentLoaded', () => {
-  if (typeof H?.onAgentStep === 'function') {
-    H.onAgentStep((step) => {
-      try {
-        if (!step) return;
-        if (step.type === 'run-start') {
-          setAgentHud('running', 'starting…');
-        } else if (step.type === 'thinking' || step.type === 'plan') {
-          setAgentHud('running', 'thinking…');
-        } else if (step.type === 'executing') {
-          setAgentHud('running', String(step.tool || 'tool').slice(0, 24));
-        } else if (step.type === 'result') {
-          // Keep running label until run-end fires.
-        } else if (step.type === 'run-end') {
-          const ok = step.status === 'done' || step.result?.ok;
-          setAgentHud(ok ? 'done' : 'error', ok ? 'done' : (step.result?.error || 'error').toString().slice(0, 24));
-          // Plan-Act: hide gate on run end (covers stopped runs).
-          planActHideGate();
-        } else if (step.type === 'plan-pending') {
-          // PR-Plan-Act — first executing step intercepted by main.
-          // Show the Approve/Reject gate above the messages.
-          setAgentHud('running', 'awaiting approval…');
-          planActShowGate(step);
-        } else if (step.type === 'plan-decision') {
-          // User clicked → main echoed the decision back to us.
-          planActHideGate();
-        } else if (step.type === 'plan-rejected') {
-          planActHideGate();
-          setAgentHud('error', 'plan rejected');
-        }
-      } catch (_) {}
-    });
-  }
-});
 
-// PR-Plan-Act — gate UI controllers + persisted toggle.
-var _planActActiveRunId = null;
-function planActShowGate(step) {
-  const gate = document.getElementById('step-rail-gate');
-  if (!gate) return;
-  _planActActiveRunId = step?.runId || null;
-  const tool = document.getElementById('plan-act-gate-tool');
-  if (tool) tool.textContent = String(step?.firstTool || 'unknown');
-  const detail = document.getElementById('plan-act-gate-detail');
-  if (detail && step?.reason) {
-    detail.textContent = String(step.reason).slice(0, 140);
-  }
-  gate.classList.add('show');
-}
-function planActHideGate() {
-  document.getElementById('step-rail-gate')?.classList.remove('show');
-  _planActActiveRunId = null;
-}
-window.planActApprove = async function () {
-  if (!_planActActiveRunId) { planActHideGate(); return; }
-  try { await H.agentControl?.(_planActActiveRunId, 'approve-plan'); } catch (_) {}
-  planActHideGate();
-};
-window.planActReject = async function () {
-  if (!_planActActiveRunId) { planActHideGate(); return; }
-  try { await H.agentControl?.(_planActActiveRunId, 'reject-plan'); } catch (_) {}
-  planActHideGate();
-};
-
-// Toggle pill in composer-foot — persisted via H.set('planActGate').
-window.togglePlanActGate = async function () {
-  let cur = false;
-  try { cur = await H.get?.('planActGate'); } catch (_) {}
-  const next = !cur;
-  try { await H.set?.('planActGate', next); } catch (_) {}
-  _planActApplyToggleVisuals(next);
-};
-function _planActApplyToggleVisuals(on) {
-  const btn = document.getElementById('plan-act-toggle');
-  if (!btn) return;
-  btn.classList.toggle('on', !!on);
-  const lbl = document.getElementById('plan-act-toggle-label');
-  if (lbl) lbl.textContent = on ? 'Plan-Act ON' : 'Plan-Act';
-}
-(async function _bootPlanActToggle() {
-  try {
-    const cur = await H.get?.('planActGate');
-    _planActApplyToggleVisuals(!!cur);
-  } catch (_) { _planActApplyToggleVisuals(false); }
-})();
-
-// PR-U-MEGA — provider-health traffic-light on the Model chip.
-// setProviderHealth('ok' | 'slow' | 'fail'). Drives the .ph-* CSS
-// modifier classes on .composer-chip.strong. Wired to the AI send
-// path: latency < 3s → ok, 3-10s → slow, error → fail.
-function setProviderHealth(state) {
-  const chip = document.getElementById('composer-model-chip')?.closest('.composer-chip');
-  if (!chip) return;
-  chip.classList.remove('ph-ok', 'ph-slow', 'ph-fail');
-  if (state) chip.classList.add('ph-' + state);
-}
-// Wrap H.ai once to intercept timing and set the dot. Idempotent —
-// only wraps if not already wrapped.
-(function _wrapAiForHealth() {
-  if (!window.H || !H.ai || H.__aiWrapped) return;
-  const orig = H.ai.bind(H);
-  H.ai = async function (...args) {
-    const t0 = performance.now();
-    try {
-      const r = await orig(...args);
-      const dt = performance.now() - t0;
-      if (r && r.error) setProviderHealth('fail');
-      else if (dt > 10000) setProviderHealth('slow');
-      else if (dt > 3000) setProviderHealth('slow');
-      else setProviderHealth('ok');
-      return r;
-    } catch (e) {
-      setProviderHealth('fail');
-      throw e;
-    }
-  };
-  H.__aiWrapped = true;
-})();
+// PR-V Phase 3.19 — Agent HUD + Plan-Act gate + Provider Health
+// traffic-light extracted to chat-hud-gates.js. setAgentHud,
+// planActShowGate/HideGate, _planActApplyToggleVisuals,
+// setProviderHealth all live there. H.ai-wrapping IIFE runs at
+// file-load time.
 
 // Recent-branches dropdown (click on the chip).
 window.toggleGitBranchDropdown = async function (ev) {
@@ -3165,242 +2680,18 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModeP
 // focusInterval` here would crash the entire script with a SyntaxError, which
 // is exactly what was breaking every button on the page.
 
-// ═══ INLINE TOOL REPORT (V2 / P1) ═══
-// Render a compact inline pill on the most recent assistant message
-// describing what tool ran ("read · 2 files · 0.4s"). Hooked via H.onAgentStep.
-function _attachToolReport(step){
-  try {
-    if (!step || !step.tool) return;
-    const msgs = document.getElementById('msgs');
-    if (!msgs) return;
-    const lastBot = msgs.querySelector('.msg.bot:last-of-type .bub');
-    if (!lastBot) return;
-    let tray = lastBot.querySelector('.tool-report-tray');
-    if (!tray) {
-      tray = document.createElement('div');
-      tray.className = 'tool-report-tray';
-      tray.style.cssText = 'margin-top:6px;display:flex;flex-wrap:wrap';
-      lastBot.appendChild(tray);
-    }
-    const pill = document.createElement('span');
-    pill.className = 'tool-report-inline';
-    const icon = ({read_file:'📖',write_file:'✎',list_dir:'📁',run_code:'⚡',shell:'❯',screenshot:'📷',analyze_screen:'👁',websearch:'🔎',open:'↗'})[step.tool] || '⚙';
-    const detail = step.detail || (step.args ? JSON.stringify(step.args).slice(0,40) : '');
-    const ms = step.duration_ms != null ? (step.duration_ms < 1000 ? step.duration_ms+'ms' : (step.duration_ms/1000).toFixed(1)+'s') : '';
-    pill.innerHTML = '<span class="tri-icon">'+icon+'</span><span>'+_escHtml(step.tool)+'</span>'+(detail?'<span>· '+_escHtml(detail)+'</span>':'')+(ms?'<span class="tri-time">· '+_escHtml(ms)+'</span>':'');
-    tray.appendChild(pill);
-  } catch(_){}
-}
-try { H.onAgentStep && H.onAgentStep((step) => _attachToolReport(step)); } catch(_){}
 
-// ═══ ACTION CARD (V2) ═══
-// If the assistant reply ends with a "[[ACTION:label|intent|args]]" tag
-// (or an explicit JSON suggestion), render an interactive Skip/Apply card.
-function renderActionCard(reply, onApply, onSkip){
-  try {
-    const msgs = document.getElementById('msgs');
-    if (!msgs) return null;
-    const lastBot = msgs.querySelector('.msg.bot:last-of-type');
-    if (!lastBot) return null;
-    // Strip control tags from displayed text — caller already did that.
-    const card = document.createElement('div');
-    card.className = 'action-card';
-    const prompt = document.createElement('div');
-    prompt.className = 'action-card-prompt';
-    prompt.textContent = reply.prompt || (lang==='ru'?'Применить предложение?':'Apply this suggestion?');
-    const actions = document.createElement('div');
-    actions.className = 'action-card-actions';
-    const skipBtn = document.createElement('button');
-    skipBtn.className = 'action-card-btn skip';
-    skipBtn.textContent = lang==='ru'?'Пропустить':'Skip';
-    skipBtn.onclick = () => { card.remove(); onSkip && onSkip(); };
-    const applyBtn = document.createElement('button');
-    applyBtn.className = 'action-card-btn primary';
-    applyBtn.textContent = (reply.label || (lang==='ru'?'Применить':'Apply'));
-    applyBtn.onclick = () => { card.remove(); onApply && onApply(reply); };
-    actions.appendChild(skipBtn);
-    actions.appendChild(applyBtn);
-    card.appendChild(prompt);
-    card.appendChild(actions);
-    lastBot.appendChild(card);
-    return card;
-  } catch(_) { return null; }
-}
-// Parser: extract action suggestion from an LLM reply.
-// Recognised forms (kept LLM-prompt-light so any provider can emit them):
-//   1) Trailing "[[ACTION: <label> | <intent> | <args-json> | <prompt>]]"
-//   2) JSON object on the last line: {"_action":{"label":"...","intent":"...","args":{...},"prompt":"..."}}
-function _parseActionSuggestion(text){
-  if (!text) return null;
-  // Form 1
-  const m = text.match(/\[\[ACTION:\s*([^|\]]+)\|([^|\]]+)\|([^\]]*?)(?:\|([^\]]+))?\]\]\s*$/);
-  if (m) {
-    let args = {};
-    try { args = JSON.parse(m[3].trim() || '{}'); } catch(_) { args = { raw: m[3] }; }
-    return { label: m[1].trim(), intent: m[2].trim(), args, prompt: (m[4]||'').trim() };
-  }
-  // Form 2
-  const lines = text.trim().split(/\n+/);
-  const last = lines[lines.length-1] || '';
-  if (last.startsWith('{') && last.includes('"_action"')) {
-    try {
-      const o = JSON.parse(last);
-      if (o && o._action) return o._action;
-    } catch(_){}
-  }
-  return null;
-}
-async function _executeActionIntent(action){
-  if (!action || !action.intent) return;
-  const intent = String(action.intent);
-  const args = action.args || {};
-  try {
-    if (intent === 'run_code') {
-      await H.execCode(args.code || '', args.lang || 'python');
-    } else if (intent === 'open_url') {
-      await H.pcOpenUrl(args.url || '');
-    } else if (intent === 'send_message') {
-      const inp = document.getElementById('inp');
-      if (inp) { inp.value = args.text || ''; sendMsg(); }
-    } else if (intent === 'plugin') {
-      await H.pluginExecTool(args.plugin_id, args.tool, args.tool_args || {});
-    } else {
-      addMsg('bot', `Unknown action intent: ${intent}`);
-    }
-  } catch(e) { addMsg('bot', `Plugin error: ${e.message}`); }
-}
+// PR-V Phase 3.20 — Inline Tool Report + Action Card extracted to
+// chat-tool-report.js. _attachToolReport, renderActionCard,
+// _parseActionSuggestion, _executeActionIntent live there.
 
-// ═══ PERMISSION CARD (P3) — gate destructive operations ═══
-// Returns Promise<boolean>. true = allow, false = deny. Esc = deny, Enter = allow.
-function requestPermission(opts){
-  return new Promise(resolve => {
-    try {
-      const returnDecision = Boolean(opts?.returnDecision);
-      const overlay = document.createElement('div');
-      overlay.className = 'perm-overlay';
-      const card = document.createElement('div');
-      card.className = 'perm-card';
-      const title = opts?.title || 'Action';
-      const eyebrow = opts?.eyebrow || (lang === 'ru' ? 'Нужно разрешение' : 'Permission required');
-      const desc = opts?.description || '';
-      card.innerHTML =
-        '<div class="perm-eyebrow">'+_escHtml(eyebrow)+'</div>'+
-        '<div class="perm-title">'+_escHtml(title)+'</div>'+
-        '<div class="perm-desc">'+_escHtml(desc)+'</div>'+
-        (opts?.detail ? '<pre class="perm-detail">'+_escHtml(opts.detail)+'</pre>' : '')+
-        '<div class="perm-actions">'+
-          '<button class="perm-btn deny" data-act="deny">'+_escHtml(lang === 'ru' ? 'Отклонить' : 'Deny')+'</button>'+
-          '<button class="perm-btn once" data-act="allow_once">'+_escHtml(lang === 'ru' ? 'Разрешить 1 раз' : 'Allow once')+' ⏎</button>'+
-          '<button class="perm-btn always" data-act="always_allow">'+_escHtml(lang === 'ru' ? 'Всегда разрешать' : 'Always allow')+'</button>'+
-        '</div>'+
-        '<div class="perm-hint">'+_escHtml(lang === 'ru' ? 'Esc - отказ, Enter - разрешить один раз' : 'Esc to deny, Enter to allow once')+'</div>';
-      overlay.appendChild(card);
-      document.body.appendChild(overlay);
-      const cleanup = (decision) => {
-        try { document.removeEventListener('keydown', onKey); } catch(_){}
-        try { overlay.remove(); } catch(_){}
-        resolve(returnDecision ? decision : decision !== 'deny');
-      };
-      const onKey = (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); cleanup('deny'); }
-        else if (e.key === 'Enter') { e.preventDefault(); cleanup('allow_once'); }
-      };
-      document.addEventListener('keydown', onKey);
-      card.querySelectorAll('[data-act]').forEach(btn => {
-        btn.onclick = () => cleanup(btn.dataset.act || 'deny');
-      });
-      setTimeout(()=>{ try { card.querySelector('[data-act="allow_once"]').focus(); } catch(_){} }, 30);
-    } catch(_) {
-      resolve(opts?.returnDecision ? 'deny' : false);
-    }
-  });
-}
-var agentPermissionPrompts = new Set();
-async function handleAgentPermissionGate(step){
-  try {
-    if (!step || step.type !== 'waiting' || !step.stepId) return;
-    const perm = step.permission || {};
-    if (!perm.required || perm.allowed) return;
-    if (agentPermissionPrompts.has(step.stepId)) return;
-    agentPermissionPrompts.add(step.stepId);
-    const detail = perm.detail || (step.args ? JSON.stringify(step.args, null, 2).slice(0, 1200) : '');
-    const decision = await requestPermission({
-      returnDecision: true,
-      eyebrow: 'Human-in-the-loop approval',
-      title: perm.title || `${step.tool || 'tool'} requires approval`,
-      description: perm.description || perm.reason || 'This action can affect files, the shell, network, browser, or external tools.',
-      detail
-    });
-    const mapped = decision === 'always_allow' ? 'always_allow' : (decision === 'allow_once' ? 'allow_once' : 'deny');
-    await H.agentStep?.(step.stepId, { decision: mapped, reason: 'permission gate' });
-  } catch(e) {
-    try { await H.agentStep?.(step?.stepId, { decision:'deny', reason:e.message || 'permission gate failed' }); } catch(_) {}
-  } finally {
-    if (step?.stepId) agentPermissionPrompts.delete(step.stepId);
-  }
-}
-try { H.onAgentStep && H.onAgentStep((step) => handleAgentPermissionGate(step)); } catch(_){}
-async function refreshPermissionAllowlist(){
-  const host = document.getElementById('permission-allowlist');
-  if (!host) return;
-  try {
-    const r = await H.permissionAllowlistList?.();
-    const entries = Array.isArray(r?.entries) ? r.entries : [];
-    if (!entries.length) {
-      host.innerHTML = 'No saved approvals. Side-effect tools will ask first.';
-      return;
-    }
-    host.innerHTML = entries.map(e => `
-      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b1)">
-        <div style="min-width:0">
-          <div style="color:var(--tx);font-size:11px;font-weight:700">${_escHtml(e.tool || e.id || 'tool')}</div>
-          <div style="color:var(--t3);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_escHtml([e.persona,e.workspace,e.operation,e.scope].filter(Boolean).join(' · '))}</div>
-        </div>
-        <button class="psv" onclick="revokePermissionEntry('${_escHtml(String(e.id || ''))}')">Revoke</button>
-      </div>
-    `).join('');
-  } catch(e) {
-    host.innerHTML = 'Could not load approvals: ' + _escHtml(e.message || 'unknown error');
-  }
-}
-async function revokePermissionEntry(id){
-  if (!id) return;
-  await H.permissionAllowlistRevoke?.(id);
-  refreshPermissionAllowlist();
-}
-// User-facing toggle so power users can disable the gate (off by default).
-var permissionGateEnabled = true;
-async function _gateDestructive(intent, opts) {
-  if (!permissionGateEnabled) return true;
-  return await requestPermission(opts);
-}
-async function safeExecCode(code, langCode){
-  codeSetStatus('Waiting for permission before executing code...');
-  return await H.execCode(code, langCode);
-}
-async function safeShell(cmd){
-  setStatus(lang==='ru'?'Ожидаю подтверждения команды…':'Waiting for command approval...', true);
-  return await H.pcShell(cmd);
-}
-async function safeWriteFile(filePath, content){
-  return await H.pcWriteFile(filePath, content);
-}
-async function safeWriteWorkspaceFile(relPath, content, before=''){
-  const ok = await requestDiffPermission({
-    title: relPath,
-    description: `Write inside selected workspace (${(content||'').length} chars).`,
-    before,
-    after: content,
-    language: inferCodeLang(relPath)
-  });
-  if (!ok) return { ok:false, err:'denied by user' };
-  return await H.wsWrite(relPath, content);
-}
-async function safeWorkspaceShell(cmd){
-  codeSetStatus('Waiting for workspace command approval...');
-  return await H.wsShell(cmd);
-}
-function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
+
+// PR-V Phase 3.17 — Permission Gate extracted to chat-permissions.js.
+// requestPermission, handleAgentPermissionGate, refreshPermissionAllowlist,
+// revokePermissionEntry, _gateDestructive, safeExecCode, safeShell,
+// safeWriteFile, safeWriteWorkspaceFile, safeWorkspaceShell all live
+// there. permissionGateEnabled var also moved.
+
 function applyLang(){
   setStatus(t('ready'));
   document.getElementById('inp').placeholder='Ask Horizon... attach files or use /commands';
@@ -3587,7 +2878,7 @@ function initWakeCalibrationUI(){
   if (slider) slider.value = vol;
   if (lbl)    lbl.textContent = vol;
 }
-async function clearHist(){if(!await customConfirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
+async function clearHist(){if(!await customConfirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;chatHistory=[];showGreeting();}
 async function clearKeys(){if(!await customConfirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','groq_voice','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','openrouter','tavily','elevenlabs','deepgram','localai','github','google_client_secret'])await H.deleteKey(s);await loadPanel();}
 
 // ═══════════════════════════════════════════════════════════════
@@ -3732,296 +3023,12 @@ var ar=el=>{
   try { if (typeof atMentionMaybeOpen === 'function') atMentionMaybeOpen(el); } catch(_){}
 };
 
-// ═══ PR-C1 — Slash commands ═══════════════════════════════════════════
-// Type `/foo` at the start of the chat input → autocomplete dropdown
-// with matching commands. Tab/Enter executes; Esc closes. Each command
-// is { id, label, hint, exec(arg) }. Designed to mirror Claude Code /
-// Cursor / ChatGPT-codex slash conventions.
-var SLASH_COMMANDS = [
-  { id: 'help',     label: '/help',           hint: 'Show all slash commands',                           exec: () => slashShowHelp() },
-  { id: 'clear',    label: '/clear',          hint: 'Clear current chat history',                       exec: () => { try { clearHist?.(); } catch(_){} } },
-  { id: 'new',      label: '/new',            hint: 'Start a new chat',                                 exec: () => { try { createNewChat?.(); } catch(_){} } },
-  { id: 'persona',  label: '/persona <id>',   hint: 'Switch persona (jarvis|friday|alfred|sage|pixel)', exec: (arg) => { try { setPersona?.(arg || 'jarvis'); } catch(_){} } },
-  { id: 'model',    label: '/model <name>',   hint: 'Switch active provider model',                     exec: (arg) => { try { saveModelSetting?.(prov, arg); } catch(_){} } },
-  { id: 'mode',     label: '/mode <name>',    hint: 'Switch chat mode (chat|code|agent|vision|...)',    exec: (arg) => { try { setMode?.(arg || 'chat'); } catch(_){} } },
-  { id: 'code',     label: '/code',           hint: 'Open Code Mode IDE',                               exec: () => { try { toggleCodeMode?.(); } catch(_){} } },
-  { id: 'agent',    label: '/agent',          hint: 'Switch to Agent mode',                             exec: () => { try { setMode?.('agent'); } catch(_){} } },
-  { id: 'settings', label: '/settings [tab]', hint: 'Open settings panel (account|models|providers|…)', exec: (arg) => { try { openPanel?.(arg || ''); } catch(_){} } },
-  { id: 'voice',    label: '/voice',          hint: 'Toggle voice (TTS) on/off',                        exec: () => { try { togSw?.('tts','sw-tts'); } catch(_){} } },
-  { id: 'wake',     label: '/wake',           hint: 'Toggle wake-word on/off',                          exec: () => { try { document.getElementById('tc-wake')?.click(); } catch(_){} } },
-  { id: 'eye',      label: '/eye',            hint: 'Toggle screen-watcher on/off',                     exec: () => { try { togSw?.('screenWatcher','sw-eye'); } catch(_){} } },
-  { id: 'workflows',label: '/workflows',      hint: 'Open Workflows panel',                             exec: () => { try { openWorkflows?.(); } catch(_){} } },
-  { id: 'plugins',  label: '/plugins',        hint: 'Open Plugin Hub',                                  exec: () => { try { openHub?.(); } catch(_){} } },
-  { id: 'store',    label: '/store',          hint: 'Open Marketplace',                                 exec: () => { try { openStore?.(); } catch(_){} } },
-  { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                    exec: () => { try { openCmdPalette?.(); } catch(_){} } },
-];
-var _slashState = null; // { items, activeIdx, inputEl, query } when open
 
-function slashMaybeOpen(inputEl) {
-  if (!inputEl) return;
-  const value = inputEl.value || '';
-  // Only trigger when the entire current line starts with `/`.
-  const m = value.match(/^\s*\/([A-Za-z0-9_-]*)$/);
-  if (!m) {
-    if (_slashState) slashClose();
-    return;
-  }
-  const query = m[1].toLowerCase();
-  const items = SLASH_COMMANDS.filter(c =>
-    !query || c.id.startsWith(query) || c.label.toLowerCase().includes('/' + query)
-  ).slice(0, 12);
-  if (!items.length) {
-    if (_slashState) slashClose();
-    return;
-  }
-  _slashState = { items, activeIdx: 0, inputEl, query };
-  slashRender();
-}
-function slashClose() {
-  _slashState = null;
-  document.getElementById('slash-pop')?.classList.remove('show');
-}
-function slashRender() {
-  let pop = document.getElementById('slash-pop');
-  if (!pop) {
-    pop = document.createElement('div');
-    pop.id = 'slash-pop';
-    pop.className = 'slash-pop';
-    document.body.appendChild(pop);
-  }
-  const s = _slashState;
-  if (!s || !s.items.length) { pop.classList.remove('show'); return; }
-  pop.innerHTML = `
-    <div class="slash-pop-h">SLASH${s.query ? ' · /' + esc(s.query) : ''}</div>
-    <ul class="slash-pop-list">
-      ${s.items.map((it, i) => `
-        <li class="slash-pop-item${i === s.activeIdx ? ' on' : ''}" data-idx="${i}" onmousedown="slashApply(${i});event.preventDefault()">
-          <span class="slash-pop-label">${esc(it.label)}</span>
-          <span class="slash-pop-hint">${esc(it.hint)}</span>
-        </li>`).join('')}
-    </ul>
-    <div class="slash-pop-foot"><span class="slash-pop-kbd">↵</span>/<span class="slash-pop-kbd">Tab</span> run · <span class="slash-pop-kbd">esc</span> close</div>
-  `;
-  // Anchor above textarea.
-  const inp = s.inputEl || document.getElementById('inp');
-  if (inp) {
-    const r = inp.getBoundingClientRect();
-    pop.style.position = 'fixed';
-    pop.style.left = Math.max(8, r.left) + 'px';
-    pop.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-    pop.style.maxWidth = Math.min(440, window.innerWidth - 16) + 'px';
-  }
-  pop.classList.add('show');
-}
-function slashKeyDown(e) {
-  const s = _slashState;
-  if (!s || !s.items.length) return false;
-  if (e.key === 'ArrowDown') { s.activeIdx = (s.activeIdx + 1) % s.items.length; slashRender(); e.preventDefault(); return true; }
-  if (e.key === 'ArrowUp')   { s.activeIdx = (s.activeIdx - 1 + s.items.length) % s.items.length; slashRender(); e.preventDefault(); return true; }
-  if (e.key === 'Tab' || e.key === 'Enter') { slashApply(s.activeIdx); e.preventDefault(); return true; }
-  if (e.key === 'Escape')    { slashClose(); e.preventDefault(); return true; }
-  return false;
-}
-window.slashApply = function (idx) {
-  const s = _slashState;
-  if (!s || !s.items[idx]) return;
-  const cmd = s.items[idx];
-  const inp = s.inputEl || document.getElementById('inp');
-  if (!inp) { slashClose(); return; }
-  // If the user typed exactly `/foo` (no args), execute immediately.
-  // Otherwise pre-fill `/foo ` so they can append an argument and hit Enter.
-  if (cmd.label.includes('<') || cmd.label.includes('[')) {
-    inp.value = cmd.label.split(/\s/)[0] + ' ';
-    slashClose();
-    inp.focus();
-    inp.setSelectionRange(inp.value.length, inp.value.length);
-    return;
-  }
-  // No-arg command — execute now.
-  slashClose();
-  inp.value = '';
-  ar(inp);
-  try { cmd.exec(); } catch (e) { if (typeof addMsg === 'function') addMsg('bot', `⚠️ /${cmd.id} failed: ${e?.message || e}`); }
-};
-
-// Called from kd() when Enter is pressed and the input starts with `/`.
-// Parses `/cmd arg1 arg2 ...` and routes to the matching command.
-function slashExecuteFromInput(inp) {
-  const value = (inp?.value || '').trim();
-  const m = value.match(/^\/([A-Za-z0-9_-]+)(?:\s+(.+))?$/);
-  if (!m) return false;
-  const cmdId = m[1].toLowerCase();
-  const arg = (m[2] || '').trim();
-  const cmd = SLASH_COMMANDS.find(c => c.id === cmdId);
-  slashClose();
-  if (!cmd) {
-    if (typeof addMsg === 'function') addMsg('bot', `⚠️ Unknown slash command: /${cmdId}. Type /help for the list.`);
-    return true;
-  }
-  inp.value = '';
-  ar(inp);
-  try { cmd.exec(arg); }
-  catch (e) { if (typeof addMsg === 'function') addMsg('bot', `⚠️ /${cmd.id} failed: ${e?.message || e}`); }
-  return true;
-}
-
-function slashShowHelp() {
-  if (typeof addMsg !== 'function') return;
-  const lines = SLASH_COMMANDS.map(c => `\`${c.label}\` — ${c.hint}`);
-  addMsg('bot', '**Slash commands:**\n\n' + lines.join('\n'));
-}
-
-// ═══ PR-D2 — @-mention autocomplete (workspace symbols) ═══════════════
-// Detects an `@` token at the caret position, queries the workspace
-// indexer (or falls back to wsList for `@file`), shows a small popover
-// anchored above the input. Tab / Enter inserts; Esc closes.
-var _AT_MENTION_TYPES = ['symbol', 'file'];
-var _atMentionState = null; // { kind, query, items, activeIdx } when open
-
-function atMentionMaybeOpen(inputEl) {
-  if (!inputEl) return;
-  const value = inputEl.value || '';
-  const caret = inputEl.selectionStart || 0;
-  // Find the start of the current token by walking back from caret.
-  // Token = `@` followed by 0+ non-whitespace chars.
-  const before = value.slice(0, caret);
-  const m = before.match(/(^|\s)@([A-Za-z0-9_./\-:]*)$/);
-  if (!m) {
-    if (_atMentionState) atMentionClose();
-    return;
-  }
-  const queryRaw = m[2];
-  // Determine kind: explicit prefix `file:foo` or `sym:bar`, otherwise
-  // default to symbol query.
-  let kind = 'symbol';
-  let q = queryRaw;
-  if (queryRaw.startsWith('file:')) { kind = 'file'; q = queryRaw.slice(5); }
-  else if (queryRaw.startsWith('sym:'))  { kind = 'symbol'; q = queryRaw.slice(4); }
-  atMentionPopulate(kind, q, inputEl);
-}
-function atMentionClose() {
-  _atMentionState = null;
-  const pop = document.getElementById('at-mention-pop');
-  if (pop) pop.classList.remove('show');
-}
-async function atMentionPopulate(kind, query, inputEl) {
-  let items = [];
-  try {
-    if (kind === 'symbol') {
-      const r = await H.wsIndexQuery?.(query, { limit: 20 });
-      if (r && r.ok) items = (r.results || []).map(s => ({
-        kind: 'symbol',
-        label: s.name,
-        sub: `${s.kind} · ${s.file}:${s.line}`,
-        insert: '@' + s.name,
-      }));
-      // If the index isn't built yet, kick a build (don't await — user
-      // will retry). Show a helpful empty-state.
-      if (r && !r.hasIndex && !r.building) {
-        H.wsIndexBuild?.().catch(() => {});
-        items = [{ kind: 'info', label: 'Building workspace index…', sub: 'Try again in a second.', insert: '' }];
-      }
-    } else if (kind === 'file') {
-      const r = await H.wsList?.('');
-      if (r && r.ok && Array.isArray(r.entries)) {
-        const ql = query.toLowerCase();
-        items = r.entries
-          .filter(e => !e.isDir && e.name.toLowerCase().includes(ql))
-          .slice(0, 20)
-          .map(e => ({
-            kind: 'file',
-            label: e.name,
-            sub: e.rel || '',
-            insert: '@file:' + (e.rel || e.name),
-          }));
-      }
-    }
-  } catch (_) { /* dropdown stays empty */ }
-  _atMentionState = { kind, query, items, activeIdx: 0, inputEl };
-  atMentionRender();
-}
-function atMentionRender() {
-  let pop = document.getElementById('at-mention-pop');
-  if (!pop) {
-    pop = document.createElement('div');
-    pop.id = 'at-mention-pop';
-    pop.className = 'at-mention-pop';
-    document.body.appendChild(pop);
-  }
-  const s = _atMentionState;
-  if (!s || !s.items?.length) {
-    pop.classList.remove('show');
-    return;
-  }
-  pop.innerHTML = `
-    <div class="at-mention-head">${esc(s.kind.toUpperCase())} · ${esc(s.query || '(empty)')}</div>
-    <ul class="at-mention-list">
-      ${s.items.map((it, i) => `
-        <li class="at-mention-item${i === s.activeIdx ? ' on' : ''} kind-${esc(it.kind)}" data-idx="${i}" onmousedown="atMentionInsert(${i});event.preventDefault()">
-          <span class="at-mention-name">${esc(it.label)}</span>
-          <span class="at-mention-sub">${esc(it.sub || '')}</span>
-        </li>`).join('')}
-    </ul>
-    <div class="at-mention-foot"><span class="at-mention-kbd">Tab</span>/<span class="at-mention-kbd">↵</span> insert · <span class="at-mention-kbd">↑↓</span> nav · <span class="at-mention-kbd">esc</span> close</div>
-  `;
-  // Anchor above the textarea.
-  const inp = s.inputEl || document.getElementById('inp');
-  if (inp) {
-    const r = inp.getBoundingClientRect();
-    pop.style.position = 'fixed';
-    pop.style.left = Math.max(8, r.left) + 'px';
-    pop.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-    pop.style.maxWidth = Math.min(420, window.innerWidth - 16) + 'px';
-  }
-  pop.classList.add('show');
-}
-function atMentionKeyDown(e) {
-  const s = _atMentionState;
-  if (!s || !s.items?.length) return false;
-  const len = s.items.length;
-  if (e.key === 'ArrowDown') {
-    s.activeIdx = (s.activeIdx + 1) % len;
-    atMentionRender();
-    e.preventDefault(); return true;
-  }
-  if (e.key === 'ArrowUp') {
-    s.activeIdx = (s.activeIdx - 1 + len) % len;
-    atMentionRender();
-    e.preventDefault(); return true;
-  }
-  if (e.key === 'Tab' || e.key === 'Enter') {
-    atMentionInsert(s.activeIdx);
-    e.preventDefault(); return true;
-  }
-  if (e.key === 'Escape') {
-    atMentionClose();
-    e.preventDefault(); return true;
-  }
-  return false;
-}
-window.atMentionInsert = function (idx) {
-  const s = _atMentionState;
-  if (!s || !s.items?.[idx]) return;
-  const item = s.items[idx];
-  if (!item.insert) { atMentionClose(); return; }
-  const inp = s.inputEl || document.getElementById('inp');
-  if (!inp) { atMentionClose(); return; }
-  const value = inp.value || '';
-  const caret = inp.selectionStart || 0;
-  // Replace the partial @-token before the caret.
-  const before = value.slice(0, caret);
-  const after = value.slice(caret);
-  const m = before.match(/(^|\s)@[A-Za-z0-9_./\-:]*$/);
-  if (!m) { atMentionClose(); return; }
-  const tokenStart = m.index + m[1].length;
-  const newValue = value.slice(0, tokenStart) + item.insert + ' ' + after;
-  inp.value = newValue;
-  const newCaret = tokenStart + item.insert.length + 1;
-  inp.setSelectionRange(newCaret, newCaret);
-  ar(inp);
-  atMentionClose();
-  inp.focus();
-};
+// PR-V Phase 3.21 — Slash commands + @-mention autocomplete extracted
+// to chat-slash-mention.js. SLASH_COMMANDS list, _slashState,
+// slashMaybeOpen/Close/Render/KeyDown/ExecuteFromInput/ShowHelp,
+// _AT_MENTION_TYPES, _atMentionState, atMentionMaybeOpen/Close/
+// Populate/Render/KeyDown all live there.
 
 // -- File/Photo upload handling ------------------------------------------------
 function onFilesSelected(e){
@@ -4174,7 +3181,7 @@ async function runAgent(text) {
   const currentProvider = provider || 'gemini';
   const currentModel = getSelectedModelForProvider(currentProvider);
   const userEstimatedTokens = estimateTokensForText(text);
-  history.push({ role: 'user', content: text });
+  chatHistory.push({ role: 'user', content: text });
   _persistChatMessage('user', text, { provider: currentProvider, model: currentModel, estimatedTokens: userEstimatedTokens });
   trackTokens(text, 'user', currentProvider, null, userEstimatedTokens);
 
@@ -4192,7 +3199,7 @@ async function runAgent(text) {
       H.agentRun(text, {
         provider: currentProvider,
         model: currentModel,
-        history: history.slice(-8),
+        history: chatHistory.slice(-8),
         maxSteps: 8
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Agent timed out')), agentTimeoutMs))
@@ -4208,7 +3215,7 @@ async function runAgent(text) {
       const stepCount = (finalSteps || []).length;
       if (!stepCount) document.getElementById('current-agent-panel')?.remove();
       addMsg('bot', result.answer, { model: result.model || currentModel || currentProvider });
-      history.push({ role: 'assistant', content: result.answer });
+      chatHistory.push({ role: 'assistant', content: result.answer });
       _persistChatMessage('assistant', result.answer, { provider: currentProvider, model: result.model || currentModel || 'agent', usage: result.usage });
       trackTokens(result.answer, 'assistant', currentProvider, result.usage);
       speak(result.answer.slice(0, 400).replace(/[*#`]/g, ''));
@@ -4226,13 +3233,13 @@ async function runAgent(text) {
     try {
       setStatus(lang === 'ru' ? 'Агент завис. Пробую обычный чат...' : 'Agent stalled. Retrying as normal chat...', true);
       const fallback = await Promise.race([
-        H.ai(history.slice(-8), currentProvider, null, aiOptsForProvider(currentProvider)),
+        H.ai(chatHistory.slice(-8), currentProvider, null, aiOptsForProvider(currentProvider)),
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), 60000))
       ]);
       if (fallback?.reply) {
         fallbackShown = true;
         addMsg('bot', fallback.reply, { model: fallback.model || currentModel || currentProvider });
-        history.push({ role: 'assistant', content: fallback.reply });
+        chatHistory.push({ role: 'assistant', content: fallback.reply });
         _persistChatMessage('assistant', fallback.reply, { provider: currentProvider, model: fallback.model || currentModel || currentProvider, usage: fallback.usage });
         trackTokens(fallback.reply, 'assistant', currentProvider, fallback.usage);
         speak(fallback.reply.slice(0, 400).replace(/[*#`]/g, ''));
@@ -4305,13 +3312,17 @@ async function sendMsg(){
 ? *${names}*` : `? *${names}*`;
   }
   addMsg('user', displayText || text);
-  if(text) {
-    const userEstimatedTokens = estimateTokensForText(text);
-    history.push({role:'user',content:text});
-    _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov), estimatedTokens: userEstimatedTokens });
-    trackTokens(text, 'user', prov, null, userEstimatedTokens);
-  }
   addTyping();
+  if(text) {
+    try {
+      const userEstimatedTokens = estimateTokensForText(text);
+      chatHistory.push({role:'user',content:text});
+      _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov), estimatedTokens: userEstimatedTokens });
+      trackTokens(text, 'user', prov, null, userEstimatedTokens);
+    } catch (e) {
+      console.warn('[chat] user message bookkeeping failed:', e?.message || e);
+    }
+  }
 
   // Process attachments first
   if(hasAttachments){
@@ -4333,7 +3344,7 @@ async function sendMsg(){
         card.innerHTML=`<div class="bub"><div class="tcard-title">🖼 ${r.name} · ${r.model}</div><img src="data:${r.mimeType};base64,${r.base64}" style="max-width:100%;border-radius:8px;margin:6px 0;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'none':'100%'"/><div style="margin-top:8px;font-size:12px;line-height:1.7">${md(r.analysis)}</div></div><div class="meta"><span class="mtag">${r.model}</span><button class="ab" onclick="H.copy(this.dataset.t)" data-t="${r.analysis.replace(/"/g,'&quot;')}">⎘ Copy</button></div>`;
         msgs.appendChild(card);
         msgs.scrollTop=msgs.scrollHeight;
-        history.push({role:'assistant',content:r.analysis});
+        chatHistory.push({role:'assistant',content:r.analysis});
         _persistChatMessage('assistant', r.analysis, {model:r.model, usage:r.usage, provider:prov});
         trackTokens(r.analysis, 'assistant', prov, r.usage);
         speak(r.analysis.slice(0,300));
@@ -4349,7 +3360,7 @@ async function sendMsg(){
 ${r.content.slice(0,30000)}
 \`\`\``;
         const userQ = text || (lang==='ru'?'Что это? Проанализируй.':'What is this? Analyze it.');
-        const msgs_for_ai = [...history.slice(-10), {role:'user', content: `${userQ}
+        const msgs_for_ai = [...chatHistory.slice(-10), {role:'user', content: `${userQ}
 
 ${fileContext}`}];
         rmTyping(); addTyping();
@@ -4359,7 +3370,7 @@ ${fileContext}`}];
         catch(e) { res = {error: e.message}; }
         rmTyping();
         if(res.error) addMsg('bot',`❌ ${res.error}`);
-        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov, usage:res.usage, provider:prov}); trackTokens(res.reply, 'assistant', prov, res.usage); speak(res.reply.slice(0,300)); }
+        else { addMsg('bot', res.reply, {model:res.model||prov}); chatHistory.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov, usage:res.usage, provider:prov}); trackTokens(res.reply, 'assistant', prov, res.usage); speak(res.reply.slice(0,300)); }
         cleanup(); return;
       }
     }
@@ -4378,7 +3389,7 @@ ${fileContext}`}];
           setStatus(lang==='ru'?'◉ Смотрю на экран…':'◉ Seeing screen…',true);
           res=await H.analyzeScreen(text);rmTyping();
           if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});chatHistory.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
           cleanup();return;
         case 'open':
           res=await H.pcOpen(cmd.arg);rmTyping();
@@ -4464,7 +3475,7 @@ ${fileContext}`}];
     setStatus(lang==='ru'?'◉ Смотрю…':'◉ Seeing…',true);
     const res=await H.analyzeScreen(text);rmTyping();
     if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});chatHistory.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     cleanup();return;
   }
 
@@ -4482,11 +3493,11 @@ ${fileContext}`}];
       const ctx=`Search: "${q2}"\n${sr.answer?'Answer: '+sr.answer+'\n\n':''}${sr.results.map((r,i)=>`[${i+1}] ${r.title}\n${r.url}\n${(r.content||'').slice(0,350)}`).join('\n\n')}\n\nUser: ${text}`;
       const sys2=lang==='ru'?`Ты Хорайзон. Синтезируй результаты. Дай чёткий ответ на русском. Ссылайся на [1],[2].`:`You are Horizon. Synthesize search results. Clear helpful answer. Cite [1],[2].`;
       let res;
-      try { res=await runStreamingAI([...history.slice(0,-1),{role:'user',content:ctx}],prov,sys2,aiOptsForProvider(prov)); }
+      try { res=await runStreamingAI([...chatHistory.slice(0,-1),{role:'user',content:ctx}],prov,sys2,aiOptsForProvider(prov)); }
       catch(e){ res={error:e.message}; }
       rmTyping();
       if(res.error){ if(!res._rendered) addMsg('bot',`⚠️ ${res.error}`); }
-      else{if(!res._rendered) addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+      else{if(!res._rendered) addMsg('bot',res.reply,{model:res.model||prov});chatHistory.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     }else{
       rmTyping();
       addMsg('bot',lang==='ru'?`⚠️ Нет результатов. ${sr.error||'Добавь Tavily ключ в ⚙️ Настройках.'}`:`⚠️ No results. ${sr.error||'Add Tavily key in ⚙️ Settings.'}`);
@@ -4522,7 +3533,7 @@ ${fileContext}`}];
   const STREAMING_PROVIDERS = new Set();
   if (STREAMING_PROVIDERS.has(prov)) {
     try {
-      await _sendStreamingMessage(history, prov, sys, opts);
+      await _sendStreamingMessage(chatHistory, prov, sys, opts);
     } catch (e) {
       rmTyping();
       addMsg('bot', `❌ Ошибка стриминга: ${e.message}`);
@@ -4531,7 +3542,7 @@ ${fileContext}`}];
     return;
   }
   try {
-    const res=await runStreamingAI(history,prov,sys,opts);
+    const res=await runStreamingAI(chatHistory,prov,sys,opts);
     rmTyping();
     if(res.error) {
       if (!res._rendered) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
@@ -4543,7 +3554,7 @@ ${fileContext}`}];
       const action = _parseActionSuggestion(res.reply);
       const cleanReply = action ? res.reply.replace(/\[\[ACTION:[^\]]+\]\]\s*$/, '').replace(/\{"_action"[^\n]*\}\s*$/, '').trim() : res.reply;
       if (!res._rendered) addMsg('bot',cleanReply,{model:res.model||prov});
-      history.push({role:'assistant',content:res.reply});
+      chatHistory.push({role:'assistant',content:res.reply});
       _persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});
       trackTokens(res.reply,'assistant',prov,res.usage);
       speak(cleanReply);
@@ -4560,7 +3571,7 @@ ${fileContext}`}];
 // chunks into it, switches the send button into a stop button, and
 // finalises with addMsg's regular post-processing (diff bubbles,
 // action cards, persistence) once `ai:done` arrives.
-async function _sendStreamingMessage(history, prov, sys, opts) {
+async function _sendStreamingMessage(messageHistory, prov, sys, opts) {
   rmTyping();
   // Allocate empty bubble we'll append into.
   const bubble = addMsg('bot', '', { model: prov });
@@ -4637,7 +3648,7 @@ async function _sendStreamingMessage(history, prov, sys, opts) {
         // Action card extraction.
         const action = _parseActionSuggestion(finalText);
         const cleanReply = action ? finalText.replace(/\[\[ACTION:[^\]]+\]\]\s*$/, '').replace(/\{"_action"[^\n]*\}\s*$/, '').trim() : finalText;
-        history.push({ role: 'assistant', content: finalText });
+        messageHistory.push({ role: 'assistant', content: finalText });
         _persistChatMessage('assistant', finalText, { model: p.model || prov, usage: p.usage, provider: prov });
         trackTokens(finalText, 'assistant', prov, p.usage);
         try { speak(cleanReply); } catch (_) {}
@@ -4648,7 +3659,7 @@ async function _sendStreamingMessage(history, prov, sys, opts) {
       });
     }
     // Kick off the stream.
-    H.aiStream(history, prov, sys, opts).then((r) => {
+    H.aiStream(messageHistory, prov, sys, opts).then((r) => {
       if (!r || !r.ok) {
         try { bubBody.innerHTML = md(`⚠️ ${r?.error || 'aiStream failed'}\n\n*Провайдер: ${prov}*`); } catch (_) {}
         finish();
@@ -5064,300 +4075,12 @@ H.onMarketAuthenticated?.(async (user) => {
 // chat-code-workspace.js (where the rest of the operator state +
 // functions already live from Phase 3.14).
 
-// ═══════════════════════════════════════════════════════════════
-// INSPECTOR PANE — Context · Tools · Cost · Log dock on the right
-// ═══════════════════════════════════════════════════════════════
-var inspectorActive = false;
-var inspectorTab = 'context';
 
-function layoutInspectorDock(){
-  const pane = document.getElementById('inspector-pane');
-  if (!pane) return;
-  const root = document.documentElement;
-  const sidebar = document.body.classList.contains('with-sidebar')
-    ? (document.querySelector('.chatside')?.getBoundingClientRect().width || 280)
-    : 0;
-  const bottomOf = (selector) => {
-    const el = document.querySelector(selector);
-    if (!el) return 0;
-    const r = el.getBoundingClientRect();
-    if (r.height <= 0) return 0;
-    return r.bottom;
-  };
-  const chromeBottom = Math.max(
-    bottomOf('.tb'),
-    bottomOf('.wake-bar.show'),
-    bottomOf('.sb'),
-    bottomOf('.modes'),
-    bottomOf('.chat-status-bar')
-  );
-  const inputRect = document.querySelector('.inp-wrap')?.getBoundingClientRect();
-  const contentWidth = Math.max(0, window.innerWidth - sidebar);
-  const compact = contentWidth < 1010;
-  const dockW = compact
-    ? Math.max(302, Math.min(358, contentWidth - 28))
-    : Math.max(320, Math.min(356, Math.round(contentWidth * 0.255)));
-  let top = Math.max(86, Math.ceil(chromeBottom + 12));
-  // On wide screens the inspector is a true right dock and should own the
-  // whole right edge down to the bottom. If it stops above the composer, the
-  // composer correctly reserves inspector-space but leaves a dead square on
-  // the lower-right. Compact/mobile keeps the old above-composer behavior.
-  let bottom = compact
-    ? Math.max(14, Math.ceil(window.innerHeight - (inputRect?.top || (window.innerHeight - 92)) + 12))
-    : 16;
-  const minDockH = Math.min(430, Math.max(300, window.innerHeight * 0.48));
-  if (window.innerHeight - top - bottom < minDockH) {
-    bottom = Math.max(14, Math.ceil(window.innerHeight - top - minDockH));
-  }
-  root.style.setProperty('--inspector-w', `${dockW}px`);
-  root.style.setProperty('--inspector-right', compact ? '12px' : '16px');
-  root.style.setProperty('--inspector-top', `${top}px`);
-  root.style.setProperty('--inspector-bottom', `${bottom}px`);
-  root.style.setProperty('--inspector-space', compact ? '0px' : `${dockW + 34}px`);
-  document.body.classList.toggle('inspector-compact', compact);
-}
+// PR-V Phase 3.16 — Inspector Pane + Step Rail extracted to
+// chat-inspector.js. All inspector* / stepRail* fns + state live
+// there. _setInspectorVisible (small helper at line ~1257) stays
+// inline because it's coupled to the surface-routing infrastructure.
 
-function toggleInspectorMode(){
-  inspectorActive = !inspectorActive;
-  if (inspectorActive) layoutInspectorDock();
-  document.body.classList.toggle('inspector-active', inspectorActive);
-  document.getElementById('inspector-mode-btn')?.classList.toggle('proc', inspectorActive);
-  if (inspectorActive) {
-    layoutInspectorDock();
-    refreshInspector();
-    try { H.set('inspectorActive', true); } catch(_){}
-  } else {
-    document.body.classList.remove('inspector-compact');
-    try { H.set('inspectorActive', false); } catch(_){}
-  }
-  updateShellChrome();
-}
-
-function setInspectorTab(name){
-  inspectorTab = name;
-  document.querySelectorAll('.insp-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
-  ['context','tools','cost','log'].forEach(t => {
-    const el = document.getElementById('insp-body-' + t);
-    if (el) el.style.display = (t === name) ? 'block' : 'none';
-  });
-  refreshInspector();
-}
-
-// Refresh whichever tab is active. Cheap on every call — only updates DOM
-// for the visible tab + the always-visible context bits (provider/model
-// pill, persona).
-function refreshInspector(){
-  if (!inspectorActive) return;
-  layoutInspectorDock();
-  // Context is cheap, always update.
-  try {
-    const p = prov || provider || 'gemini';
-    const m = getSelectedModelForProvider?.(p) || (p === 'gemini' ? geminiModel : '') || 'default';
-    document.getElementById('insp-provider').textContent = p;
-    document.getElementById('insp-model').textContent = m;
-    document.getElementById('insp-mode').textContent = mode || 'chat';
-    document.getElementById('insp-persona').textContent = currentPersona || 'Default';
-    document.getElementById('insp-workspace').textContent = codeWorkspace || 'No workspace';
-    document.getElementById('insp-open-files').textContent = (codeOpenFiles?.length || 0).toString();
-    document.getElementById('insp-voice').textContent = voiceProvider || '—';
-  } catch(_) {}
-
-  if (inspectorTab === 'tools') refreshInspectorTools();
-  if (inspectorTab === 'cost')  refreshInspectorCost();
-  if (inspectorTab === 'log')   refreshInspectorLog();
-  // Connections row updates lazily
-  refreshInspectorConnections();
-}
-
-async function refreshInspectorConnections(){
-  try {
-    const r = await H.mcpServersList?.().catch(()=>({ok:false,servers:[]}));
-    const enabled = (r?.servers || []).filter(s => s.enabled !== false).length;
-    const total = (r?.servers || []).length;
-    const el = document.getElementById('insp-mcp');
-    if (el) el.textContent = total ? `${enabled} / ${total} enabled` : '0';
-  } catch(_) {}
-}
-
-function refreshInspectorTools(){
-  // Built-in tools from agent.js TOOL_DEFINITIONS — we don't have a live
-  // listing IPC, so describe the static set + any MCP discovered tools.
-  const builtin = [
-    { name: 'fs.read_file',  scope: codeWorkspace ? 'workspace' : 'no workspace' },
-    { name: 'fs.write_file', scope: 'permission required' },
-    { name: 'fs.search',     scope: codeWorkspace ? 'workspace' : 'no workspace' },
-    { name: 'shell.exec',    scope: 'permission required' },
-    { name: 'web.search',    scope: 'tavily key' },
-    { name: 'ai.edit',       scope: (prov || provider) + ' model' },
-  ];
-  const host = document.getElementById('insp-tools-builtin');
-  if (host) {
-    host.innerHTML = builtin.map(t =>
-      `<div class="insp-row"><span class="v" style="text-align:left;color:var(--tx)">${esc(t.name)}</span><span class="k">${esc(t.scope)}</span></div>`
-    ).join('');
-  }
-  // MCP tools list — async
-  H.mcpServersList?.().then(r => {
-    const servers = r?.servers || [];
-    const mcpHost = document.getElementById('insp-tools-mcp');
-    if (!mcpHost) return;
-    if (!servers.length) {
-      mcpHost.innerHTML = '<div class="insp-empty">No MCP servers connected.</div>';
-      return;
-    }
-    mcpHost.innerHTML = servers.map(s => {
-      const status = s.enabled === false ? 'disabled' : (s.connected ? 'connected' : 'idle');
-      const tools = s.tools?.length || 0;
-      return `<div class="insp-row"><span class="v" style="text-align:left;color:var(--tx)">${esc(s.name)}</span><span class="k">${tools} tool${tools===1?'':'s'} · ${status}</span></div>`;
-    }).join('');
-  }).catch(()=>{});
-}
-
-function refreshInspectorCost(){
-  // Pull live values from the existing token tracker.
-  const headline = document.getElementById('insp-cost-headline');
-  const sub = document.getElementById('insp-cost-sub');
-  if (headline) headline.textContent = formatCost();
-  if (sub) {
-    const source = sessionUsageKnown
-      ? (sessionHasEstimatedUsage ? 'provider + estimated usage' : 'provider usage')
-      : (sessionTokens ? 'estimated usage' : 'estimates start after the first message');
-    sub.textContent = `${sessionMsgs} msg${sessionMsgs===1?'':'s'} - ${formatTokens(sessionTokens)} tokens - ${source}`;
-  }
-
-  // Token budget visualisation. We don't have per-segment counters; estimate
-  // splits as 7% system, 83% history, 8% files, 2% tools (a rough pattern
-  // that matches typical chat sessions). Real per-segment tracking is a
-  // follow-up. This gets the bar visible and updating as tokens grow.
-  const total = sessionTokens || 0;
-  const budget = 200000;
-  const segs = {
-    system:  Math.round(total * 0.07),
-    history: Math.round(total * 0.83),
-    files:   Math.round(total * 0.08),
-    tools:   Math.round(total * 0.02),
-  };
-  const totalUsed = Math.min(total, budget);
-  const bar = document.getElementById('insp-token-bar');
-  if (bar) {
-    const w = (n) => budget > 0 ? `${(n / budget * 100).toFixed(2)}%` : '0%';
-    bar.querySelector('.token-seg.system' ).style.width = w(segs.system);
-    bar.querySelector('.token-seg.history').style.width = w(segs.history);
-    bar.querySelector('.token-seg.files'  ).style.width = w(segs.files);
-    bar.querySelector('.token-seg.tools'  ).style.width = w(segs.tools);
-  }
-  const meta = document.getElementById('insp-token-meta');
-  if (meta) {
-    const approx = sessionTokens ? '~' : '';
-    meta.innerHTML = `
-      <span class="seg system" title="Approximate split until provider exposes per-part usage">System ${approx}${formatTokens(segs.system)}</span>
-      <span class="seg history" title="Approximate split until provider exposes per-part usage">History ${approx}${formatTokens(segs.history)}</span>
-      <span class="seg files" title="Approximate split until provider exposes per-part usage">Files ${approx}${formatTokens(segs.files)}</span>
-      <span class="seg tools" title="Approximate split until provider exposes per-part usage">Tools ${approx}${formatTokens(segs.tools)}</span>`;
-  }
-  document.getElementById('insp-token-used').textContent = formatTokens(totalUsed);
-  document.getElementById('insp-token-budget').textContent = formatTokens(budget);
-}
-
-function refreshInspectorLog(){
-  const host = document.getElementById('insp-log-list');
-  if (!host) return;
-  const lines = (operatorLogLines || []).slice(-30).reverse();
-  if (!lines.length) {
-    host.innerHTML = '<div class="insp-empty">No agent activity yet.</div>';
-    return;
-  }
-  host.innerHTML = lines.map(l =>
-    `<div class="insp-log-row ${esc(l.type||'info')}"><span class="ts">${esc(l.time||'')}</span><span class="msg">${esc(l.msg||'')}</span><span class="dur"></span></div>`
-  ).join('');
-}
-
-function formatTokens(n){
-  if (!n) return '0';
-  if (n >= 1000) return (n/1000).toFixed(1) + 'k';
-  return String(n);
-}
-function formatCost(){
-  // No hardcoded dollars. Show token usage only because each BYOK provider can
-  // bill differently and local models may not report provider usage at all.
-  return (sessionHasEstimatedUsage ? '~' : '') + formatTokens(sessionTokens) + ' tok';
-}
-
-window.addEventListener('resize', () => {
-  if (inspectorActive) layoutInspectorDock();
-});
-
-// ═══════════════════════════════════════════════════════════════
-// STEP RAIL — agent plan progress at top of chat
-// ═══════════════════════════════════════════════════════════════
-var stepRailState = { steps: [], currentIdx: -1 };
-
-function setStepRail(steps, currentIdx){
-  stepRailState.steps = Array.isArray(steps) ? steps.slice(0, 7) : [];
-  stepRailState.currentIdx = (typeof currentIdx === 'number') ? currentIdx : -1;
-  renderStepRail();
-}
-
-function clearStepRail(){
-  stepRailState = { steps: [], currentIdx: -1 };
-  const rail = document.getElementById('step-rail');
-  if (rail) {
-    rail.classList.remove('show');
-    rail.innerHTML = '';
-  }
-}
-
-function renderStepRail(){
-  const rail = document.getElementById('step-rail');
-  if (!rail) return;
-  const steps = stepRailState.steps;
-  if (!steps.length) {
-    rail.classList.remove('show');
-    return;
-  }
-  rail.classList.add('show');
-  const cur = stepRailState.currentIdx;
-  const html = steps.map((s, i) => {
-    const status = (i < cur) ? 'done' : (i === cur ? 'now' : '');
-    const num = (i < cur) ? '✓' : String(i + 1);
-    return `<div class="step ${status}"><span class="num">${num}</span><span>${esc(s)}</span></div>`;
-  }).join('<span class="step-arrow">→</span>');
-  rail.innerHTML = html;
-}
-
-// Auto-update Inspector and Step Rail from agent step events. Hooks into
-// the existing operator-side onAgentStep listener via a soft tap so we
-// don't fight Operator Mode's own subscriber.
-try {
-  H.onAgentStep?.((step) => {
-    try {
-      // Step rail — server sends {type:'plan', steps:[...], currentIdx}
-      if (step?.type === 'plan' && Array.isArray(step.steps)) {
-        setStepRail(step.steps, step.currentIdx ?? 0);
-      }
-      if (step?.type === 'plan-step' && typeof step.idx === 'number') {
-        setStepRail(stepRailState.steps, step.idx);
-      }
-      if (step?.type === 'run-end' || step?.type === 'done') {
-        // Fade rail after a beat so the user sees the final ✓ state
-        setTimeout(clearStepRail, 1500);
-      }
-      // Inspector log + cost auto-refresh on activity
-      if (inspectorActive) {
-        if (inspectorTab === 'log')  refreshInspectorLog();
-        if (inspectorTab === 'cost') refreshInspectorCost();
-      }
-    } catch(_) {}
-  });
-} catch(_) {}
-
-// Restore inspector state on load
-window.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const wasActive = await H.get('inspectorActive').catch(()=>null);
-    if (wasActive) toggleInspectorMode();
-  } catch(_) {}
-});
 // PR-V Phase 3.15 — opLog + console.log/error overrides moved to
 // chat-code-workspace.js (where opRender lives, and where
 // ensureOperatorAgentListener calls opLog directly).
@@ -5432,5 +4155,33 @@ window.addEventListener('DOMContentLoaded', async () => {
      Quick Open file picker. Bundled with operator state vars that
      were physically adjacent in source. -->
 <script src="chat-code-workspace.js"></script>
+<!-- PR-V Phase 3.16 — Inspector Pane + Step Rail (was 5106-5398).
+     ~294 LOC: right-side Inspector dock (Context/Tools/Cost/Log
+     tabs), plus Step Rail (agent plan progress strip above messages). -->
+<script src="chat-inspector.js"></script>
+<!-- PR-V Phase 3.17 — Permission Gate (PR3 destructive-op confirm)
+     was 3308-3437. ~131 LOC: requestPermission, handleAgentPermissionGate,
+     refreshPermissionAllowlist, revokePermissionEntry, _gateDestructive,
+     safe* helpers wrapping every destructive IPC. -->
+<script src="chat-permissions.js"></script>
+<!-- PR-V Phase 3.18 — Multi-chat persistence (was 1762-2160). ~400 LOC:
+     sidebar render + search, list/switch/create/rename/delete chats,
+     chat-delete permission with always-allow, boot restore, debounced
+     refresh, per-message persistence, AI auto-name after first reply. -->
+<script src="chat-multichat.js"></script>
+<!-- PR-V Phase 3.19 — Agent HUD + Plan-Act gate + Provider Health
+     traffic-light (was 2134-2267). ~135 LOC: composer-foot agent
+     activity chip, plan/act approve-gate, model-chip ::after dot,
+     H.ai timing-wrapper IIFE. -->
+<script src="chat-hud-gates.js"></script>
+<!-- PR-V Phase 3.20 — Inline Tool Report + Action Card (was 2683-2786).
+     ~105 LOC: tool-call pill on assistant messages + Apply/Skip
+     action buttons from trailing JSON _action envelope. -->
+<script src="chat-tool-report.js"></script>
+<!-- PR-V Phase 3.21 — Slash commands + @-mention autocomplete (was 3026-3315).
+     ~291 LOC: SLASH_COMMANDS list (PR-C1), slash dropdown with
+     Tab/Enter exec; @symbol / @file autocomplete (PR-D2) reading
+     workspace via H.wsList / H.wsSearch. -->
+<script src="chat-slash-mention.js"></script>
 </body>
 </html>
