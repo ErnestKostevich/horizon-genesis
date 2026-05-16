@@ -16541,7 +16541,13 @@ function layoutInspectorDock(){
     ? Math.max(302, Math.min(358, contentWidth - 28))
     : Math.max(320, Math.min(356, Math.round(contentWidth * 0.255)));
   let top = Math.max(86, Math.ceil(chromeBottom + 12));
-  let bottom = Math.max(14, Math.ceil(window.innerHeight - (inputRect?.top || (window.innerHeight - 92)) + 12));
+  // On wide screens the inspector is a true right dock and should own the
+  // whole right edge down to the bottom. If it stops above the composer, the
+  // composer correctly reserves inspector-space but leaves a dead square on
+  // the lower-right. Compact/mobile keeps the old above-composer behavior.
+  let bottom = compact
+    ? Math.max(14, Math.ceil(window.innerHeight - (inputRect?.top || (window.innerHeight - 92)) + 12))
+    : 16;
   const minDockH = Math.min(430, Math.max(300, window.innerHeight * 0.48));
   if (window.innerHeight - top - bottom < minDockH) {
     bottom = Math.max(14, Math.ceil(window.innerHeight - top - minDockH));
