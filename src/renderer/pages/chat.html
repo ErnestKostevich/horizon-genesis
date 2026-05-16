@@ -1368,45 +1368,10 @@ var sessionTokens = 0;
 var sessionMsgs = 0;
 var sessionUsageKnown = false;
 var sessionHasEstimatedUsage = false;
-// trackTokens(text, role, provider [, usage])
-// `usage` is the normalised {prompt, completion, total} object that the
-// main-process H.ai handler now returns next to `reply`. When a provider does
-// not return usage (many local/OpenAI-compatible servers do this), Horizon
-// keeps an honest estimate instead of showing "usage unavailable" forever.
-function estimateTokensForText(text) {
-  const raw = String(text || '').trim();
-  if (!raw) return 0;
-  const words = raw.split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.ceil(raw.length / 4), Math.ceil(words * 1.3));
-}
-function trackTokens(text, role, provider, usage, estimatedTokens) {
-  let pTok = 0, cTok = 0;
-  if (usage && (usage.total != null || usage.prompt != null || usage.completion != null)) {
-    pTok = usage.prompt || 0;
-    cTok = usage.completion || 0;
-    if (usage.total != null && !pTok && !cTok) cTok = Number(usage.total) || 0;
-    sessionUsageKnown = true;
-  } else {
-    cTok = Number(estimatedTokens || estimateTokensForText(text)) || 0;
-    sessionHasEstimatedUsage = true;
-  }
-  const tokens = pTok + cTok;
-  sessionTokens += tokens;
-  if (role === 'user') sessionMsgs++;
-  updateTokenDisplay();
-  return tokens;
-}
-function updateTokenDisplay() {
-  const fmt = n => n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n);
-  try {
-    document.getElementById('stat-msgs').textContent = sessionMsgs;
-    document.getElementById('stat-tokens').textContent = (sessionHasEstimatedUsage ? '~' : '') + fmt(sessionTokens);
-    document.getElementById('stat-usage').textContent = sessionUsageKnown
-      ? (sessionHasEstimatedUsage ? 'mixed usage' : 'provider usage')
-      : 'estimated';
-    document.getElementById('csb-tokens').textContent = `${sessionHasEstimatedUsage ? '~' : ''}${fmt(sessionTokens)} tokens`;
-  } catch(_) {}
-}
+
+// PR-V Phase 3.22 — Token tracking extracted to chat-tokens.js.
+// estimateTokensForText, trackTokens, updateTokenDisplay live there.
+
 
 
 // PR-V Phase 3 — wake word engine extracted to chat-voice-wake.js.
@@ -1988,246 +1953,9 @@ async function _bootModelCache() {
 // the cache anyway. No await — keeps the renderer init non-blocking.
 _bootModelCache().catch(() => {});
 
-// ═══ PR-C4 — Git branch indicator + recent-branch dropdown ═══════════
-// `refreshGitBranchChip()` is called whenever the workspace changes
-// (see openCodeFile / chooseCodeWorkspace) and on a 30s poll while
-// Code Mode is open so external CLI checkouts get reflected. Cheap:
-// reads `.git/HEAD` directly, no shell-out for the common path.
-var _gitBranchPollTimer = null;
 
-async function refreshGitBranchChip() {
-  const chip = document.getElementById('shell-git-branch');
-  const nameEl = document.getElementById('shell-git-branch-name');
-  if (!chip || !nameEl) return;
-  const ws = (typeof codeWorkspace !== 'undefined' && codeWorkspace) ? codeWorkspace : null;
-  if (!ws) {
-    chip.style.display = 'none';
-    return;
-  }
-  try {
-    const r = await H.gitBranch?.(ws);
-    if (r && r.ok && r.branch) {
-      // Truncate long branch names so the chip doesn't push the rest
-      // of the title bar off-screen.
-      const display = r.branch.length > 28 ? r.branch.slice(0, 26) + '…' : r.branch;
-      nameEl.textContent = display;
-      nameEl.title = r.branch;
-      chip.style.display = '';
-      chip.classList.toggle('detached', !!r.detached);
-    } else {
-      chip.style.display = 'none';
-    }
-  } catch (_) {
-    chip.style.display = 'none';
-  }
-}
-
-function startGitBranchPoll() {
-  if (_gitBranchPollTimer) return;
-  refreshGitBranchChip().catch(() => {});
-  _gitBranchPollTimer = setInterval(() => {
-    if (!document.body.classList.contains('code-mode-active')) return;
-    refreshGitBranchChip().catch(() => {});
-  }, 30000);
-}
-function stopGitBranchPoll() {
-  if (_gitBranchPollTimer) { clearInterval(_gitBranchPollTimer); _gitBranchPollTimer = null; }
-}
-// Auto-start poll once the renderer + IPC are ready.
-window.addEventListener('DOMContentLoaded', () => { startGitBranchPoll(); });
-
-// PR-B5 — set body class so per-OS CSS rules can hide the custom
-// .wbtn buttons in favour of native window controls. Detection is
-// best-effort (renderer can't read process.platform directly because
-// nodeIntegration:false; we sniff via navigator.userAgent which is
-// stable enough for this single decision).
-(function _detectPlatform() {
-  try {
-    const ua = (navigator.userAgent || '').toLowerCase();
-    if (ua.includes('mac os x') || ua.includes('darwin')) {
-      document.body.classList.add('os-mac');
-    } else if (ua.includes('windows') || ua.includes('win64') || ua.includes('win32')) {
-      document.body.classList.add('os-win');
-    } else {
-      document.body.classList.add('os-linux');
-    }
-  } catch (_) { /* default to no-class behaviour (Linux-style custom .wbtn) */ }
-})();
-
-// PR-U-MEGA — single source of truth for layout cleanup. The
-// `body.shell-clean` class hides the duplicated mode strip + chat
-// status bar; composer-toolbar + composer-foot become the only
-// ambient controls. Default ON for all users; can be toggled off
-// via `H.set('shellClean', false)` for diagnostics.
-(async function _bootShellClean() {
-  try {
-    const v = await H.get?.('shellClean');
-    // Default ON unless explicitly disabled.
-    document.body.classList.toggle('shell-clean', v !== false);
-  } catch (_) {
-    document.body.classList.add('shell-clean');
-  }
-})();
-
-// PR-U-MEGA — cost preview line below the composer. Updates live
-// as the user types so they SEE the cost-of-this-turn before sending.
-// Estimate: input.length / 4 (≈ tokens) + a fixed 1500-token
-// overhead for system prompt + persona + recent history. Uses the
-// active provider's pricing from MODEL_PRICING (PR-C3).
-function _estimateInputTokens(text) {
-  // Rough char→token: 4 chars/token average for English code+prose.
-  // Cyrillic averages closer to 2.5; we average to 3.5 → conservative.
-  const chars = String(text || '').length;
-  return Math.ceil(chars / 3.5);
-}
-function _estimateContextOverhead() {
-  // System prompt + persona + recent history estimate.
-  // History contributes ~150 tok per message; cap at 12 messages.
-  try {
-    const recent = Array.isArray(chatHistory) ? chatHistory.slice(-12) : [];
-    const histTok = recent.reduce((s, m) => s + Math.ceil((m.content || '').length / 3.5), 0);
-    return 800 + histTok; // 800 = system + persona baseline
-  } catch (_) { return 800; }
-}
-function refreshCostPreview() {
-  try {
-    const inp = document.getElementById('inp');
-    const tokEl = document.getElementById('composer-foot-tokens-n');
-    const costEl = document.getElementById('composer-foot-cost');
-    if (!tokEl || !costEl) return;
-    const inputTok = _estimateInputTokens(inp?.value || '');
-    const ctxTok = _estimateContextOverhead();
-    const totalTok = inputTok + ctxTok;
-    tokEl.textContent = totalTok > 1000 ? (totalTok / 1000).toFixed(1) + 'k' : String(totalTok);
-    // Cost: input × $/Mtok + assumed 600-token output × $/Mtok
-    const activeProv = (typeof prov !== 'undefined' && prov) ? prov : 'gemini';
-    const activeModel = typeof getSelectedModelForProvider === 'function'
-      ? getSelectedModelForProvider(activeProv)
-      : '';
-    const pricing = (typeof getModelPricing === 'function') ? getModelPricing(activeProv, activeModel) : null;
-    if (pricing && pricing.in != null && pricing.out != null) {
-      const costIn  = (totalTok / 1_000_000) * pricing.in;
-      const costOut = (600       / 1_000_000) * pricing.out;
-      const total = costIn + costOut;
-      costEl.textContent = total === 0 ? 'free' : (total < 0.001 ? '< $0.001' : '$' + total.toFixed(4));
-      costEl.title = `Input: $${costIn.toFixed(5)} (${totalTok} tok @ $${pricing.in}/Mtok) · Output est: $${costOut.toFixed(5)} (600 tok @ $${pricing.out}/Mtok)`;
-    } else {
-      // Local provider or no pricing data → show "free" or "—".
-      const isLocal = ['ollama','lmstudio','localai'].includes(activeProv);
-      costEl.textContent = isLocal ? 'free' : '—';
-      costEl.title = isLocal ? 'Local model — no API cost' : 'Pricing data unavailable for this model';
-    }
-  } catch (_) { /* best-effort */ }
-}
-// Hook the existing `ar()` autosize handler (called on every keystroke)
-// to also refresh the cost preview. We can't modify ar in-place
-// because it's used everywhere — instead, install a MutationObserver-
-// like input listener once.
-window.addEventListener('DOMContentLoaded', () => {
-  const inp = document.getElementById('inp');
-  if (inp) {
-    inp.addEventListener('input', () => { refreshCostPreview(); });
-    refreshCostPreview();
-  }
-});
-
-
-// PR-V Phase 3.19 — Agent HUD + Plan-Act gate + Provider Health
-// traffic-light extracted to chat-hud-gates.js. setAgentHud,
-// planActShowGate/HideGate, _planActApplyToggleVisuals,
-// setProviderHealth all live there. H.ai-wrapping IIFE runs at
-// file-load time.
-
-// Recent-branches dropdown (click on the chip).
-window.toggleGitBranchDropdown = async function (ev) {
-  try { ev?.stopPropagation(); } catch (_) {}
-  const pop = document.getElementById('git-branch-pop');
-  const chip = document.getElementById('shell-git-branch');
-  if (!pop || !chip) return;
-  if (pop.classList.contains('show')) { pop.classList.remove('show'); return; }
-  pop.innerHTML = `<div class="git-branch-pop-h">Loading branches…</div>`;
-  // Position relative to chip BEFORE async fetch so user sees the
-  // popover open immediately.
-  const r = chip.getBoundingClientRect();
-  pop.style.position = 'fixed';
-  pop.style.top = (r.bottom + 6) + 'px';
-  pop.style.left = Math.max(8, Math.min(window.innerWidth - 280, r.left)) + 'px';
-  pop.classList.add('show');
-
-  let branches = [];
-  let currentName = '';
-  try {
-    const cur = await H.gitBranch?.(codeWorkspace);
-    if (cur && cur.ok) currentName = cur.branch;
-    const list = await H.gitRecentBranches?.(codeWorkspace);
-    if (list && list.ok) branches = list.branches;
-  } catch (_) {}
-
-  if (!branches.length) {
-    pop.innerHTML = `<div class="git-branch-pop-empty">No recent branches found.</div>`;
-  } else {
-    pop.innerHTML = `
-      <div class="git-branch-pop-h">RECENT BRANCHES · ${branches.length}</div>
-      <ul class="git-branch-pop-list">
-        ${branches.map(b => {
-          const isCurrent = b === currentName;
-          return `<li class="git-branch-pop-item${isCurrent ? ' on' : ''}" onclick="checkoutGitBranch('${String(b).replace(/'/g, "\\'")}')">
-            <span class="git-branch-pop-icon">${isCurrent ? '●' : '○'}</span>
-            <span class="git-branch-pop-name">${esc(b)}</span>
-          </li>`;
-        }).join('')}
-      </ul>
-      <div class="git-branch-pop-foot">Click a branch to checkout (asks permission)</div>`;
-  }
-  // Outside-click / Esc closes.
-  const offClick = (e) => {
-    if (pop.contains(e.target) || chip.contains(e.target)) return;
-    pop.classList.remove('show');
-    document.removeEventListener('mousedown', offClick);
-    document.removeEventListener('keydown', offEsc);
-  };
-  const offEsc = (e) => {
-    if (e.key !== 'Escape') return;
-    pop.classList.remove('show');
-    document.removeEventListener('mousedown', offClick);
-    document.removeEventListener('keydown', offEsc);
-  };
-  setTimeout(() => {
-    document.addEventListener('mousedown', offClick);
-    document.addEventListener('keydown', offEsc);
-  }, 0);
-};
-
-window.checkoutGitBranch = async function (branchName) {
-  if (!branchName) return;
-  const pop = document.getElementById('git-branch-pop');
-  if (pop) pop.classList.remove('show');
-  if (!codeWorkspace) return;
-  // Permission gate via existing requestPermission path.
-  const ok = typeof requestPermission === 'function'
-    ? await requestPermission({
-        eyebrow: 'GIT CHECKOUT',
-        title: `Switch to branch "${branchName}"?`,
-        description: 'Runs `git checkout <branch>` in the workspace. Uncommitted changes may be lost — Horizon does not stash automatically.',
-        detail: `git checkout ${branchName}`,
-      })
-    : confirm(`Run git checkout ${branchName}?`);
-  if (!ok) return;
-  try {
-    const safe = String(branchName).replace(/[^A-Za-z0-9_./\-]/g, '');
-    const r = await H.wsShell?.(`git checkout ${safe}`);
-    if (r && r.ok) {
-      if (typeof opLog === 'function') opLog(`git checkout ${safe}`, 'tool');
-      if (typeof codeSetStatus === 'function') codeSetStatus(`Switched to branch "${safe}".`);
-      refreshGitBranchChip();
-    } else {
-      const msg = (r?.err || r?.error || 'unknown').slice(0, 200);
-      if (typeof codeSetStatus === 'function') codeSetStatus(`git checkout failed: ${msg}`, true);
-    }
-  } catch (e) {
-    if (typeof codeSetStatus === 'function') codeSetStatus(`git checkout threw: ${e?.message || e}`, true);
-  }
-};
+// PR-V Phase 3.23 — Git branch chip + Cost preview + Git dropdown
+// extracted to chat-status-bits.js.
 
 function getSelectedModelForProvider(p){
   try {
@@ -2275,263 +2003,14 @@ function modelChoicesForProvider(p) {
   return choices;
 }
 
-// ═══ LICENSE PILL — show Pro/Trial/Expired status in chat status bar ═══
-// IMPORTANT: H.licenseState() returns the licenseManager.evaluate() shape
-// ({allowed, reason, plan, trialDaysLeft, expiresAt}), NOT the raw
-// /api/license/status payload. Earlier code read state.active and
-// state.in_trial which never exist on this shape, so every render fell
-// through to the EXPIRED branch — even on active trials. That bug is what
-// painted "● EXPIRED" on a 5-day-trial account.
-//
-// We also surface privileged plans (owner/official/admin/team/lifetime)
-// with their own label instead of "PRO · owner" — those accounts hold the
-// product, they're not subscribers.
-var _PRIVILEGED_PILL_LABELS = {
-  owner:    'OWNER',
-  official: 'OFFICIAL',
-  admin:    'ADMIN',
-  team:     'TEAM',
-  lifetime: 'LIFETIME',
-};
-async function refreshLicensePill() {
-  // PR-LAYOUT-V5 — tb-license-pill was removed (it duplicated the
-  // existing #license-pill-host injected by license-ui.js). license-ui.js
-  // handles its own rendering via window.H.onLicenseChange / licenseState
-  // — we don't need to write to it from here. We still write to the
-  // legacy csb-license pill in chat-status-bar for any back-compat path
-  // (it's CSS-hidden via #csb-license { display:none !important } above).
-  const pills = [
-    document.getElementById('csb-license'),
-  ].filter(Boolean);
-  if (!pills.length) return;
-  try {
-    const state = await H.licenseState();
-    if (!state) { pills.forEach(p => { p.style.display = 'none'; }); return; }
-    let text = '', cls = '', title = '', show = true;
-    const plan = String(state.plan || '').toLowerCase();
-    const privileged = _PRIVILEGED_PILL_LABELS[plan];
-    if (privileged) {
-      text = privileged;
-      cls = 'accent';
-      title = privileged + ' access - Horizon is included for this account.';
-    } else if (state.reason === 'pro') {
-      text = 'PRO';
-      cls = 'accent';
-      const planSuffix = plan ? ' - ' + plan : '';
-      title = 'Pro active' + planSuffix + (state.expiresAt ? ' - renews ' + new Date(state.expiresAt).toLocaleDateString() : '');
-    } else if (state.reason === 'trial') {
-      const days = state.trialDaysLeft != null ? state.trialDaysLeft : null;
-      text = days != null ? 'TRIAL ' + days + 'd' : 'TRIAL';
-      cls = 'warn';
-      title = 'Free trial - ' + (days != null ? days + ' days' : '') + ' left. Click to upgrade.';
-    } else if (state.reason === 'trial-expired' || state.reason === 'expired') {
-      text = 'EXPIRED';
-      cls = 'danger';
-      title = state.reason === 'trial-expired'
-        ? 'Trial ended. Click to upgrade.'
-        : 'Subscription expired. Click to renew.';
-    } else {
-      show = false;
-    }
-    pills.forEach(pill => {
-      if (!show) { pill.style.display = 'none'; return; }
-      pill.style.display = 'inline-flex';
-      pill.classList.remove('accent', 'warn', 'danger');
-      if (cls) pill.classList.add(cls);
-      pill.textContent = text;
-      pill.title = title;
-    });
-  } catch (_) {
-    pills.forEach(p => { try { p.style.display = 'none'; } catch (__) {} });
-  }
-}
-function onLicensePillClick() {
-  try { H.licenseOpenUpgradePage && H.licenseOpenUpgradePage(); } catch(_){}
-}
-// Update license pill when desktop pushes a license-state event.
-// The account panel reads the same state for the Pro badge, so refresh it
-// here too when it's open — otherwise the badge lags behind by up to an hour
-// (the license refresh interval).
-try {
-  H.onLicenseChange && H.onLicenseChange(() => {
-    refreshLicensePill();
-    if (document.getElementById('acct-panel')?.classList.contains('show')) renderAcctBody();
-  });
-} catch(_){}
 
-// ═══ PROVIDER / MODEL CLICK-SWITCH (P1) ═══
-function openProviderSettings(){
-  // Legacy entry point — still used by a few buttons. Tabbed Settings means
-  // we just jump straight to the Providers tab.
-  openPanel('providers');
-}
+// PR-V Phase 3.24 — License Pill extracted to chat-license-pill.js.
 
-// ═══ MODEL VARIANT POPOVER ═══
-// Click on the model pill in the chat header → small floating popover with
-// the current provider's model dropdown. No need to open Settings for a
-// simple variant switch. Mirrors the ChatGPT / Claude pattern.
-var MODEL_PICKER_PROVIDERS = [
-  'gemini', 'claude', 'openai', 'openrouter',
-  'groq', 'deepseek', 'mistral', 'qwen',
-  'perplexity', 'cohere', 'grok',
-  'ollama', 'lmstudio', 'localai'
-];
 
-function providerPickerLabel(p) {
-  return ({
-    gemini: 'Gemini',
-    claude: 'Claude',
-    openai: 'OpenAI',
-    openrouter: 'OpenRouter',
-    groq: 'Groq',
-    deepseek: 'DeepSeek',
-    mistral: 'Mistral',
-    qwen: 'Qwen',
-    perplexity: 'Perplexity',
-    cohere: 'Cohere',
-    grok: 'Grok',
-    ollama: 'Ollama',
-    lmstudio: 'LM Studio',
-    localai: 'LocalAI'
-  })[p] || String(p || '').toUpperCase();
-}
-
-function positionPicker(pop, anchor) {
-  if (!pop) return;
-  const fallback = document.getElementById('inp') || document.body;
-  const target = anchor || fallback;
-  const r = target.getBoundingClientRect();
-  pop.style.left = '16px';
-  pop.style.top = '16px';
-  pop.classList.add('show');
-  requestAnimationFrame(() => {
-    const pr = pop.getBoundingClientRect();
-    const margin = 14;
-    const preferAbove = r.top > pr.height + 24;
-    const left = Math.min(Math.max(margin, r.left), Math.max(margin, window.innerWidth - pr.width - margin));
-    const topCandidate = preferAbove ? (r.top - pr.height - 10) : (r.bottom + 10);
-    const top = Math.min(Math.max(margin, topCandidate), Math.max(margin, window.innerHeight - pr.height - margin));
-    pop.style.left = `${left}px`;
-    pop.style.top = `${top}px`;
-  });
-}
-
-function openModelPicker(ev){
-  try { ev?.stopPropagation(); } catch(_) {}
-  closePersonaPicker();
-  const pop = document.getElementById('model-popover');
-  if (!pop) return;
-  const activeProv = (typeof prov !== 'undefined' ? prov : null) || 'gemini';
-  const sections = MODEL_PICKER_PROVIDERS.map(p => {
-    const choices = modelChoicesForProvider(p);
-    if (!choices.length) return '';
-    const selected = getSelectedModelForProvider(p) || '';
-    const providerOn = p === activeProv;
-    const local = p === 'ollama' || p === 'lmstudio' || p === 'localai';
-    const rows = choices.map(item => {
-      const escProv = p.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-      const escVal = item.value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-      const on = providerOn && item.value === selected;
-      const meta = on ? 'active' : (local ? 'local' : providerPickerLabel(p));
-      return `
-        <button class="model-popover-opt${on ? ' on' : ''}" data-model-row data-provider="${_escHtml(p)}" data-label="${_escHtml((item.label || item.value) + ' ' + p)}" onclick="pickAnyModel('${escProv}','${escVal}')" title="${_escHtml(item.value)}">
-          <span class="model-popover-opt-name">${_escHtml(item.label || item.value)}</span>
-          <span class="model-popover-opt-meta">${_escHtml(meta)}</span>
-        </button>`;
-    }).join('');
-    return `
-      <section class="model-provider-section" data-provider-section data-label="${_escHtml(providerPickerLabel(p) + ' ' + p)}">
-        <div class="model-provider-title"><b>${_escHtml(providerPickerLabel(p))}</b><span>${choices.length} models</span></div>
-        <div class="model-provider-models">${rows}</div>
-      </section>`;
-  }).filter(Boolean).join('');
-
-  pop.innerHTML = `
-    <div class="picker-head">
-      <div>
-        <div class="picker-title">Choose Model</div>
-        <div class="picker-sub">One switcher for every connected provider. Prices are not guessed here.</div>
-      </div>
-      <input class="picker-search" id="model-picker-search" placeholder="Search models..." oninput="filterModelPicker(this.value)" />
-    </div>
-    <div class="picker-body">${sections || '<div class="model-popover-empty">No model lists are loaded yet. Open Settings → Models and refresh local providers.</div>'}</div>
-  `;
-  positionPicker(pop, ev?.currentTarget || document.getElementById('composer-model-chip'));
-  setTimeout(() => document.getElementById('model-picker-search')?.focus(), 30);
-}
-
-async function pickModel(provider, model){
-  try { await saveModelSetting(provider, model); } catch(_) {}
-  // PR-TECHDEBT — csb-model removed in PR-U-MEGA; saveModelSetting +
-  // updateShellChrome already update the surviving surfaces. Keep a
-  // null-guarded write for any future reincarnation of the element.
-  const cm = document.getElementById('csb-model');
-  if (cm) cm.textContent = model;
-  try { H.notify?.('Model selected', `${provider}: ${model}`); } catch(_) {}
-  closeModelPicker();
-}
-
-async function pickAnyModel(provider, model) {
-  try { setProv(provider); } catch (_) {}
-  const isLocalProvider = provider === 'ollama' || provider === 'lmstudio' || provider === 'localai';
-  if (isLocalProvider) return pickLocalModel(provider, model);
-  return pickModel(provider, model);
-}
-
-async function pickLocalModel(provider, model){
-  try {
-    const sel = document.getElementById('pi-' + provider + '-model');
-    if (sel) sel.value = model;
-    await saveLocalProvider(provider);
-    const cm = document.getElementById('csb-model');
-    if (cm) cm.textContent = model;
-    // PR-LAYOUT-V2 — same root cause as saveModelSetting; the composer
-    // Model chip wasn't refreshing after selecting a local model.
-    try { updateShellChrome(); } catch(_) {}
-    try { H.notify?.('Model selected', `${provider}: ${model}`); } catch(_) {}
-  } catch(_) {}
-  closeModelPicker();
-}
-
-function closeModelPicker(){
-  document.getElementById('model-popover')?.classList.remove('show');
-}
-
-function filterModelPicker(q) {
-  const query = String(q || '').trim().toLowerCase();
-  const pop = document.getElementById('model-popover');
-  if (!pop) return;
-  pop.querySelectorAll('[data-model-row]').forEach(row => {
-    const hit = !query || String(row.dataset.label || '').toLowerCase().includes(query);
-    row.style.display = hit ? '' : 'none';
-  });
-  pop.querySelectorAll('[data-provider-section]').forEach(section => {
-    const hasVisible = [...section.querySelectorAll('[data-model-row]')].some(row => row.style.display !== 'none');
-    const sectionHit = !query || String(section.dataset.label || '').toLowerCase().includes(query);
-    section.style.display = (hasVisible || sectionHit) ? '' : 'none';
-  });
-}
-
-// Outside-click closes the popover. Escape too.
-// PR-TECHDEBT — #csb-model was retired in PR-U-MEGA; the picker
-// anchor is now the composer-toolbar Model chip. Allow clicks on
-// either the (legacy) csb-model OR the new #composer-model-chip
-// without closing the popover.
-document.addEventListener('click', (e) => {
-  const pop = document.getElementById('model-popover');
-  if (!pop?.classList.contains('show')) return;
-  if (e.target.closest('#model-popover')) return;
-  if (e.target.closest('#csb-model')) return;
-  if (e.target.closest('#composer-model-chip')) return;
-  if (e.target.closest('.composer-chip.strong')) return;
-  closeModelPicker();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    closeModelPicker();
-    closePersonaPicker();
-  }
-});
+// PR-V Phase 3.25 — Model picker extracted to chat-model-picker.js.
+// openProviderSettings, openModelPicker, pickModel, pickAnyModel,
+// pickLocalModel, closeModelPicker, filterModelPicker,
+// providerPickerLabel, MODEL_PICKER_PROVIDERS live there.
 
 async function openPersonaPicker(ev) {
   try { ev?.stopPropagation(); } catch (_) {}
@@ -3030,69 +2509,9 @@ var ar=el=>{
 // _AT_MENTION_TYPES, _atMentionState, atMentionMaybeOpen/Close/
 // Populate/Render/KeyDown all live there.
 
-// -- File/Photo upload handling ------------------------------------------------
-function onFilesSelected(e){
-  const files=[...e.target.files];
-  e.target.value=''; // reset so same file can be re-selected
-  files.forEach(file=>{
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      const b64=ev.target.result.split(',')[1];
-      const isImage=file.type.startsWith('image/');
-      const att={name:file.name, type:file.type||'application/octet-stream', base64:b64, isImage};
-      attachments.push(att);
-      renderAttachPreview();
-      document.getElementById('btn-send').disabled=false;
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
-function renderAttachPreview(){
-  const area=document.getElementById('attach-preview');
-  area.innerHTML='';
-  attachments.forEach((att,i)=>{
-    if(att.isImage){
-      const img=document.createElement('img');
-      img.className='att-img';
-      img.src=`data:${att.type};base64,${att.base64}`;
-      img.title=att.name;
-      const wrap=document.createElement('div');
-      wrap.style.position='relative';
-      const rm=document.createElement('button');
-      rm.textContent='×'; rm.style.cssText='position:absolute;top:-4px;right:-4px;background:var(--bg3);border:1px solid var(--b1);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0;z-index:1';
-      rm.onclick=()=>{attachments.splice(i,1);renderAttachPreview();};
-      wrap.appendChild(img); wrap.appendChild(rm);
-      area.appendChild(wrap);
-    } else {
-      const chip=document.createElement('div');
-      chip.className='att-chip';
-      const icon = att.name.endsWith('.zip')?'📦': att.name.endsWith('.pdf')?'📄': att.name.match(/\.(js|ts|py|html|css|json)$/)?'💻': '📝';
-      chip.innerHTML=`<span>${icon}</span><span title="${att.name}">${att.name}</span><button onclick="attachments.splice(${i},1);renderAttachPreview()">×</button>`;
-      area.appendChild(chip);
-    }
-  });
-}
-
-async function processAttachments(userText){
-  if(!attachments.length) return null;
-  const results=[];
-  for(const att of attachments){
-    if(att.isImage){
-      setStatus(lang==='ru'?'🔍 Анализирую изображение…':'🔍 Analyzing image…',true);
-      const q = userText && userText.length>2 ? userText : null;
-      const r=await H.analyzeImage(att.base64, att.type, q);
-      if(r.reply) results.push({type:'image',name:att.name,analysis:r.reply,model:r.model,base64:att.base64,mimeType:att.type});
-      else results.push({type:'image',name:att.name,error:r.error});
-    } else {
-      setStatus(lang==='ru'?`📂 Читаю ${att.name}…`:`📂 Reading ${att.name}…`,true);
-      const r=await H.readUploadedFile(att.base64, att.name, att.type);
-      if(r.ok) results.push({type:'file',name:att.name,content:r.content,ext:r.ext});
-      else results.push({type:'file',name:att.name,error:r.error});
-    }
-  }
-  return results;
-}
+// PR-V Phase 3.26 — Attachment handling extracted to chat-attachments.js.
+// onFilesSelected, renderAttachPreview, processAttachments live there.
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4183,5 +3602,21 @@ H.onMarketAuthenticated?.(async (user) => {
      Tab/Enter exec; @symbol / @file autocomplete (PR-D2) reading
      workspace via H.wsList / H.wsSearch. -->
 <script src="chat-slash-mention.js"></script>
+<!-- PR-V Phase 3.22 — Token tracking (estimateTokens, trackTokens,
+     updateTokenDisplay). ~38 LOC. -->
+<script src="chat-tokens.js"></script>
+<!-- PR-V Phase 3.23 — Git branch chip + Cost preview + Git dropdown.
+     ~240 LOC bundling PR-C4 + PR-U-MEGA features. -->
+<script src="chat-status-bits.js"></script>
+<!-- PR-V Phase 3.24 — License Pill (Pro/Trial/Expired + privileged
+     OWNER/OFFICIAL labels). ~84 LOC. -->
+<script src="chat-license-pill.js"></script>
+<!-- PR-V Phase 3.25 — Model Picker (openModelPicker, pickModel,
+     pickLocalModel, providerPickerLabel, MODEL_PICKER_PROVIDERS).
+     ~170 LOC. -->
+<script src="chat-model-picker.js"></script>
+<!-- PR-V Phase 3.26 — Attachment handling (onFilesSelected,
+     renderAttachPreview, processAttachments). ~64 LOC. -->
+<script src="chat-attachments.js"></script>
 </body>
 </html>
