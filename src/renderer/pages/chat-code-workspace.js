@@ -2463,3 +2463,50 @@ async function quickOpenSelect(rel){
   if (rel) await openCodeFile(rel);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// OPERATOR CONSOLE — toggleOperatorMode + opLog + console hooks
+// ═══════════════════════════════════════════════════════════════
+// PR-V Phase 3.15 — moved here from chat.html inline (was lines
+// 4951-4966 + 5262-5275 of pre-extraction file). All other operator
+// functions (opStartRun, opEndRun, opRefresh, opPause, opStep, opStop,
+// opTab, opLoadRuns, opShowRunJson, opBackToRuns, opRender,
+// ensureOperatorAgentListener, handleOperatorAgentStep) already lived
+// in this file from Phase 3.14 — they were physically interleaved
+// with code-workspace state. Now toggleOperatorMode + opLog +
+// console.log/error overrides join them.
+//
+// opLog needs to be defined here because ensureOperatorAgentListener
+// (also here) calls opLog when forwarding agent steps.
+
+var operatorModeActive = false;
+function toggleOperatorMode() {
+  operatorModeActive = !operatorModeActive;
+  if (operatorModeActive) {
+    if (activeSurface !== 'chat' && activeSurface !== 'code') closeActiveSurface();
+    document.body.classList.add('operator-mode-active');
+    document.getElementById('operator-mode-btn').classList.add('proc');
+    ensureOperatorAgentListener();
+    opLoadRuns().catch(()=>{});
+    opRefresh();
+  } else {
+    document.body.classList.remove('operator-mode-active');
+    document.getElementById('operator-mode-btn').classList.remove('proc');
+  }
+  updateShellChrome('chat');
+}
+
+function opLog(msg, type='info') {
+  operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type});
+  opRender();
+}
+var origLog = console.log;
+console.log = function(...args) {
+  origLog.apply(console, args);
+  if(operatorModeActive) opLog(args.join(' '));
+};
+var origError = console.error;
+console.error = function(...args) {
+  origError.apply(console, args);
+  if(operatorModeActive) opLog(args.join(' '), 'error');
+};
+
