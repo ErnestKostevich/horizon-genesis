@@ -217,40 +217,46 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 /* ═══ TITLE BAR ═══ */
 .tb{position:relative;z-index:10;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;background:rgba(8,9,12,.95);border-bottom:1px solid var(--b1);backdrop-filter:blur(40px);-webkit-app-region:drag}
 .tb-l{display:flex;align-items:center;gap:11px;-webkit-app-region:drag}
-/* PR-LAYOUT-V5 — tb-license-pill rules removed (the element is gone;
-   see HTML around line 4923). The license-ui.js #license-pill-host
-   element is the single source of truth for license status. Below we
-   tighten its visual treatment so the OWNER + ACCOUNT pair reads as
-   ONE compact pill instead of two competing badges. */
+/* PR-LAYOUT-V6 — restore the license-pill to its ORIGINAL (V3-ish)
+   rounded-pill size (height 30 / border-radius 999 / larger paddings)
+   and push it ~130px to the right of the ERNEST badge so it doesn't
+   crowd the identity area. apex-alive.css line 547 positions it
+   absolute center; we override into normal flow with a left margin. */
 #license-pill-host {
-  -webkit-app-region: no-drag;
-  margin-left: 6px !important;
+  -webkit-app-region: no-drag !important;
+  pointer-events: auto !important;
+  position: relative !important;
+  left: auto !important;
+  transform: none !important;
+  margin-left: 130px !important;
 }
 #license-pill-host .license-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 8px 0 10px;
-  border-radius: 7px;
-  border: 1px solid rgba(125,211,252,.24);
-  background: rgba(125,211,252,.10);
-  color: #a7e8ff;
-  font: 800 10px/1 var(--mono, ui-monospace, monospace);
-  letter-spacing: .55px;
-  text-transform: uppercase;
-  cursor: pointer;
-  gap: 6px;
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 30px !important;
+  padding: 0 4px 0 14px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(130,236,255,.30) !important;
+  background: rgba(10,20,30,.78) !important;
+  box-shadow: 0 10px 34px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.06) !important;
+  color: #a7e8ff !important;
+  font: 700 11px/1 var(--mono, ui-monospace, monospace) !important;
+  letter-spacing: .8px !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  gap: 8px !important;
 }
-#license-pill-host .license-pill.trial   { border-color: rgba(251,191,36,.36); background: rgba(251,191,36,.13); color: #fcd34d; }
-#license-pill-host .license-pill.expired { border-color: rgba(248,113,113,.36); background: rgba(248,113,113,.13); color: #fca5a5; }
+#license-pill-host .license-pill.trial   { border-color: rgba(251,191,36,.40) !important; background: rgba(40,30,5,.78) !important; color: #fcd34d !important; }
+#license-pill-host .license-pill.expired { border-color: rgba(248,113,113,.40) !important; background: rgba(40,10,10,.78) !important; color: #fca5a5 !important; }
 #license-pill-host .license-pill .lp-cta {
-  margin-left: 4px !important;
-  padding: 1px 6px !important;
-  border-radius: 5px !important;
-  background: rgba(255,255,255,.10) !important;
-  font: 700 9px/1 var(--mono, ui-monospace, monospace) !important;
-  letter-spacing: .4px !important;
+  margin-left: 6px !important;
+  padding: 4px 11px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(135deg, rgba(130,236,255,.28), rgba(255,184,112,.22)) !important;
+  font: 700 10px/1 var(--mono, ui-monospace, monospace) !important;
+  letter-spacing: .5px !important;
   border: 1px solid rgba(255,255,255,.10) !important;
+  color: #fff !important;
 }
 /* Old centered chat-status-bar license — kept hidden (covered in V4). */
 #csb-license { display: none !important; }
@@ -4086,6 +4092,30 @@ body.code-mode-active.code-chat-collapsed .msgs,
 body.code-mode-active.code-chat-collapsed .inp-wrap,
 body.code-mode-active.code-chat-collapsed .chat-status-bar {
   display: none !important;
+}
+/* PR-LAYOUT-V6 — when Chat is collapsed in Code Mode, operator-pane
+   should also take full width (no need to reserve 380px for hidden chat).
+   Owner saw small empty space on bottom-right when operator + code mode
+   were on but chat was collapsed. */
+body.code-mode-active.code-chat-collapsed.operator-mode-active .operator-pane {
+  right: 0 !important;
+}
+/* PR-LAYOUT-V6 — Chat button in Code Mode opened "большое пустое пятно"
+   because the chat column appeared but the .msgs container has no
+   greeting / placeholder in this floating-right-column layout. Show
+   a hint when there are no messages yet, so users know what to do. */
+body.code-mode-active:not(.code-chat-collapsed) .msgs:empty::before {
+  content: 'Send a message below to chat about your code. Selecting text in the editor + ⌘K runs an inline AI edit.';
+  display: block;
+  padding: 24px 20px;
+  margin: 60px auto 0;
+  max-width: 280px;
+  text-align: center;
+  font: 600 12px/1.5 var(--font);
+  color: var(--t3, #6f7b94);
+  border: 1px dashed rgba(148,163,184,.18);
+  border-radius: 12px;
+  background: rgba(15,23,42,.34);
 }
 body.code-mode-active:not(.code-terminal-collapsed) .apex-right-pane.code-shell {
   grid-template-rows: 44px minmax(0, 1fr) 220px !important;
@@ -10600,11 +10630,103 @@ async function runAgent(text) {
   cleanup();
 }
 
+// PR-LAYOUT-V6 — slash command dispatcher. Returns true if the input
+// was consumed as a command (no LLM call should follow). False = treat
+// as a normal chat message. Designed to fail SAFE: unknown commands
+// return false (sent to LLM as normal text) so users don't get stuck.
+async function _handleSlashCommand(raw) {
+  const text = String(raw || '').trim();
+  if (!text.startsWith('/')) return false;
+  const [cmdRaw, ...argParts] = text.slice(1).split(/\s+/);
+  const cmd = (cmdRaw || '').toLowerCase();
+  const arg = argParts.join(' ').trim();
+  try {
+    switch (cmd) {
+      case 'clear': {
+        try { document.getElementById('msgs').innerHTML = ''; } catch (_) {}
+        try { history = []; } catch (_) {}
+        try { H.notify?.('Chat', 'Cleared current chat view.'); } catch (_) {}
+        return true;
+      }
+      case 'new': {
+        try { await createNewChat?.(); } catch (_) {}
+        return true;
+      }
+      case 'persona': {
+        if (!arg) { addMsg?.('bot', 'Usage: `/persona <id>` — e.g. /persona friday'); return true; }
+        try { await setPersona?.(arg, { announce: false }); } catch (_) {}
+        return true;
+      }
+      case 'model': {
+        if (!arg) { addMsg?.('bot', 'Usage: `/model <name>` — e.g. /model gpt-4o or /model claude-3-5-sonnet-latest'); return true; }
+        // Look up provider that owns this model in MODEL_PICKER_REGISTRY.
+        let foundProvider = null;
+        try {
+          for (const [p, list] of Object.entries(MODEL_PICKER_REGISTRY || {})) {
+            if ((list || []).some(([val]) => String(val).toLowerCase() === arg.toLowerCase())) {
+              foundProvider = p; break;
+            }
+          }
+        } catch (_) {}
+        if (foundProvider) {
+          try { await saveModelSetting?.(foundProvider, arg); } catch (_) {}
+        } else {
+          // Fall back: assume current provider.
+          try { await saveModelSetting?.(prov, arg); } catch (_) {}
+        }
+        return true;
+      }
+      case 'code':     try { setMode?.('code'); } catch(_){} return true;
+      case 'agent':    try { setMode?.('agent'); } catch(_){} return true;
+      case 'chat':     try { setMode?.('chat'); } catch(_){} return true;
+      case 'settings': try { openPanel?.(arg || undefined); } catch(_){} return true;
+      case 'help': {
+        addMsg?.('bot',
+          '**Slash commands**\n' +
+          '`/clear` — wipe current chat view\n' +
+          '`/new` — start a fresh chat\n' +
+          '`/persona <id>` — switch persona (e.g. /persona friday)\n' +
+          '`/model <name>` — switch model (e.g. /model gpt-4o)\n' +
+          '`/code` — open Code Mode IDE\n' +
+          '`/agent` — switch to Agent mode\n' +
+          '`/chat` — switch back to Chat mode\n' +
+          '`/settings [tab]` — open Settings panel\n' +
+          '`/help` — show this list'
+        );
+        return true;
+      }
+      default: return false;
+    }
+  } catch (e) {
+    console.warn('[slash]', cmd, 'failed:', e?.message);
+    return false;
+  }
+}
+
 async function sendMsg(){
   const inp=document.getElementById('inp');
   const text=inp.value.trim();
   const hasAttachments=attachments.length>0;
   if(!text && !hasAttachments) return;
+
+  // PR-LAYOUT-V6 — slash commands (PR-C1 from roadmap). Quick win: lets
+  // power users do common actions from the input bar without taking
+  // hands off keyboard. Commands prefixed by `/` are intercepted before
+  // the message goes to the LLM.
+  //   /clear            — wipe current chat history (front-end only)
+  //   /new              — start a fresh chat
+  //   /persona <id>     — switch persona by id (e.g. /persona friday)
+  //   /model <name>     — switch model (provider auto-detected by registry)
+  //   /code             — open Code Mode IDE
+  //   /agent            — switch to Agent mode
+  //   /chat             — switch back to Chat mode
+  //   /settings         — open Settings panel
+  //   /help             — list all commands as a bot message
+  if (text.startsWith('/') && !hasAttachments) {
+    const handled = await _handleSlashCommand(text);
+    if (handled) { inp.value=''; inp.style.height='auto'; return; }
+  }
+
   inp.value='';inp.style.height='auto';
 
   // -- AGENT MODE: use autonomous loop --
