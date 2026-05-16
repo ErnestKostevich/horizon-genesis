@@ -122,6 +122,8 @@ function _replayMessages(messages){
   sessionMsgs = 0;
   sessionUsageKnown = false;
   sessionHasEstimatedUsage = false;
+  sessionUsageUnavailable = false;
+  try { loadOperatorLogForCurrentChat?.(); } catch (_) {}
   if (!messages || messages.length === 0) {
     // Empty chat → restore the welcome greeting so the canvas isn't blank.
     if (typeof showGreeting === 'function') {

@@ -213,31 +213,28 @@
         <option value="balanced" selected>⚖️ Balanced</option>
         <option value="deep">🧠 Deep (Reasoning)</option>
       </select></div>
-      <div class="local-status" id="thinking-hint" style="margin-top:6px;font-size:10.5px">Deep mode triggers extended thinking on Claude, Gemini 2.5+/3, and OpenAI o-series / gpt-5-thinking. Other providers ignore the setting.</div></div>
+      <div class="local-status" id="thinking-hint" style="margin-top:6px;font-size:10.5px">Deep mode uses provider-native reasoning/thinking only when the selected model supports it.</div></div>
       <div class="pf"><label>Claude (Anthropic)</label><div class="pr"><select class="pi ms-sel" id="ms-claude" onchange="saveModelSetting('claude', this.value)">
         <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced (default)</option>
         <option value="claude-opus-4-7">Opus 4.7 — most capable, agentic coding</option>
         <option value="claude-haiku-4-5">Haiku 4.5 — fastest</option>
-        <option value="claude-opus-4-6">Opus 4.6 — legacy</option>
-        <option value="claude-sonnet-4-5">Sonnet 4.5 — legacy</option>
       </select></div></div>
       <div class="pf"><label>OpenAI</label><div class="pr"><select class="pi ms-sel" id="ms-openai" onchange="saveModelSetting('openai', this.value)">
-        <option value="gpt-4o">gpt-4o — multimodal flagship (default)</option>
-        <option value="gpt-4o-mini">gpt-4o-mini — smaller workhorse</option>
-        <option value="gpt-5">gpt-5 — frontier (if account has access)</option>
-        <option value="gpt-5-mini">gpt-5-mini — compact frontier</option>
-        <option value="gpt-5-thinking">gpt-5-thinking — extended reasoning 🧠</option>
-        <option value="gpt-4.1">gpt-4.1 — long-context</option>
+        <option value="gpt-5.5">gpt-5.5 - frontier</option>
+        <option value="gpt-5.4">gpt-5.4 - flagship</option>
+        <option value="gpt-5.4-mini">gpt-5.4-mini - fast/compact</option>
+        <option value="gpt-5.3-codex">gpt-5.3-codex - coding</option>
+        <option value="gpt-5.2">gpt-5.2 - reliable fallback</option>
         <option value="o3">o3 — top-tier reasoning 🧠</option>
         <option value="o4-mini">o4-mini — reasoning-tuned 🧠</option>
       </select></div></div>
       <div class="pf"><label>Gemini (Google)</label><div class="pr"><select class="pi ms-sel" id="ms-gemini" onchange="saveModelSetting('gemini', this.value)">
-        <option value="gemini-3-pro">gemini-3-pro — frontier multimodal 🧠</option>
-        <option value="gemini-3-flash">gemini-3-flash — fast, agentic-tuned 🧠</option>
+        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview - strongest preview</option>
+        <option value="gemini-3.1-flash-preview">gemini-3.1-flash-preview - fast preview</option>
+        <option value="gemini-3.0-pro-preview">gemini-3.0-pro-preview - pro preview</option>
         <option value="gemini-2.5-pro">gemini-2.5-pro — most capable (2.5) 🧠</option>
         <option value="gemini-2.5-flash" selected>gemini-2.5-flash — fast default 🧠</option>
         <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite — lightweight</option>
-        <option value="gemini-2.0-flash">gemini-2.0-flash — legacy</option>
       </select></div></div>
       <div class="pf"><label>Groq</label><div class="pr"><select class="pi ms-sel" id="ms-groq" onchange="saveModelSetting('groq', this.value)">
         <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (default)</option>
@@ -249,7 +246,6 @@
       <div class="pf"><label>DeepSeek</label><div class="pr"><select class="pi ms-sel" id="ms-deepseek" onchange="saveModelSetting('deepseek', this.value)">
         <option value="deepseek-chat">deepseek-chat — default</option>
         <option value="deepseek-reasoner">deepseek-reasoner — chain-of-thought</option>
-        <option value="deepseek-v4-pro">deepseek-v4-pro — flagship (if available)</option>
       </select></div></div>
       <div class="pf"><label>Grok (xAI)</label><div class="pr"><select class="pi ms-sel" id="ms-grok" onchange="saveModelSetting('grok', this.value)">
         <option value="grok-4">grok-4 — flagship (default)</option>
@@ -266,8 +262,6 @@
       <div class="pf"><label>Qwen (Alibaba)</label><div class="pr"><select class="pi ms-sel" id="ms-qwen" onchange="saveModelSetting('qwen', this.value)">
         <option value="qwen-plus">qwen-plus — workhorse (default)</option>
         <option value="qwen3-max">qwen3-max — flagship</option>
-        <option value="qwen3.5-plus">qwen3.5-plus — newer mid-tier</option>
-        <option value="qwen3.5-flash">qwen3.5-flash — fast</option>
         <option value="qwen3-coder-plus">qwen3-coder-plus — code-tuned</option>
       </select></div></div>
       <div class="pf"><label>Perplexity (web-grounded)</label><div class="pr"><select class="pi ms-sel" id="ms-perplexity" onchange="saveModelSetting('perplexity', this.value)">
@@ -730,7 +724,7 @@
   <button class="chip" id="pc-qwen"     onclick="setProv('qwen')">Qwen</button>
   <button class="chip" id="pc-grok"     onclick="setProv('grok')">Grok</button>
   <button class="chip" id="pc-claude"   onclick="setProv('claude')">Claude</button>
-  <button class="chip" id="pc-openai"   onclick="setProv('openai')">GPT-4o</button>
+  <button class="chip" id="pc-openai"   onclick="setProv('openai')">OpenAI</button>
   <button class="chip" id="pc-perplexity" onclick="setProv('perplexity')">Perplexity</button>
   <button class="chip" id="pc-cohere"  onclick="setProv('cohere')">Cohere</button>
   <button class="chip" id="pc-openrouter" onclick="setProv('openrouter')" title="One key, 200+ models">OpenRouter</button>
@@ -1122,12 +1116,12 @@
        pills across 3 different surfaces. -->
   <div class="composer-foot">
     <span class="composer-foot-l">
-      <span class="composer-foot-tokens" id="composer-foot-tokens" title="Estimated tokens for this turn (input + system context)">
+      <span class="composer-foot-tokens" id="composer-foot-tokens" title="Provider-reported token usage for this chat">
         <svg class="licon"><use href="#i-trending-up"/></svg>
-        <span id="composer-foot-tokens-n">0</span> tok
+        <span id="composer-foot-tokens-n">usage unavailable</span>
       </span>
       <span class="composer-foot-sep">·</span>
-      <span class="composer-foot-cost" id="composer-foot-cost" title="Estimated cost of this turn (input + output) at the active model's pricing">$0.0000</span>
+      <span class="composer-foot-cost" id="composer-foot-cost" title="Horizon does not estimate BYOK cost from stale hardcoded prices">provider usage only</span>
       <span class="composer-foot-sep">·</span>
       <span class="composer-foot-byok" title="BYOK · calls go directly from your machine to the provider — Horizon never sees prompts">🔒 BYOK</span>
     </span>
@@ -1377,6 +1371,7 @@ var sessionTokens = 0;
 var sessionMsgs = 0;
 var sessionUsageKnown = false;
 var sessionHasEstimatedUsage = false;
+var sessionUsageUnavailable = false;
 
 // PR-V Phase 3.22 — Token tracking extracted to chat-tokens.js.
 // estimateTokensForText, trackTokens, updateTokenDisplay live there.
@@ -1768,26 +1763,25 @@ var _modelCache = Object.create(null);
 var MODEL_PICKER_REGISTRY = {
   claude: [
     ['claude-sonnet-4-6', 'Claude Sonnet 4.6'],
-    ['claude-opus-4-5', 'Claude Opus 4.5'],
-    ['claude-3-7-sonnet-latest', 'Claude 3.7 Sonnet'],
-    ['claude-3-5-haiku-latest', 'Claude 3.5 Haiku'],
+    ['claude-opus-4-7', 'Claude Opus 4.7'],
+    ['claude-haiku-4-5', 'Claude Haiku 4.5'],
   ],
   openai: [
-    ['gpt-4o', 'GPT-4o'],
-    ['gpt-4o-mini', 'GPT-4o mini'],
-    ['gpt-4.1', 'GPT-4.1'],
-    ['gpt-5', 'GPT-5'],
-    ['gpt-5-mini', 'GPT-5 mini'],
+    ['gpt-5.5', 'GPT-5.5'],
+    ['gpt-5.4', 'GPT-5.4'],
+    ['gpt-5.4-mini', 'GPT-5.4 mini'],
+    ['gpt-5.3-codex', 'GPT-5.3 Codex'],
+    ['gpt-5.2', 'GPT-5.2'],
     ['o3', 'o3 reasoning'],
     ['o4-mini', 'o4-mini reasoning'],
   ],
   gemini: [
+    ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview'],
+    ['gemini-3.1-flash-preview', 'Gemini 3.1 Flash Preview'],
+    ['gemini-3.0-pro-preview', 'Gemini 3.0 Pro Preview'],
     ['gemini-2.5-flash', 'Gemini 2.5 Flash'],
     ['gemini-2.5-pro', 'Gemini 2.5 Pro'],
     ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite'],
-    ['gemini-2.0-flash', 'Gemini 2.0 Flash'],
-    ['gemini-3-flash', 'Gemini 3 Flash'],
-    ['gemini-3-pro', 'Gemini 3 Pro'],
   ],
   groq: [
     ['llama-3.3-70b-versatile', 'Llama 3.3 70B Versatile'],
@@ -1815,8 +1809,6 @@ var MODEL_PICKER_REGISTRY = {
   qwen: [
     ['qwen-plus', 'Qwen Plus'],
     ['qwen3-max', 'Qwen3 Max'],
-    ['qwen3.5-plus', 'Qwen3.5 Plus'],
-    ['qwen3.5-flash', 'Qwen3.5 Flash'],
     ['qwen3-coder-plus', 'Qwen3 Coder Plus'],
   ],
   perplexity: [
@@ -1831,7 +1823,7 @@ var MODEL_PICKER_REGISTRY = {
     ['command-r', 'Command R'],
   ],
   openrouter: [
-    ['openai/gpt-4o-mini', 'OpenAI GPT-4o mini'],
+    ['openai/gpt-5.4-mini', 'OpenAI GPT-5.4 mini'],
     ['anthropic/claude-sonnet-4.5', 'Claude Sonnet via OpenRouter'],
     ['google/gemini-2.5-flash', 'Gemini 2.5 Flash via OpenRouter'],
     ['meta-llama/llama-3.3-70b-instruct', 'Llama 3.3 70B via OpenRouter'],
@@ -1845,72 +1837,37 @@ var MODEL_PICKER_REGISTRY = {
 // nominal context window in K tokens. OpenRouter pricing is fetched
 // dynamically (see _openrouterAllModels), so we only ship a default
 // here for the curated 4 entries in MODEL_PICKER_REGISTRY.openrouter.
-var MODEL_PRICING = {
-  claude: {
-    'claude-sonnet-4-6':       { in: 3.00,  out: 15.00, ctx: 200 },
-    'claude-opus-4-5':         { in: 15.00, out: 75.00, ctx: 200 },
-    'claude-3-7-sonnet-latest':{ in: 3.00,  out: 15.00, ctx: 200 },
-    'claude-3-5-haiku-latest': { in: 0.80,  out: 4.00,  ctx: 200 },
-  },
-  openai: {
-    'gpt-4o':       { in: 2.50, out: 10.00, ctx: 128 },
-    'gpt-4o-mini':  { in: 0.15, out: 0.60,  ctx: 128 },
-    'gpt-4.1':      { in: 2.00, out: 8.00,  ctx: 128 },
-    'gpt-5':        { in: 5.00, out: 15.00, ctx: 256 },
-    'gpt-5-mini':   { in: 0.25, out: 2.00,  ctx: 128 },
-    'o3':           { in: 20.00,out: 80.00, ctx: 200 },
-    'o4-mini':      { in: 1.10, out: 4.40,  ctx: 128 },
-  },
-  gemini: {
-    'gemini-2.5-flash':      { in: 0.30, out: 2.50, ctx: 1000 },
-    'gemini-2.5-pro':        { in: 1.25, out: 5.00, ctx: 2000 },
-    'gemini-2.5-flash-lite': { in: 0.10, out: 0.40, ctx: 1000 },
-    'gemini-2.0-flash':      { in: 0.075,out: 0.30, ctx: 1000 },
-    'gemini-3-flash':        { in: 0.30, out: 2.50, ctx: 1000 },
-    'gemini-3-pro':          { in: 1.50, out: 6.00, ctx: 2000 },
-  },
-  groq: {
-    'llama-3.3-70b-versatile':       { in: 0.59, out: 0.79, ctx: 128 },
-    'llama-3.1-8b-instant':          { in: 0.05, out: 0.08, ctx: 128 },
-    'qwen/qwen3-32b':                { in: 0.29, out: 0.59, ctx: 128 },
-    'moonshotai/kimi-k2-instruct':   { in: 1.00, out: 3.00, ctx: 128 },
-    'openai/gpt-oss-120b':           { in: 0.15, out: 0.60, ctx: 128 },
-  },
-  deepseek: {
-    'deepseek-chat':     { in: 0.27, out: 1.10, ctx: 128 },
-    'deepseek-reasoner': { in: 0.55, out: 2.19, ctx: 128 },
-  },
-  grok: {
-    'grok-4':                { in: 5.00, out: 15.00, ctx: 256 },
-    'grok-4-fast-reasoning': { in: 1.00, out: 4.00,  ctx: 256 },
-    'grok-4-mini':           { in: 0.30, out: 1.20,  ctx: 128 },
-    'grok-code-fast-1':      { in: 1.00, out: 4.00,  ctx: 256 },
-  },
-  mistral: {
-    'mistral-large-latest':  { in: 2.00, out: 6.00, ctx: 128 },
-    'mistral-medium-latest': { in: 0.40, out: 2.00, ctx: 128 },
-    'mistral-small-latest':  { in: 0.20, out: 0.60, ctx: 128 },
-    'codestral-latest':      { in: 0.30, out: 0.90, ctx: 256 },
-  },
-  qwen: {
-    'qwen-plus':       { in: 0.40, out: 1.20, ctx: 1000 },
-    'qwen3-max':       { in: 1.20, out: 6.00, ctx: 256 },
-    'qwen3.5-plus':    { in: 0.40, out: 1.20, ctx: 1000 },
-    'qwen3.5-flash':   { in: 0.10, out: 0.30, ctx: 1000 },
-    'qwen3-coder-plus':{ in: 0.50, out: 1.50, ctx: 256 },
-  },
-  perplexity: {
-    'sonar-pro':            { in: 3.00, out: 15.00, ctx: 200 },
-    'sonar':                { in: 1.00, out: 1.00,  ctx: 128 },
-    'sonar-reasoning':      { in: 1.00, out: 5.00,  ctx: 128 },
-    'sonar-reasoning-pro':  { in: 2.00, out: 8.00,  ctx: 128 },
-  },
-  cohere: {
-    'command-a-03-2025':  { in: 2.50, out: 10.00, ctx: 256 },
-    'command-r-plus':     { in: 2.50, out: 10.00, ctx: 128 },
-    'command-r':          { in: 0.15, out: 0.60,  ctx: 128 },
-  },
+var MODEL_PRICING = {};
+
+var DEFAULT_MODEL_BY_PROVIDER = {
+  claude: 'claude-sonnet-4-6',
+  openai: 'gpt-5.4',
+  gemini: 'gemini-2.5-flash',
+  groq: 'llama-3.3-70b-versatile',
+  deepseek: 'deepseek-chat',
+  grok: 'grok-4',
+  mistral: 'mistral-large-latest',
+  qwen: 'qwen-plus',
+  perplexity: 'sonar-pro',
+  cohere: 'command-a-03-2025',
+  openrouter: 'openai/gpt-5.4-mini',
 };
+
+function isKnownModelForProvider(provider, model) {
+  if (!provider || !model) return false;
+  if (['ollama', 'lmstudio', 'localai'].includes(provider)) return true;
+  if (provider === 'openrouter') {
+    if (Array.isArray(_openrouterAllModels) && _openrouterAllModels.some(m => (typeof m === 'string' ? m : m.id) === model)) return true;
+    return /^[-a-z0-9_.]+\/[-a-z0-9_.:]+$/i.test(model);
+  }
+  return (MODEL_PICKER_REGISTRY[provider] || []).some(([id]) => id === model);
+}
+
+function normalizeModelForProvider(provider, model) {
+  const id = String(model || '').trim();
+  if (isKnownModelForProvider(provider, id)) return id;
+  return DEFAULT_MODEL_BY_PROVIDER[provider] || id;
+}
 
 // Look up pricing for a provider+model. For OpenRouter, prefer the
 // per-model data fetched via openrouterListModels() (cached on
@@ -1952,7 +1909,7 @@ async function _bootModelCache() {
   await Promise.all(known.map(async (p) => {
     try {
       const v = await H.get('model.' + p);
-      if (v) _modelCache[p] = v;
+      if (v) _modelCache[p] = normalizeModelForProvider(p, v);
     } catch (_) {}
   }));
   // Refresh status bar if anything's already painted.
@@ -1972,11 +1929,11 @@ function getSelectedModelForProvider(p){
     // both Settings-panel <select> changes and chat-status-bar picker
     // clicks. DOM `<select>` is consulted ONLY as a fallback for the very
     // first frame before the cache boot completes.
-    if (_modelCache[p]) return _modelCache[p];
+    if (_modelCache[p]) return normalizeModelForProvider(p, _modelCache[p]);
     if (p === 'ollama') return document.getElementById('pi-ollama-model')?.value || '';
     if (p === 'lmstudio') return document.getElementById('pi-lmstudio-model')?.value || '';
     const sel = document.getElementById('ms-' + p);
-    if (sel?.value) return sel.value;
+    if (sel?.value) return normalizeModelForProvider(p, sel.value);
     if (p === 'gemini') return geminiModel || 'gemini-2.5-flash';
   } catch(_) {}
   return '';
@@ -2094,7 +2051,7 @@ var _MODE_PICKER_ITEMS = [
   { id: 'code',      label: 'Code',      group: 'Core',   hint: 'Programming + IDE workspace (opens code editor)' },
   { id: 'agent',     label: 'Agent',     group: 'Core',   hint: 'Autonomous tool-use (Operator)' },
   // Phase 4.2 — Image generation mode (BYOK via openai/gemini key).
-  { id: 'image',     label: '🎨 Image',  group: 'Core',   hint: 'Generate images via DALL-E 3 / Imagen 3 (BYOK)' },
+  { id: 'image',     label: 'Image',     group: 'Core',   hint: 'Generate images via GPT Image / Gemini Nano Banana (BYOK)' },
   { id: 'focus',     label: 'Focus',     group: 'Niche',  hint: 'Pomodoro + deep work cues' },
   { id: 'plan',      label: 'Plan',      group: 'Niche',  hint: 'Plan-only — no execution' },
   { id: 'coach',     label: 'Coach',     group: 'Niche',  hint: 'Coaching tone, Socratic' },
@@ -2610,10 +2567,9 @@ async function runAgent(text) {
   addMsg('user', text);
   const currentProvider = provider || 'gemini';
   const currentModel = getSelectedModelForProvider(currentProvider);
-  const userEstimatedTokens = estimateTokensForText(text);
   chatHistory.push({ role: 'user', content: text });
-  _persistChatMessage('user', text, { provider: currentProvider, model: currentModel, estimatedTokens: userEstimatedTokens });
-  trackTokens(text, 'user', currentProvider, null, userEstimatedTokens);
+  _persistChatMessage('user', text, { provider: currentProvider, model: currentModel });
+  trackTokens(text, 'user', currentProvider, null);
 
   const steps = [];
   let agentPanelRef = renderAgentPanel([], null, true);
@@ -2720,6 +2676,9 @@ async function sendMsg(){
   // Echo user prompt as a regular user message so they see what they asked for.
   if (mode === 'image' && text && !hasAttachments) {
     addMsg('user', text);
+    chatHistory.push({role:'user',content:text});
+    _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov), mode: 'image' });
+    trackTokens(text, 'user', prov, null);
     try { await window.generateImageFromPrompt?.(text); }
     catch (e) { addMsg('bot', `🎨 Image gen crashed: ${e?.message || e}`); }
     cleanup();
@@ -2755,10 +2714,9 @@ async function sendMsg(){
   addTyping();
   if(text) {
     try {
-      const userEstimatedTokens = estimateTokensForText(text);
       chatHistory.push({role:'user',content:text});
-      _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov), estimatedTokens: userEstimatedTokens });
-      trackTokens(text, 'user', prov, null, userEstimatedTokens);
+      _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov) });
+      trackTokens(text, 'user', prov, null);
     } catch (e) {
       console.warn('[chat] user message bookkeeping failed:', e?.message || e);
     }

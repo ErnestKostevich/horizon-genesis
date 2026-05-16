@@ -42,7 +42,7 @@ window._handleSlashCommand = async function _handleSlashCommand(raw) {
         return true;
       }
       case 'model': {
-        if (!arg) { window.addMsg?.('bot', 'Usage: `/model <name>` — e.g. /model gpt-4o or /model claude-3-5-sonnet-latest'); return true; }
+        if (!arg) { window.addMsg?.('bot', 'Usage: `/model <name>` — e.g. /model gpt-5.4 or /model claude-sonnet-4-6'); return true; }
         // Look up provider that owns this model in MODEL_PICKER_REGISTRY.
         let foundProvider = null;
         try {
@@ -70,7 +70,7 @@ window._handleSlashCommand = async function _handleSlashCommand(raw) {
           '`/clear` — wipe current chat view\n' +
           '`/new` — start a fresh chat\n' +
           '`/persona <id>` — switch persona (e.g. /persona friday)\n' +
-          '`/model <name>` — switch model (e.g. /model gpt-4o)\n' +
+          '`/model <name>` — switch model (e.g. /model gpt-5.4)\n' +
           '`/code` — open Code Mode IDE\n' +
           '`/agent` — switch to Agent mode\n' +
           '`/chat` — switch back to Chat mode\n' +
