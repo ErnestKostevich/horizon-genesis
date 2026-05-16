@@ -1161,7 +1161,9 @@ var geminiModel='gemini-2.5-flash', voiceProvider='groq', ttsProvider='system';
 var elevenLabsVoice='pNInz6obpgDQGcFmaJgB', openaiTtsVoice='onyx';
 var isRecording=false, isProcessing=false;
 var audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
-var history=[];
+// Do not name this `history`: in Electron/browser renderers that resolves to
+// window.history, so history.push(...) can crash before the AI request starts.
+var chatHistory=[];
 
 var SURFACE_NAMES = ['chat','code','workflows','plugins','marketplace','personas','settings','account','recorder'];
 var SURFACE_PANEL_IDS = ['hub-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
@@ -1842,7 +1844,7 @@ function _replayMessages(messages){
   const w = document.getElementById('msgs');
   if (!w) return;
   w.innerHTML = '';
-  history = [];
+  chatHistory = [];
   // Reset per-chat counters; they'll be re-accumulated as we replay.
   sessionTokens = 0;
   sessionMsgs = 0;
@@ -1860,7 +1862,7 @@ function _replayMessages(messages){
     const role = m.role === 'assistant' ? 'bot' : 'user';
     const meta = m.meta || {};
     addMsg(role, m.content || '', { model: meta.model });
-    history.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' });
+    chatHistory.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content || '' });
     // Re-account tokens for this chat. If meta.usage is present (provider
     // returned real token counts at send time and we persisted them), use
     // it — the running session totals then survive chat-switch / reload
@@ -2055,8 +2057,33 @@ function _scheduleChatListRefresh(){
   }, 350);
 }
 
+async function _ensureCurrentChatIdForPersist(){
+  if (currentChatId) return currentChatId;
+  try {
+    const cur = await H.chatGetCurrent?.();
+    if (cur && cur.id) {
+      currentChatId = cur.id;
+      return currentChatId;
+    }
+  } catch (e) {
+    console.warn('[chat] chatGetCurrent failed before persist:', e?.message || e);
+  }
+  try {
+    const chat = await H.chatCreate?.({});
+    if (chat && chat.id) {
+      currentChatId = chat.id;
+      _scheduleChatListRefresh();
+      return currentChatId;
+    }
+  } catch (e) {
+    console.warn('[chat] chatCreate failed before persist:', e?.message || e);
+  }
+  return null;
+}
+
 function _persistChatMessage(role, content, meta){
-  if (!currentChatId) {
+  currentChatId = currentChatId || null;
+  if (false && !currentChatId) {
     console.warn('[chat] _persistChatMessage skipped — no currentChatId');
     return;
   }
@@ -2064,7 +2091,15 @@ function _persistChatMessage(role, content, meta){
   // try/catch only caught synchronous errors and silently dropped any IPC
   // rejection. Log the rejection so persistence failures show up in
   // DevTools instead of looking like a phantom "messages don't save" bug.
-  Promise.resolve(H.chatAddMessage(currentChatId, role, content, meta || {}))
+  Promise.resolve()
+    .then(async () => {
+      const chatId = await _ensureCurrentChatIdForPersist();
+      if (!chatId) {
+        console.warn('[chat] _persistChatMessage skipped - no currentChatId');
+        return { ok: false, error: 'no current chat' };
+      }
+      return H.chatAddMessage(chatId, role, content, meta || {});
+    })
     .then(r => {
       if (r && r.ok === false) console.warn('[chat] chatAddMessage rejected:', r.error || r);
       // Refresh the sidebar so msg count + last-modified timestamp + the
@@ -2441,7 +2476,7 @@ function _estimateContextOverhead() {
   // System prompt + persona + recent history estimate.
   // History contributes ~150 tok per message; cap at 12 messages.
   try {
-    const recent = Array.isArray(history) ? history.slice(-12) : [];
+    const recent = Array.isArray(chatHistory) ? chatHistory.slice(-12) : [];
     const histTok = recent.reduce((s, m) => s + Math.ceil((m.content || '').length / 3.5), 0);
     return 800 + histTok; // 800 = system + persona baseline
   } catch (_) { return 800; }
@@ -3587,7 +3622,7 @@ function initWakeCalibrationUI(){
   if (slider) slider.value = vol;
   if (lbl)    lbl.textContent = vol;
 }
-async function clearHist(){if(!await customConfirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;history=[];showGreeting();}
+async function clearHist(){if(!await customConfirm(lang==='ru'?'Очистить историю?':'Clear history?'))return;chatHistory=[];showGreeting();}
 async function clearKeys(){if(!await customConfirm(lang==='ru'?'Удалить все ключи?':'Delete all keys?'))return;for(const s of['gemini','groq','groq_voice','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','openrouter','tavily','elevenlabs','deepgram','localai','github','google_client_secret'])await H.deleteKey(s);await loadPanel();}
 
 // ═══════════════════════════════════════════════════════════════
@@ -4174,7 +4209,7 @@ async function runAgent(text) {
   const currentProvider = provider || 'gemini';
   const currentModel = getSelectedModelForProvider(currentProvider);
   const userEstimatedTokens = estimateTokensForText(text);
-  history.push({ role: 'user', content: text });
+  chatHistory.push({ role: 'user', content: text });
   _persistChatMessage('user', text, { provider: currentProvider, model: currentModel, estimatedTokens: userEstimatedTokens });
   trackTokens(text, 'user', currentProvider, null, userEstimatedTokens);
 
@@ -4192,7 +4227,7 @@ async function runAgent(text) {
       H.agentRun(text, {
         provider: currentProvider,
         model: currentModel,
-        history: history.slice(-8),
+        history: chatHistory.slice(-8),
         maxSteps: 8
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Agent timed out')), agentTimeoutMs))
@@ -4208,7 +4243,7 @@ async function runAgent(text) {
       const stepCount = (finalSteps || []).length;
       if (!stepCount) document.getElementById('current-agent-panel')?.remove();
       addMsg('bot', result.answer, { model: result.model || currentModel || currentProvider });
-      history.push({ role: 'assistant', content: result.answer });
+      chatHistory.push({ role: 'assistant', content: result.answer });
       _persistChatMessage('assistant', result.answer, { provider: currentProvider, model: result.model || currentModel || 'agent', usage: result.usage });
       trackTokens(result.answer, 'assistant', currentProvider, result.usage);
       speak(result.answer.slice(0, 400).replace(/[*#`]/g, ''));
@@ -4226,13 +4261,13 @@ async function runAgent(text) {
     try {
       setStatus(lang === 'ru' ? 'Агент завис. Пробую обычный чат...' : 'Agent stalled. Retrying as normal chat...', true);
       const fallback = await Promise.race([
-        H.ai(history.slice(-8), currentProvider, null, aiOptsForProvider(currentProvider)),
+        H.ai(chatHistory.slice(-8), currentProvider, null, aiOptsForProvider(currentProvider)),
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), 60000))
       ]);
       if (fallback?.reply) {
         fallbackShown = true;
         addMsg('bot', fallback.reply, { model: fallback.model || currentModel || currentProvider });
-        history.push({ role: 'assistant', content: fallback.reply });
+        chatHistory.push({ role: 'assistant', content: fallback.reply });
         _persistChatMessage('assistant', fallback.reply, { provider: currentProvider, model: fallback.model || currentModel || currentProvider, usage: fallback.usage });
         trackTokens(fallback.reply, 'assistant', currentProvider, fallback.usage);
         speak(fallback.reply.slice(0, 400).replace(/[*#`]/g, ''));
@@ -4305,13 +4340,17 @@ async function sendMsg(){
 ? *${names}*` : `? *${names}*`;
   }
   addMsg('user', displayText || text);
-  if(text) {
-    const userEstimatedTokens = estimateTokensForText(text);
-    history.push({role:'user',content:text});
-    _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov), estimatedTokens: userEstimatedTokens });
-    trackTokens(text, 'user', prov, null, userEstimatedTokens);
-  }
   addTyping();
+  if(text) {
+    try {
+      const userEstimatedTokens = estimateTokensForText(text);
+      chatHistory.push({role:'user',content:text});
+      _persistChatMessage('user', text, { provider: prov, model: getSelectedModelForProvider(prov), estimatedTokens: userEstimatedTokens });
+      trackTokens(text, 'user', prov, null, userEstimatedTokens);
+    } catch (e) {
+      console.warn('[chat] user message bookkeeping failed:', e?.message || e);
+    }
+  }
 
   // Process attachments first
   if(hasAttachments){
@@ -4333,7 +4372,7 @@ async function sendMsg(){
         card.innerHTML=`<div class="bub"><div class="tcard-title">🖼 ${r.name} · ${r.model}</div><img src="data:${r.mimeType};base64,${r.base64}" style="max-width:100%;border-radius:8px;margin:6px 0;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'none':'100%'"/><div style="margin-top:8px;font-size:12px;line-height:1.7">${md(r.analysis)}</div></div><div class="meta"><span class="mtag">${r.model}</span><button class="ab" onclick="H.copy(this.dataset.t)" data-t="${r.analysis.replace(/"/g,'&quot;')}">⎘ Copy</button></div>`;
         msgs.appendChild(card);
         msgs.scrollTop=msgs.scrollHeight;
-        history.push({role:'assistant',content:r.analysis});
+        chatHistory.push({role:'assistant',content:r.analysis});
         _persistChatMessage('assistant', r.analysis, {model:r.model, usage:r.usage, provider:prov});
         trackTokens(r.analysis, 'assistant', prov, r.usage);
         speak(r.analysis.slice(0,300));
@@ -4349,7 +4388,7 @@ async function sendMsg(){
 ${r.content.slice(0,30000)}
 \`\`\``;
         const userQ = text || (lang==='ru'?'Что это? Проанализируй.':'What is this? Analyze it.');
-        const msgs_for_ai = [...history.slice(-10), {role:'user', content: `${userQ}
+        const msgs_for_ai = [...chatHistory.slice(-10), {role:'user', content: `${userQ}
 
 ${fileContext}`}];
         rmTyping(); addTyping();
@@ -4359,7 +4398,7 @@ ${fileContext}`}];
         catch(e) { res = {error: e.message}; }
         rmTyping();
         if(res.error) addMsg('bot',`❌ ${res.error}`);
-        else { addMsg('bot', res.reply, {model:res.model||prov}); history.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov, usage:res.usage, provider:prov}); trackTokens(res.reply, 'assistant', prov, res.usage); speak(res.reply.slice(0,300)); }
+        else { addMsg('bot', res.reply, {model:res.model||prov}); chatHistory.push({role:'assistant',content:res.reply}); _persistChatMessage('assistant', res.reply, {model:res.model||prov, usage:res.usage, provider:prov}); trackTokens(res.reply, 'assistant', prov, res.usage); speak(res.reply.slice(0,300)); }
         cleanup(); return;
       }
     }
@@ -4378,7 +4417,7 @@ ${fileContext}`}];
           setStatus(lang==='ru'?'◉ Смотрю на экран…':'◉ Seeing screen…',true);
           res=await H.analyzeScreen(text);rmTyping();
           if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+          else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});chatHistory.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
           cleanup();return;
         case 'open':
           res=await H.pcOpen(cmd.arg);rmTyping();
@@ -4464,7 +4503,7 @@ ${fileContext}`}];
     setStatus(lang==='ru'?'◉ Смотрю…':'◉ Seeing…',true);
     const res=await H.analyzeScreen(text);rmTyping();
     if(res.error)addMsg('bot',`⚠️ ${res.error}`);
-    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+    else{addMsg('bot',res.reply,{model:res.model,imgB64:res.base64});chatHistory.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     cleanup();return;
   }
 
@@ -4482,11 +4521,11 @@ ${fileContext}`}];
       const ctx=`Search: "${q2}"\n${sr.answer?'Answer: '+sr.answer+'\n\n':''}${sr.results.map((r,i)=>`[${i+1}] ${r.title}\n${r.url}\n${(r.content||'').slice(0,350)}`).join('\n\n')}\n\nUser: ${text}`;
       const sys2=lang==='ru'?`Ты Хорайзон. Синтезируй результаты. Дай чёткий ответ на русском. Ссылайся на [1],[2].`:`You are Horizon. Synthesize search results. Clear helpful answer. Cite [1],[2].`;
       let res;
-      try { res=await runStreamingAI([...history.slice(0,-1),{role:'user',content:ctx}],prov,sys2,aiOptsForProvider(prov)); }
+      try { res=await runStreamingAI([...chatHistory.slice(0,-1),{role:'user',content:ctx}],prov,sys2,aiOptsForProvider(prov)); }
       catch(e){ res={error:e.message}; }
       rmTyping();
       if(res.error){ if(!res._rendered) addMsg('bot',`⚠️ ${res.error}`); }
-      else{if(!res._rendered) addMsg('bot',res.reply,{model:res.model||prov});history.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
+      else{if(!res._rendered) addMsg('bot',res.reply,{model:res.model||prov});chatHistory.push({role:'assistant',content:res.reply});_persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});trackTokens(res.reply,'assistant',prov,res.usage);speak(res.reply);}
     }else{
       rmTyping();
       addMsg('bot',lang==='ru'?`⚠️ Нет результатов. ${sr.error||'Добавь Tavily ключ в ⚙️ Настройках.'}`:`⚠️ No results. ${sr.error||'Add Tavily key in ⚙️ Settings.'}`);
@@ -4522,7 +4561,7 @@ ${fileContext}`}];
   const STREAMING_PROVIDERS = new Set();
   if (STREAMING_PROVIDERS.has(prov)) {
     try {
-      await _sendStreamingMessage(history, prov, sys, opts);
+      await _sendStreamingMessage(chatHistory, prov, sys, opts);
     } catch (e) {
       rmTyping();
       addMsg('bot', `❌ Ошибка стриминга: ${e.message}`);
@@ -4531,7 +4570,7 @@ ${fileContext}`}];
     return;
   }
   try {
-    const res=await runStreamingAI(history,prov,sys,opts);
+    const res=await runStreamingAI(chatHistory,prov,sys,opts);
     rmTyping();
     if(res.error) {
       if (!res._rendered) addMsg('bot',`⚠️ ${res.error}\n\n*Провайдер: ${prov} · Проверь API ключ в ⚙ Настройках*`);
@@ -4543,7 +4582,7 @@ ${fileContext}`}];
       const action = _parseActionSuggestion(res.reply);
       const cleanReply = action ? res.reply.replace(/\[\[ACTION:[^\]]+\]\]\s*$/, '').replace(/\{"_action"[^\n]*\}\s*$/, '').trim() : res.reply;
       if (!res._rendered) addMsg('bot',cleanReply,{model:res.model||prov});
-      history.push({role:'assistant',content:res.reply});
+      chatHistory.push({role:'assistant',content:res.reply});
       _persistChatMessage('assistant',res.reply,{model:res.model||prov, usage:res.usage, provider:prov});
       trackTokens(res.reply,'assistant',prov,res.usage);
       speak(cleanReply);
@@ -4560,7 +4599,7 @@ ${fileContext}`}];
 // chunks into it, switches the send button into a stop button, and
 // finalises with addMsg's regular post-processing (diff bubbles,
 // action cards, persistence) once `ai:done` arrives.
-async function _sendStreamingMessage(history, prov, sys, opts) {
+async function _sendStreamingMessage(messageHistory, prov, sys, opts) {
   rmTyping();
   // Allocate empty bubble we'll append into.
   const bubble = addMsg('bot', '', { model: prov });
@@ -4637,7 +4676,7 @@ async function _sendStreamingMessage(history, prov, sys, opts) {
         // Action card extraction.
         const action = _parseActionSuggestion(finalText);
         const cleanReply = action ? finalText.replace(/\[\[ACTION:[^\]]+\]\]\s*$/, '').replace(/\{"_action"[^\n]*\}\s*$/, '').trim() : finalText;
-        history.push({ role: 'assistant', content: finalText });
+        messageHistory.push({ role: 'assistant', content: finalText });
         _persistChatMessage('assistant', finalText, { model: p.model || prov, usage: p.usage, provider: prov });
         trackTokens(finalText, 'assistant', prov, p.usage);
         try { speak(cleanReply); } catch (_) {}
@@ -4648,7 +4687,7 @@ async function _sendStreamingMessage(history, prov, sys, opts) {
       });
     }
     // Kick off the stream.
-    H.aiStream(history, prov, sys, opts).then((r) => {
+    H.aiStream(messageHistory, prov, sys, opts).then((r) => {
       if (!r || !r.ok) {
         try { bubBody.innerHTML = md(`⚠️ ${r?.error || 'aiStream failed'}\n\n*Провайдер: ${prov}*`); } catch (_) {}
         finish();
