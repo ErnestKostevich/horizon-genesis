@@ -244,8 +244,10 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
    sidebar moved the shrunken container only partway to true centre.
    V9 fix: stretch .msgs to fill the entire content area (full viewport
    minus sidebar), then centre the children inside via align-items.
-   Owner: "Не по середине текст в главном меню он чуть левее ... пусть
-   будет по середине". */
+   PR-LAYOUT-V10 — also subtract inspector space when inspector is
+   active. Without this, composer + msgs ran behind the inspector
+   panel (owner: "При открытии Inspector Композер улетает в какую-то
+   жопу"). */
 body.with-sidebar > .msgs {
   margin-left: var(--sidebar-w, 280px) !important;
   margin-right: 0 !important;
@@ -257,6 +259,23 @@ body.with-sidebar > .msgs {
 body.with-sidebar.chat-sidebar-collapsed > .msgs {
   margin-left: 46px !important;
   width: calc(100vw - 46px) !important;
+}
+body.with-sidebar.inspector-active > .msgs {
+  width: calc(100vw - var(--sidebar-w, 280px) - var(--inspector-space, 356px)) !important;
+}
+body.with-sidebar.chat-sidebar-collapsed.inspector-active > .msgs {
+  width: calc(100vw - 46px - var(--inspector-space, 356px)) !important;
+}
+/* PR-LAYOUT-V10 — composer (.inp-wrap) needs the same inspector-space
+   reservation, otherwise it extends behind the inspector panel and
+   chips at the right (Plan-Act / idle / send) get covered. V5 forced
+   right:auto with !important, which killed the original
+   `body.inspector-active .inp-wrap { right: calc(var(--inspector-space) + 24px) }`
+   rule at line 4222 of horizon-cursor-layout-v3. V10 restores the
+   behaviour by shrinking the dock width via margin-right when inspector
+   is open. */
+body.with-sidebar.inspector-active > .inp-wrap {
+  margin-right: var(--inspector-space, 356px) !important;
 }
 /* Each direct child of .msgs (greeting + message bubbles) now lives
    inside the full-width flex column. Constrain their inner width and
@@ -4438,6 +4457,77 @@ textarea#inp {
   }
 }
 </style>
+<style id="horizon-layout-emergency-dock-fix">
+/* PR-LAYOUT-V11 -- final dock contract for Inspector + Code/Operator.
+   Older patches fought each other: some centered the composer as a card,
+   others pushed it with right/max-width, and Code Mode kept reserving a
+   hidden 380px chat lane. Keep this block late so the shell has one truth. */
+body.with-sidebar:not(.code-mode-active) > .msgs {
+  margin-left: var(--sidebar-w, 300px) !important;
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px)) !important;
+  max-width: none !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+body.with-sidebar.chat-sidebar-collapsed:not(.code-mode-active) > .msgs {
+  margin-left: 46px !important;
+  width: calc(100vw - 46px) !important;
+}
+body.with-sidebar.inspector-active:not(.code-mode-active) > .msgs {
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px) - var(--inspector-space, 356px)) !important;
+}
+body.with-sidebar.chat-sidebar-collapsed.inspector-active:not(.code-mode-active) > .msgs {
+  width: calc(100vw - 46px - var(--inspector-space, 356px)) !important;
+}
+body.with-sidebar:not(.code-mode-active) > .inp-wrap {
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  margin-left: var(--sidebar-w, 300px) !important;
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px)) !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+body.with-sidebar.chat-sidebar-collapsed:not(.code-mode-active) > .inp-wrap {
+  margin-left: 46px !important;
+  width: calc(100vw - 46px) !important;
+}
+body.with-sidebar.inspector-active:not(.code-mode-active) > .inp-wrap {
+  margin-right: 0 !important;
+  width: calc(100vw - var(--sidebar-w, 300px) - var(--inspector-space, 356px)) !important;
+  max-width: none !important;
+}
+body.with-sidebar.chat-sidebar-collapsed.inspector-active:not(.code-mode-active) > .inp-wrap {
+  width: calc(100vw - 46px - var(--inspector-space, 356px)) !important;
+}
+body.inspector-active:not(.code-mode-active) > .inp-wrap .composer-toolbar,
+body.inspector-active:not(.code-mode-active) > .inp-wrap .irow,
+body.inspector-active:not(.code-mode-active) > .inp-wrap .composer-foot,
+body.inspector-active:not(.code-mode-active) > .inp-wrap .hint,
+body.inspector-active:not(.code-mode-active) > .msgs > .greet,
+body.inspector-active:not(.code-mode-active) > .msgs > .msg {
+  max-width: min(1040px, calc(100% - 48px)) !important;
+}
+body.code-mode-active.code-chat-collapsed .apex-right-pane.code-shell {
+  right: 0 !important;
+}
+body.code-mode-active.code-chat-collapsed .msgs,
+body.code-mode-active.code-chat-collapsed .inp-wrap,
+body.code-mode-active.code-chat-collapsed .chat-status-bar {
+  display: none !important;
+}
+body.code-mode-active.code-chat-collapsed.operator-mode-active .apex-right-pane.code-shell {
+  right: 0 !important;
+  bottom: 220px !important;
+}
+body.code-mode-active.code-chat-collapsed.operator-mode-active .operator-pane {
+  left: 0 !important;
+  right: 0 !important;
+}
+</style>
 </head>
 <body>
 <canvas id="fractalBg" aria-hidden="true"></canvas>
@@ -5558,7 +5648,7 @@ textarea#inp {
       </button>
       <span class="composer-foot-agent" id="composer-foot-agent" title="Agent activity">
         <span class="composer-foot-agent-dot" id="composer-foot-agent-dot"></span>
-        <span id="composer-foot-agent-text">idle</span>
+        <span id="composer-foot-agent-text">ready</span>
       </span>
     </span>
   </div>
@@ -5692,7 +5782,7 @@ function _setCodeSurfaceVisible(on){
     if (typeof codeModeActive !== 'undefined') codeModeActive = Boolean(on);
     document.body.classList.toggle('code-mode-active', Boolean(on));
     document.body.classList.toggle('code-terminal-collapsed', Boolean(on));
-    if (!on) document.body.classList.remove('code-chat-collapsed');
+    document.body.classList.toggle('code-chat-collapsed', Boolean(on));
     document.getElementById('code-mode-btn')?.classList.toggle('proc', Boolean(on));
   } catch(_) {}
 }
@@ -7855,8 +7945,8 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // PR-U-MEGA — agent activity HUD wired to the existing onAgentStep
-// stream. Three states: idle / running / done|error. Auto-fades back
-// to idle 3s after completion so the chip doesn't permanently glow.
+// stream. Three states: ready / running / done|error. Auto-fades back
+// to ready 3s after completion so the chip doesn't permanently glow.
 let _agentHudTimer = null;
 function setAgentHud(state, text) {
   const el = document.getElementById('composer-foot-agent');
@@ -7867,7 +7957,7 @@ function setAgentHud(state, text) {
   if (text) txt.textContent = text;
   if (_agentHudTimer) { clearTimeout(_agentHudTimer); _agentHudTimer = null; }
   if (state === 'done' || state === 'error') {
-    _agentHudTimer = setTimeout(() => setAgentHud('', 'idle'), 3000);
+    _agentHudTimer = setTimeout(() => setAgentHud('', 'ready'), 3000);
   }
 }
 window.addEventListener('DOMContentLoaded', () => {
@@ -16237,6 +16327,7 @@ function toggleCodeMode() {
     setActiveSurface('code');
     codeModeActive = true;
     document.body.classList.add('code-mode-active');
+    document.body.classList.add('code-chat-collapsed');
     // Start with the bottom terminal collapsed — the editor wants the room
     // and most users open the terminal on demand. They can open it via the
     // ⌨ Terminal button in the top bar.
@@ -16403,7 +16494,7 @@ let operatorModeActive = false;
 function toggleOperatorMode() {
   operatorModeActive = !operatorModeActive;
   if (operatorModeActive) {
-    if (activeSurface !== 'chat') closeActiveSurface();
+    if (activeSurface !== 'chat' && activeSurface !== 'code') closeActiveSurface();
     document.body.classList.add('operator-mode-active');
     document.getElementById('operator-mode-btn').classList.add('proc');
     ensureOperatorAgentListener();
