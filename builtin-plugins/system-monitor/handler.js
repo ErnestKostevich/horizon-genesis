@@ -83,8 +83,13 @@ module.exports = {
 
     if (tool === 'disk_info') {
       if (IS_WIN) {
+        // Phase 2 fix — previous PowerShell pipeline used Get-PSDrive
+        // which returns NaN for $_.Used on network/mapped drives and
+        // breaks the Format-Table output. Switched to Get-CimInstance
+        // Win32_LogicalDisk which is more reliable + faster + works
+        // without elevation. Filter out non-fixed/removable drives.
         return sh(
-          'powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N=\'UsedGB\';E={[math]::Round($_.Used/1GB,2)}}, @{N=\'FreeGB\';E={[math]::Round($_.Free/1GB,2)}}, @{N=\'TotalGB\';E={[math]::Round(($_.Used+$_.Free)/1GB,2)}} | Format-Table -AutoSize | Out-String"',
+          'powershell -NoProfile -Command "Get-CimInstance Win32_LogicalDisk -Filter \'DriveType=3 OR DriveType=2\' | Select-Object DeviceID, @{N=\'UsedGB\';E={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, @{N=\'FreeGB\';E={[math]::Round($_.FreeSpace/1GB,2)}}, @{N=\'TotalGB\';E={[math]::Round($_.Size/1GB,2)}}, @{N=\'UsedPct\';E={if($_.Size -gt 0){[math]::Round((($_.Size - $_.FreeSpace)/$_.Size)*100,1)}else{0}}} | Format-Table -AutoSize | Out-String"',
         );
       }
       return sh('df -h 2>/dev/null');

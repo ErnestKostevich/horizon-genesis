@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('H', {
   ai:                   (m, p, s, o) => ipcRenderer.invoke('ai', m, p, s, o),
   aiStream:             (m, p, s, o) => ipcRenderer.invoke('aiStream', m, p, s, o),
   aiAbort:              (runId)      => ipcRenderer.invoke('aiAbort', runId),
+  // Phase 4.1 — image generation (BYOK). opts = { provider, prompt, size?, model?, quality?, n? }
+  // Returns { ok, images: [{ b64, mime, prompt, revised_prompt?, model, provider }], error? }
+  aiImage:              (opts)       => ipcRenderer.invoke('aiImage', opts),
   onAIStreamChunk:      (cb)         => {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('aiStreamChunk', handler);
