@@ -217,6 +217,34 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 /* ═══ TITLE BAR ═══ */
 .tb{position:relative;z-index:10;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;background:rgba(8,9,12,.95);border-bottom:1px solid var(--b1);backdrop-filter:blur(40px);-webkit-app-region:drag}
 .tb-l{display:flex;align-items:center;gap:11px;-webkit-app-region:drag}
+/* PR-LAYOUT-V4 Fix 4 — license/account pill, lives in tb-l next to
+   identity badge (ERNEST). Replaces the centered csb-license that
+   was overlapping with the Chat surface label. */
+.tb-license-pill {
+  -webkit-app-region: no-drag;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(125,211,252,.24);
+  background: rgba(125,211,252,.10);
+  color: #a7e8ff;
+  font: 800 10px/24px var(--mono, ui-monospace, monospace);
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.tb-license-pill:hover { background: rgba(125,211,252,.18); border-color: rgba(125,211,252,.42); }
+.tb-license-pill.accent { border-color: rgba(125,211,252,.36); background: rgba(125,211,252,.14); color: #b8eaff; }
+.tb-license-pill.warn   { border-color: rgba(251,191,36,.36);  background: rgba(251,191,36,.13);  color: #fcd34d; }
+.tb-license-pill.danger { border-color: rgba(248,113,113,.36); background: rgba(248,113,113,.13); color: #fca5a5; }
+/* PR-LAYOUT-V4 Fix 4 — old #csb-license now never renders to avoid
+   double-pill (it lived in .chat-status-bar; refreshLicensePill still
+   updates it for back-compat but CSS keeps it hidden in this build). */
+#csb-license { display: none !important; }
 .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--purple));display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;box-shadow:var(--glow);font-weight:700;color:#fff;font-family:var(--mono)}
 .tb-name{font-size:14px;font-weight:700;color:var(--tx);letter-spacing:.5px;font-family:var(--font)}
 .tb-sub{font-size:10px;color:var(--t3);display:block;font-weight:500}
@@ -1543,15 +1571,30 @@ body.surface-code.code-mode-active .apex-right-pane.code-shell {
    the .with-sidebar margin offsets so the title bar / messages / input
    span the full viewport width above & below the IDE shell. */
 body.code-mode-active .chatside { display: none; }
-body.code-mode-active.with-sidebar > .tb,
-body.code-mode-active.with-sidebar > .modes,
-body.code-mode-active.with-sidebar > .msgs,
-body.code-mode-active.with-sidebar > .inp-wrap,
-body.code-mode-active.with-sidebar > .chat-status-bar,
-body.code-mode-active.with-sidebar > .panel,
-body.code-mode-active.with-sidebar > .wake-bar,
-body.code-mode-active.with-sidebar > .sb,
-body.code-mode-active.with-sidebar > #fractalBg { margin-left: 0; }
+/* PR-LAYOUT-V4 Fix 3 — was unconditional margin-left:0 for all code-mode
+   children, which ignored the chat-sidebar-collapsed state. When the
+   sidebar was a 46px rail (collapsed), code-mode still zeroed the
+   margin, leaving the rail VISIBLE on the left BUT with a thin empty
+   strip between rail and content (because tb / msgs / etc. didn't
+   shift). Now we respect the rail when collapsed. */
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .tb,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .modes,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .msgs,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .inp-wrap,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .chat-status-bar,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .panel,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .wake-bar,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > .sb,
+body.code-mode-active.with-sidebar:not(.chat-sidebar-collapsed) > #fractalBg { margin-left: 0; }
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .tb,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .modes,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .msgs,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .inp-wrap,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .chat-status-bar,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .panel,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .wake-bar,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > .sb,
+body.code-mode-active.with-sidebar.chat-sidebar-collapsed > #fractalBg { margin-left: 46px; }
 
 /* When the terminal is collapsed the bottom row disappears entirely. */
 body.code-mode-active.code-terminal-collapsed .apex-right-pane.code-shell {
@@ -1569,6 +1612,13 @@ body.code-mode-active .msgs,
 body.code-mode-active .inp-wrap {
   margin-right: 0;
 }
+/* PR-LAYOUT-V4 Fix 2 — chat column in code-mode was hardcoded 380px
+   wide, leaving an awkward gap with operator-pane (which has
+   right:360px when code-mode-active+operator-mode-active). The gap
+   was the visible empty-right-area the owner flagged on the screenshot.
+   Solution: make the chat column resilient — 32vw width with floor/cap,
+   AND when operator+code-mode together, align the chat-column right edge
+   with the operator-pane right offset so they form a clean L-shape. */
 body.code-mode-active .msgs {
   position: fixed;
   top: 52px;       /* matches .tb height — no top-bleed of underlying chat */
@@ -1590,6 +1640,15 @@ body.code-mode-active .inp-wrap {
 /* When operator pane is also active, leave room for it on the right column. */
 body.code-mode-active.operator-mode-active .msgs { bottom: calc(92px + 220px); }
 body.code-mode-active.operator-mode-active .inp-wrap { bottom: 220px; }
+/* PR-LAYOUT-V4 Fix 2 — kill the right-side empty zone. When operator
+   AND code-mode are both on, the chat-column lived in the same 380px
+   right slot but operator-pane stopped at 360px (its `right:360px` rule
+   at line 2140 reserves space for the code-mode right column). The 20px
+   delta + the chat column being narrower than code-shell created an
+   empty L-band. Pin them: chat-column right edge = operator-pane right
+   edge = 0; code-shell stops at 380px from the right. */
+body.code-mode-active.operator-mode-active .operator-pane { right: 380px !important; }
+body.code-mode-active.operator-mode-active .apex-right-pane.code-shell { right: 380px !important; }
 body.surface-code.operator-mode-active .apex-right-pane.code-shell { bottom: 220px; }
 body.surface-code.operator-mode-active .operator-pane {
   left: 0;
@@ -2126,6 +2185,17 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
 /* ═══ OPERATOR MODE ═══ */
 .operator-pane { display:none; position:fixed; bottom:0; left:280px; right:0; height:220px; background:#111111; border-top:1px solid rgba(167,139,250,.3); z-index:50; flex-direction:column; font-family:var(--mono); color:var(--t2); font-size:11px; }
 body.operator-mode-active .operator-pane { display:flex; }
+/* PR-LAYOUT-V4 Fix 1 — operator-pane hardcoded left:280px (sidebar
+   default width) didn't update when sidebar collapses to 46px rail,
+   leaving a ~234px empty rectangle on the left between rail and pane.
+   Owner saw this on a screenshot ("большое пустое место с лева когда
+   оператор открыт и чат свёрнут"). */
+html body.with-sidebar.chat-sidebar-collapsed.operator-mode-active .operator-pane {
+  left: 46px !important;
+}
+html body.with-sidebar:not(.chat-sidebar-collapsed).operator-mode-active .operator-pane {
+  left: var(--sidebar-w, 280px) !important;
+}
 /* Reserve real space for the operator-pane by shrinking the body's
    available height with padding-bottom. The previous rules tried to do
    this with `bottom:` shifts on relative-positioned .msgs / .inp-wrap,
@@ -4180,55 +4250,58 @@ textarea#inp {
   border-radius: 9px !important;
 }
 
-/* PR-LAYOUT-V3 — composer "island" fix. The owner described the
-   bottom area as "small island at the bottom of the screen, even not
-   in the middle, ugly". Cause: composer-toolbar (max-width 980),
-   .irow (max-width 1080), .composer-foot all stacked centered inside
-   a full-width .inp-wrap dock, so the COMPOSER content felt off-center
-   (because of the left sidebar shifting horizontal centre rightward)
-   and visually disconnected from each other. Fix: wider, more
-   generous inner content (max-width 1180), unified panel treatment
-   under the toolbar + input + footer so they read as ONE component
-   ("a dock"), subtle accent border + shadow lifting it from the
-   messages area. */
+/* PR-LAYOUT-V4 Fix 5 — composer no longer feels like a floating
+   island. V3 used a 1180-max-width card on full-width dock that on
+   1920px viewports left visible "frame" around the composer. Owner
+   said it still looked like an island. Now: dock spans the full
+   content width (no max-width on inner items), input row is a flush
+   inline element (no card border), toolbar and footer hug the input
+   edges. Visual unity comes from spacing, not from boxes. */
 .inp-wrap {
-  padding-top: 14px !important;
-  padding-bottom: 16px !important;
-  background: linear-gradient(180deg, rgba(8,12,20,.62) 0%, rgba(5,8,14,.96) 60%) !important;
-  border-top: 1px solid rgba(125,211,252,.10) !important;
-  box-shadow: 0 -16px 48px rgba(0,0,0,.32) !important;
+  padding: 12px 24px 14px !important;
+  background: linear-gradient(180deg, rgba(8,12,20,.55) 0%, rgba(5,8,14,.96) 70%) !important;
+  border-top: 1px solid rgba(148,163,184,.10) !important;
+  box-shadow: 0 -16px 48px rgba(0,0,0,.28) !important;
+  /* PR-LAYOUT-V4 Fix 5 — override prior max-width:1040 + border-radius
+     from horizon-cursor-layout-v3 / older "card" treatments so the dock
+     truly spans the content area (sidebar-offset → viewport right edge),
+     not a floating centered card. */
+  max-width: none !important;
+  width: auto !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  border-radius: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
 }
+body.with-sidebar > .inp-wrap { margin-left: var(--sidebar-w, 280px) !important; }
+body.with-sidebar.chat-sidebar-collapsed > .inp-wrap { margin-left: 46px !important; }
 .inp-wrap .composer-toolbar,
 .inp-wrap .irow,
 .inp-wrap .composer-foot,
 .inp-wrap .hint {
-  max-width: 1180px !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
+  max-width: none !important;
   width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   box-sizing: border-box !important;
-  padding-left: 18px !important;
-  padding-right: 18px !important;
 }
-/* Wrap toolbar + irow in a visual "card" via box-shadow on the
-   middle (.irow) element — the toolbar sits flush above it, the
-   footer sits flush below it. This is the Cursor / Linear dock
-   pattern — one rounded panel, clear inner padding. */
+.inp-wrap .composer-toolbar { margin-bottom: 8px !important; padding: 0 !important; }
+.inp-wrap .composer-foot   { margin-top: 6px !important; padding: 0 !important; }
+.inp-wrap .hint            { margin-top: 4px !important; padding: 0 !important; }
 .inp-wrap .irow {
-  background: rgba(15,23,42,.42) !important;
-  border: 1px solid rgba(148,163,184,.12) !important;
-  border-radius: 14px !important;
-  padding: 6px 8px !important;
+  background: rgba(11,18,28,.62) !important;
+  border: 1px solid rgba(125,211,252,.16) !important;
+  border-radius: 12px !important;
+  padding: 4px 6px !important;
 }
 .inp-wrap textarea#inp {
   border: 0 !important;
   background: transparent !important;
   min-height: 42px !important;
-  padding-left: 6px !important;
-  padding-right: 6px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
 }
-.inp-wrap .composer-toolbar { margin-bottom: 10px !important; }
-.inp-wrap .composer-foot { margin-top: 8px !important; }
 
 /* PR-LAYOUT-V3 — CURSOR-STYLE COMPOSER CHIPS.
    The owner's screenshot showed labels truncating to "MO… Ag…",
@@ -4847,6 +4920,18 @@ textarea#inp {
       <span class="tb-name">Horizon AI</span>
       <span class="tb-sub" id="tb-sub">Genesis</span>
     </div>
+    <!-- PR-LAYOUT-V4 Fix 4 — license/account pill moved from
+         .chat-status-bar (center bottom of titlebar area) to .tb-l.
+         Reason: owner reported that OWNER/ACCOUNT visually overlapped
+         the centered "Chat" surface label ("ты их расположил обе на
+         одно и тоже место по середине"). Status of YOUR account
+         semantically belongs next to YOUR identity (the ERNEST badge),
+         not in the center where the surface label lives. Click handler
+         and refreshLicensePill() rewired to this id below. -->
+    <button class="tb-license-pill" id="tb-license-pill"
+            onclick="onLicensePillClick()"
+            title="Subscription / account status"
+            style="display:none"></button>
   </div>
   <!-- PR-U1 (UX research): the title-bar centre is a SINGLE source of
        truth — the surface chip (opens Cmd-K palette) + git branch
@@ -7991,40 +8076,56 @@ const _PRIVILEGED_PILL_LABELS = {
   lifetime: 'LIFETIME',
 };
 async function refreshLicensePill() {
-  const pill = document.getElementById('csb-license');
-  if (!pill) return;
+  // PR-LAYOUT-V4 Fix 4 — write to BOTH the legacy csb-license pill (in
+  // .chat-status-bar) AND the new tb-license-pill (in .tb-l, titlebar
+  // left). Owner saw OWNER/ACCOUNT pills overlapping the centered Chat
+  // button — the new location is the canonical one. Legacy stays so
+  // chat-status-bar (visible when not in shell-clean mode) doesn't go
+  // empty for users who depend on it.
+  const pills = [
+    document.getElementById('tb-license-pill'),
+    document.getElementById('csb-license'),
+  ].filter(Boolean);
+  if (!pills.length) return;
   try {
     const state = await H.licenseState();
-    if (!state) { pill.style.display = 'none'; return; }
-    pill.style.display = 'inline-block';
-    pill.classList.remove('accent', 'warn', 'danger');
+    if (!state) { pills.forEach(p => { p.style.display = 'none'; }); return; }
+    let text = '', cls = '', title = '', show = true;
     const plan = String(state.plan || '').toLowerCase();
     const privileged = _PRIVILEGED_PILL_LABELS[plan];
     if (privileged) {
-      pill.textContent = privileged;
-      pill.classList.add('accent');
-      pill.title = privileged + ' access - Horizon is included for this account.';
+      text = privileged;
+      cls = 'accent';
+      title = privileged + ' access - Horizon is included for this account.';
     } else if (state.reason === 'pro') {
-      pill.textContent = 'PRO';
-      pill.classList.add('accent');
+      text = 'PRO';
+      cls = 'accent';
       const planSuffix = plan ? ' - ' + plan : '';
-      pill.title = 'Pro active' + planSuffix + (state.expiresAt ? ' - renews ' + new Date(state.expiresAt).toLocaleDateString() : '');
+      title = 'Pro active' + planSuffix + (state.expiresAt ? ' - renews ' + new Date(state.expiresAt).toLocaleDateString() : '');
     } else if (state.reason === 'trial') {
       const days = state.trialDaysLeft != null ? state.trialDaysLeft : null;
-      pill.textContent = days != null ? 'TRIAL ' + days + 'd' : 'TRIAL';
-      pill.classList.add('warn');
-      pill.title = 'Free trial - ' + (days != null ? days + ' days' : '') + ' left. Click to upgrade.';
+      text = days != null ? 'TRIAL ' + days + 'd' : 'TRIAL';
+      cls = 'warn';
+      title = 'Free trial - ' + (days != null ? days + ' days' : '') + ' left. Click to upgrade.';
     } else if (state.reason === 'trial-expired' || state.reason === 'expired') {
-      pill.textContent = 'EXPIRED';
-      pill.classList.add('danger');
-      pill.title = state.reason === 'trial-expired'
+      text = 'EXPIRED';
+      cls = 'danger';
+      title = state.reason === 'trial-expired'
         ? 'Trial ended. Click to upgrade.'
         : 'Subscription expired. Click to renew.';
     } else {
-      pill.style.display = 'none';
+      show = false;
     }
+    pills.forEach(pill => {
+      if (!show) { pill.style.display = 'none'; return; }
+      pill.style.display = 'inline-flex';
+      pill.classList.remove('accent', 'warn', 'danger');
+      if (cls) pill.classList.add(cls);
+      pill.textContent = text;
+      pill.title = title;
+    });
   } catch (_) {
-    try { pill.style.display = 'none'; } catch (__) {}
+    pills.forEach(p => { try { p.style.display = 'none'; } catch (__) {} });
   }
 }
 function onLicensePillClick() {
