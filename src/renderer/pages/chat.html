@@ -1594,6 +1594,10 @@ async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
   const msgEl = addMsg('bot', '', { model: getSelectedModelForProvider?.(p) || p });
   const bubble = msgEl.querySelector('.bub');
   const metaModel = msgEl.querySelector('.mtag');
+  const paintError = (err) => {
+    if (!bubble) return;
+    bubble.innerHTML = md(`Error: ${err || 'AI request failed'}`);
+  };
   const render = () => {
     if (!bubble) return;
     const body = text || (reasoning ? `<em>${lang === 'ru' ? 'Размышляю...' : 'Thinking...'}</em>` : '');
@@ -1601,6 +1605,29 @@ async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
     const w = document.getElementById('msgs');
     if (w) w.scrollTop = w.scrollHeight;
   };
+  const fallbackToNonStreaming = async (reason) => {
+    try {
+      setStatus(lang === 'ru' ? 'Повторяю без стриминга...' : 'Retrying without streaming...', true);
+      const requestTimeoutMs = Number(opts.requestTimeoutMs || 60000);
+      const fallback = await Promise.race([
+        H.ai(messages, p, systemPrompt, opts),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), requestTimeoutMs))
+      ]);
+      if (fallback?.reply) {
+        text = fallback.reply;
+        render();
+        return { ...fallback, _rendered: true, _streamFallback: true };
+      }
+      const err = fallback?.error || reason || 'No response';
+      paintError(err);
+      return { ...(fallback || {}), error: err, _rendered: true };
+    } catch (e) {
+      const err = e?.message || reason || String(e);
+      paintError(err);
+      return { error: err, _rendered: true };
+    }
+  };
+  render();
   const off = H.onAIStreamChunk((ev) => {
     if (!ev || ev.runId !== streamId) return;
     if (ev.model && metaModel) metaModel.textContent = ev.model;
@@ -1609,12 +1636,25 @@ async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
     if (ev.type === 'error') { streamError = ev.error || 'Stream failed'; }
   });
   try {
-    const res = await H.aiStream(messages, p, systemPrompt, { ...opts, streamId });
+    const timeoutMs = Number(opts.streamTimeoutMs || 45000);
+    const timeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Stream timed out')), timeoutMs);
+    });
+    const res = await Promise.race([
+      H.aiStream(messages, p, systemPrompt, { ...opts, streamId }),
+      timeout
+    ]);
     try { off?.(); } catch(_) {}
     if (res?.reply && res.reply !== text) { text = res.reply; render(); }
+    if (res?.error || res?.ok === false) {
+      return fallbackToNonStreaming(res.error || streamError || `${p} stream failed`);
+    }
     if (streamError && !res?.ok) {
       if (bubble) bubble.innerHTML = md(`⚠️ ${streamError}`);
-      return { ...(res || {}), error: streamError, _rendered: true };
+      return fallbackToNonStreaming(streamError);
+    }
+    if (!text && !res?.reply) {
+      return fallbackToNonStreaming('Empty streaming response');
     }
     try { _renderDiffsInBubble(msgEl, text, { model: res?.model || getSelectedModelForProvider?.(p) || p }); } catch(_) {}
     return { ...(res || {}), _rendered: true };
@@ -1622,7 +1662,8 @@ async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
     try { off?.(); } catch(_) {}
     const err = e?.message || String(e);
     if (bubble) bubble.innerHTML = md(`⚠️ ${err}`);
-    return { error: err, _rendered: true };
+    try { H.aiAbort?.(streamId); } catch(_) {}
+    return fallbackToNonStreaming(err);
   }
 }
 
@@ -4107,15 +4148,21 @@ async function runAgent(text) {
   ensureOperatorAgentListener();
 
   try {
-    const result = await H.agentRun(text, {
-      provider: currentProvider,
-      model: currentModel,
-      history: history.slice(-8),
-      maxSteps: 8
-    });
+    setStatus(lang === 'ru' ? 'Агент думает...' : 'Agent thinking...', true);
+    const agentTimeoutMs = 60000;
+    const result = await Promise.race([
+      H.agentRun(text, {
+        provider: currentProvider,
+        model: currentModel,
+        history: history.slice(-8),
+        maxSteps: 8
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Agent timed out')), agentTimeoutMs))
+    ]);
 
     // Final render
     renderAgentPanel(result.steps || steps, result.ok ? result.answer : `Error: ${result.error}`);
+    if (!result?.ok) throw new Error(result?.error || 'Agent failed');
 
     if (result.ok && result.answer) {
       history.push({ role: 'assistant', content: result.answer });
@@ -4131,7 +4178,23 @@ async function runAgent(text) {
     opEndRun(opRun, 'error');
     // Handle timeout or other errors
     renderAgentPanel(steps, `Error: ${e.message}`);
-    addMsg('bot', lang === 'ru' 
+    let fallbackShown = false;
+    try {
+      setStatus(lang === 'ru' ? 'Агент завис. Пробую обычный чат...' : 'Agent stalled. Retrying as normal chat...', true);
+      const fallback = await Promise.race([
+        H.ai(history.slice(-8), currentProvider, null, aiOptsForProvider(currentProvider)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), 60000))
+      ]);
+      if (fallback?.reply) {
+        fallbackShown = true;
+        addMsg('bot', fallback.reply, { model: fallback.model || currentModel || currentProvider });
+        history.push({ role: 'assistant', content: fallback.reply });
+        _persistChatMessage('assistant', fallback.reply, { provider: currentProvider, model: fallback.model || currentModel || currentProvider, usage: fallback.usage });
+        trackTokens(fallback.reply, 'assistant', currentProvider, fallback.usage);
+        speak(fallback.reply.slice(0, 400).replace(/[*#`]/g, ''));
+      }
+    } catch (_) {}
+    if (!fallbackShown) addMsg('bot', lang === 'ru'
       ? `⚠️ Агент не смог завершить задачу: ${e.message}. Попробуй переформулировать запрос.`
       : `⚠️ Agent couldn't complete the task: ${e.message}. Try rephrasing.`);
   }
@@ -4176,7 +4239,12 @@ async function sendMsg(){
   if(mode==='agent' && text && !hasAttachments){
     document.getElementById('btn-send').disabled=true;
     window.speechSynthesis?.cancel();
-    await runAgent(text);
+    try {
+      await runAgent(text);
+    } catch (e) {
+      addMsg('bot', `Error: ${e?.message || e || 'Agent failed'}`);
+      cleanup();
+    }
     return;
   }
 
