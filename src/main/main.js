@@ -2199,6 +2199,20 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
   }
 });
 
+// Phase 4.1 — image generation IPC (BYOK: caller picks provider + model,
+// we read the user's stored key, never proxy). Returns base64 image data
+// so renderer can render via <img src="data:..."> without disk round-trip.
+ipcMain.handle('aiImage', async (_, opts) => {
+  try {
+    const { generateImage } = require('./imageGen');
+    // getKey passed in so imageGen.js doesn't have to know about
+    // electron-store directly (keeps it testable + provider-agnostic).
+    return await generateImage(opts || {}, (svc) => keysStore.get(`k_${svc}`, null));
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
 ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';

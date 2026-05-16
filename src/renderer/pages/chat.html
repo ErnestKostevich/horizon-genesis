@@ -2093,6 +2093,8 @@ var _MODE_PICKER_ITEMS = [
   { id: 'chat',      label: 'Chat',      group: 'Core',   hint: 'Default conversation' },
   { id: 'code',      label: 'Code',      group: 'Core',   hint: 'Programming + IDE workspace (opens code editor)' },
   { id: 'agent',     label: 'Agent',     group: 'Core',   hint: 'Autonomous tool-use (Operator)' },
+  // Phase 4.2 — Image generation mode (BYOK via openai/gemini key).
+  { id: 'image',     label: '🎨 Image',  group: 'Core',   hint: 'Generate images via DALL-E 3 / Imagen 3 (BYOK)' },
   { id: 'focus',     label: 'Focus',     group: 'Niche',  hint: 'Pomodoro + deep work cues' },
   { id: 'plan',      label: 'Plan',      group: 'Niche',  hint: 'Plan-only — no execution' },
   { id: 'coach',     label: 'Coach',     group: 'Niche',  hint: 'Coaching tone, Socratic' },
@@ -2713,6 +2715,16 @@ async function sendMsg(){
   }
 
   inp.value='';inp.style.height='auto';
+
+  // Phase 4.2 — IMAGE MODE: route to image-gen instead of chat LLM.
+  // Echo user prompt as a regular user message so they see what they asked for.
+  if (mode === 'image' && text && !hasAttachments) {
+    addMsg('user', text);
+    try { await window.generateImageFromPrompt?.(text); }
+    catch (e) { addMsg('bot', `🎨 Image gen crashed: ${e?.message || e}`); }
+    cleanup();
+    return;
+  }
 
   // -- AGENT MODE: use autonomous loop --
   if(mode==='agent' && text && !hasAttachments){
@@ -3627,5 +3639,9 @@ H.onMarketAuthenticated?.(async (user) => {
 <!-- PR-V Phase 3.26 — Attachment handling (onFilesSelected,
      renderAttachPreview, processAttachments). ~64 LOC. -->
 <script src="chat-attachments.js"></script>
+<!-- Post-PR-V Phase 4.2 — Image generation mode (BYOK).
+     Routes sendMsg through generateImageFromPrompt when mode='image'.
+     Provider auto-detected from active chip + key availability. -->
+<script src="chat-image-mode.js"></script>
 </body>
 </html>
