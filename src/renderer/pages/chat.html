@@ -217,25 +217,40 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 /* ═══ TITLE BAR ═══ */
 .tb{position:relative;z-index:10;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;background:rgba(8,9,12,.95);border-bottom:1px solid var(--b1);backdrop-filter:blur(40px);-webkit-app-region:drag}
 .tb-l{display:flex;align-items:center;gap:11px;-webkit-app-region:drag}
-/* PR-LAYOUT-V7 — owner clarified: keep license-pill at its ORIGINAL
-   size + position (absolute-centered in .tb), just SHIFT it slightly
-   right so it doesn't overlap the "Chat" surface button which is also
-   centered. The previous V6 attempt moved it into .tb-l flow, which
-   he didn't want ("вернул как было все опять криво ... я просил ту
-   штуку просто совсем чуть подвинуть в право"). All other styling
-   (size / shape / colors) inherits from apex-alive.css unchanged. */
+/* PR-LAYOUT-V8 — owner: license-pill still crowding the centered Chat
+   chip ("опять все криво нужно подогнать чтобы было идеально не
+   налезало и не спорило за место"). V7 used +120px which wasn't
+   enough — the pill's left edge was right against the Chat chip's
+   right edge. V8 bumps to +220px so there's a clear gap between Chat
+   and the OWNER+ACCOUNT pill. transform stays at -50%. */
 #license-pill-host {
   -webkit-app-region: no-drag !important;
   pointer-events: auto !important;
-  /* apex-alive.css sets position:absolute; left:50%; transform:translateX(-50%).
-     Override left to shift the centered pill ~120px right of the
-     title-bar centre line, so it sits AFTER the Chat surface chip and
-     doesn't overlap it. transform stays at -50% so the pill still
-     anchors by its own centre. */
-  left: calc(50% + 120px) !important;
+  left: calc(50% + 220px) !important;
 }
+/* PR-LAYOUT-V8 — owner: hide ERNEST identity badge (tb-sub). He keeps
+   reading the userName-uppercase badge as something I added unprompted
+   ("опять зачем то написал мое имя"). The badge was already in HTML
+   before I touched anything (savePf writes userName.toUpperCase into
+   tb-sub at line 9560), but the visual prominence next to the project
+   name reads wrong to him. Hide it; identity surface lives in
+   Settings → Profile instead. */
+#tb-sub { display: none !important; }
 /* Old centered chat-status-bar license — kept hidden (covered in V4). */
 #csb-license { display: none !important; }
+/* PR-LAYOUT-V8 — center greeting + messages in the CONTENT area, not
+   the body. Without this, .msgs uses `margin:auto` in body (which is
+   full viewport), so visually the greeting sits to the LEFT of true
+   content-area centre by half the sidebar width. Owner: "текст в чате
+   на главной странице не посередине а немного левее". Shift right
+   by half the sidebar so .msgs reads centered against the visible
+   content (sidebar-end → viewport-right). */
+body.with-sidebar > .msgs {
+  transform: translateX(calc(var(--sidebar-w, 280px) / 2)) !important;
+}
+body.with-sidebar.chat-sidebar-collapsed > .msgs {
+  transform: translateX(23px) !important; /* half of 46px rail */
+}
 .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--purple));display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;box-shadow:var(--glow);font-weight:700;color:#fff;font-family:var(--mono)}
 .tb-name{font-size:14px;font-weight:700;color:var(--tx);letter-spacing:.5px;font-family:var(--font)}
 .tb-sub{font-size:10px;color:var(--t3);display:block;font-weight:500}
@@ -5212,7 +5227,11 @@ textarea#inp {
       <span class="code-tag" id="code-context-title">Horizon Code Mode</span>
       <button class="code-btn" onclick="chooseCodeWorkspace()" title="Open a folder as the workspace">Open</button>
       <button class="code-btn" onclick="refreshCodeWorkspace()" title="Reload file tree from disk">Reload</button>
-      <button class="code-btn" onclick="toggleCodeChat()" id="code-chat-toggle" title="Show / hide the right chat column">Chat</button>
+      <!-- PR-LAYOUT-V8 — Chat button removed per owner request. The
+           mini-chat floating right column was confusing UX, and the
+           topbar reads cleaner without the toggle. Use the main chat
+           (left sidebar nav → Chat) when you need a conversation. -->
+      <button class="code-btn" onclick="toggleCodeChat()" id="code-chat-toggle" title="Show / hide the right chat column" style="display:none">Chat</button>
       <button class="code-btn" onclick="toggleCodeTerminal()" id="code-terminal-toggle" title="Show / hide the terminal panel">Terminal</button>
       <button class="code-btn" onclick="toggleCodeMode()" title="Close Code Mode">Close</button>
     </div>
