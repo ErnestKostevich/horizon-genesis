@@ -1152,21 +1152,21 @@ try { document.body.classList.add('with-sidebar'); } catch(_) {}
 // ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
-let prov='gemini', mode='chat', lang='ru', userName='Ernest';
-let ttsOn=true, eyeOn=false, searchOn=false, wakeOn=false;
-let provider='gemini';
-let screenContextB64=null;
-let attachments=[];
-let geminiModel='gemini-2.5-flash', voiceProvider='groq', ttsProvider='system';
-let elevenLabsVoice='pNInz6obpgDQGcFmaJgB', openaiTtsVoice='onyx';
-let isRecording=false, isProcessing=false;
-let audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
-let history=[];
+var prov='gemini', mode='chat', lang='ru', userName='Ernest';
+var ttsOn=true, eyeOn=false, searchOn=false, wakeOn=false;
+var provider='gemini';
+var screenContextB64=null;
+var attachments=[];
+var geminiModel='gemini-2.5-flash', voiceProvider='groq', ttsProvider='system';
+var elevenLabsVoice='pNInz6obpgDQGcFmaJgB', openaiTtsVoice='onyx';
+var isRecording=false, isProcessing=false;
+var audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
+var history=[];
 
-const SURFACE_NAMES = ['chat','code','workflows','plugins','marketplace','personas','settings','account','recorder'];
-const SURFACE_PANEL_IDS = ['hub-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
-let activeSurface = 'chat';
-let chatSidebarCollapsed = false;
+var SURFACE_NAMES = ['chat','code','workflows','plugins','marketplace','personas','settings','account','recorder'];
+var SURFACE_PANEL_IDS = ['hub-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
+var activeSurface = 'chat';
+var chatSidebarCollapsed = false;
 
 function uiIcon(id){
   return `<svg class="licon"><use href="#${id}"/></svg>`;
@@ -1357,15 +1357,15 @@ function showChatSurface(){
 }
 
 // ═══ MULTI-CHAT STATE ═══
-let currentChatId = null;
-let chatsCache = []; // sidebar payload only (no messages)
-let chatSearchQuery = ''; // sidebar search filter
+var currentChatId = null;
+var chatsCache = []; // sidebar payload only (no messages)
+var chatSearchQuery = ''; // sidebar search filter
 
 // ═══ TOKEN TRACKING ═══
-let sessionTokens = 0;
-let sessionMsgs = 0;
-let sessionUsageKnown = false;
-let sessionHasEstimatedUsage = false;
+var sessionTokens = 0;
+var sessionMsgs = 0;
+var sessionUsageKnown = false;
+var sessionHasEstimatedUsage = false;
 // trackTokens(text, role, provider [, usage])
 // `usage` is the normalised {prompt, completion, total} object that the
 // main-process H.ai handler now returns next to `reply`. When a provider does
@@ -1407,21 +1407,21 @@ function updateTokenDisplay() {
 }
 
 // ═══ WAKE WORD ENGINE STATE ═══
-let wakeActive=false;
-let wakePhase='off';
-let wakeStream=null;
-let wakeRec=null;
-let wakeChunks=[];
-let wakeLoopTimer=null;
-let wakeDebounce=false;
-let cmdRec=null;
+var wakeActive=false;
+var wakePhase='off';
+var wakeStream=null;
+var wakeRec=null;
+var wakeChunks=[];
+var wakeLoopTimer=null;
+var wakeDebounce=false;
+var cmdRec=null;
 
 // ═══ ECHO DETECTION — prevents wake word from triggering on Horizon's own voice ═══
-let isSpeaking = false;  // true while TTS is playing
-let speakEndTime = 0;    // timestamp when TTS finished
-const ECHO_COOLDOWN = 1500; // ignore mic for 1.5s after TTS ends
+var isSpeaking = false;  // true while TTS is playing
+var speakEndTime = 0;    // timestamp when TTS finished
+var ECHO_COOLDOWN = 1500; // ignore mic for 1.5s after TTS ends
 
-const MIN_SUSTAINED_SPEECH_FRAMES = 5; // 500ms
+var MIN_SUSTAINED_SPEECH_FRAMES = 5; // 500ms
 function isSustainedSpeech(frames) { return frames >= MIN_SUSTAINED_SPEECH_FRAMES; }
 
 function pauseWakeForTts(){
@@ -1441,19 +1441,19 @@ function resumeWakeAfterTts(){
 }
 
 // ═══ AMBIENT MODE STATE ═══
-let ambientOn = false;
-let ambientInterval = null;
-const AMBIENT_INTERVAL_MS = 45000; // check every 45 sec
+var ambientOn = false;
+var ambientInterval = null;
+var AMBIENT_INTERVAL_MS = 45000; // check every 45 sec
 
 // ═══ SMART NOTIFICATIONS STATE ═══  
-let notificationsOn = false;
-let dailyBriefingDone = false;
-let notifCheckInterval = null;
+var notificationsOn = false;
+var dailyBriefingDone = false;
+var notifCheckInterval = null;
 
 // ═══════════════════════════════════════════════════════════════
 // TRANSLATIONS
 // ═══════════════════════════════════════════════════════════════
-const TX={
+var TX={
   ru:{
     ready:'Готов',thinking:'Думаю…',searching:'Ищу…',recording:'Запись…',processing:'Обрабатываю…',
     opening:'Открываю',
@@ -1501,7 +1501,7 @@ const TX={
     chatRenamePrompt:'New chat title:'
   }
 };
-const t=k=>TX[lang]?.[k]||TX.en[k]||k;
+var t=k=>TX[lang]?.[k]||TX.en[k]||k;
 
 // ═══════════════════════════════════════════════════════════════
 // WAKE WORD — ULTRA-STRICT DETECTION
@@ -1510,7 +1510,7 @@ const t=k=>TX[lang]?.[k]||TX.en[k]||k;
 
 // Wake words — matched as whole words anywhere in the transcription.
 // Includes common Whisper mis-transcriptions of "Горизонт" / "Horizon".
-const WAKE_EXACT = new Set([
+var WAKE_EXACT = new Set([
   'горизонт','горизон','харизон','харизонт','хорайзон','хоризон','гаризонт','горизонте','горизонта',
   'horizon','horizan','horison','jarvis','джарвис','джарвиса',
   'hey horizon','эй горизонт','окей горизонт','окей хорайзон','слышь горизонт','hello horizon','ok horizon'
@@ -1527,12 +1527,12 @@ const WAKE_EXACT = new Set([
 //     less sensitive (skips quiet background) but might miss soft "Horizon".
 //   • wake.confirmBeep (default OFF) — play a short tone after fire so the
 //     user knows it heard them.
-const WAKE_SETTING_KEYS = {
+var WAKE_SETTING_KEYS = {
   strictMode: 'wakeStrictMode',
   volumeThreshold: 'wakeVolumeThreshold',
   confirmBeep: 'wakeConfirmBeep',
 };
-const wakeSettings = {
+var wakeSettings = {
   strictMode: true,
   volumeThreshold: 18,
   confirmBeep: false,
@@ -1567,9 +1567,9 @@ async function loadWakeSettings() {
 }
 
 // Hot window
-let hotWindowActive = false;
-let hotWindowTimeout = null;
-const HOT_WINDOW_DURATION = 15000;
+var hotWindowActive = false;
+var hotWindowTimeout = null;
+var HOT_WINDOW_DURATION = 15000;
 
 function activateHotWindow() {
   hotWindowActive = true;
@@ -1706,9 +1706,9 @@ function stopWakeMode(){
 
 // Record a 2.5-second audio chunk, check volume, then transcribe for wake word
 // KEY FIX: Added volume threshold to avoid sending silence/noise to Whisper
-let wakeAudioCtx = null;
-let wakeAnalyser = null;
-let wakePeakVolume = 0;
+var wakeAudioCtx = null;
+var wakeAnalyser = null;
+var wakePeakVolume = 0;
 
 function initWakeAudioAnalysis() {
   try {
@@ -2105,10 +2105,10 @@ async function processAudio(mimeType){
 // HOLD-TO-DICTATE (jarvis feature)
 // Press and hold to record, release to transcribe and insert text
 // ═══════════════════════════════════════════════════════════════
-let dictateStream = null;
-let dictateRec = null;
-let dictateChunks = [];
-let isDictating = false;
+var dictateStream = null;
+var dictateRec = null;
+var dictateChunks = [];
+var isDictating = false;
 
 async function startDictate() {
   if (isDictating || isRecording || isProcessing) return;
@@ -2284,7 +2284,7 @@ function speak(text){ speakAndThen(text, null); }
 // ═══════════════════════════════════════════════════════════════
 // MODE SYSTEM PROMPTS
 // ═══════════════════════════════════════════════════════════════
-const MODES={
+var MODES={
   agent:{ru:'Ты в режиме АГЕНТ. У тебя прямой доступ к ПК пользователя. Открывай приложения, папки, делай скриншоты, анализируй экран, выполняй команды. Если не можешь что-то — объясни как сделать вручную. Говори "Сэр" как Джарвис.',en:'AGENT mode. Direct PC access — open apps, folders, screenshots, run commands. Say "Sir" like JARVIS.'},
   email:{ru:'Режим EMAIL. Пиши профессиональные письма. Структура: тема, приветствие, суть, подпись. Стиль — деловой но дружелюбный.',en:'EMAIL mode. Write professional emails. Structure: subject, greeting, body, signature. Style: businesslike but friendly.'},
   search:{ru:'Режим ПОИСК. Ищи информацию, отвечай с источниками. Будь точным и актуальным.',en:'SEARCH mode. Find information, answer with sources. Be accurate and current.'},
@@ -2305,7 +2305,7 @@ const MODES={
 // ═══════════════════════════════════════════════════════════════
 // PC AGENT — Smart RU+EN detection
 // ═══════════════════════════════════════════════════════════════
-const APP_ALIASES={
+var APP_ALIASES={
   'ютуб':'youtube','ютьюб':'youtube','хром':'chrome','хромиум':'chrome',
   'файрфокс':'firefox','мозилла':'firefox','блокнот':'notepad','калькулятор':'calculator',
   'проводник':'explorer','эксплорер':'explorer','терминал':'terminal','консоль':'cmd',
@@ -2411,8 +2411,8 @@ function md(text){
     .replace(/\n(?!<\/(h[123]|pre|li|hr|blockquote))/g,'<br>');
 }
 
-const ts2=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-const rmGreet=()=>document.getElementById('greet')?.remove();
+var ts2=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+var rmGreet=()=>document.getElementById('greet')?.remove();
 
 function addMsg(role,text,extra={}){
   rmGreet();
@@ -2432,7 +2432,7 @@ function addMsg(role,text,extra={}){
   w.appendChild(d);w.scrollTop=w.scrollHeight;return d;
 }
 
-const STREAMING_CHAT_PROVIDERS = new Set([
+var STREAMING_CHAT_PROVIDERS = new Set([
   'gemini', 'openai', 'groq', 'grok', 'deepseek', 'mistral', 'qwen',
   'perplexity', 'cohere', 'openrouter', 'ollama', 'lmstudio', 'localai'
 ]);
@@ -2688,7 +2688,7 @@ function _escHtml(s){
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
-const esc = _escHtml;
+var esc = _escHtml;
 function _shortTs(iso){
   if (!iso) return '';
   try {
@@ -2888,7 +2888,7 @@ function customConfirm(message) {
   });
 }
 
-const CHAT_DELETE_ALLOW_ID = 'ui.chat.delete.global';
+var CHAT_DELETE_ALLOW_ID = 'ui.chat.delete.global';
 async function getSavedPermissionAllowlist(){
   try {
     const r = await H.permissionAllowlistList?.();
@@ -2987,7 +2987,7 @@ async function bootCurrentChat(){
 // (user msg + assistant msg + tool / agent step messages). Coalesce them
 // into a single loadChatList() call after the burst settles, otherwise the
 // sidebar wastes IPC and re-renders mid-stream.
-let _chatListRefreshTimer = null;
+var _chatListRefreshTimer = null;
 function _scheduleChatListRefresh(){
   if (_chatListRefreshTimer) clearTimeout(_chatListRefreshTimer);
   _chatListRefreshTimer = setTimeout(() => {
@@ -3087,9 +3087,9 @@ function updateStatusBar(title) {
 // it from settingsStore at startup. This breaks the old DOM-only read path
 // that silently used stale Settings-dropdown values when the user switched
 // model from the chat status bar instead of from Settings.
-const _modelCache = Object.create(null);
+var _modelCache = Object.create(null);
 
-const MODEL_PICKER_REGISTRY = {
+var MODEL_PICKER_REGISTRY = {
   claude: [
     ['claude-sonnet-4-6', 'Claude Sonnet 4.6'],
     ['claude-opus-4-5', 'Claude Opus 4.5'],
@@ -3169,7 +3169,7 @@ const MODEL_PICKER_REGISTRY = {
 // nominal context window in K tokens. OpenRouter pricing is fetched
 // dynamically (see _openrouterAllModels), so we only ship a default
 // here for the curated 4 entries in MODEL_PICKER_REGISTRY.openrouter.
-const MODEL_PRICING = {
+var MODEL_PRICING = {
   claude: {
     'claude-sonnet-4-6':       { in: 3.00,  out: 15.00, ctx: 200 },
     'claude-opus-4-5':         { in: 15.00, out: 75.00, ctx: 200 },
@@ -3291,7 +3291,7 @@ _bootModelCache().catch(() => {});
 // (see openCodeFile / chooseCodeWorkspace) and on a 30s poll while
 // Code Mode is open so external CLI checkouts get reflected. Cheap:
 // reads `.git/HEAD` directly, no shell-out for the common path.
-let _gitBranchPollTimer = null;
+var _gitBranchPollTimer = null;
 
 async function refreshGitBranchChip() {
   const chip = document.getElementById('shell-git-branch');
@@ -3432,7 +3432,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // PR-U-MEGA — agent activity HUD wired to the existing onAgentStep
 // stream. Three states: ready / running / done|error. Auto-fades back
 // to ready 3s after completion so the chip doesn't permanently glow.
-let _agentHudTimer = null;
+var _agentHudTimer = null;
 function setAgentHud(state, text) {
   const el = document.getElementById('composer-foot-agent');
   const txt = document.getElementById('composer-foot-agent-text');
@@ -3481,7 +3481,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // PR-Plan-Act — gate UI controllers + persisted toggle.
-let _planActActiveRunId = null;
+var _planActActiveRunId = null;
 function planActShowGate(step) {
   const gate = document.getElementById('step-rail-gate');
   if (!gate) return;
@@ -3712,7 +3712,7 @@ function modelChoicesForProvider(p) {
 // We also surface privileged plans (owner/official/admin/team/lifetime)
 // with their own label instead of "PRO · owner" — those accounts hold the
 // product, they're not subscribers.
-const _PRIVILEGED_PILL_LABELS = {
+var _PRIVILEGED_PILL_LABELS = {
   owner:    'OWNER',
   official: 'OFFICIAL',
   admin:    'ADMIN',
@@ -3796,7 +3796,7 @@ function openProviderSettings(){
 // Click on the model pill in the chat header → small floating popover with
 // the current provider's model dropdown. No need to open Settings for a
 // simple variant switch. Mirrors the ChatGPT / Claude pattern.
-const MODEL_PICKER_PROVIDERS = [
+var MODEL_PICKER_PROVIDERS = [
   'gemini', 'claude', 'openai', 'openrouter',
   'groq', 'deepseek', 'mistral', 'qwen',
   'perplexity', 'cohere', 'grok',
@@ -4022,7 +4022,7 @@ document.addEventListener('click', (e) => {
 // niche modes (Focus/Plan/Coach/Write/Email/Search/Translate/Roleplay)
 // became unreachable. Replaces the previous "cycle on click" behaviour
 // of the Mode chip — discoverable + skips past inactive states.
-const _MODE_PICKER_ITEMS = [
+var _MODE_PICKER_ITEMS = [
   // Core: each gets a short subtitle so the picker explains the mode
   // rather than relying on the user to memorise what "Plan" means.
   // PR-LAYOUT-V4 Phase 2.A — Vision removed from Core. It was a
@@ -4256,7 +4256,7 @@ function requestPermission(opts){
     }
   });
 }
-const agentPermissionPrompts = new Set();
+var agentPermissionPrompts = new Set();
 async function handleAgentPermissionGate(step){
   try {
     if (!step || step.type !== 'waiting' || !step.stepId) return;
@@ -4310,7 +4310,7 @@ async function revokePermissionEntry(id){
   refreshPermissionAllowlist();
 }
 // User-facing toggle so power users can disable the gate (off by default).
-let permissionGateEnabled = true;
+var permissionGateEnabled = true;
 async function _gateDestructive(intent, opts) {
   if (!permissionGateEnabled) return true;
   return await requestPermission(opts);
@@ -4546,10 +4546,10 @@ function setSettingsTab(name){
 // (Russian + English), allowed-tools toggles, and long-term memories.
 // Edits persist via H.personaUpsert; deleting a built-in resets it to
 // default. Refreshes on tab open + after save / delete.
-let _peActiveId = null;
-let _peCache = { list: [], full: {} };
+var _peActiveId = null;
+var _peCache = { list: [], full: {} };
 
-const PE_TOOLS = [
+var PE_TOOLS = [
   { name: 'fs.read',  label: 'Read files',  write: false },
   { name: 'fs.write', label: 'Write files', write: true  },
   { name: 'shell',    label: 'Shell',       write: true  },
@@ -4982,7 +4982,7 @@ function _seedLocalModelSelect(provider, savedValue){
 // OpenRouter exposes 200+ models behind one API key. We fetch its catalog,
 // cache it for 24h in settings, and surface a filterable <select> in
 // Settings → Models.
-let _openrouterAllModels = [];
+var _openrouterAllModels = [];
 
 async function refreshOpenRouterModels(force=false){
   const sel = document.getElementById('ms-openrouter');
@@ -5458,7 +5458,7 @@ async function loadMcpServers(){
 // of these come from @modelcontextprotocol on npm; running them via npx
 // is the canonical install path. Hint string is shown in mcp-status to
 // tell the user what's still required.
-const MCP_PRESETS = {
+var MCP_PRESETS = {
   filesystem: {
     name:    'filesystem',
     command: 'npx',
@@ -5700,11 +5700,11 @@ function toggleEye(){const next=!eyeOn;document.getElementById('tc-eye')?.classL
 // ═══════════════════════════════════════════════════════════════
 // MAIN SEND
 // ═══════════════════════════════════════════════════════════════
-const q=text=>{const inp=document.getElementById('inp');inp.value=text;ar(inp);sendMsg();};
+var q=text=>{const inp=document.getElementById('inp');inp.value=text;ar(inp);sendMsg();};
 // PR-D2 — `kd` now also forwards keys to the @-mention dropdown when
 // it's open (Tab/↓/↑ navigate, Enter inserts, Esc closes). The Enter→
 // sendMsg path remains the default when the dropdown is hidden.
-const kd=e=>{
+var kd=e=>{
   // Order matters: slash-commands check first (they have their own
   // dropdown handling), then @-mentions, then default Enter→send.
   if (typeof slashKeyDown === 'function' && slashKeyDown(e)) return;
@@ -5726,7 +5726,7 @@ const kd=e=>{
 };
 // `ar` autosizes the textarea AND triggers @-mention detection + slash
 // detection. Order: slash first (it owns the input when it fires).
-const ar=el=>{
+var ar=el=>{
   el.style.height='auto';
   el.style.height=Math.min(el.scrollHeight,110)+'px';
   try { if (typeof slashMaybeOpen === 'function') slashMaybeOpen(el); } catch(_){}
@@ -5738,7 +5738,7 @@ const ar=el=>{
 // with matching commands. Tab/Enter executes; Esc closes. Each command
 // is { id, label, hint, exec(arg) }. Designed to mirror Claude Code /
 // Cursor / ChatGPT-codex slash conventions.
-const SLASH_COMMANDS = [
+var SLASH_COMMANDS = [
   { id: 'help',     label: '/help',           hint: 'Show all slash commands',                           exec: () => slashShowHelp() },
   { id: 'clear',    label: '/clear',          hint: 'Clear current chat history',                       exec: () => { try { clearHist?.(); } catch(_){} } },
   { id: 'new',      label: '/new',            hint: 'Start a new chat',                                 exec: () => { try { createNewChat?.(); } catch(_){} } },
@@ -5756,7 +5756,7 @@ const SLASH_COMMANDS = [
   { id: 'store',    label: '/store',          hint: 'Open Marketplace',                                 exec: () => { try { openStore?.(); } catch(_){} } },
   { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                    exec: () => { try { openCmdPalette?.(); } catch(_){} } },
 ];
-let _slashState = null; // { items, activeIdx, inputEl, query } when open
+var _slashState = null; // { items, activeIdx, inputEl, query } when open
 
 function slashMaybeOpen(inputEl) {
   if (!inputEl) return;
@@ -5876,8 +5876,8 @@ function slashShowHelp() {
 // Detects an `@` token at the caret position, queries the workspace
 // indexer (or falls back to wsList for `@file`), shows a small popover
 // anchored above the input. Tab / Enter inserts; Esc closes.
-const _AT_MENTION_TYPES = ['symbol', 'file'];
-let _atMentionState = null; // { kind, query, items, activeIdx } when open
+var _AT_MENTION_TYPES = ['symbol', 'file'];
+var _atMentionState = null; // { kind, query, items, activeIdx } when open
 
 function atMentionMaybeOpen(inputEl) {
   if (!inputEl) return;
@@ -6220,78 +6220,10 @@ async function runAgent(text) {
   cleanup();
 }
 
-// PR-LAYOUT-V6 — slash command dispatcher. Returns true if the input
-// was consumed as a command (no LLM call should follow). False = treat
-// as a normal chat message. Designed to fail SAFE: unknown commands
-// return false (sent to LLM as normal text) so users don't get stuck.
-async function _handleSlashCommand(raw) {
-  const text = String(raw || '').trim();
-  if (!text.startsWith('/')) return false;
-  const [cmdRaw, ...argParts] = text.slice(1).split(/\s+/);
-  const cmd = (cmdRaw || '').toLowerCase();
-  const arg = argParts.join(' ').trim();
-  try {
-    switch (cmd) {
-      case 'clear': {
-        try { document.getElementById('msgs').innerHTML = ''; } catch (_) {}
-        try { history = []; } catch (_) {}
-        try { H.notify?.('Chat', 'Cleared current chat view.'); } catch (_) {}
-        return true;
-      }
-      case 'new': {
-        try { await createNewChat?.(); } catch (_) {}
-        return true;
-      }
-      case 'persona': {
-        if (!arg) { addMsg?.('bot', 'Usage: `/persona <id>` — e.g. /persona friday'); return true; }
-        try { await setPersona?.(arg, { announce: false }); } catch (_) {}
-        return true;
-      }
-      case 'model': {
-        if (!arg) { addMsg?.('bot', 'Usage: `/model <name>` — e.g. /model gpt-4o or /model claude-3-5-sonnet-latest'); return true; }
-        // Look up provider that owns this model in MODEL_PICKER_REGISTRY.
-        let foundProvider = null;
-        try {
-          for (const [p, list] of Object.entries(MODEL_PICKER_REGISTRY || {})) {
-            if ((list || []).some(([val]) => String(val).toLowerCase() === arg.toLowerCase())) {
-              foundProvider = p; break;
-            }
-          }
-        } catch (_) {}
-        if (foundProvider) {
-          try { await saveModelSetting?.(foundProvider, arg); } catch (_) {}
-        } else {
-          // Fall back: assume current provider.
-          try { await saveModelSetting?.(prov, arg); } catch (_) {}
-        }
-        return true;
-      }
-      case 'code':     try { setMode?.('code'); } catch(_){} return true;
-      case 'agent':    try { setMode?.('agent'); } catch(_){} return true;
-      case 'chat':     try { setMode?.('chat'); } catch(_){} return true;
-      case 'settings': try { openPanel?.(arg || undefined); } catch(_){} return true;
-      case 'help': {
-        addMsg?.('bot',
-          '**Slash commands**\n' +
-          '`/clear` — wipe current chat view\n' +
-          '`/new` — start a fresh chat\n' +
-          '`/persona <id>` — switch persona (e.g. /persona friday)\n' +
-          '`/model <name>` — switch model (e.g. /model gpt-4o)\n' +
-          '`/code` — open Code Mode IDE\n' +
-          '`/agent` — switch to Agent mode\n' +
-          '`/chat` — switch back to Chat mode\n' +
-          '`/settings [tab]` — open Settings panel\n' +
-          '`/help` — show this list'
-        );
-        return true;
-      }
-      default: return false;
-    }
-  } catch (e) {
-    console.warn('[slash]', cmd, 'failed:', e?.message);
-    return false;
-  }
-}
+// PR-V Phase 2 — _handleSlashCommand extracted to chat-slash.js. The
+// function is loaded as window._handleSlashCommand via a deferred
+// <script src="chat-slash.js"> tag at the bottom of <body>. sendMsg
+// below still calls it the same way.
 
 async function sendMsg(){
   const inp=document.getElementById('inp');
@@ -6708,7 +6640,7 @@ function cleanup(){
 // ═══════════════════════════════════════════════════════════════
 // COMMAND PALETTE (Ctrl+K) — instant access to all features
 // ═══════════════════════════════════════════════════════════════
-const COMMANDS = [
+var COMMANDS = [
   { icon:'🤖', text:'Agent Mode', hint:'autonomous', action:()=>setMode('agent') },
   { icon:'\u{1F4AC}', text:'Chat Mode', hint:'conversation', action:()=>setMode('chat') },
   { icon:'\u{1F441}', text:'Vision Mode', hint:'screen analysis', action:()=>setMode('vision') },
@@ -6740,7 +6672,7 @@ const COMMANDS = [
   { icon:'\u{1F5D1}', text:'Clear Chat', hint:'reset', action:()=>clearHist() },
   { icon:'⚙️', text:'Settings', hint:'configure', action:()=>openPanel() },
 ];
-let cmdActiveIdx = 0;
+var cmdActiveIdx = 0;
 
 function openCmdPalette() {
   const el = document.getElementById('cmd-palette');
@@ -6957,9 +6889,9 @@ document.addEventListener('keydown', (e) => {
 // ═══════════════════════════════════════════════════════════════
 // FOCUS TIMER (Pomodoro)
 // ═══════════════════════════════════════════════════════════════
-let focusInterval = null;
-let focusRemaining = 0;
-let focusPaused = false;
+var focusInterval = null;
+var focusRemaining = 0;
+var focusPaused = false;
 
 function startFocusTimer(minutes = 25) {
   focusRemaining = minutes * 60;
@@ -7162,7 +7094,7 @@ async function requestBriefing() {
 // ═══════════════════════════════════════════════════════════════
 // NO-CODE WORKFLOW BUILDER
 // ═══════════════════════════════════════════════════════════════
-let workflows = [];
+var workflows = [];
 
 async function loadWorkflows() {
   try {
@@ -7407,7 +7339,7 @@ async function analyzeClipboard() {
 // ═══════════════════════════════════════════════════════════════
 // AI PERSONAS
 // ═══════════════════════════════════════════════════════════════
-let currentPersona = 'jarvis';
+var currentPersona = 'jarvis';
 
 async function setPersona(id, opts = {}) {
   currentPersona = id;
@@ -7495,8 +7427,8 @@ async function checkGoogleAuth() {
 // ═══════════════════════════════════════════════════════════════
 // PLUGIN HUB
 // ═══════════════════════════════════════════════════════════════
-let hubCurrentTab = 'installed';
-let hubPluginsCache = [];
+var hubCurrentTab = 'installed';
+var hubPluginsCache = [];
 
 function openHub() {
   setActiveSurface('plugins', { keepPanels:['hub-panel'] });
@@ -7780,16 +7712,16 @@ async function installFromUrl() {
 // ═══════════════════════════════════════════════════════════════
 // MARKETPLACE STORE
 // ═══════════════════════════════════════════════════════════════
-let storeCurrentTab = 'plugins';
-let storeCat = 'all';
-let storeItems = [];
-let storeInstalled = [];
+var storeCurrentTab = 'plugins';
+var storeCat = 'all';
+var storeItems = [];
+var storeInstalled = [];
 
 // ═══════════════════════════════════════════════════════════════
 // HORIZON ACCOUNT (SSO with marketplace website)
 // ═══════════════════════════════════════════════════════════════
-let acctCurrentTab = 'login';
-let currentUser = null;
+var acctCurrentTab = 'login';
+var currentUser = null;
 
 async function refreshAccount() {
   try {
@@ -7839,7 +7771,7 @@ function acctTab(tab) {
 // surface a "Pro" badge, otherwise an admin/owner sees "Owner Pro" which is
 // noisy and slightly misleading. Mirrors the marketplace web app
 // (PRIVILEGED_LICENSE_PLANS in Pricing.jsx / Dashboard.jsx).
-const _PRIVILEGED_LICENSE_PLANS = new Set(['owner','official','admin','team','lifetime']);
+var _PRIVILEGED_LICENSE_PLANS = new Set(['owner','official','admin','team','lifetime']);
 
 async function _getLicenseStateSafe(){
   try { return (typeof H !== 'undefined' && H.licenseState) ? await H.licenseState() : null; }
@@ -8368,7 +8300,7 @@ async function publishPlugin() {
 // ═══════════════════════════════════════════════════════════════
 // WORKFLOWS PANEL
 // ═══════════════════════════════════════════════════════════════
-let wfCurrentTab = 'overview';
+var wfCurrentTab = 'overview';
 
 function openWorkflows() {
   setActiveSurface('workflows', { keepPanels:['wf-panel'] });
@@ -8392,7 +8324,7 @@ function wfTab(tab) {
 // tab can paint the active node + done/pending nodes in the graph view.
 // Updated by IPC events `workflow:running:start|step|end`. When idle,
 // falls back to the most recent finished run (via lastRun on stored wfs).
-let wfActiveRun = null;
+var wfActiveRun = null;
 function _wfStepLabel(action) {
   const map = {
     open_url: 'Open URL', open_site: 'Open Site', open_app: 'Open App',
@@ -8436,7 +8368,7 @@ function _wfTriggerKind(t) {
   return { label: t, cls: '' };
 }
 
-const STEP_ICONS = {
+var STEP_ICONS = {
   open_url:'\u{1F310}', open_site:'\u{1F4BB}', type_text:'\u{2328}\u{FE0F}', press_key:'\u{2328}\u{FE0F}',
   run_code:'\u{1F4BB}', wait:'\u{23F1}\u{FE0F}', notify:'\u{1F4C4}', speak:'\u{1F5E3}\u{FE0F}',
   send_message:'\u{1F4AC}', close_url:'\u{274C}', screenshot:'\u{1F4F8}'
@@ -8444,7 +8376,7 @@ const STEP_ICONS = {
 
 // Map lucide-react icon names (used by the marketplace backend) to real emoji glyphs,
 // so plugin cards in the desktop app don't show raw words like "Music" as their avatar.
-const LUCIDE_ICON_MAP = {
+var LUCIDE_ICON_MAP = {
   Music:'\u{1F3B5}', Music2:'\u{1F3B5}', Music3:'\u{1F3B5}', Music4:'\u{1F3B5}', Headphones:'\u{1F3A7}', Radio:'\u{1F4FB}', Mic:'\u{1F399}\u{FE0F}', Mic2:'\u{1F399}\u{FE0F}', Volume:'\u{1F50A}', Volume2:'\u{1F50A}',
   Puzzle:'\u{1F9E9}', Plug:'\u{1F50C}', PlugZap:'\u{26A1}', Zap:'\u{26A1}', Bolt:'\u{26A1}', Star:'\u{2B50}', Sparkles:'\u{2728}', Gem:'\u{1F48E}', Crown:'\u{1F451}',
   Globe:'\u{1F310}', Globe2:'\u{1F310}', Chrome:'\u{1F310}', Compass:'\u{1F9ED}', Map:'\u{1F5FA}\u{FE0F}', MapPin:'\u{1F4CD}', Navigation:'\u{1F9ED}',
@@ -8883,7 +8815,7 @@ async function renderWfBody() {
   }
 }
 
-let wfDraftSteps = [];
+var wfDraftSteps = [];
 
 function updateWfStepBuilderHints() {
   const action = document.getElementById('wf-step-action')?.value || 'open_url';
@@ -9003,7 +8935,7 @@ async function createWfManual() {
   wfTab('list');
 }
 
-const WF_EXAMPLES = {
+var WF_EXAMPLES = {
   youtube: { name: 'YouTube Open & Close', trigger: 'manual', steps: [{action:'open_url',args:{url:'https://youtube.com'}},{action:'wait',args:{ms:10000}},{action:'notify',args:{message:'Closing YouTube now'}},{action:'run_code',args:{code:'require("child_process").exec("taskkill /F /IM chrome.exe")',language:'node'}}] },
   screenshot: { name: 'Screenshot & Notify', trigger: 'manual', steps: [{action:'notify',args:{message:'Taking screenshot...'}},{action:'screenshot',args:{}},{action:'notify',args:{message:'Screenshot saved!'}}] },
   morning: { name: 'Morning Routine', trigger: 'schedule:09:00', steps: [{action:'notify',args:{message:'Good morning! Time to start your day.'}},{action:'speak',args:{text:'Good morning! Here is your daily briefing.'}},{action:'send_message',args:{text:'Give me a morning briefing with weather and tasks'}}] },
@@ -9126,13 +9058,13 @@ async function shareWorkflow(id) {
 // ═══════════════════════════════════════════════════════════════
 // SCREEN RECORDER + AI NARRATOR
 // ═══════════════════════════════════════════════════════════════
-let isScreenRecording = false;
-let screenRecStream = null;
-let screenRecMediaRec = null;
-let screenRecChunks = [];
-let screenRecTimer = null;
-let screenRecSeconds = 0;
-let screenRecordings = [];
+var isScreenRecording = false;
+var screenRecStream = null;
+var screenRecMediaRec = null;
+var screenRecChunks = [];
+var screenRecTimer = null;
+var screenRecSeconds = 0;
+var screenRecordings = [];
 
 function openRecorder() {
   setActiveSurface('recorder', { keepPanels:['recorder-panel'] });
@@ -9556,31 +9488,31 @@ H.onMarketAuthenticated?.(async (user) => {
 })();
 
 // CODE MODE / OPERATOR MODE RUNTIME
-let codeModeActive = false;
-let codeWorkspace = '';
-let codeDir = '';
-let codeCurrentFile = '';
-let operatorRuns = new Map();
-let operatorLogLines = [];
-let operatorTab = 'log';
-let operatorPaused = false;
-let operatorStopRequested = false;
-let operatorCurrentAgentRunId = '';
-let operatorWaitingStepId = '';
-let operatorRunHistory = [];
-let operatorRunJson = null;
-let operatorAgentListenerInstalled = false;
-let activeAgentPanelSteps = null;
-let activeAgentPanelRef = null;
-let opSeq = 0;
-let activeMessageRun = null;
-let codeEditor = null;
-let codeEditorReady = null;
-let codeLastAiPatch = null;
-let codeTerminal = null;
-let codeTerminalId = '';
-let codeTerminalListenerInstalled = false;
-let codeTerminalResizeInstalled = false;
+var codeModeActive = false;
+var codeWorkspace = '';
+var codeDir = '';
+var codeCurrentFile = '';
+var operatorRuns = new Map();
+var operatorLogLines = [];
+var operatorTab = 'log';
+var operatorPaused = false;
+var operatorStopRequested = false;
+var operatorCurrentAgentRunId = '';
+var operatorWaitingStepId = '';
+var operatorRunHistory = [];
+var operatorRunJson = null;
+var operatorAgentListenerInstalled = false;
+var activeAgentPanelSteps = null;
+var activeAgentPanelRef = null;
+var opSeq = 0;
+var activeMessageRun = null;
+var codeEditor = null;
+var codeEditorReady = null;
+var codeLastAiPatch = null;
+var codeTerminal = null;
+var codeTerminalId = '';
+var codeTerminalListenerInstalled = false;
+var codeTerminalResizeInstalled = false;
 
 function initCodeEditor(){
   if(codeEditorReady) return codeEditorReady;
@@ -9703,7 +9635,7 @@ function _setupCodeEditorBindings(ta) {
     _codeEditorResizeBound = true;
   }
 }
-let _codeEditorResizeBound = false;
+var _codeEditorResizeBound = false;
 
 // ─── ⌘K floating edit bar — PR-D1.1 ─────────────────────────────────
 // Open: capture the current Monaco selection, position the .cek-bar over
@@ -10769,9 +10701,9 @@ async function requestMultiFileDiff({ title='Review changes', description='', fi
 // the settingsStore entry stays small (the `before` snapshot can be
 // large for whole-file edits; 10 × ~200KB worst case = 2MB which is
 // well within electron-store comfort).
-let _cekHistory = [];
-const CEK_HISTORY_MAX = 10;
-let _cekAutoCommit = false;
+var _cekHistory = [];
+var CEK_HISTORY_MAX = 10;
+var _cekAutoCommit = false;
 
 (async function _cekBootHistory() {
   try {
@@ -11172,8 +11104,8 @@ async function chooseCodeWorkspace(){
 // Expanding a dir for the first time fetches it and caches. Re-expanding is
 // instant. Hidden defaults can be overridden via the wsListIgnore setting
 // (array of names to skip).
-let codeTreeNodes = {};
-let codeTreeIgnore = ['.git','node_modules','dist','build','.next','out','.cache','.idea','.vscode','__pycache__','.venv','venv','target'];
+var codeTreeNodes = {};
+var codeTreeIgnore = ['.git','node_modules','dist','build','.next','out','.cache','.idea','.vscode','__pycache__','.venv','venv','target'];
 
 async function _loadCodeTreeDir(rel){
   if (codeTreeNodes[rel]?.loaded) return codeTreeNodes[rel];
@@ -11286,9 +11218,9 @@ async function searchCodeWorkspace(){
 // surface dirty state. Limit prevents an accidentally-large workspace
 // session from chewing memory; oldest non-active tab gets evicted with a
 // warning if it's dirty.
-const CODE_OPEN_FILES_LIMIT = 8;
-let codeOpenFiles = [];
-let codeActiveTabIdx = -1;
+var CODE_OPEN_FILES_LIMIT = 8;
+var codeOpenFiles = [];
+var codeActiveTabIdx = -1;
 
 async function openCodeFile(rel){
   if(!codeWorkspace) return;
@@ -11869,9 +11801,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ── Quick file open (Ctrl+P) ────────────────────────────────────────────
-let _qoSelected = 0;
-let _qoLastQuery = '';
-let _qoTimer = null;
+var _qoSelected = 0;
+var _qoLastQuery = '';
+var _qoTimer = null;
 
 function openQuickOpen(){
   if (!codeWorkspace) {
@@ -11975,7 +11907,7 @@ async function quickOpenSelect(rel){
 }
 
 
-let operatorModeActive = false;
+var operatorModeActive = false;
 function toggleOperatorMode() {
   operatorModeActive = !operatorModeActive;
   if (operatorModeActive) {
@@ -11995,8 +11927,8 @@ function toggleOperatorMode() {
 // ═══════════════════════════════════════════════════════════════
 // INSPECTOR PANE — Context · Tools · Cost · Log dock on the right
 // ═══════════════════════════════════════════════════════════════
-let inspectorActive = false;
-let inspectorTab = 'context';
+var inspectorActive = false;
+var inspectorTab = 'context';
 
 function layoutInspectorDock(){
   const pane = document.getElementById('inspector-pane');
@@ -12218,7 +12150,7 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════════════════════════════
 // STEP RAIL — agent plan progress at top of chat
 // ═══════════════════════════════════════════════════════════════
-let stepRailState = { steps: [], currentIdx: -1 };
+var stepRailState = { steps: [], currentIdx: -1 };
 
 function setStepRail(steps, currentIdx){
   stepRailState.steps = Array.isArray(steps) ? steps.slice(0, 7) : [];
@@ -12290,17 +12222,23 @@ function opLog(msg, type='info') {
   operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type});
   opRender();
 }
-const origLog = console.log;
+var origLog = console.log;
 console.log = function(...args) {
   origLog.apply(console, args);
   if(operatorModeActive) opLog(args.join(' '));
 };
-const origError = console.error;
+var origError = console.error;
 console.error = function(...args) {
   origError.apply(console, args);
   if(operatorModeActive) opLog(args.join(' '), 'error');
 };
 </script>
 <script src="fractal-bg.js"></script>
+<!-- PR-V Phase 2 — slash command dispatcher extracted from inline.
+     Loaded AFTER the main inline script so window.* globals it reads
+     (prov, history, MODEL_PICKER_REGISTRY, setMode, setPersona, etc.)
+     are defined by the time it parses. defer is implicit for external
+     scripts at end of body. -->
+<script src="chat-slash.js"></script>
 </body>
 </html>
