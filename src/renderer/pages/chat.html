@@ -1581,10 +1581,47 @@ var STREAMING_CHAT_PROVIDERS = new Set([
   'perplexity', 'cohere', 'openrouter', 'ollama', 'lmstudio', 'localai'
 ]);
 
+async function runNonStreamingAIVisible(messages, providerName, systemPrompt, opts = {}) {
+  const p = providerName || prov || 'gemini';
+  rmTyping();
+  const msgEl = addMsg('bot', '', { model: getSelectedModelForProvider?.(p) || p });
+  const bubble = msgEl.querySelector('.bub');
+  const paint = (body) => {
+    if (!bubble) return;
+    bubble.innerHTML = body ? md(body) : '<span class="muted">...</span>';
+    const w = document.getElementById('msgs');
+    if (w) w.scrollTop = w.scrollHeight;
+  };
+  paint(lang === 'ru' ? 'Отправляю запрос провайдеру...' : 'Sending request to provider...');
+  if (!window.H?.ai) {
+    paint('Error: AI bridge is unavailable. Restart Horizon and try again.');
+    return { error: 'AI bridge is unavailable', _rendered: true };
+  }
+  try {
+    const timeoutMs = Number(opts.requestTimeoutMs || 60000);
+    const res = await Promise.race([
+      H.ai(messages, p, systemPrompt, opts),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), timeoutMs))
+    ]);
+    if (res?.reply) {
+      paint(res.reply);
+      try { _renderDiffsInBubble(msgEl, res.reply, { model: res.model || getSelectedModelForProvider?.(p) || p }); } catch(_) {}
+      return { ...res, _rendered: true };
+    }
+    const err = res?.error || 'No response';
+    paint(`Error: ${err}`);
+    return { ...(res || {}), error: err, _rendered: true };
+  } catch (e) {
+    const err = e?.message || String(e);
+    paint(`Error: ${err}`);
+    return { error: err, _rendered: true };
+  }
+}
+
 async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
   const p = providerName || prov || 'gemini';
   if (!window.H?.aiStream || !window.H?.onAIStreamChunk || !STREAMING_CHAT_PROVIDERS.has(p)) {
-    return H.ai(messages, p, systemPrompt, opts);
+    return runNonStreamingAIVisible(messages, p, systemPrompt, opts);
   }
   const streamId = 'ui-' + Date.now().toString(36) + '-' + Math.random().toString(16).slice(2);
   let text = '';
@@ -4143,6 +4180,7 @@ async function runAgent(text) {
 
   const steps = [];
   let agentPanelRef = renderAgentPanel([], null, true);
+  addTyping();
   activeAgentPanelSteps = steps;
   activeAgentPanelRef = agentPanelRef;
   ensureOperatorAgentListener();
@@ -4161,10 +4199,15 @@ async function runAgent(text) {
     ]);
 
     // Final render
-    renderAgentPanel(result.steps || steps, result.ok ? result.answer : `Error: ${result.error}`);
+    rmTyping();
+    const finalSteps = result.steps || steps;
+    renderAgentPanel(finalSteps, result.ok ? null : `Error: ${result.error}`);
     if (!result?.ok) throw new Error(result?.error || 'Agent failed');
 
     if (result.ok && result.answer) {
+      const stepCount = (finalSteps || []).length;
+      if (!stepCount) document.getElementById('current-agent-panel')?.remove();
+      addMsg('bot', result.answer, { model: result.model || currentModel || currentProvider });
       history.push({ role: 'assistant', content: result.answer });
       _persistChatMessage('assistant', result.answer, { provider: currentProvider, model: result.model || currentModel || 'agent', usage: result.usage });
       trackTokens(result.answer, 'assistant', currentProvider, result.usage);
@@ -4177,6 +4220,7 @@ async function runAgent(text) {
     opLog(`agent error: ${e.message}`, 'error');
     opEndRun(opRun, 'error');
     // Handle timeout or other errors
+    rmTyping();
     renderAgentPanel(steps, `Error: ${e.message}`);
     let fallbackShown = false;
     try {
