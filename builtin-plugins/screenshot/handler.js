@@ -17,8 +17,16 @@ async function captureBuffer() {
     thumbnailSize: { width: width || 1920, height: height || 1080 },
   });
   if (!sources.length) throw new Error('No screen sources available');
-  const src = sources[0];
-  const img = src.thumbnail;
+  // Phase 2 fix — pick the source matching the PRIMARY display, not blindly
+  // sources[0]. On multi-monitor setups sources[0] can be the secondary
+  // screen, which is the wrong capture (and the user'll get a screenshot
+  // of their reference monitor instead of their work screen).
+  const primaryId = String(display.id);
+  const primary =
+    sources.find(s => String(s.display_id || '') === primaryId)
+    || sources.find(s => /entire screen|screen 1|primary/i.test(s.name || ''))
+    || sources[0];
+  const img = primary.thumbnail;
   if (!img || img.isEmpty()) throw new Error('Captured screenshot is empty');
   return img.toPNG(); // returns Buffer
 }
