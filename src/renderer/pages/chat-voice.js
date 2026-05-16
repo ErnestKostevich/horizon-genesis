@@ -30,15 +30,141 @@
 // MANUAL VOICE BUTTON (MediaRecorder + Groq Whisper)
 // ═══════════════════════════════════════════════════════════════
 async function testMic(){
-  const st=document.getElementById('mic-st');
-  st.textContent='Тестирую…'; st.style.color='var(--t3)';
-  try{
-    const s=await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
-    s.getTracks().forEach(t=>t.stop());
-    st.textContent='✅ Микрофон работает!'; st.style.color='var(--green)';
-  }catch(e){
-    st.textContent='❌ '+e.message; st.style.color='var(--red)';
+  // Post-PR-V Phase 1.6 — diagnostic: 3-sec record + peak dB + playback.
+  // The previous version only checked getUserMedia permission and stopped
+  // the stream immediately, which didn't tell users whether their mic
+  // was actually picking up sound. Now we record, measure peak volume,
+  // play it back so they hear themselves.
+  const st = document.getElementById('mic-st');
+  if (!st) return;
+  st.textContent = '🎙 Recording 3s — say something...'; st.style.color = 'var(--t2)';
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
+  } catch (e) {
+    st.textContent = '❌ ' + e.message; st.style.color = 'var(--red)';
+    return;
   }
+  // Measure peak via AudioContext analyser.
+  let peak = 0;
+  let sampleRate = 0;
+  let channels = 0;
+  try {
+    const ctx = new AudioContext();
+    sampleRate = ctx.sampleRate;
+    const src = ctx.createMediaStreamSource(stream);
+    channels = src.channelCount;
+    const an = ctx.createAnalyser();
+    an.fftSize = 1024;
+    src.connect(an);
+    const data = new Uint8Array(an.frequencyBinCount);
+    const peakTimer = setInterval(() => {
+      an.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      if (avg > peak) peak = avg;
+    }, 50);
+    setTimeout(() => clearInterval(peakTimer), 3000);
+  } catch (_) {}
+  // Record 3 sec via MediaRecorder + play back.
+  const chunks = [];
+  let rec;
+  try {
+    rec = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+  } catch (_) {
+    try { rec = new MediaRecorder(stream); } catch (_) {}
+  }
+  if (!rec) {
+    stream.getTracks().forEach(t => t.stop());
+    st.textContent = '❌ MediaRecorder unsupported in this Electron build.';
+    st.style.color = 'var(--red)';
+    return;
+  }
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    const peakDb = peak > 0 ? Math.round(20 * Math.log10(peak / 255) * 10) / 10 : -60;
+    const verdict = peak < 20
+      ? '⚠ Too quiet — check mic gain'
+      : peak > 220 ? '⚠ Clipping — lower mic gain'
+      : '✅ Mic working';
+    st.innerHTML = `${verdict}<br>` +
+      `<span style="font:600 11px var(--mono);color:var(--t3)">` +
+      `peak: ${peak.toFixed(0)} / 255 (~${peakDb} dB) · ` +
+      `${sampleRate}Hz · ${channels}ch</span>`;
+    st.style.color = peak < 20 || peak > 220 ? 'var(--warn)' : 'var(--green)';
+    // Play back what we just recorded.
+    if (chunks.length) {
+      const blob = new Blob(chunks, { type: rec.mimeType });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play().catch(() => {});
+      audio.onended = () => URL.revokeObjectURL(url);
+    }
+  };
+  rec.start();
+  setTimeout(() => { try { rec.stop(); } catch (_) {} }, 3000);
+}
+
+// Post-PR-V Phase 1.6 — wake-word transcription test.
+// Records 3 sec of the user saying "Horizon" (or whatever wake word
+// they want to test), transcribes it via the same Groq Whisper path
+// the actual wake engine uses, and shows the transcription result.
+// If the result doesn't contain "horizon"/"горизонт"/"хорайзон"/
+// "хоризонт", the engine wouldn't trigger either — user knows to
+// adjust sensitivity or check pronunciation.
+async function testWakeWord(){
+  const st = document.getElementById('wake-test-st');
+  if (!st) return;
+  st.textContent = '🎙 Recording 3s — say "Horizon" or "Горизонт"...';
+  st.style.color = 'var(--t2)';
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
+  } catch (e) {
+    st.textContent = '❌ ' + e.message; st.style.color = 'var(--red)';
+    return;
+  }
+  const chunks = [];
+  let rec;
+  try { rec = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' }); }
+  catch (_) { try { rec = new MediaRecorder(stream); } catch (_) {} }
+  if (!rec) {
+    stream.getTracks().forEach(t => t.stop());
+    st.textContent = '❌ MediaRecorder unsupported.'; st.style.color = 'var(--red)';
+    return;
+  }
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    st.textContent = '⏳ Transcribing via Groq Whisper...';
+    st.style.color = 'var(--t3)';
+    try {
+      const blob = new Blob(chunks, { type: rec.mimeType });
+      // Use the same transcribeWakeChunk infra as the actual wake engine
+      // so the result matches what the engine would see live.
+      const text = (typeof transcribeWakeChunk === 'function')
+        ? await transcribeWakeChunk(blob)
+        : '';
+      const wouldFire = typeof isWakeWord === 'function' ? isWakeWord(text) : false;
+      if (!text) {
+        st.innerHTML = `❌ Empty transcription — check Groq API key.<br>` +
+          `<span style="font:600 11px var(--mono);color:var(--t3)">Try Settings → Voice → Groq Key.</span>`;
+        st.style.color = 'var(--red)';
+        return;
+      }
+      st.innerHTML = `${wouldFire ? '✅' : '⚠'} Transcribed: <b>"${(text || '').slice(0, 80)}"</b><br>` +
+        `<span style="font:600 11px var(--mono);color:var(--t3)">` +
+        `Would fire wake? <b style="color:${wouldFire ? 'var(--green)' : 'var(--warn)'}">${wouldFire ? 'YES' : 'NO'}</b>` +
+        (wouldFire ? ' — engine ready.' : ' — adjust sensitivity or check pronunciation.') +
+        `</span>`;
+      st.style.color = wouldFire ? 'var(--green)' : 'var(--warn)';
+    } catch (e) {
+      st.innerHTML = `❌ Transcribe failed: ${e?.message || e}`;
+      st.style.color = 'var(--red)';
+    }
+  };
+  rec.start();
+  setTimeout(() => { try { rec.stop(); } catch (_) {} }, 3000);
 }
 
 function startLvl(stream){
