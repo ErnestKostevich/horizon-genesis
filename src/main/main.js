@@ -176,7 +176,7 @@ const ALLOWED_SETTING_KEYS = new Set([
 
 const DEFAULT_PROVIDER_MODELS = {
   claude: 'claude-sonnet-4-6',
-  openai: 'gpt-4o',
+  openai: 'gpt-5.4',
   gemini: 'gemini-2.5-flash',
   groq: 'llama-3.3-70b-versatile',
   deepseek: 'deepseek-chat',
@@ -185,11 +185,34 @@ const DEFAULT_PROVIDER_MODELS = {
   qwen: 'qwen-plus',
   perplexity: 'sonar-pro',
   cohere: 'command-a-03-2025',
-  openrouter: 'openai/gpt-4o-mini',
+  openrouter: 'openai/gpt-5.4-mini',
   ollama: 'llama3.1',
   lmstudio: 'local-model',
   localai: 'local-model',
 };
+
+const KNOWN_PROVIDER_MODELS = {
+  claude: ['claude-sonnet-4-6', 'claude-opus-4-7', 'claude-haiku-4-5'],
+  openai: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2', 'o3', 'o4-mini'],
+  gemini: ['gemini-3.1-pro-preview', 'gemini-3.1-flash-preview', 'gemini-3.0-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'moonshotai/kimi-k2-instruct', 'openai/gpt-oss-120b'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  grok: ['grok-4', 'grok-4-fast-reasoning', 'grok-4-mini', 'grok-code-fast-1'],
+  mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest'],
+  qwen: ['qwen-plus', 'qwen3-max', 'qwen3-coder-plus'],
+  perplexity: ['sonar-pro', 'sonar', 'sonar-reasoning', 'sonar-reasoning-pro'],
+  cohere: ['command-a-03-2025', 'command-a-reasoning-08-2025', 'command-a-vision-07-2025', 'command-r-plus-08-2024'],
+};
+
+function normalizeSelectedModel(provider, model) {
+  const id = String(model || '').trim();
+  if (!id) return DEFAULT_PROVIDER_MODELS[provider] || '';
+  if (provider === 'openrouter') return id.includes('/') ? id : DEFAULT_PROVIDER_MODELS.openrouter;
+  if (provider === 'ollama' || provider === 'lmstudio' || provider === 'localai') return id;
+  const known = KNOWN_PROVIDER_MODELS[provider];
+  if (!known || known.includes(id)) return id;
+  return DEFAULT_PROVIDER_MODELS[provider] || id;
+}
 
 function assertAllowedKey(service) {
   if (!ALLOWED_KEY_IDS.has(String(service || ''))) {
@@ -240,13 +263,13 @@ function localOpenAIEndpoint(provider) {
 }
 
 function selectedModel(provider, opts = {}) {
-  if (opts && typeof opts.model === 'string' && opts.model.trim()) return opts.model.trim();
+  if (opts && typeof opts.model === 'string' && opts.model.trim()) return normalizeSelectedModel(provider, opts.model);
   if (provider === 'gemini') {
-    return settingsStore.get('model.gemini') || settingsStore.get('geminiModel') || DEFAULT_PROVIDER_MODELS.gemini;
+    return normalizeSelectedModel(provider, settingsStore.get('model.gemini') || settingsStore.get('geminiModel') || DEFAULT_PROVIDER_MODELS.gemini);
   }
   const localEp = localOpenAIEndpoint(provider);
   if (localEp) return localEp.model;
-  return settingsStore.get(`model.${provider}`) || DEFAULT_PROVIDER_MODELS[provider] || DEFAULT_PROVIDER_MODELS.openai;
+  return normalizeSelectedModel(provider, settingsStore.get(`model.${provider}`) || DEFAULT_PROVIDER_MODELS[provider] || DEFAULT_PROVIDER_MODELS.openai);
 }
 
 function responseProfile() {
@@ -2322,12 +2345,9 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       case 'openai': {
         const k = keysStore.get('k_openai');
         if (!k) return { error: lang==='ru'?'Ключ OpenAI не задан':'OpenAI key not set' };
-        // Default: gpt-4o (broadly available + cheap). gpt-5 / gpt-5-mini are
-        // available but not every account has access on first key issue.
         const openaiModel = selectedModel('openai', opts);
         const respProfile = settingsStore.get('responseProfile') || 'balanced';
-        // reasoning_effort is only honoured by reasoning models (o-series and
-        // the *-thinking SKUs of gpt-5). Sending it to gpt-4o is a 400.
+        // reasoning_effort is only honoured by reasoning models.
         const isReasoningModel = /^o[134]/.test(openaiModel) || /thinking|reasoning/.test(openaiModel);
         const openaiBody = { model: openaiModel, max_tokens: 4096, messages: [{role:'system',content:sysMsg},...messages] };
         if (isReasoningModel) {
@@ -2416,7 +2436,6 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
         const k = keysStore.get('k_deepseek');
         if (!k) return { error: lang==='ru'?'Ключ DeepSeek не задан → platform.deepseek.com':'DeepSeek key not set → platform.deepseek.com' };
         // 'deepseek-chat' is the cheap-fast alias (currently → V3.1). For the
-        // V4 generation pass 'deepseek-v4-pro' or 'deepseek-v4-flash'.
         const deepseekModel = selectedModel('deepseek', opts);
         const r = await fetch('https://api.deepseek.com/chat/completions', {
           method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},

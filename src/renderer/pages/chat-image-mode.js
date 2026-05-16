@@ -6,7 +6,7 @@
 // regular bot messages with download / regenerate buttons.
 //
 // Provider routing: respects the active provider chip in composer
-// model picker (gemini → Imagen 3, openai → DALL-E 3). Other
+// model picker (Gemini native image / OpenAI GPT Image). Other
 // providers fall back to OpenAI if the user has an openai key, else
 // to Gemini, else an error message that explains BYOK setup.
 //
@@ -22,7 +22,7 @@
     const cur = (window.prov || window.provider || '').toLowerCase();
     if (cur === 'gemini') return 'gemini';
     if (cur === 'openai') return 'openai';
-    // Fall through: prefer openai (DALL-E 3 is the more battle-tested),
+    // Fall through: prefer OpenAI GPT Image first,
     // fall back to gemini, else null (caller renders helpful error).
     try { if (await window.H?.hasKey?.('openai')) return 'openai'; } catch (_) {}
     try { if (await window.H?.hasKey?.('gemini')) return 'gemini'; } catch (_) {}
@@ -97,8 +97,8 @@
         '🎨 **Image mode needs an API key.**\n\n' +
         'Image generation is BYOK (bring-your-own-key) — Horizon never proxies image prompts. ' +
         'Open **Settings → Providers** and add a key for either:\n' +
-        '- **OpenAI** (DALL-E 3) — `sk-...` from platform.openai.com\n' +
-        '- **Gemini** (Imagen 3) — from aistudio.google.com'
+        '- **OpenAI** (GPT Image) - `sk-...` from platform.openai.com\n' +
+        '- **Gemini** (Nano Banana image models) - from aistudio.google.com'
       );
       return;
     }

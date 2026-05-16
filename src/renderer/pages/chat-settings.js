@@ -128,16 +128,22 @@ async function loadPanel(){
   // Hydrate the model dropdowns from settingsStore so the user sees their
   // current selection (or the GA default if they've never picked one).
   const _modelDefaults = {
-    claude:'claude-sonnet-4-6', openai:'gpt-4o', gemini:'gemini-2.5-flash',
+    claude:'claude-sonnet-4-6', openai:'gpt-5.4', gemini:'gemini-2.5-flash',
     groq:'llama-3.3-70b-versatile', deepseek:'deepseek-chat', grok:'grok-4',
     mistral:'mistral-large-latest', qwen:'qwen-plus',
-    perplexity:'sonar-pro', cohere:'command-a-03-2025', openrouter:'openai/gpt-4o-mini'
+    perplexity:'sonar-pro', cohere:'command-a-03-2025', openrouter:'openai/gpt-5.4-mini'
   };
   await Promise.all(Object.keys(_modelDefaults).map(async (p) => {
     try {
       const stored = await H.get('model.' + p);
       const sel = document.getElementById('ms-' + p);
-      if (sel) sel.value = stored || _modelDefaults[p];
+      const value = typeof normalizeModelForProvider === 'function'
+        ? normalizeModelForProvider(p, stored || _modelDefaults[p])
+        : (stored || _modelDefaults[p]);
+      if (sel) sel.value = value;
+      if (stored && stored !== value) {
+        await H.set('model.' + p, value).catch(()=>{});
+      }
     } catch(_) {}
   }));
   // Hydrate Connections section state.
@@ -494,7 +500,7 @@ function updateThinkingHint(){
   const supported = _profileSupportsThinking(typeof prov !== 'undefined' ? prov : '', model);
   el.classList.remove('ok','bad');
   if (profile !== 'deep') {
-    el.textContent = 'Deep mode triggers extended thinking on Claude, Gemini 2.5+/3, and OpenAI o-series / gpt-5-thinking.';
+    el.textContent = 'Deep mode uses provider-native reasoning/thinking only when the selected model supports it.';
     return;
   }
   if (supported) {

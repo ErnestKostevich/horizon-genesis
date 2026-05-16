@@ -244,8 +244,35 @@ function formatTokens(n){
 function formatCost(){
   // No hardcoded dollars. Show token usage only because each BYOK provider can
   // bill differently and local models may not report provider usage at all.
-  return (sessionHasEstimatedUsage ? '~' : '') + formatTokens(sessionTokens) + ' tok';
+  return (sessionUsageKnown && sessionTokens > 0) ? (formatTokens(sessionTokens) + ' tok') : 'Usage unavailable';
 }
+
+// Honest cost tab: no fabricated budget split. Provider-reported usage only.
+refreshInspectorCost = function(){
+  const headline = document.getElementById('insp-cost-headline');
+  const sub = document.getElementById('insp-cost-sub');
+  const hasUsage = !!(sessionUsageKnown && sessionTokens > 0);
+  if (headline) headline.textContent = hasUsage ? `${formatTokens(sessionTokens)} tok` : 'Usage unavailable';
+  if (sub) {
+    sub.textContent = hasUsage
+      ? `${sessionMsgs} msg${sessionMsgs===1?'':'s'} - provider-reported usage`
+      : `${sessionMsgs} msg${sessionMsgs===1?'':'s'} - provider did not return usage`;
+  }
+  const bar = document.getElementById('insp-token-bar');
+  if (bar) {
+    bar.querySelectorAll('.token-seg').forEach(seg => { seg.style.width = '0%'; });
+  }
+  const meta = document.getElementById('insp-token-meta');
+  if (meta) {
+    meta.innerHTML = hasUsage
+      ? '<span class="seg history" title="Provider total usage">Provider total</span>'
+      : '<span class="seg history" title="No provider usage in this chat yet">Usage unavailable</span>';
+  }
+  const used = document.getElementById('insp-token-used');
+  if (used) used.textContent = hasUsage ? formatTokens(sessionTokens) : '0';
+  const budget = document.getElementById('insp-token-budget');
+  if (budget) budget.textContent = 'provider';
+};
 
 window.addEventListener('resize', () => {
   if (inspectorActive) layoutInspectorDock();

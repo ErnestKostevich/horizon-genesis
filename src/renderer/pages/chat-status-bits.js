@@ -153,6 +153,27 @@ function refreshCostPreview() {
     }
   } catch (_) { /* best-effort */ }
 }
+// Override the legacy estimator above. Keeping this assignment here avoids
+// showing fake pre-request tokens or hardcoded dollar costs.
+refreshCostPreview = function() {
+  try {
+    const tokEl = document.getElementById('composer-foot-tokens-n');
+    const costEl = document.getElementById('composer-foot-cost');
+    if (!tokEl || !costEl) return;
+    const hasUsage = !!(typeof sessionUsageKnown !== 'undefined' && sessionUsageKnown && sessionTokens > 0);
+    if (hasUsage) {
+      const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+      tokEl.textContent = fmt(sessionTokens);
+      costEl.textContent = 'provider usage';
+      costEl.title = sessionUsageUnavailable ? 'Some messages did not include provider usage.' : 'Provider reported usage for this chat.';
+    } else {
+      tokEl.textContent = 'usage unavailable';
+      costEl.textContent = 'usage unavailable';
+      costEl.title = 'This provider did not return token usage yet.';
+    }
+  } catch (_) {}
+};
+
 // Hook the existing `ar()` autosize handler (called on every keystroke)
 // to also refresh the cost preview. We can't modify ar in-place
 // because it's used everywhere — instead, install a MutationObserver-

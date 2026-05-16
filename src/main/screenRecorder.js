@@ -73,15 +73,16 @@ class ScreenRecorder {
       ? `Ты AI-нарратор записи экрана. Опиши кратко (1-2 предложения) что происходит на экране. ${context ? 'Контекст: ' + context : ''} Будь конкретным и информативным.`
       : `You are an AI screen recording narrator. Briefly describe (1-2 sentences) what's happening on screen. ${context ? 'Context: ' + context : ''} Be specific and informative.`;
 
-    // Try OpenAI GPT-4o Vision
+    // Try OpenAI vision with the selected/default Horizon model.
     const openaiKey = this.keysStore.get('k_openai');
     if (openaiKey) {
       try {
+        const openaiModel = this.settingsStore.get('model.openai') || 'gpt-5.4';
         const r = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
           body: JSON.stringify({
-            model: 'gpt-4o',
+            model: openaiModel,
             max_tokens: 150,
             messages: [{ role: 'user', content: [
               { type: 'image_url', image_url: { url: `data:${mimeType || 'image/png'};base64,${base64Screenshot}`, detail: 'low' } },
@@ -90,7 +91,7 @@ class ScreenRecorder {
           })
         });
         const d = await r.json();
-        if (!d.error) return { ok: true, narration: d.choices[0].message.content, model: 'GPT-4o' };
+        if (!d.error) return { ok: true, narration: d.choices[0].message.content, model: openaiModel };
       } catch {}
     }
 
@@ -98,7 +99,7 @@ class ScreenRecorder {
     const geminiKey = this.keysStore.get('k_gemini');
     if (geminiKey) {
       try {
-        const model = this.settingsStore.get('geminiModel') || 'gemini-2.5-flash';
+        const model = this.settingsStore.get('model.gemini') || this.settingsStore.get('geminiModel') || 'gemini-2.5-flash';
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -122,7 +123,7 @@ class ScreenRecorder {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-opus-4-5', max_tokens: 150,
+            model: this.settingsStore.get('model.claude') || 'claude-sonnet-4-6', max_tokens: 150,
             messages: [{ role: 'user', content: [
               { type: 'image', source: { type: 'base64', media_type: mimeType || 'image/png', data: base64Screenshot } },
               { type: 'text', text: prompt }
