@@ -217,33 +217,42 @@ body::after{content:'';position:fixed;bottom:-30%;right:-20%;width:80%;height:80
 /* ═══ TITLE BAR ═══ */
 .tb{position:relative;z-index:10;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;background:rgba(8,9,12,.95);border-bottom:1px solid var(--b1);backdrop-filter:blur(40px);-webkit-app-region:drag}
 .tb-l{display:flex;align-items:center;gap:11px;-webkit-app-region:drag}
-/* PR-LAYOUT-V4 Fix 4 — license/account pill, lives in tb-l next to
-   identity badge (ERNEST). Replaces the centered csb-license that
-   was overlapping with the Chat surface label. */
-.tb-license-pill {
+/* PR-LAYOUT-V5 — tb-license-pill rules removed (the element is gone;
+   see HTML around line 4923). The license-ui.js #license-pill-host
+   element is the single source of truth for license status. Below we
+   tighten its visual treatment so the OWNER + ACCOUNT pair reads as
+   ONE compact pill instead of two competing badges. */
+#license-pill-host {
   -webkit-app-region: no-drag;
-  display: none;
+  margin-left: 6px !important;
+}
+#license-pill-host .license-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 8px 0 10px;
   border-radius: 7px;
   border: 1px solid rgba(125,211,252,.24);
   background: rgba(125,211,252,.10);
   color: #a7e8ff;
-  font: 800 10px/24px var(--mono, ui-monospace, monospace);
-  letter-spacing: .6px;
+  font: 800 10px/1 var(--mono, ui-monospace, monospace);
+  letter-spacing: .55px;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background .12s ease, border-color .12s ease;
+  gap: 6px;
 }
-.tb-license-pill:hover { background: rgba(125,211,252,.18); border-color: rgba(125,211,252,.42); }
-.tb-license-pill.accent { border-color: rgba(125,211,252,.36); background: rgba(125,211,252,.14); color: #b8eaff; }
-.tb-license-pill.warn   { border-color: rgba(251,191,36,.36);  background: rgba(251,191,36,.13);  color: #fcd34d; }
-.tb-license-pill.danger { border-color: rgba(248,113,113,.36); background: rgba(248,113,113,.13); color: #fca5a5; }
-/* PR-LAYOUT-V4 Fix 4 — old #csb-license now never renders to avoid
-   double-pill (it lived in .chat-status-bar; refreshLicensePill still
-   updates it for back-compat but CSS keeps it hidden in this build). */
+#license-pill-host .license-pill.trial   { border-color: rgba(251,191,36,.36); background: rgba(251,191,36,.13); color: #fcd34d; }
+#license-pill-host .license-pill.expired { border-color: rgba(248,113,113,.36); background: rgba(248,113,113,.13); color: #fca5a5; }
+#license-pill-host .license-pill .lp-cta {
+  margin-left: 4px !important;
+  padding: 1px 6px !important;
+  border-radius: 5px !important;
+  background: rgba(255,255,255,.10) !important;
+  font: 700 9px/1 var(--mono, ui-monospace, monospace) !important;
+  letter-spacing: .4px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+}
+/* Old centered chat-status-bar license — kept hidden (covered in V4). */
 #csb-license { display: none !important; }
 .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--purple));display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;box-shadow:var(--glow);font-weight:700;color:#fff;font-family:var(--mono)}
 .tb-name{font-size:14px;font-weight:700;color:var(--tx);letter-spacing:.5px;font-family:var(--font)}
@@ -1640,13 +1649,13 @@ body.code-mode-active .inp-wrap {
 /* When operator pane is also active, leave room for it on the right column. */
 body.code-mode-active.operator-mode-active .msgs { bottom: calc(92px + 220px); }
 body.code-mode-active.operator-mode-active .inp-wrap { bottom: 220px; }
-/* PR-LAYOUT-V4 Fix 2 — kill the right-side empty zone. When operator
-   AND code-mode are both on, the chat-column lived in the same 380px
-   right slot but operator-pane stopped at 360px (its `right:360px` rule
-   at line 2140 reserves space for the code-mode right column). The 20px
-   delta + the chat column being narrower than code-shell created an
-   empty L-band. Pin them: chat-column right edge = operator-pane right
-   edge = 0; code-shell stops at 380px from the right. */
+/* PR-LAYOUT-V4/V5 Fix 2 — kill the right-side empty zone in code+op.
+   When operator AND code-mode are both on:
+     - chat column (.msgs/.inp-wrap) lives in the 380px right slot
+     - code-shell extends from x=0 to x=viewport-380
+     - operator-pane is full-width below
+   V4 only fixed right edge alignment; V5 fixes left edge below in
+   the OPERATOR MODE section (after Fix 1) for source-order priority. */
 body.code-mode-active.operator-mode-active .operator-pane { right: 380px !important; }
 body.code-mode-active.operator-mode-active .apex-right-pane.code-shell { right: 380px !important; }
 body.surface-code.operator-mode-active .apex-right-pane.code-shell { bottom: 220px; }
@@ -2195,6 +2204,14 @@ html body.with-sidebar.chat-sidebar-collapsed.operator-mode-active .operator-pan
 }
 html body.with-sidebar:not(.chat-sidebar-collapsed).operator-mode-active .operator-pane {
   left: var(--sidebar-w, 280px) !important;
+}
+/* PR-LAYOUT-V5 Fix 2 (continued) — in code-mode the chatside is
+   display:none (line 1545), so operator-pane should NOT be offset by
+   var(--sidebar-w) — it should start at x=0. This rule lives AFTER
+   Fix 1 in source so source-order tiebreak wins over the
+   :not(.chat-sidebar-collapsed) version (same specificity). */
+html body.with-sidebar.code-mode-active.operator-mode-active .operator-pane {
+  left: 0 !important;
 }
 /* Reserve real space for the operator-pane by shrinking the body's
    available height with padding-bottom. The previous rules tried to do
@@ -4200,19 +4217,28 @@ body.inspector-active .inp-wrap {
   right: calc(var(--inspector-space) + 24px) !important;
   max-width: min(var(--composer-max), calc(100vw - var(--sidebar-w) - var(--inspector-space) - 72px)) !important;
 }
+/* PR-LAYOUT-V5 — was a centered-card treatment (max-width var(--composer-max),
+   margin 0 auto, border-radius 18px). That made the composer feel like a
+   tiny floating island in the lower-right, not aligned with the messages
+   above. V5 removes the centering / card chrome and lets .inp-wrap behave
+   as a normal bottom dock — the inner content (composer-toolbar / irow /
+   etc.) is centered to match messages width via the rules above. */
 .inp-wrap {
-  left: calc(var(--sidebar-w) + 24px) !important;
-  right: 24px !important;
-  max-width: var(--composer-max) !important;
-  margin: 0 auto !important;
-  border-radius: 18px !important;
-  border: 1px solid rgba(148,163,184,.13) !important;
-  background: rgba(6,10,16,.92) !important;
-  box-shadow: 0 18px 54px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.04) !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  /* `left` / `right` were used by an older absolute-positioning attempt
+     that was never converted to true static flow. Force them inert. */
+  left: auto !important;
+  right: auto !important;
+  position: relative !important;
 }
-body.chat-sidebar-collapsed .inp-wrap {
-  left: 70px !important;
-}
+/* Override the legacy chat-sidebar-collapsed offset (was left:70px). */
+body.chat-sidebar-collapsed .inp-wrap { left: auto !important; }
 /* PR-LAYOUT-V2 — the previous override here forced the last 3 chips
    (Tools / Web / Screen) to be 38px squares with cryptic single-letter
    labels K / W / S via ::before. That was the single most-broken bit
@@ -4257,33 +4283,31 @@ textarea#inp {
    content width (no max-width on inner items), input row is a flush
    inline element (no card border), toolbar and footer hug the input
    edges. Visual unity comes from spacing, not from boxes. */
+/* PR-LAYOUT-V5 — fix the "крив" (crooked) composer. V4 made the dock
+   full-width but messages above stayed max-width-centered, so the
+   composer extended past the messages horizontally — visual asymmetry
+   the owner correctly called crooked. V5: composer back to centered,
+   matching the messages width, but using the FULL message viewport
+   (1280px max) so it doesn't look like a tiny floating island. */
 .inp-wrap {
   padding: 12px 24px 14px !important;
   background: linear-gradient(180deg, rgba(8,12,20,.55) 0%, rgba(5,8,14,.96) 70%) !important;
   border-top: 1px solid rgba(148,163,184,.10) !important;
   box-shadow: 0 -16px 48px rgba(0,0,0,.28) !important;
-  /* PR-LAYOUT-V4 Fix 5 — override prior max-width:1040 + border-radius
-     from horizon-cursor-layout-v3 / older "card" treatments so the dock
-     truly spans the content area (sidebar-offset → viewport right edge),
-     not a floating centered card. */
   max-width: none !important;
   width: auto !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
   border-radius: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
 }
-body.with-sidebar > .inp-wrap { margin-left: var(--sidebar-w, 280px) !important; }
-body.with-sidebar.chat-sidebar-collapsed > .inp-wrap { margin-left: 46px !important; }
+/* Dock spans the content area, but INNER content is centered to match
+   the .msgs reading width. No floating, no crooked offset. */
 .inp-wrap .composer-toolbar,
 .inp-wrap .irow,
 .inp-wrap .composer-foot,
 .inp-wrap .hint {
-  max-width: none !important;
+  max-width: 1280px !important;
   width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
   box-sizing: border-box !important;
 }
 .inp-wrap .composer-toolbar { margin-bottom: 8px !important; padding: 0 !important; }
@@ -4920,18 +4944,14 @@ body.with-sidebar.chat-sidebar-collapsed > .inp-wrap { margin-left: 46px !import
       <span class="tb-name">Horizon AI</span>
       <span class="tb-sub" id="tb-sub">Genesis</span>
     </div>
-    <!-- PR-LAYOUT-V4 Fix 4 — license/account pill moved from
-         .chat-status-bar (center bottom of titlebar area) to .tb-l.
-         Reason: owner reported that OWNER/ACCOUNT visually overlapped
-         the centered "Chat" surface label ("ты их расположил обе на
-         одно и тоже место по середине"). Status of YOUR account
-         semantically belongs next to YOUR identity (the ERNEST badge),
-         not in the center where the surface label lives. Click handler
-         and refreshLicensePill() rewired to this id below. -->
-    <button class="tb-license-pill" id="tb-license-pill"
-            onclick="onLicensePillClick()"
-            title="Subscription / account status"
-            style="display:none"></button>
+    <!-- PR-LAYOUT-V5 — tb-license-pill REMOVED. It was a duplicate of
+         the existing #license-pill-host injected by license-ui.js
+         (which already lives in .tb-l after the logo). My V4 addition
+         created a SECOND pill side-by-side with the original, making
+         the titlebar look cluttered. The owner correctly called this
+         out: "в верху слева ... мое имя написал и еще что-то это не
+         уместно". The original license-pill-host stays; v5 below
+         restyles it to be more compact (one pill, not pill+CTA). -->
   </div>
   <!-- PR-U1 (UX research): the title-bar centre is a SINGLE source of
        truth — the surface chip (opens Cmd-K palette) + git branch
@@ -8080,14 +8100,13 @@ const _PRIVILEGED_PILL_LABELS = {
   lifetime: 'LIFETIME',
 };
 async function refreshLicensePill() {
-  // PR-LAYOUT-V4 Fix 4 — write to BOTH the legacy csb-license pill (in
-  // .chat-status-bar) AND the new tb-license-pill (in .tb-l, titlebar
-  // left). Owner saw OWNER/ACCOUNT pills overlapping the centered Chat
-  // button — the new location is the canonical one. Legacy stays so
-  // chat-status-bar (visible when not in shell-clean mode) doesn't go
-  // empty for users who depend on it.
+  // PR-LAYOUT-V5 — tb-license-pill was removed (it duplicated the
+  // existing #license-pill-host injected by license-ui.js). license-ui.js
+  // handles its own rendering via window.H.onLicenseChange / licenseState
+  // — we don't need to write to it from here. We still write to the
+  // legacy csb-license pill in chat-status-bar for any back-compat path
+  // (it's CSS-hidden via #csb-license { display:none !important } above).
   const pills = [
-    document.getElementById('tb-license-pill'),
     document.getElementById('csb-license'),
   ].filter(Boolean);
   if (!pills.length) return;
