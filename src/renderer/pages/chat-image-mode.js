@@ -19,6 +19,10 @@
   // we still need to pick an image provider, so we prefer whichever
   // image-capable key is set.
   async function pickImageProvider() {
+    try {
+      const configured = String(await window.H?.get?.('image.provider') || 'auto').toLowerCase();
+      if (configured === 'gemini' || configured === 'openai') return configured;
+    } catch (_) {}
     const cur = (window.prov || window.provider || '').toLowerCase();
     if (cur === 'gemini') return 'gemini';
     if (cur === 'openai') return 'openai';
@@ -27,6 +31,16 @@
     try { if (await window.H?.hasKey?.('openai')) return 'openai'; } catch (_) {}
     try { if (await window.H?.hasKey?.('gemini')) return 'gemini'; } catch (_) {}
     return null;
+  }
+
+  async function pickImageModel(provider) {
+    const fallback = provider === 'openai' ? 'gpt-image-2' : 'gemini-2.5-flash-image';
+    const key = provider === 'openai' ? 'image.model.openai' : 'image.model.gemini';
+    try {
+      return String(await window.H?.get?.(key) || fallback).trim() || fallback;
+    } catch (_) {
+      return fallback;
+    }
   }
 
   function imgGenIcon() {
@@ -102,26 +116,28 @@
       );
       return;
     }
-    // Stub message — user sees we accepted the prompt immediately.
-    const stubEl = window.addMsg?.('bot', '', { model: `${provider} · generating...` });
+    const model = await pickImageModel(provider);
+    // Stub message: user sees we accepted the prompt immediately.
+    const stubEl = window.addMsg?.('bot', '', { model: `${provider} · ${model}` });
     const stubBubble = stubEl?.querySelector('.bub');
     if (stubBubble) {
       stubBubble.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--t3);font:600 12px var(--font)">
         <span style="width:14px;height:14px;border:2px solid var(--t3);border-top-color:transparent;border-radius:50%;display:inline-block;animation:spin .8s linear infinite"></span>
-        Generating image via ${provider}... (10-30s)
+        Generating image via ${provider} / ${escapeText(model)}... (10-30s)
       </div>`;
     }
     try {
       const res = await window.H?.aiImage?.({
         provider,
         prompt: text,
+        model,
         size: '1024x1024',
       });
       // Remove the stub regardless of success.
       stubEl?.remove();
       if (!res?.ok) {
         window.addMsg?.('bot',
-          `🎨 **Image generation failed** (${provider})\n\n` +
+          `🎨 **Image generation failed** (${provider} / ${model})\n\n` +
           '```\n' + (res?.error || 'Unknown error') + '\n```\n\n' +
           'Common fixes: check your API key in Settings, verify your provider account has image-gen enabled, or try the other provider.'
         );

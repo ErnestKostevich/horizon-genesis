@@ -160,6 +160,9 @@ contextBridge.exposeInMainWorld('H', {
   chatRename:       (id, title)     => ipcRenderer.invoke('chatRename', id, title),
   chatDelete:       (id)            => ipcRenderer.invoke('chatDelete', id),
   chatAddMessage:   (id, r, c, m)   => ipcRenderer.invoke('chatAddMessage', id, r, c, m),
+  chatGetLogs:      (id)            => ipcRenderer.invoke('chatGetLogs', id),
+  chatSetLogs:      (id, logs)      => ipcRenderer.invoke('chatSetLogs', id, logs),
+  chatClearLogs:    (id)            => ipcRenderer.invoke('chatClearLogs', id),
   chatGetCurrent:   ()              => ipcRenderer.invoke('chatGetCurrent'),
 
   // ── NUTRITION ─────────────────────────────────────────────────────────────────
