@@ -123,7 +123,10 @@ function _replayMessages(messages){
   sessionUsageKnown = false;
   sessionHasEstimatedUsage = false;
   sessionUsageUnavailable = false;
-  try { loadOperatorLogForCurrentChat?.(); } catch (_) {}
+  try {
+    const p = loadOperatorLogForCurrentChat?.();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch (_) {}
   if (!messages || messages.length === 0) {
     // Empty chat → restore the welcome greeting so the canvas isn't blank.
     if (typeof showGreeting === 'function') {
@@ -307,6 +310,12 @@ async function bootCurrentChat(){
       currentChatId = cur.id;
       if (Array.isArray(cur.messages) && cur.messages.length) {
         _replayMessages(cur.messages);
+      } else {
+        try { showGreeting?.(); } catch(_){}
+        try {
+          const p = loadOperatorLogForCurrentChat?.();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch(_){}
       }
       updateStatusBar(cur.title);
     }

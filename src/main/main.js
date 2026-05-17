@@ -166,6 +166,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'inspectorActive', 'chatSidebarCollapsed', 'chatSidebarWidth',
   'customPersonas',
   'permissionAllowlist',
+  'image.provider', 'image.model.openai', 'image.model.gemini',
   // PR-D1.5 — ⌘K edit history (LRU 10) + auto-commit toggle.
   'cmdKHistory', 'cmdKAutoCommit',
   // PR-Plan-Act — toggle gates the first agent tool execution behind
@@ -4006,6 +4007,18 @@ ipcMain.handle('chatDelete', (_, id) => {
 ipcMain.handle('chatAddMessage', (_, id, role, content, meta) => {
   loadAgentModules();
   try { return chatStore ? chatStore.addMessage(id, role, content, meta) : { ok: false }; } catch (e) { return { ok: false }; }
+});
+ipcMain.handle('chatGetLogs', (_, id) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.getLogs(id) : { ok: false, logs: [] }; } catch (e) { return { ok: false, logs: [] }; }
+});
+ipcMain.handle('chatSetLogs', (_, id, logs) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.setLogs(id, logs) : { ok: false }; } catch (e) { return { ok: false }; }
+});
+ipcMain.handle('chatClearLogs', (_, id) => {
+  loadAgentModules();
+  try { return chatStore ? chatStore.clearLogs(id) : { ok: false }; } catch (e) { return { ok: false }; }
 });
 ipcMain.handle('chatGetCurrent', () => {
   loadAgentModules();
