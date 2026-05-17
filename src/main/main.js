@@ -167,6 +167,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'settingsTab',
   'openrouter.modelsCache', 'openrouter.modelsCacheAt',
   'mcp.enabled', 'mcp.servers', 'mcp.toolsCache', 'mcp.toolsCacheAt',
+  'connection.telegram_bot.live',
   'codeWorkspace', 'codeOpenFiles', 'codeActiveTabIdx', 'wsListIgnore',
   'inspectorActive', 'chatSidebarCollapsed', 'chatSidebarWidth',
   'customPersonas',
@@ -2311,7 +2312,7 @@ ipcMain.handle('aiImageModels', async () => {
   }
 });
 
-ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
+async function runAiCompletion(_, messages, provider, system, opts) {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';
   const lang     = settingsStore.get('lang') || 'en';
@@ -2614,7 +2615,9 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
       default: return { error: `Unknown provider: ${provider}` };
     }
   } catch(e) { return { error: `Network error: ${e.message}` }; }
-});
+}
+
+ipcMain.handle('ai', runAiCompletion);
 
 // ── Web Search ────────────────────────────────────────────────────────────────
 ipcMain.handle('search', async (_, query) => {
@@ -3540,6 +3543,24 @@ function loadAgentModules() {
     try {
       const { ConnectionsManager } = require('./connectionsManager');
       connectionsManager = new ConnectionsManager(keysStore, settingsStore);
+      connectionsManager.setReplyFn(async ({ messages, system }) => {
+        const provider = settingsStore.get('provider') || 'gemini';
+        const res = await runAiCompletion(null, messages || [], provider, system || '', { source: 'telegram' });
+        return {
+          ...res,
+          provider,
+          text: res?.reply || res?.error || '',
+        };
+      });
+      connectionsManager.setEventBridge((channel, payload) => {
+        try {
+          const wins = BrowserWindow.getAllWindows();
+          for (const w of wins) {
+            if (w && !w.isDestroyed() && w.webContents) w.webContents.send(channel, payload);
+          }
+        } catch (_) {}
+      });
+      connectionsManager.startEnabledRuntimes().catch(e => console.error('Connections runtime failed:', e.message));
       console.log('Connections manager loaded');
     } catch(e) {
       console.error('Connections manager failed:', e.message);
@@ -4156,6 +4177,28 @@ ipcMain.handle('connectionsTest', async (_, id) => {
   if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
   try { return await connectionsManager.testConnection(String(id || '')); }
   catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('connectionsSetLive', async (_, id, enabled) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try {
+    if (String(id || '') === 'telegram_bot') return await connectionsManager.setTelegramLive(!!enabled);
+    return { ok: false, error: `Live runtime is not available for ${id}` };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('connectionsRuntimeStatus', async (_, id) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try {
+    if (String(id || '') === 'telegram_bot') return connectionsManager.telegramStatus();
+    return { ok: false, error: `Runtime status is not available for ${id}` };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 
 // ── CHAT MANAGEMENT ──────────────────────────────────────────────────────────
