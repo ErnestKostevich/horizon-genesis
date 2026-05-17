@@ -91,6 +91,17 @@ contextBridge.exposeInMainWorld('H', {
   projectConfigGet:        ()         => ipcRenderer.invoke('projectConfigGet'),
   projectConfigWriteRules: (content)  => ipcRenderer.invoke('projectConfigWriteRules', content),
   projectConfigWriteHooks: (hooks)    => ipcRenderer.invoke('projectConfigWriteHooks', hooks),
+  // Skills — Claude Code-style markdown skill bundles.
+  skillsList:              ()              => ipcRenderer.invoke('skillsList'),
+  skillsRead:              (id, scope)     => ipcRenderer.invoke('skillsRead', id, scope),
+  skillsWrite:             (id, c, scope)  => ipcRenderer.invoke('skillsWrite', id, c, scope),
+  skillsToggle:            (id, scope)     => ipcRenderer.invoke('skillsToggle', id, scope),
+  skillsUninstall:         (id, scope)     => ipcRenderer.invoke('skillsUninstall', id, scope),
+  skillsInstallBundle:     (b, opts)       => ipcRenderer.invoke('skillsInstallBundle', b, opts),
+  skillsInstallFromUrl:    (url)           => ipcRenderer.invoke('skillsInstallFromUrl', url),
+  skillsShareUrl:          (id)            => ipcRenderer.invoke('skillsShareUrl', id),
+  skillsPreviewMatch:      (q, opts)       => ipcRenderer.invoke('skillsPreviewMatch', q, opts),
+  skillsRunHelper:         (id, helper, args, tmo) => ipcRenderer.invoke('skillsRunHelper', id, helper, args, tmo),
   // PR-D2 — workspace symbol index (built lazily on workspace open).
   wsIndexBuild:         (opts)       => ipcRenderer.invoke('wsIndexBuild', opts),
   wsIndexStatus:        ()           => ipcRenderer.invoke('wsIndexStatus'),
