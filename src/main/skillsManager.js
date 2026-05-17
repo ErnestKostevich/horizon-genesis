@@ -121,6 +121,7 @@ class SkillsManager {
     this.skills = new Map();   // id → record (best-scope variant kept here)
     this.allScopes = new Map(); // `${scope}:${id}` → record (full list for the UI)
     this.disabled = new Set(this._loadDisabled());
+    this.usageStats = this._loadUsageStats();
     this._cacheKey = '';
 
     if (this.userDir && !fs.existsSync(this.userDir)) {
@@ -140,6 +141,40 @@ class SkillsManager {
     if (!this.settingsStore) return;
     try { this.settingsStore.set('skills.disabled', Array.from(this.disabled)); }
     catch (_) {}
+  }
+
+  _loadUsageStats() {
+    if (!this.settingsStore) return {};
+    try {
+      const raw = this.settingsStore.get('skills.usage') || {};
+      return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    } catch (_) { return {}; }
+  }
+
+  _saveUsageStats() {
+    if (!this.settingsStore) return;
+    try { this.settingsStore.set('skills.usage', this.usageStats || {}); }
+    catch (_) {}
+  }
+
+  recordUsage(skillIds, query, outcome = 'selected') {
+    const ids = Array.isArray(skillIds) ? skillIds.map(String).filter(Boolean) : [];
+    if (!ids.length) return { ok: true, recorded: 0 };
+    const now = new Date().toISOString();
+    const q = String(query || '').trim().slice(0, 500);
+    for (const id of ids) {
+      const prev = this.usageStats[id] || {};
+      const recentQueries = Array.isArray(prev.recentQueries) ? prev.recentQueries.slice(0, 11) : [];
+      if (q) recentQueries.unshift(q);
+      this.usageStats[id] = {
+        count: (prev.count || 0) + 1,
+        lastUsedAt: now,
+        lastOutcome: outcome || 'selected',
+        recentQueries,
+      };
+    }
+    this._saveUsageStats();
+    return { ok: true, recorded: ids.length };
   }
 
   _scanDir(rootDir, scope) {
@@ -221,9 +256,13 @@ class SkillsManager {
         description: rec.frontmatter.description,
         version: rec.frontmatter.version || '0.1.0',
         tags: rec.frontmatter.tags || [],
+        aliases: rec.frontmatter.aliases || [],
+        triggers: rec.frontmatter.triggers || [],
+        examples: rec.frontmatter.examples || [],
         permissions: rec.frontmatter.permissions || [],
         helpers: rec.helpers.map(h => h.rel),
         hasHelpers: rec.helpers.length > 0,
+        usage: this.usageStats[rec.id] || { count: 0, recentQueries: [] },
         parseOk: rec.parseOk,
         parseErrors: rec.parseErrors,
         dir: rec.dir,
@@ -286,6 +325,37 @@ class SkillsManager {
     }
     this.loadAll();
     return { ok: true, id: newId, scope: target, dir: baseDir };
+  }
+
+  previewSource(query, content, opts = {}) {
+    const parsed = parseSkillMd(content);
+    if (!parsed.ok) {
+      return { ok: false, error: 'invalid SKILL.md: ' + (parsed.errors || []).join('; '), selected: [], scored: [] };
+    }
+    const id = String(parsed.frontmatter.name || 'preview-skill');
+    const draft = {
+      id,
+      scope: opts.scope || 'draft',
+      enabled: true,
+      frontmatter: parsed.frontmatter,
+    };
+    const active = this.list().filter(s => s.active && s.id !== id).map(s => ({
+      ...s,
+      frontmatter: {
+        name: s.name,
+        description: s.description,
+        tags: s.tags,
+        aliases: s.aliases,
+        triggers: s.triggers,
+        examples: s.examples,
+      },
+    }));
+    const { selected, scored } = selectRelevantSkills([draft, ...active], query || '', {
+      ...opts,
+      forcedIds: opts.forcedIds || [id],
+      usageStats: this.usageStats,
+    });
+    return { ok: true, id, selected, scored };
   }
 
   /**
@@ -409,10 +479,13 @@ class SkillsManager {
           name: s.name,
           description: s.description,
           tags: s.tags,
+          aliases: s.aliases,
+          triggers: s.triggers,
+          examples: s.examples,
         },
       })),
       query,
-      opts
+      { ...opts, usageStats: this.usageStats }
     );
 
     const parts = [];

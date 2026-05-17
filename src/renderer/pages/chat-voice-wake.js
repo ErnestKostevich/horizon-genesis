@@ -21,6 +21,8 @@ var wakeRec=null;
 var wakeChunks=[];
 var wakeLoopTimer=null;
 var wakeDebounce=false;
+var wakeLastDebug=null;
+var wakeLastFireAt=0;
 var cmdRec=null;
 
 // ═══ ECHO DETECTION — prevents wake word from triggering on Horizon's own voice ═══
@@ -28,7 +30,7 @@ var isSpeaking = false;  // true while TTS is playing
 var speakEndTime = 0;    // timestamp when TTS finished
 var ECHO_COOLDOWN = 1500; // ignore mic for 1.5s after TTS ends
 
-var MIN_SUSTAINED_SPEECH_FRAMES = 5; // 500ms
+var MIN_SUSTAINED_SPEECH_FRAMES = 3; // 300ms
 function isSustainedSpeech(frames) { return frames >= MIN_SUSTAINED_SPEECH_FRAMES; }
 
 function pauseWakeForTts(){
@@ -141,7 +143,7 @@ var WAKE_SETTING_KEYS = {
 };
 var wakeSettings = {
   strictMode: true,
-  volumeThreshold: 18,
+  volumeThreshold: 10,
   confirmBeep: false,
 };
 
@@ -169,7 +171,7 @@ async function loadWakeSettings() {
   const vol = await H.get('wakeVolumeThreshold').catch(() => null);
   const beep = await H.get('wakeConfirmBeep').catch(() => null);
   wakeSettings.strictMode = strict === null ? localWakeCfg('strictMode', true) : !!strict;
-  wakeSettings.volumeThreshold = vol === null ? localWakeCfg('volumeThreshold', 18) : Math.max(5, Math.min(50, +vol || 18));
+  wakeSettings.volumeThreshold = vol === null ? localWakeCfg('volumeThreshold', 10) : Math.max(5, Math.min(50, +vol || 10));
   wakeSettings.confirmBeep = beep === null ? localWakeCfg('confirmBeep', false) : !!beep;
 }
 
@@ -184,79 +186,88 @@ function activateHotWindow() {
   hotWindowTimeout = setTimeout(() => { hotWindowActive = false; }, HOT_WINDOW_DURATION);
 }
 
-function isWakeWord(text){
-  if(!text) return false;
-  // Clean text — strip punctuation, collapse spaces.
-  let lo = text.toLowerCase()
-    .replace(/[.,!?'"()[\]{}\-_:;…«»""'']/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if(!lo) return false;
-
-  // REJECT if Horizon is currently speaking or just finished (echo detection).
-  if(isSpeaking || (Date.now() - speakEndTime < ECHO_COOLDOWN)) return false;
-
-  // REJECT Whisper artifacts in brackets like [music] or (applause).
-  if(/^\[.*\]$/.test(lo) || /^\(.*\)$/.test(lo)) return false;
-
-  // REJECT very long transcriptions — a wake chunk is only 3s, anything this
-  // long is almost certainly hallucinated subtitles or a spurious decode.
-  if(lo.length > 80) return false;
-
-  // REJECT common Whisper hallucination artifacts when they are the ONLY content.
-  const HALLUCINATIONS = /^(thanks|thank you|bye|okay|ok|oh|ah|um|uh|hmm|hm|yeah|yes|no|so|well|the|a|you|i|it|is|to|and|спасибо|пока|ну|да|нет|ой|ах|эм|угу|ага|хм|ладно|вот|это|та|не|то|субтитры|подпис\w*|редактор|перевод\w*|продолж\w*|subscribe|like|comment|music|playing|silence|noise|applause|laughter|ммм|ээ|аа)$/i;
-  if(HALLUCINATIONS.test(lo)) return false;
-
-  const words = lo.split(' ').filter(Boolean);
-  const strict = wakeCfg('strictMode', true);
-
-  // Strict mode (default): wake word must be the whole utterance OR the
-  // very first word, optionally preceded by a single attention word
-  // ("hey", "ok", "okay", "эй", "окей", "слышь"). This blocks the most
-  // common false positives — "Horizon" used mid-sentence by people on
-  // phone calls or other ambient speech.
-  if (strict) {
-    const ATTN = new Set(['hey','ok','okay','hello','эй','окей','окэй','слышь','эй,','слушай']);
-    for (const w of WAKE_EXACT) {
-      if (w.includes(' ')) {
-        // Phrase wake words like "hey horizon" only match at the very start.
-        if (lo === w || lo.startsWith(w + ' ')) return true;
-      } else {
-        // Single-word: allowed only as utterance, the first word, or
-        // second word after a single recognised attention prefix.
-        if (lo === w) return true;
-        if (words[0] === w) return true;
-        if (words.length >= 2 && ATTN.has(words[0]) && words[1] === w) return true;
-      }
-    }
-  } else {
-    // Lenient mode — original behaviour. Whole-word match anywhere.
-    for(const w of WAKE_EXACT) {
-      if(w.includes(' ')) {
-        if(lo === w || lo.startsWith(w + ' ') || lo.endsWith(' ' + w) || lo.includes(' ' + w + ' ')) return true;
-      } else {
-        if(words.includes(w)) return true;
-      }
-    }
-  }
-
-  // Hot window — during the 15s after a wake fires, accept any meaningful
-  // speech (the user is continuing the conversation).
-  if(hotWindowActive && lo.length > 3 && words.length >= 1) {
-    hotWindowActive = false;
-    clearTimeout(hotWindowTimeout);
-    return true;
-  }
-
-  return false;
-}
-
 // ═══════════════════════════════════════════════════════════════
 // WAKE WORD ENGINE — MediaRecorder + Groq Whisper
 // This is the ONLY method that reliably works in Electron.
 // Web Speech API throws "network error" in Electron — confirmed bug.
 // ═══════════════════════════════════════════════════════════════
+function normalizeWakeText(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[.,!?'"()[\]{}\-_:;…«»“”‘’]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function wakeDistance(a, b, maxDistance = 2) {
+  a = String(a || '');
+  b = String(b || '');
+  if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const curr = new Array(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    let rowMin = curr[0];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+      rowMin = Math.min(rowMin, curr[j]);
+    }
+    if (rowMin > maxDistance) return maxDistance + 1;
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+  }
+  return prev[b.length];
+}
+
+function matchWakeWord(text) {
+  const normalized = normalizeWakeText(text);
+  const now = Date.now();
+  const debug = { ok: false, normalized, matched: '', confidence: 0, reason: '' };
+  if (!normalized) return { ...debug, reason: 'empty' };
+  if (isSpeaking || (now - speakEndTime < ECHO_COOLDOWN)) return { ...debug, reason: 'echo-cooldown' };
+  if (/^\[.*\]$/.test(normalized) || /^\(.*\)$/.test(normalized)) return { ...debug, reason: 'subtitle-artifact' };
+  if (normalized.length > 90) return { ...debug, reason: 'too-long' };
+  const hallucinations = /^(thanks|thank you|bye|okay|ok|oh|ah|um|uh|hmm|hm|yeah|yes|no|so|well|music|playing|silence|noise|applause|laughter|спасибо|пока|ну|да|нет|ой|ах|эм|угу|ага|хм|ладно|субтитры|подписка|подписывайтесь)$/i;
+  if (hallucinations.test(normalized)) return { ...debug, reason: 'common-hallucination' };
+
+  const words = normalized.split(' ').filter(Boolean);
+  const strict = wakeCfg('strictMode', true);
+  const attention = new Set(['hey', 'hi', 'hello', 'ok', 'okay', 'эй', 'слушай', 'окей', 'привет']);
+  const canonical = [
+    'горизонт', 'горизон', 'хорайзон', 'хоризон', 'харизон', 'харизонт', 'horizon', 'horizan', 'horison',
+    'jarvis', 'джарвис'
+  ];
+  const startWords = attention.has(words[0]) ? words.slice(1, 3) : words.slice(0, 2);
+  const candidates = strict ? startWords : words;
+  for (const token of candidates) {
+    for (const wake of canonical) {
+      if (token === wake) return { ok: true, normalized, matched: wake, confidence: 1, reason: 'exact' };
+      const maxDist = wake.length >= 7 ? 2 : 1;
+      const d = wakeDistance(token, wake, maxDist);
+      if (d <= maxDist) {
+        return { ok: true, normalized, matched: wake, confidence: Number((1 - d / Math.max(token.length, wake.length)).toFixed(2)), reason: 'fuzzy' };
+      }
+    }
+  }
+  if (hotWindowActive && normalized.length > 3 && words.length >= 1) {
+    hotWindowActive = false;
+    clearTimeout(hotWindowTimeout);
+    return { ok: true, normalized, matched: 'hot-window', confidence: 0.75, reason: 'hot-window' };
+  }
+  return { ...debug, reason: strict ? 'no-start-match' : 'no-match' };
+}
+
+function isWakeWord(text){
+  const match = matchWakeWord(text);
+  wakeLastDebug = { ...match, at: new Date().toISOString() };
+  return !!match.ok;
+}
+
+window.normalizeWakeText = normalizeWakeText;
+window.matchWakeWord = matchWakeWord;
+window.getWakeDebug = () => wakeLastDebug;
+
 function voiceAudioConstraints() {
   return {
     audio: {
@@ -364,7 +375,7 @@ function runWakeChunk(){
     if (vol > wakePeakVolume) wakePeakVolume = vol;
     
     // Sustained-speech tracking
-    const volThreshold = wakeCfg('volumeThreshold', 18);
+    const volThreshold = wakeCfg('volumeThreshold', 10);
     if (vol > volThreshold) {
       consecutiveSpeechFrames++;
       if (consecutiveSpeechFrames > maxConsecutiveSpeechFrames) {
@@ -392,10 +403,19 @@ function runWakeChunk(){
     // Threshold default 18; user-tunable via Settings -> Voice -> Sensitivity
     // (range 5-50). Lower = more sensitive (catches quiet "Horizon" but
     // more false positives), higher = stricter.
-    const volThreshold = wakeCfg('volumeThreshold', 18);
+    const volThreshold = wakeCfg('volumeThreshold', 10);
     const strictMode = wakeCfg('strictMode', true);
     
-    if(blob.size < 3000 || wakePeakVolume < volThreshold || (strictMode && maxConsecutiveSpeechFrames < MIN_SUSTAINED_SPEECH_FRAMES)){
+    if(blob.size < 1200 || (wakePeakVolume < Math.max(4, volThreshold * 0.45) && maxConsecutiveSpeechFrames < 2) || (strictMode && maxConsecutiveSpeechFrames < Math.max(2, MIN_SUSTAINED_SPEECH_FRAMES - 1))){
+      wakeLastDebug = {
+        ok: false,
+        reason: 'audio-gate',
+        peak: Number(wakePeakVolume.toFixed(1)),
+        frames: maxConsecutiveSpeechFrames,
+        bytes: blob.size,
+        threshold: volThreshold,
+        at: new Date().toISOString(),
+      };
       scheduleNextChunk();
       return;
     }
@@ -413,7 +433,10 @@ function runWakeChunk(){
 
     if(!wakeActive) return;
 
-    if(text && isWakeWord(text)){
+    const wakeMatch = matchWakeWord(text);
+    wakeLastDebug = { ...wakeMatch, peak: Number(wakePeakVolume.toFixed(1)), frames: maxConsecutiveSpeechFrames, bytes: blob.size, at: new Date().toISOString() };
+
+    if(text && wakeMatch.ok){
       if(!wakeDebounce){
         wakeDebounce=true;
         setTimeout(()=>wakeDebounce=false, 2500);
@@ -426,9 +449,8 @@ function runWakeChunk(){
 
   wakePhase='listening';
   setWakeBar('listening');
-  wakeRec.start();
-  // Longer chunk = better transcription accuracy, fewer false positives
-  wakeLoopTimer = setTimeout(()=>{ try{wakeRec?.stop();}catch(_){} }, 3000);
+  wakeRec.start(100);
+  wakeLoopTimer = setTimeout(()=>{ try{wakeRec?.stop();}catch(_){} }, 1600);
 }
 
 function scheduleNextChunk(){
@@ -436,7 +458,7 @@ function scheduleNextChunk(){
   wakePhase='idle';
   setWakeBar('idle');
   // Small gap between chunks for processing
-  wakeLoopTimer = setTimeout(runWakeChunk, 200);
+  wakeLoopTimer = setTimeout(runWakeChunk, 80);
 }
 
 async function transcribeWakeChunk(blob){
@@ -488,12 +510,12 @@ async function fireWake(){
   }
 
   addMsg('bot', `◈ ${reply}`);
-  speakAndThen(reply, ()=>{
-    // After TTS, listen for command
+  wakeLastFireAt = Date.now();
+  setTimeout(()=>{
     if(!wakeActive){ wakePhase='idle'; setWakeBar('idle'); return; }
     setWakeBar('command');
     listenForCommand();
-  });
+  }, 120);
 }
 
 // Record the command (up to 8 seconds of silence detection)

@@ -3872,6 +3872,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
           selected: (res.selected || []).map(s => ({ id: s.id, score: s.score, breakdown: s.breakdown, scope: s.scope, forced: s.forced, truncated: s.truncated, bytes: s.bytes })),
           scored: (res.scored || []).map(s => ({ id: s.id, score: s.score, breakdown: s.breakdown, scope: s.scope, forced: s.forced })),
         };
+        skillsManager.recordUsage(skillsSelected.selected.map(s => s.id), userMessage, 'selected');
         // Emit a dedicated step so the inspector can render a "Skills loaded"
         // panel. Same channel agentLoop uses for tool dispatches, so the
         // renderer's existing onAgentStep listener picks it up.
@@ -4468,6 +4469,13 @@ ipcMain.handle('skillsPreviewMatch', (_, query, opts) => {
 
 // Forwarded to agent.js dispatchTool — gated by withPermission so the standard
 // approval UX fires before any helper script runs.
+ipcMain.handle('skillsPreviewSource', (_, query, content, opts) => {
+  loadAgentModules();
+  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded', selected: [], scored: [] };
+  skillsManager.refreshIfStale();
+  return skillsManager.previewSource(query || '', content || '', opts || {});
+});
+
 ipcMain.handle('skillsRunHelper', async (event, skillId, helperRel, helperArgs, timeoutMs) => {
   loadAgentModules();
   if (!agentTools || !skillsManager) return { ok: false, error: 'Skills manager not loaded' };

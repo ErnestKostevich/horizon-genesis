@@ -34,6 +34,10 @@ const WEIGHTS = {
   description: 1.0,
   name: 0.6,
   tags: 0.4,
+  aliases: 0.8,
+  triggers: 1.2,
+  examples: 0.7,
+  recentUsage: 0.25,
 };
 
 const DEFAULT_THRESHOLD = 0.15;
@@ -74,16 +78,37 @@ function overlap(queryTokens, fieldTokens) {
  * Compute a [0..~1] relevance score for one skill against a query.
  * Returns { score, breakdown } — breakdown is shown in the inspector UI.
  */
-function scoreSkill(skill, queryTokens) {
+function usageBoost(skillId, queryTokens, usageStats = {}) {
+  const stat = usageStats?.[skillId];
+  if (!stat) return { score: 0, hits: 0 };
+  const recent = Array.isArray(stat.recentQueries) ? stat.recentQueries.slice(0, 8) : [];
+  let hits = 0;
+  for (const q of recent) {
+    const qt = tokenize(q);
+    if (overlap(queryTokens, qt) >= 0.34) hits++;
+  }
+  const countBoost = Math.min(0.08, Math.log10((stat.count || 0) + 1) * 0.03);
+  const queryBoost = Math.min(WEIGHTS.recentUsage, hits * 0.08);
+  return { score: countBoost + queryBoost, hits };
+}
+
+function scoreSkill(skill, queryTokens, opts = {}) {
   const fm = skill?.frontmatter || {};
   const descT = tokenize(fm.description || '');
   const nameT = tokenize(fm.name || '');
   const tagT = tokenize((fm.tags || []).join(' '));
+  const aliasT = tokenize((fm.aliases || []).join(' '));
+  const triggerT = tokenize((fm.triggers || []).join(' '));
+  const exampleT = tokenize((fm.examples || []).join(' '));
 
   const dScore = overlap(queryTokens, descT) * WEIGHTS.description;
   const nScore = overlap(queryTokens, nameT) * WEIGHTS.name;
   const tScore = overlap(queryTokens, tagT) * WEIGHTS.tags;
-  const total = dScore + nScore + tScore;
+  const aScore = overlap(queryTokens, aliasT) * WEIGHTS.aliases;
+  const trScore = overlap(queryTokens, triggerT) * WEIGHTS.triggers;
+  const eScore = overlap(queryTokens, exampleT) * WEIGHTS.examples;
+  const u = usageBoost(skill?.id || fm.name, queryTokens, opts.usageStats || {});
+  const total = dScore + nScore + tScore + aScore + trScore + eScore + u.score;
 
   return {
     score: Number(total.toFixed(4)),
@@ -91,6 +116,10 @@ function scoreSkill(skill, queryTokens) {
       description: Number(dScore.toFixed(4)),
       name: Number(nScore.toFixed(4)),
       tags: Number(tScore.toFixed(4)),
+      aliases: Number(aScore.toFixed(4)),
+      triggers: Number(trScore.toFixed(4)),
+      examples: Number(eScore.toFixed(4)),
+      recentUsage: Number(u.score.toFixed(4)),
     },
   };
 }
@@ -115,13 +144,19 @@ function selectRelevantSkills(skills, query, opts = {}) {
   const queryTokens = tokenize(query);
 
   const scoped = enabled.map(skill => {
-    const { score, breakdown } = scoreSkill(skill, queryTokens);
+    const { score, breakdown } = scoreSkill(skill, queryTokens, opts);
+    const fm = skill.frontmatter || {};
+    const forcedNames = [
+      skill.id,
+      fm.name,
+      ...(Array.isArray(fm.aliases) ? fm.aliases : []),
+    ].filter(Boolean).map(String);
     return {
       id: skill.id,
       scope: skill.scope || 'user',
       score,
       breakdown,
-      forced: forced.has(skill.id) || forced.has(skill.frontmatter?.name),
+      forced: forcedNames.some(n => forced.has(n)),
       skill,
     };
   });
