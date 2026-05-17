@@ -116,6 +116,58 @@ class AgentMemory {
     this.filePath = dbPath.replace(/\.db$/, '.json');
     this.ready = false;
     this._data = { memories: [], facts: {}, meals: [], conversations: [], learning: { stats: {} } };
+    // Embeddings service is wired post-construct via setEmbeddingService.
+    // While null, recall() stays on the keyword scorer — no regression for
+    // users who haven't added an OpenAI/Gemini key.
+    this.embeddings = null;
+    this._embedDebounce = null;
+    this._pendingEmbedKeys = new Set();
+  }
+
+  /** Inject the EmbeddingService instance (created in main.js so it shares
+   *  fetch + keysStore). Called once at boot after init(). */
+  setEmbeddingService(svc) {
+    this.embeddings = svc || null;
+    if (svc) {
+      // Prune indexes for memories that were deleted while we weren't
+      // looking — cheap, runs once on wiring.
+      try { svc.pruneKeys(this._data.memories.map(m => m.key)); } catch (_) {}
+    }
+  }
+
+  /** Queue a memory key for async embedding. Coalesces bursts of remember()
+   *  calls into a single batch run on the next tick. */
+  _queueEmbedding(key) {
+    if (!this.embeddings || !key) return;
+    this._pendingEmbedKeys.add(key);
+    if (this._embedDebounce) return;
+    this._embedDebounce = setTimeout(() => {
+      this._embedDebounce = null;
+      this._flushEmbeddingQueue().catch(e => console.warn('[memory] flush embeddings:', e.message));
+    }, 1500);
+  }
+
+  async _flushEmbeddingQueue() {
+    if (!this.embeddings || !this._pendingEmbedKeys.size) return;
+    const keys = [...this._pendingEmbedKeys];
+    this._pendingEmbedKeys.clear();
+    const items = keys
+      .map(k => this._data.memories.find(m => m.key === k))
+      .filter(Boolean)
+      .map(m => ({ key: m.key, text: m.content }));
+    if (!items.length) return;
+    try {
+      await this.embeddings.backfill(items);
+    } catch (e) {
+      console.warn('[memory] embed flush failed:', e.message);
+    }
+  }
+
+  /** Backfill all memories that don't have embeddings yet. Idempotent. */
+  async embedAllPending(onProgress) {
+    if (!this.embeddings) return { ok: false, error: 'no embeddings service' };
+    const items = this._data.memories.map(m => ({ key: m.key, text: m.content }));
+    return this.embeddings.backfill(items, { onProgress });
   }
 
   _ensureShape() {
@@ -193,9 +245,16 @@ class AgentMemory {
     this._data.memories.push(item);
     // Limit to last 2000 memories
     if (this._data.memories.length > 2000) {
-      this._data.memories = this._data.memories.slice(-2000);
+      const dropped = this._data.memories.splice(0, this._data.memories.length - 2000);
+      // Drop their embeddings too — sidecar would otherwise hold orphans.
+      if (this.embeddings) {
+        for (const m of dropped) this.embeddings.removeVector(m.key);
+        try { this.embeddings.saveSidecar(); } catch (_) {}
+      }
     }
     this._save();
+    // Fire-and-forget: index the new memory in the background.
+    this._queueEmbedding(item.key);
     return item;
   }
 
@@ -226,31 +285,90 @@ class AgentMemory {
     );
   }
 
-  // Search memories by content (simple keyword match)
-  recall(query, limit) {
-    this._ensureShape();
+  // Keyword scoring kept private so the hybrid recall can reuse it. Returns
+  // the same record shape as before (`...m, score, matches`).
+  _keywordScore(query) {
     const q = (query || '').toLowerCase();
     const words = q.split(/[^\p{L}\p{N}_-]+/u).filter(w => w.length > 2);
     const now = Date.now();
-    
-    return this._data.memories
-      .map(m => {
-        const content = String(m.content || '').toLowerCase();
-        // Score based on word matches
-        const matches = words.reduce((acc, w) => acc + (content.includes(w) ? 1 : 0), 0);
-        const ageDays = Math.max(0, (now - (m.lastSeen || m.created || now)) / 86400000);
-        const recency = Math.max(0, 4 - Math.floor(ageDays / 14));
-        const score = (matches * 4) + (m.importance || 5) + recency + Math.min(3, m.seen || 1);
-        return { ...m, score, matches };
-      })
+    return this._data.memories.map(m => {
+      const content = String(m.content || '').toLowerCase();
+      const matches = words.reduce((acc, w) => acc + (content.includes(w) ? 1 : 0), 0);
+      const ageDays = Math.max(0, (now - (m.lastSeen || m.created || now)) / 86400000);
+      const recency = Math.max(0, 4 - Math.floor(ageDays / 14));
+      const score = (matches * 4) + (m.importance || 5) + recency + Math.min(3, m.seen || 1);
+      return { ...m, kwScore: score, matches };
+    });
+  }
+
+  /**
+   * Synchronous keyword recall — kept as the safe fallback path. Used when
+   * the EmbeddingService is unavailable, when query length is too short to
+   * embed meaningfully, or when the model side calls recall synchronously.
+   */
+  recall(query, limit) {
+    this._ensureShape();
+    const q = (query || '').toLowerCase();
+    return this._keywordScore(q)
       .filter(m => m.matches > 0 || q.length < 3)
+      .map(m => ({ ...m, score: m.kwScore }))
       .sort((a, b) => {
-        // Sort by score, then importance, then recency
         if (b.score !== a.score) return b.score - a.score;
         if (b.importance !== a.importance) return b.importance - a.importance;
         return b.created - a.created;
       })
       .slice(0, limit || 10);
+  }
+
+  /**
+   * Hybrid semantic + keyword recall. Embedding contributes ~0.6 of the
+   * blended score; keyword retains ~0.4. The split means:
+   *  - exact-string queries (e.g. user pastes a memory verbatim) still win
+   *    via the keyword path,
+   *  - paraphrased / conceptual queries surface their best semantic match.
+   * Falls back to plain `recall()` when no embedding service is wired or
+   * the query embedding can't be computed.
+   *
+   * Returns the same record shape as recall() plus {semantic, kw, score}.
+   */
+  async semanticRecall(query, limit, opts = {}) {
+    this._ensureShape();
+    const q = String(query || '').trim();
+    const lim = limit || 10;
+    if (!this.embeddings || !this.embeddings.isAvailable() || q.length < 3) {
+      return this.recall(q, lim);
+    }
+    let queryVec = null;
+    try { queryVec = await this.embeddings.embed(q); }
+    catch (e) { /* fall through */ }
+    if (!queryVec) return this.recall(q, lim);
+
+    const semWeight = typeof opts.semanticWeight === 'number' ? opts.semanticWeight : 0.6;
+    const kwWeight = 1 - semWeight;
+    const kw = this._keywordScore(q);
+    // Normalise keyword scores to [0,1] for blending. Empirically a kwScore
+    // above ~18 is "strong match" (importance up to 10 + matches × 4 + ...).
+    const kwMax = Math.max(1, ...kw.map(m => m.kwScore || 0));
+    const blended = kw.map(m => {
+      const vec = this.embeddings.index.get(m.key);
+      const sem = vec ? Math.max(0, require('./embeddings').cosine(queryVec, vec)) : 0;
+      const kwNorm = (m.kwScore || 0) / kwMax;
+      const score = (semWeight * sem) + (kwWeight * kwNorm);
+      return { ...m, semantic: Number(sem.toFixed(4)), kw: Number(kwNorm.toFixed(4)), score: Number(score.toFixed(4)) };
+    });
+    // Require some signal — either decent semantic overlap (≥0.18, the
+    // empirical "vaguely related" floor for small-256 embeddings) or any
+    // keyword match. Avoids dumping unrelated memories at low cutoffs.
+    return blended
+      .filter(m => m.semantic >= 0.18 || m.matches > 0)
+      .sort((a, b) => (b.score - a.score) || (b.importance - a.importance) || (b.created - a.created))
+      .slice(0, lim);
+  }
+
+  embeddingStatus() {
+    if (!this.embeddings) return { available: false, indexed: 0 };
+    const st = this.embeddings.status();
+    return { ...st, totalMemories: this._data.memories.length };
   }
 
   getRecent(limit) {
