@@ -1407,6 +1407,9 @@ function updateShellChrome(surface = activeSurface){
     if (modelLabel) modelLabel.textContent = `${(prov || provider || 'AI').toUpperCase()} · ${model}`;
     const composerModel = document.getElementById('composer-model-chip');
     if (composerModel) composerModel.textContent = model;
+    if (String(mode || '').toLowerCase() === 'image' && typeof refreshImageComposerChip === 'function') {
+      refreshImageComposerChip();
+    }
     const composerPersona = document.getElementById('composer-persona-chip');
     if (composerPersona) composerPersona.textContent = currentPersona || 'Default';
     const composerMode = document.getElementById('composer-mode-chip');
