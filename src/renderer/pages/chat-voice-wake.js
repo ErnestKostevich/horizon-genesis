@@ -143,9 +143,20 @@ var WAKE_SETTING_KEYS = {
 };
 var wakeSettings = {
   strictMode: true,
-  volumeThreshold: 10,
+  // Default was 10 — too high for many built-in laptop mics where typical
+  // speech reads 5–8 on the frequency-bin average. With 10 the audio gate
+  // dropped quiet "Хорайзон" utterances before they ever reached Whisper.
+  // 6 is the sweet spot: still rejects pure room noise (typically 2–4) but
+  // catches normal voice. User can still raise via Settings → Voice.
+  volumeThreshold: 6,
   confirmBeep: false,
 };
+// Last raw transcription so debugSurfacing tools and the wake bar can show
+// what Whisper heard. Surfaced via window.getWakeDebug() and the wake bar
+// tooltip — invaluable when the user reports "wake doesn't work".
+var wakeLastText = '';
+var wakeLastTextAt = 0;
+var wakeTranscribeErrorShown = false;
 
 function localWakeCfg(key, def) {
   try {
@@ -266,7 +277,15 @@ function isWakeWord(text){
 
 window.normalizeWakeText = normalizeWakeText;
 window.matchWakeWord = matchWakeWord;
-window.getWakeDebug = () => wakeLastDebug;
+window.getWakeDebug = () => ({
+  last: wakeLastDebug,
+  lastText: wakeLastText,
+  lastTextAt: wakeLastTextAt,
+  active: wakeActive,
+  phase: wakePhase,
+  cfg: { ...wakeSettings },
+  transcribeErrorShown: wakeTranscribeErrorShown,
+});
 
 function voiceAudioConstraints() {
   return {
@@ -305,6 +324,10 @@ async function startWakeMode(){
 
   wakeActive=true;
   wakePhase='idle';
+  // Fresh start: re-arm the one-shot transcription-error toast so users who
+  // fix their Groq key (or switch provider) get feedback again.
+  wakeTranscribeErrorShown = false;
+  wakeLastText = '';
   setWakeBar('idle');
   runWakeChunk(); // start the loop
 }
@@ -390,90 +413,146 @@ function runWakeChunk(){
   }, 100);
 
   wakeRec.ondataavailable = e => { if(e.data?.size>0) wakeChunks.push(e.data); };
-  wakeRec.onstop = async () => {
+  wakeRec.onstop = () => {
     clearInterval(volumeCheckInterval);
     try { document.getElementById('wb-bar').style.width = '0%'; } catch(_){}
 
     if(!wakeActive || wakePhase==='command') return;
-    if(wakeChunks.length===0){ scheduleNextChunk(); return; }
 
-    const blob = new Blob(wakeChunks, {type: wakeRec.mimeType||'audio/webm'});
+    // Snapshot this chunk's data before we restart the next chunk.
+    const chunkBlob = wakeChunks.length ? new Blob(wakeChunks, {type: wakeRec.mimeType||'audio/webm'}) : null;
+    const peak = wakePeakVolume;
+    const frames = maxConsecutiveSpeechFrames;
+    const recMime = wakeRec.mimeType || 'audio/webm';
 
-    // Skip if blob too small OR peak volume too low (just background noise).
-    // Threshold default 18; user-tunable via Settings -> Voice -> Sensitivity
-    // (range 5-50). Lower = more sensitive (catches quiet "Horizon" but
-    // more false positives), higher = stricter.
-    const volThreshold = wakeCfg('volumeThreshold', 10);
-    const strictMode = wakeCfg('strictMode', true);
-    
-    if(blob.size < 1200 || (wakePeakVolume < Math.max(4, volThreshold * 0.45) && maxConsecutiveSpeechFrames < 2) || (strictMode && maxConsecutiveSpeechFrames < Math.max(2, MIN_SUSTAINED_SPEECH_FRAMES - 1))){
-      wakeLastDebug = {
-        ok: false,
-        reason: 'audio-gate',
-        peak: Number(wakePeakVolume.toFixed(1)),
-        frames: maxConsecutiveSpeechFrames,
-        bytes: blob.size,
-        threshold: volThreshold,
-        at: new Date().toISOString(),
-      };
-      scheduleNextChunk();
-      return;
-    }
-    
-    // ECHO DETECTION: Skip if Horizon is speaking or just finished
-    if(isSpeaking || (Date.now() - speakEndTime < ECHO_COOLDOWN)){
-      scheduleNextChunk();
-      return;
-    }
+    // CRITICAL: restart recording IMMEDIATELY — don't wait for transcription.
+    // The previous version awaited Groq Whisper (500-1500ms) before starting
+    // the next chunk, which created a 600-1800ms "deaf" window every cycle.
+    // If the user said "Хорайзон" during that gap, it was silently missed.
+    // Now: schedule the next chunk on the next tick, then process THIS chunk
+    // asynchronously. Worst case the two overlap slightly, which is fine —
+    // the audio gate + dedup already handles duplicate matches.
+    scheduleNextChunk();
 
-    wakePhase='transcribing';
-    setWakeBar('transcribing');
-
-    const text = await transcribeWakeChunk(blob);
-
-    if(!wakeActive) return;
-
-    const wakeMatch = matchWakeWord(text);
-    wakeLastDebug = { ...wakeMatch, peak: Number(wakePeakVolume.toFixed(1)), frames: maxConsecutiveSpeechFrames, bytes: blob.size, at: new Date().toISOString() };
-
-    if(text && wakeMatch.ok){
-      if(!wakeDebounce){
-        wakeDebounce=true;
-        setTimeout(()=>wakeDebounce=false, 2500);
-        fireWake();
+    // Audio gate + transcribe + match happen in background.
+    (async () => {
+      if (!chunkBlob || chunkBlob.size < 1200) {
+        wakeLastDebug = { ok: false, reason: 'no-data', bytes: chunkBlob?.size || 0, at: new Date().toISOString() };
         return;
       }
-    }
-    scheduleNextChunk();
+
+      const volThreshold = wakeCfg('volumeThreshold', 6);
+      const strictMode = wakeCfg('strictMode', true);
+
+      // Audio gate: need EITHER decent peak volume OR sustained speech frames.
+      // Strict mode additionally requires at least 2 sustained frames (200ms).
+      const volumeFail = peak < Math.max(3, volThreshold * 0.5) && frames < 2;
+      const strictFail = strictMode && frames < 2;
+      if (volumeFail || strictFail) {
+        wakeLastDebug = {
+          ok: false,
+          reason: 'audio-gate',
+          peak: Number(peak.toFixed(1)),
+          frames,
+          bytes: chunkBlob.size,
+          threshold: volThreshold,
+          at: new Date().toISOString(),
+        };
+        return;
+      }
+
+      // ECHO DETECTION: Skip if Horizon is speaking or just finished
+      if (isSpeaking || (Date.now() - speakEndTime < ECHO_COOLDOWN)) {
+        wakeLastDebug = { ok: false, reason: 'echo-cooldown', at: new Date().toISOString() };
+        return;
+      }
+
+      const result = await transcribeWakeChunk(chunkBlob);
+      if (!wakeActive) return;
+
+      if (!result.ok) {
+        wakeLastDebug = { ok: false, reason: 'transcribe-error', error: result.error, peak: Number(peak.toFixed(1)), frames, at: new Date().toISOString() };
+        surfaceWakeTranscribeError(result.error);
+        return;
+      }
+
+      const text = result.text || '';
+      wakeLastText = text;
+      wakeLastTextAt = Date.now();
+      const wakeMatch = matchWakeWord(text);
+      wakeLastDebug = { ...wakeMatch, text, peak: Number(peak.toFixed(1)), frames, bytes: chunkBlob.size, at: new Date().toISOString() };
+
+      // Show what we heard in the wake bar's idle text so the user has live
+      // feedback. If we heard something but didn't match, this is gold for
+      // diagnosing "why didn't it fire" without opening DevTools.
+      if (wakeActive && wakePhase !== 'command' && text && !wakeMatch.ok) {
+        try {
+          const txt = document.getElementById('wb-txt');
+          if (txt) txt.textContent = (lang === 'ru' ? 'Услышал: ' : 'Heard: ') + '"' + text.slice(0, 40) + '"';
+        } catch(_) {}
+      }
+
+      if (text && wakeMatch.ok && !wakeDebounce) {
+        wakeDebounce = true;
+        setTimeout(() => wakeDebounce = false, 2500);
+        fireWake();
+      }
+    })().catch(e => console.warn('[wake] process chunk error:', e));
   };
 
   wakePhase='listening';
   setWakeBar('listening');
   wakeRec.start(100);
-  wakeLoopTimer = setTimeout(()=>{ try{wakeRec?.stop();}catch(_){} }, 1600);
+  // 2000ms chunk — gives users a comfortable window to say "Хорайзон" (~700ms)
+  // after they see the bar pulse. Combined with the deafness-gap fix above,
+  // effective continuous listening with ~50ms transition between chunks.
+  wakeLoopTimer = setTimeout(()=>{ try{wakeRec?.stop();}catch(_){} }, 2000);
 }
 
 function scheduleNextChunk(){
   if(!wakeActive) return;
   wakePhase='idle';
-  setWakeBar('idle');
-  // Small gap between chunks for processing
-  wakeLoopTimer = setTimeout(runWakeChunk, 80);
+  // Minimal gap — chunk processing now runs in background, so we no longer
+  // need a buffer for transcription to finish. 30ms is just enough for the
+  // browser to clean up the previous MediaRecorder.
+  wakeLoopTimer = setTimeout(()=>{ if (wakeActive && wakePhase !== 'command') runWakeChunk(); }, 30);
 }
 
+// Returns the FULL transcription result so the caller can surface errors —
+// the old version dropped `{error}` results with `res?.text || ''` and the
+// wake loop fell silent forever. Now: `{ ok, text, error }`.
 async function transcribeWakeChunk(blob){
   try {
     const reader = new FileReader();
     return await new Promise(resolve=>{
       reader.onloadend = async ()=>{
-        const b64 = reader.result.split(',')[1];
-        const mime = blob.type.split(';')[0];
-        const res = await H.transcribeAudio(b64, mime);
-        resolve(res?.text || '');
+        try {
+          const b64 = reader.result.split(',')[1];
+          const mime = blob.type.split(';')[0];
+          const res = await H.transcribeAudio(b64, mime);
+          if (res && res.error) return resolve({ ok: false, text: '', error: res.error });
+          return resolve({ ok: true, text: res?.text || '', error: null });
+        } catch(e) {
+          resolve({ ok: false, text: '', error: e.message || 'transcribe failed' });
+        }
       };
       reader.readAsDataURL(blob);
     });
-  } catch(e){ return ''; }
+  } catch(e){ return { ok: false, text: '', error: e.message || 'reader failed' }; }
+}
+
+function surfaceWakeTranscribeError(err) {
+  if (!err) return;
+  console.warn('[wake] transcribe error:', err);
+  // Show ONCE per session — repeated toasts on every chunk would be noise.
+  // Re-arm the flag when user toggles wake off → on.
+  if (wakeTranscribeErrorShown) return;
+  wakeTranscribeErrorShown = true;
+  try {
+    addMsg?.('bot', lang === 'ru'
+      ? `⚠️ Wake-mode: транскрипция не работает — ${err}\n\nПроверь Groq-ключ в ⚙️ Настройки → Голос. Без рабочего Whisper bot никогда не услышит "Хорайзон".`
+      : `⚠️ Wake mode: transcription failed — ${err}\n\nCheck Groq key in ⚙️ Settings → Voice. Without working Whisper the bot will never hear "Horizon".`);
+  } catch(_) {}
 }
 
 // Wake word detected! Respond + record command
