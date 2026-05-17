@@ -112,7 +112,7 @@ async function loadChatList(){
     renderChatSidebar();
   } catch (e) { console.warn('chatList failed:', e?.message); }
 }
-function _replayMessages(messages){
+function _replayMessages(messages, chatId){
   const w = document.getElementById('msgs');
   if (!w) return;
   w.innerHTML = '';
@@ -124,7 +124,7 @@ function _replayMessages(messages){
   sessionHasEstimatedUsage = false;
   sessionUsageUnavailable = false;
   try {
-    const p = loadOperatorLogForCurrentChat?.();
+    const p = loadOperatorLogForCurrentChat?.(chatId || currentChatId);
     if (p && typeof p.catch === 'function') p.catch(() => {});
   } catch (_) {}
   if (!messages || messages.length === 0) {
@@ -163,7 +163,7 @@ async function switchChat(id){
     const chat = await H.chatSwitch(id);
     if (!chat || !chat.id) return;
     currentChatId = chat.id;
-    _replayMessages(chat.messages);
+    _replayMessages(chat.messages, chat.id);
     renderChatSidebar();
     updateStatusBar(chat.title);
   } catch (e) { console.warn('switchChat failed:', e?.message); }
@@ -173,7 +173,7 @@ async function createNewChat(){
     const chat = await H.chatCreate({});
     if (!chat || !chat.id) return;
     currentChatId = chat.id;
-    _replayMessages([]);
+    _replayMessages([], chat.id);
     await loadChatList();
     updateStatusBar(lang==='ru'?'Новый чат':'New chat');
     setTimeout(()=>{ try { document.getElementById('inp')?.focus(); } catch(_){} }, 30);
@@ -309,11 +309,11 @@ async function bootCurrentChat(){
     if (cur && cur.id) {
       currentChatId = cur.id;
       if (Array.isArray(cur.messages) && cur.messages.length) {
-        _replayMessages(cur.messages);
+        _replayMessages(cur.messages, cur.id);
       } else {
         try { showGreeting?.(); } catch(_){}
         try {
-          const p = loadOperatorLogForCurrentChat?.();
+          const p = loadOperatorLogForCurrentChat?.(cur.id);
           if (p && typeof p.catch === 'function') p.catch(() => {});
         } catch(_){}
       }

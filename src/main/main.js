@@ -2302,6 +2302,15 @@ ipcMain.handle('aiImage', async (_, opts) => {
   }
 });
 
+ipcMain.handle('aiImageModels', async () => {
+  try {
+    const { listImageModels, DEFAULTS } = require('./imageGen');
+    return { ok: true, models: listImageModels(), defaults: DEFAULTS };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e), models: {} };
+  }
+});
+
 ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';

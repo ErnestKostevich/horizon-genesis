@@ -43,6 +43,16 @@
     }
   }
 
+  window.refreshImageComposerChip = async function () {
+    try {
+      if (String(window.mode || '').toLowerCase() !== 'image') return;
+      const provider = await pickImageProvider();
+      const model = provider ? await pickImageModel(provider) : 'image model';
+      const chip = document.getElementById('composer-model-chip');
+      if (chip) chip.textContent = provider ? `${provider} · ${model}` : model;
+    } catch (_) {}
+  };
+
   function imgGenIcon() {
     return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
   }
@@ -62,14 +72,14 @@
       : '';
     bubble.innerHTML = `
       <div class="img-gen-card" style="display:flex;flex-direction:column;gap:8px">
-        <div style="font:700 11px/1 var(--mono);color:var(--t3);letter-spacing:.4px;text-transform:uppercase">🎨 Image · ${escapeText(image.provider)} · ${escapeText(image.model)}</div>
+        <div style="font:700 11px/1 var(--mono);color:var(--t3);letter-spacing:.4px;text-transform:uppercase">${imgGenIcon()} Image · ${escapeText(image.provider)} · ${escapeText(image.model)}</div>
         <img src="${dataUrl}" style="max-width:100%;border-radius:10px;border:1px solid var(--b1);cursor:zoom-in"
              onclick="window.open(this.src, '_blank')"
              alt="${escapeText(prompt).slice(0,200)}"/>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="ic-btn img-gen-download" style="height:28px;padding:0 10px;font:700 10px var(--mono)">⬇ Download</button>
+          <button class="ic-btn img-gen-download" style="height:28px;padding:0 10px;font:700 10px var(--mono)">Download</button>
           <button class="ic-btn img-gen-regen"    style="height:28px;padding:0 10px;font:700 10px var(--mono)">↻ Regenerate</button>
-          <button class="ic-btn img-gen-copy"     style="height:28px;padding:0 10px;font:700 10px var(--mono)">📋 Copy prompt</button>
+          <button class="ic-btn img-gen-copy"     style="height:28px;padding:0 10px;font:700 10px var(--mono)">Copy prompt</button>
         </div>
         ${revisedNote}
       </div>
@@ -108,7 +118,7 @@
     const provider = await pickImageProvider();
     if (!provider) {
       window.addMsg?.('bot',
-        '🎨 **Image mode needs an API key.**\n\n' +
+        '**Image mode needs an API key.**\n\n' +
         'Image generation is BYOK (bring-your-own-key) — Horizon never proxies image prompts. ' +
         'Open **Settings → Providers** and add a key for either:\n' +
         '- **OpenAI** (GPT Image) - `sk-...` from platform.openai.com\n' +
@@ -137,7 +147,7 @@
       stubEl?.remove();
       if (!res?.ok) {
         window.addMsg?.('bot',
-          `🎨 **Image generation failed** (${provider} / ${model})\n\n` +
+          `**Image generation failed** (${provider} / ${model})\n\n` +
           '```\n' + (res?.error || 'Unknown error') + '\n```\n\n' +
           'Common fixes: check your API key in Settings, verify your provider account has image-gen enabled, or try the other provider.'
         );
@@ -148,7 +158,7 @@
       }
     } catch (e) {
       stubEl?.remove();
-      window.addMsg?.('bot', `🎨 Image generation crashed: ${e?.message || e}`);
+      window.addMsg?.('bot', `Image generation crashed: ${e?.message || e}`);
     }
   };
 

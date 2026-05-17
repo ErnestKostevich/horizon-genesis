@@ -78,11 +78,14 @@ function positionPicker(pop, anchor) {
   });
 }
 
-function openModelPicker(ev){
+async function openModelPicker(ev){
   try { ev?.stopPropagation(); } catch(_) {}
   closePersonaPicker();
   const pop = document.getElementById('model-popover');
   if (!pop) return;
+  if (String(mode || '').toLowerCase() === 'image') {
+    return openImageModelPicker(ev, pop);
+  }
   const activeProv = (typeof prov !== 'undefined' ? prov : null) || 'gemini';
   const sections = MODEL_PICKER_PROVIDERS.map(p => {
     const choices = modelChoicesForProvider(p);
@@ -120,6 +123,110 @@ function openModelPicker(ev){
   `;
   positionPicker(pop, ev?.currentTarget || document.getElementById('composer-model-chip'));
   setTimeout(() => document.getElementById('model-picker-search')?.focus(), 30);
+}
+
+function fallbackImageModels() {
+  return {
+    openai: [
+      { id: 'gpt-image-2',      label: 'GPT Image 2' },
+      { id: 'gpt-image-1.5',    label: 'GPT Image 1.5' },
+      { id: 'gpt-image-1',      label: 'GPT Image 1' },
+      { id: 'gpt-image-1-mini', label: 'GPT Image 1 mini' },
+    ],
+    gemini: [
+      { id: 'gemini-2.5-flash-image',         label: 'Gemini 2.5 Flash Image (Nano Banana)' },
+      { id: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image Preview (Nano Banana 2)' },
+      { id: 'gemini-3-pro-image-preview',     label: 'Gemini 3 Pro Image Preview (Nano Banana Pro)' },
+      { id: 'imagen-4.0-generate-001',         label: 'Imagen 4' },
+      { id: 'imagen-4.0-ultra-generate-001',   label: 'Imagen 4 Ultra' },
+      { id: 'imagen-4.0-fast-generate-001',    label: 'Imagen 4 Fast' },
+    ],
+  };
+}
+
+async function getImageModelRegistry() {
+  try {
+    const r = await H.aiImageModels?.();
+    if (r?.ok && r.models && typeof r.models === 'object') return r.models;
+  } catch (_) {}
+  return fallbackImageModels();
+}
+
+async function getSelectedImageProvider() {
+  try {
+    const configured = String(await H.get?.('image.provider') || 'auto').toLowerCase();
+    if (configured === 'openai' || configured === 'gemini') return configured;
+  } catch (_) {}
+  const cur = String(prov || provider || '').toLowerCase();
+  if (cur === 'openai' || cur === 'gemini') return cur;
+  return 'openai';
+}
+
+async function getSelectedImageModel(provider) {
+  const fallback = provider === 'gemini' ? 'gemini-2.5-flash-image' : 'gpt-image-2';
+  const key = provider === 'gemini' ? 'image.model.gemini' : 'image.model.openai';
+  try {
+    return String(await H.get?.(key) || fallback).trim() || fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+async function openImageModelPicker(ev, pop) {
+  const registry = await getImageModelRegistry();
+  const activeProvider = await getSelectedImageProvider();
+  const selectedByProvider = {
+    openai: await getSelectedImageModel('openai'),
+    gemini: await getSelectedImageModel('gemini'),
+  };
+  const sections = ['openai', 'gemini'].map(p => {
+    const choices = Array.isArray(registry[p]) ? registry[p] : [];
+    if (!choices.length) return '';
+    const rows = choices.map(item => {
+      const id = String(item.id || item.value || '').trim();
+      if (!id) return '';
+      const label = item.label || id;
+      const on = p === activeProvider && id === selectedByProvider[p];
+      const escProv = p.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const escVal = id.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      return `
+        <button class="model-popover-opt${on ? ' on' : ''}" data-model-row data-provider="${_escHtml(p)}" data-label="${_escHtml(label + ' ' + id + ' ' + p)}" onclick="pickImageModel('${escProv}','${escVal}')" title="${_escHtml(id)}">
+          <span class="model-popover-opt-name">${_escHtml(label)}</span>
+          <span class="model-popover-opt-meta">${on ? 'active image' : providerPickerLabel(p)}</span>
+        </button>`;
+    }).join('');
+    return `
+      <section class="model-provider-section" data-provider-section data-label="${_escHtml(providerPickerLabel(p) + ' image ' + p)}">
+        <div class="model-provider-title"><b>${_escHtml(providerPickerLabel(p))} Image</b><span>${choices.length} models</span></div>
+        <div class="model-provider-models">${rows}</div>
+      </section>`;
+  }).filter(Boolean).join('');
+
+  pop.innerHTML = `
+    <div class="picker-head">
+      <div>
+        <div class="picker-title">Choose Image Model</div>
+        <div class="picker-sub">Image mode uses BYOK image models only. Chat model selection stays untouched.</div>
+      </div>
+      <input class="picker-search" id="model-picker-search" placeholder="Search image models..." oninput="filterModelPicker(this.value)" />
+    </div>
+    <div class="picker-body">${sections || '<div class="model-popover-empty">No image models are available.</div>'}</div>
+  `;
+  positionPicker(pop, ev?.currentTarget || document.getElementById('composer-model-chip'));
+  setTimeout(() => document.getElementById('model-picker-search')?.focus(), 30);
+}
+
+async function pickImageModel(provider, model) {
+  provider = String(provider || '').toLowerCase();
+  if (provider !== 'openai' && provider !== 'gemini') return;
+  const key = provider === 'gemini' ? 'image.model.gemini' : 'image.model.openai';
+  try { await H.set?.('image.provider', provider); } catch (_) {}
+  try { await H.set?.(key, model); } catch (_) {}
+  const chip = document.getElementById('composer-model-chip');
+  if (chip) chip.textContent = model;
+  try { refreshImageComposerChip?.(); } catch (_) {}
+  try { H.notify?.('Image model selected', `${provider}: ${model}`); } catch(_) {}
+  closeModelPicker();
 }
 
 async function pickModel(provider, model){
