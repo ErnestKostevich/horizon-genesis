@@ -64,6 +64,41 @@ window._handleSlashCommand = async function _handleSlashCommand(raw) {
       case 'agent':    try { window.setMode?.('agent'); } catch(_){} return true;
       case 'chat':     try { window.setMode?.('chat'); } catch(_){} return true;
       case 'settings': try { window.openPanel?.(arg || undefined); } catch(_){} return true;
+      case 'skills':   try { window.openSkillHub?.(); } catch(_){} return true;
+      case 'skill': {
+        // One-shot force-load: /skill <id> [<rest of message>]
+        // - With a rest-of-message: queue the id and re-dispatch the rest
+        //   as the user's message for this turn, so the agent runs once
+        //   with the skill injected regardless of relevance score.
+        // - Without a rest-of-message: just queue the id; user types
+        //   their message next.
+        if (!arg) {
+          try {
+            const skills = await window.H?.skillsList?.() || [];
+            const enabled = skills.filter(s => s.enabled).map(s => '`' + s.id + '`').join(', ') || '(none enabled)';
+            window.addMsg?.('bot', '**`/skill <id> [message]`** — force-load a skill for the next turn.\nEnabled skills: ' + enabled);
+          } catch (_) {
+            window.addMsg?.('bot', 'Usage: `/skill <id> [message]` — force-load a skill for the next turn.');
+          }
+          return true;
+        }
+        const parts = arg.split(/\s+/);
+        const skillId = parts.shift();
+        const rest = parts.join(' ').trim();
+        if (!Array.isArray(window.forceSkillsNextTurn)) window.forceSkillsNextTurn = [];
+        if (!window.forceSkillsNextTurn.includes(skillId)) window.forceSkillsNextTurn.push(skillId);
+        if (rest) {
+          // Re-inject the rest as a normal message — runAgent/aiStream picks
+          // up window.forceSkillsNextTurn on its way out.
+          try {
+            const inp = document.getElementById('inp');
+            if (inp) { inp.value = rest; if (typeof window.send === 'function') window.send(); }
+          } catch (_) {}
+        } else {
+          window.addMsg?.('bot', `📘 Will force-load skill **${skillId}** on your next message.`);
+        }
+        return true;
+      }
       case 'help': {
         window.addMsg?.('bot',
           '**Slash commands**\n' +
@@ -75,6 +110,8 @@ window._handleSlashCommand = async function _handleSlashCommand(raw) {
           '`/agent` — switch to Agent mode\n' +
           '`/chat` — switch back to Chat mode\n' +
           '`/settings [tab]` — open Settings panel\n' +
+          '`/skills` — open the Skill Hub\n' +
+          '`/skill <id> [msg]` — force-load a skill for the next turn\n' +
           '`/help` — show this list'
         );
         return true;

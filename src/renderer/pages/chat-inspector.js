@@ -100,12 +100,18 @@ function toggleInspectorMode(){
 function setInspectorTab(name){
   inspectorTab = name;
   document.querySelectorAll('.insp-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
-  ['context','tools','cost','log'].forEach(t => {
+  ['context','tools','skills','cost','log'].forEach(t => {
     const el = document.getElementById('insp-body-' + t);
     if (el) el.style.display = (t === name) ? 'block' : 'none';
   });
   refreshInspector();
 }
+
+// Last 'skills-selected' step we saw from main process. Populated by the
+// onAgentStep tap at the bottom of this file. The Skills inspector tab
+// reads this on every refresh, so even if the user opens Inspector after
+// the turn ran they still see what loaded.
+var lastSkillsSelected = null;
 
 // Refresh whichever tab is active. Cheap on every call — only updates DOM
 // for the visible tab + the always-visible context bits (provider/model
@@ -126,9 +132,10 @@ function refreshInspector(){
     document.getElementById('insp-voice').textContent = voiceProvider || '—';
   } catch(_) {}
 
-  if (inspectorTab === 'tools') refreshInspectorTools();
-  if (inspectorTab === 'cost')  refreshInspectorCost();
-  if (inspectorTab === 'log')   refreshInspectorLog();
+  if (inspectorTab === 'tools')  refreshInspectorTools();
+  if (inspectorTab === 'skills') refreshInspectorSkills();
+  if (inspectorTab === 'cost')   refreshInspectorCost();
+  if (inspectorTab === 'log')    refreshInspectorLog();
   // Connections row updates lazily
   refreshInspectorConnections();
 }
@@ -319,6 +326,41 @@ function renderStepRail(){
 // Auto-update Inspector and Step Rail from agent step events. Hooks into
 // the existing operator-side onAgentStep listener via a soft tap so we
 // don't fight Operator Mode's own subscriber.
+function refreshInspectorSkills(){
+  const host = document.getElementById('insp-body-skills');
+  if (!host) return;
+  const sel = lastSkillsSelected;
+  if (!sel || (!sel.selected?.length && !sel.scored?.length)) {
+    host.innerHTML = `
+      <div class="insp-section">
+        <div class="insp-h">Skills loaded for the last turn</div>
+        <div class="insp-empty">No skills resolved yet. Send a message — skills whose <code>description</code> matches your query will appear here with their relevance score.</div>
+      </div>`;
+    return;
+  }
+  const fmt = (e) => `
+    <div class="insp-row" style="display:flex;justify-content:space-between;gap:8px">
+      <span class="v" style="text-align:left;color:var(--tx);font-weight:600">${esc(e.id)}</span>
+      <span class="k">${e.forced ? '<span style="color:var(--acc)">forced</span> · ' : ''}${e.scope || 'user'} · score <strong>${e.score}</strong>${e.truncated ? ' · <span style="color:var(--amb,#facc15)">truncated</span>' : ''}</span>
+    </div>
+    <div class="insp-row" style="display:block;font-size:9px;color:var(--t3);padding-left:4px">desc ${e.breakdown?.description ?? 0} · name ${e.breakdown?.name ?? 0} · tags ${e.breakdown?.tags ?? 0}${typeof e.bytes === 'number' ? ' · ' + e.bytes + ' B injected' : ''}</div>`;
+  const loaded = (sel.selected || []).map(fmt).join('') || '<div class="insp-empty">Nothing above threshold this turn.</div>';
+  const otherCandidates = (sel.scored || []).filter(s => !(sel.selected || []).some(x => x.id === s.id) && (s.score || 0) > 0);
+  const candidates = otherCandidates.length
+    ? otherCandidates.map(fmt).join('')
+    : '<div class="insp-empty">No other partial matches.</div>';
+  host.innerHTML = `
+    <div class="insp-section">
+      <div class="insp-h">Loaded this turn</div>
+      ${loaded}
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">Other candidates (below threshold)</div>
+      ${candidates}
+    </div>
+  `;
+}
+
 try {
   H.onAgentStep?.((step) => {
     try {
@@ -332,6 +374,13 @@ try {
       if (step?.type === 'run-end' || step?.type === 'done') {
         // Fade rail after a beat so the user sees the final ✓ state
         setTimeout(clearStepRail, 1500);
+      }
+      // Capture skills-selected for the inspector's Skills tab. Stored on a
+      // module-level var so opening the tab after the turn still shows the
+      // latest match — same UX pattern as plan-step → stepRailState.
+      if (step?.type === 'skills-selected' && step.payload) {
+        lastSkillsSelected = step.payload;
+        if (inspectorActive && inspectorTab === 'skills') refreshInspectorSkills();
       }
       // Inspector log + cost auto-refresh on activity
       if (inspectorActive) {
