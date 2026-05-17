@@ -594,6 +594,7 @@ async function dispatchTool(name, args = {}) {
 
 const CHAT_STORE_MAX_CHATS = 200;
 const CHAT_STORE_MAX_MESSAGES_PER_CHAT = 1000;
+const CHAT_STORE_MAX_LOGS_PER_CHAT = 500;
 const CHAT_STORE_TITLE_MAX = 80;
 const CHAT_STORE_PREVIEW_MAX = 160;
 
@@ -645,6 +646,15 @@ class ChatStore {
     return String(s || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`>_~]/g, '').replace(/\s+/g, ' ').trim().slice(0, CHAT_STORE_PREVIEW_MAX);
   }
 
+  _cleanLogLine(line) {
+    const item = line && typeof line === 'object' ? line : { msg: line };
+    return {
+      time: String(item.time || '').slice(0, 80),
+      type: String(item.type || 'info').slice(0, 32),
+      msg: String(item.msg || '').slice(0, 8000),
+    };
+  }
+
   _summary(chat) {
     return {
       id: chat.id,
@@ -687,6 +697,7 @@ class ChatStore {
       message_count: 0,
       preview: '',
       messages: [],
+      logs: [],
     };
     this._data.chats.push(chat);
     if (opts.switch !== false) this._data.current_chat_id = chat.id;
@@ -750,6 +761,33 @@ class ChatStore {
     }
     this._save();
     return { ok: true, message_count: chat.message_count, title: chat.title };
+  }
+
+  getLogs(id) {
+    const i = this._findIndex(id);
+    if (i < 0) return { ok: false, logs: [], error: 'chat not found' };
+    const chat = this._data.chats[i];
+    const logs = Array.isArray(chat.logs) ? chat.logs : [];
+    return { ok: true, logs: JSON.parse(JSON.stringify(logs.slice(-CHAT_STORE_MAX_LOGS_PER_CHAT))) };
+  }
+
+  setLogs(id, logs) {
+    const i = this._findIndex(id);
+    if (i < 0) return { ok: false, error: 'chat not found' };
+    const clean = Array.isArray(logs)
+      ? logs.map(line => this._cleanLogLine(line)).slice(-CHAT_STORE_MAX_LOGS_PER_CHAT)
+      : [];
+    this._data.chats[i].logs = clean;
+    this._save();
+    return { ok: true, count: clean.length };
+  }
+
+  clearLogs(id) {
+    const i = this._findIndex(id);
+    if (i < 0) return { ok: false, error: 'chat not found' };
+    this._data.chats[i].logs = [];
+    this._save();
+    return { ok: true };
   }
 
   getCurrent() {
