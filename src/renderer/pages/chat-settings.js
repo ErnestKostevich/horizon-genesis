@@ -165,6 +165,7 @@ async function loadPanel(){
       if (inp) inp.placeholder = '••••••••••';
     }
   } catch(_) {}
+  loadTokenConnections().catch(()=>{});
   loadMcpServers().catch(()=>{});
   // Profile
   if(nm) document.getElementById('pi-name').value=nm;
@@ -473,6 +474,56 @@ async function connectGithub(){
     inp.value = '';
     inp.placeholder = '••••••••••';
   } catch(e) { console.warn('connectGithub:', e?.message); }
+}
+const TOKEN_CONNECTION_IDS = ['slack','notion','linear','telegram_bot'];
+function _connectionLabel(id){
+  return ({slack:'Slack',notion:'Notion',linear:'Linear',telegram_bot:'Telegram Bot'})[id] || id;
+}
+async function loadTokenConnections(){
+  for (const id of TOKEN_CONNECTION_IDS) {
+    try {
+      const has = await H.hasKey(id);
+      _setConnStatus(id, !!has);
+      const inp = document.getElementById('pi-' + id + '-conn');
+      if (inp && has) inp.placeholder = '••••••••••';
+    } catch (_) { _setConnStatus(id, false); }
+  }
+  try {
+    const r = await H.connectionsList?.();
+    if (r?.ok) {
+      for (const c of r.connections || []) _setConnStatus(c.id, !!c.connected);
+    }
+  } catch (_) {}
+}
+async function saveTokenConnection(id){
+  try {
+    const inp = document.getElementById('pi-' + id + '-conn');
+    const v = (inp?.value || '').trim();
+    if (!v) return;
+    await H.saveKey(id, v);
+    if (inp) { inp.value = ''; inp.placeholder = '••••••••••'; }
+    _setConnStatus(id, true);
+  } catch(e) {
+    const st = document.getElementById('conn-' + id + '-status');
+    if (st) st.textContent = e?.message || ('Could not save ' + _connectionLabel(id));
+  }
+}
+async function testTokenConnection(id){
+  const st = document.getElementById('conn-' + id + '-status');
+  if (st) st.textContent = 'Testing ' + _connectionLabel(id) + '...';
+  try {
+    const r = await H.connectionsTest(id);
+    if (st) {
+      st.textContent = r?.ok
+        ? (_connectionLabel(id) + ' connected. Tools are available to Agent mode.')
+        : (r?.error || r?.err || _connectionLabel(id) + ' test failed.');
+      st.classList.toggle('bad', !r?.ok);
+      st.classList.toggle('ok', !!r?.ok);
+    }
+    _setConnStatus(id, !!r?.ok);
+  } catch(e) {
+    if (st) { st.textContent = e?.message || 'Connection test failed.'; st.classList.add('bad'); }
+  }
 }
 function _setConnStatus(svc, connected){
   try {
