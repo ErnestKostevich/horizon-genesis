@@ -69,9 +69,10 @@ var codeLastAiPatch = null;
 var codeTerminal = null;
 var codeTerminalId = '';
 var opLogPersistTimer = null;
+var operatorLogChatId = null;
 
-function opLogStorageKey() {
-  const id = (typeof currentChatId !== 'undefined' && currentChatId) ? currentChatId : 'scratch';
+function opLogStorageKey(id) {
+  id = id || ((typeof currentChatId !== 'undefined' && currentChatId) ? currentChatId : 'scratch');
   return `horizon.operatorLog.${id}`;
 }
 
@@ -89,36 +90,44 @@ async function opEnsureChatIdForLog() {
   }
 }
 
-async function opPersistLogForCurrentChat() {
+async function opPersistLogRows(chatId, rows) {
   try {
-    const trimmed = (operatorLogLines || []).slice(-300);
-    const id = await opEnsureChatIdForLog();
+    const trimmed = (Array.isArray(rows) ? rows : []).slice(-300);
+    const id = chatId || await opEnsureChatIdForLog();
     if (id && window.H?.chatSetLogs) {
       await window.H.chatSetLogs(id, trimmed);
     }
     // Keep a localStorage mirror only as an emergency migration fallback.
-    try { localStorage.setItem(opLogStorageKey(), JSON.stringify(trimmed)); } catch (_) {}
+    try { localStorage.setItem(opLogStorageKey(id), JSON.stringify(trimmed)); } catch (_) {}
   } catch (_) {}
+}
+
+async function opPersistLogForCurrentChat(chatId) {
+  const target = chatId || operatorLogChatId || ((typeof currentChatId !== 'undefined' && currentChatId) ? currentChatId : null);
+  return opPersistLogRows(target, operatorLogLines || []);
 }
 
 function opSchedulePersistLogForCurrentChat() {
   if (opLogPersistTimer) clearTimeout(opLogPersistTimer);
+  const target = operatorLogChatId || ((typeof currentChatId !== 'undefined' && currentChatId) ? currentChatId : null);
+  const rows = (operatorLogLines || []).slice(-300);
   opLogPersistTimer = setTimeout(() => {
     opLogPersistTimer = null;
-    opPersistLogForCurrentChat().catch(() => {});
+    opPersistLogRows(target, rows).catch(() => {});
   }, 160);
 }
 
-async function loadOperatorLogForCurrentChat() {
+async function loadOperatorLogForCurrentChat(chatId) {
   try {
-    const id = await opEnsureChatIdForLog();
+    const id = chatId || await opEnsureChatIdForLog();
+    operatorLogChatId = id || null;
     let rows = [];
     if (id && window.H?.chatGetLogs) {
       const res = await window.H.chatGetLogs(id);
       if (Array.isArray(res?.logs)) rows = res.logs;
     }
     if (!rows.length) {
-      const raw = localStorage.getItem(opLogStorageKey());
+      const raw = localStorage.getItem(opLogStorageKey(id));
       rows = raw ? JSON.parse(raw) : [];
       if (Array.isArray(rows) && rows.length && id && window.H?.chatSetLogs) {
         window.H.chatSetLogs(id, rows.slice(-300)).catch(() => {});
@@ -2560,7 +2569,11 @@ function toggleOperatorMode() {
 }
 
 function opLog(msg, type='info') {
-  operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type});
+  const chatId = (typeof currentChatId !== 'undefined' && currentChatId) ? currentChatId : operatorLogChatId;
+  if (chatId && operatorLogChatId !== chatId) {
+    operatorLogChatId = chatId;
+  }
+  operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type, chatId: operatorLogChatId || null});
   opSchedulePersistLogForCurrentChat();
   opRender();
   try { if (inspectorTab === 'log') refreshInspectorLog(); } catch (_) {}

@@ -92,10 +92,15 @@ window._handleSlashCommand = async function _handleSlashCommand(raw) {
           // up window.forceSkillsNextTurn on its way out.
           try {
             const inp = document.getElementById('inp');
-            if (inp) { inp.value = rest; if (typeof window.send === 'function') window.send(); }
+            if (inp) {
+              inp.value = rest;
+              if (typeof window.sendMsg === 'function') window.sendMsg();
+              else if (typeof window.send === 'function') window.send();
+            }
           } catch (_) {}
         } else {
-          window.addMsg?.('bot', `📘 Will force-load skill **${skillId}** on your next message.`);
+          try { window.updateQueuedSkillUi?.(); } catch (_) {}
+          window.addMsg?.('bot', `Skill **${skillId}** will be used on your next message.`);
         }
         return true;
       }
