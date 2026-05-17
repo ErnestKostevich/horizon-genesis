@@ -11,13 +11,92 @@
  * - Full PC control (mouse, keyboard, files)
  */
 
-const { exec, spawn } = require('child_process');
+const { exec, spawn, execFile } = require('child_process');
 const path = require('path');
 const os   = require('os');
 const fs   = require('fs');
 const crypto = require('crypto');
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
+
+const SKILL_HELPER_TIMEOUT_MAX = 60_000;
+const SKILL_HELPER_TIMEOUT_DEFAULT = 30_000;
+const SKILL_HELPER_OUTPUT_MAX = 1024 * 1024; // 1 MB cap on stdout+stderr
+
+function _getSkillsManager() {
+  // Resolved lazily through main.js's require cache so agent.js stays
+  // standalone for tests. Same pattern agentLoop.js uses for settingsStore.
+  try {
+    const mainMod = require.cache[require.resolve('./main')];
+    return (mainMod && mainMod.exports && mainMod.exports.skillsManager) || null;
+  } catch (_) { return null; }
+}
+
+async function runSkillHelper(skillId, helperRel, helperArgs, timeoutMs) {
+  const mgr = _getSkillsManager();
+  if (!mgr) return { ok: false, err: 'skills manager not initialised' };
+  const resolved = mgr.resolveHelperPath(skillId, helperRel);
+  if (!resolved) return { ok: false, err: `helper not found or invalid: ${skillId} / ${helperRel}` };
+  const timeout = Math.min(SKILL_HELPER_TIMEOUT_MAX, Math.max(1000, Number(timeoutMs) || SKILL_HELPER_TIMEOUT_DEFAULT));
+  const jsonArgs = (() => {
+    try { return JSON.stringify(helperArgs || {}); } catch (_) { return '{}'; }
+  })();
+
+  return new Promise(resolve => {
+    let cmd;
+    let cmdArgs;
+    if (resolved.ext === '.py') {
+      cmd = IS_WIN ? 'python.exe' : 'python';
+      cmdArgs = [resolved.absPath];
+    } else {
+      // .js / .mjs / .cjs — run via Electron's bundled node (process.execPath).
+      cmd = process.execPath;
+      cmdArgs = [resolved.absPath];
+    }
+    let child;
+    try {
+      child = execFile(
+        cmd,
+        cmdArgs,
+        {
+          cwd: resolved.skillDir,
+          timeout,
+          windowsHide: true,
+          maxBuffer: SKILL_HELPER_OUTPUT_MAX,
+          env: {
+            ...process.env,
+            HORIZON_SKILL_ID: skillId,
+            HORIZON_SKILL_ARGS: jsonArgs,
+            HORIZON_SKILL_SCOPE: resolved.scope || '',
+            // Prevent helpers from poking electron internals via ELECTRON_RUN_AS_NODE
+            ELECTRON_RUN_AS_NODE: '1',
+            ELECTRON_NO_ATTACH_CONSOLE: '1',
+          },
+        },
+        (err, stdout, stderr) => {
+          const out = (stdout || '').toString().slice(0, 16000);
+          const errOut = (stderr || '').toString().slice(0, 4000);
+          if (err && err.killed) {
+            return resolve({ ok: false, err: `helper timed out after ${timeout}ms`, out, stderr: errOut });
+          }
+          if (err) {
+            return resolve({ ok: false, err: err.message || 'helper failed', code: err.code, out, stderr: errOut });
+          }
+          resolve({ ok: true, out, stderr: errOut, skill: skillId, helper: helperRel });
+        }
+      );
+    } catch (e) {
+      return resolve({ ok: false, err: 'spawn failed: ' + e.message });
+    }
+    // Feed JSON args to stdin so helpers can read them without parsing argv.
+    try {
+      if (child && child.stdin) {
+        child.stdin.write(jsonArgs);
+        child.stdin.end();
+      }
+    } catch (_) {}
+  });
+}
 
 // Shell command executor
 function sh(cmd, timeout) {
@@ -478,7 +557,8 @@ const TOOL_DEFINITIONS = [
   { name: 'web_search', desc: 'Search the web (DuckDuckGo)', params: { query: 'string' } },
   { name: 'wikipedia', desc: 'Search Wikipedia', params: { query: 'string' } },
   { name: 'smart_click', desc: 'Click on a UI element by visual description (uses AI vision)', params: { target: 'string describing what to click' } },
-  { name: 'open_site', desc: 'Open a website: google, youtube, gmail, github, etc', params: { name: 'string' } }
+  { name: 'open_site', desc: 'Open a website: google, youtube, gmail, github, etc', params: { name: 'string' } },
+  { name: 'skill_run_helper', desc: 'Run a helper script bundled with a loaded skill. Use when a SKILL.md tells you to invoke one of its helpers.', params: { skill: 'string skill id', helper: 'string helper path (e.g. helpers/find-stale.js)', args: 'object passed as JSON on stdin', timeoutMs: 'number (default 30000)' } }
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -581,6 +661,8 @@ async function dispatchTool(name, args = {}) {
         return { ok: true, out: JSON.stringify(nutrition, null, 2), nutrition };
       }
       return { ok: false, err: 'Memory not initialized' };
+    case 'skill_run_helper':
+      return runSkillHelper(args.skill, args.helper, args.args, args.timeoutMs);
     default:
       return { ok: false, err: `Unknown tool: ${name}` };
   }
@@ -825,5 +907,6 @@ module.exports = {
   getRunningApps,
   browserNavigate,
   browserSearch,
+  runSkillHelper,
   TOOL_DEFINITIONS
 };

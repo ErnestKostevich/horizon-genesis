@@ -52,6 +52,7 @@ var COMMANDS = [
   { icon:'\u{1F4CB}', text:'Analyze Clipboard', hint:'smart paste', action:()=>analyzeClipboard() },
   { icon:'\u{1F5D1}', text:'Clear Chat', hint:'reset', action:()=>clearHist() },
   { icon:'⚙️', text:'Settings', hint:'configure', action:()=>openPanel() },
+  { icon:'\u{1F4D8}', text:'Skill Hub', hint:'browse/edit SKILL.md bundles', action:()=>{ try { closeCmdPalette(); window.openSkillHub?.(); } catch(_){} } },
 ];
 var cmdActiveIdx = 0;
 

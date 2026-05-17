@@ -89,6 +89,10 @@ const PRO_HANDLERS = new Set([
   // Workflows / recorder
   'workflowRun',
   'recorderStart', 'recorderStop', 'recorderSave', 'recorderNarrate',
+  // Skills — write/exec paths gated; read-only listing/reading are free.
+  'skillsWrite', 'skillsToggle', 'skillsUninstall',
+  'skillsInstallBundle', 'skillsInstallFromUrl',
+  'skillsRunHelper',
 ]);
 
 let _licenseManagerRef = null;  // populated once licenseManager is constructed.
@@ -2847,6 +2851,7 @@ let mcpManager = null;
 let computerUse = null;
 let browserManager = null;
 let pluginManager = null;
+let skillsManager = null;
 let googleAuth = null;
 let personas = null;
 let workflowEngine = null;
@@ -3363,6 +3368,26 @@ function loadAgentModules() {
       console.error('Plugin manager failed:', e.message);
     }
   }
+  if (!skillsManager) {
+    try {
+      const { SkillsManager } = require('./skillsManager');
+      skillsManager = new SkillsManager({
+        userDir: path.join(app.getPath('userData'), 'skills'),
+        builtinDir: path.join(__dirname, '..', '..', 'builtin-skills'),
+        workspaceProvider: () => currentWorkspaceRoot(),
+        settingsStore,
+      });
+      skillsManager.loadAll();
+      module.exports.skillsManager = skillsManager;
+      const builtinReport = skillsManager.installAllBuiltins();
+      if (builtinReport.installed?.length) {
+        console.log('✓ Built-in skills:', builtinReport.installed.join(', '));
+      }
+      console.log('✓ Skills manager loaded');
+    } catch(e) {
+      console.error('Skills manager failed:', e.message);
+    }
+  }
   if (!googleAuth) {
     try {
       const { GoogleAuth } = require('./googleAuth');
@@ -3832,6 +3857,32 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     const startStep = { type: 'run-start', runId, provider, model: runRecord.model, prompt: runRecord.prompt };
     controller.observe(startStep);
     broadcastAgentStep(startStep, event.sender);
+    // Resolve any Claude Code-style skills matching the user's message and
+    // pass them to the agent loop. forcedSkillIds (from `/skill <name>` slash
+    // command) live in opts.forcedSkillIds passed by the renderer.
+    let skillsBlock = '';
+    let skillsSelected = null;
+    if (skillsManager) {
+      try {
+        const res = skillsManager.getSkillsBlock(userMessage, {
+          forcedIds: Array.isArray(opts.forcedSkillIds) ? opts.forcedSkillIds : [],
+        });
+        skillsBlock = res.block || '';
+        skillsSelected = {
+          selected: (res.selected || []).map(s => ({ id: s.id, score: s.score, breakdown: s.breakdown, scope: s.scope, forced: s.forced, truncated: s.truncated, bytes: s.bytes })),
+          scored: (res.scored || []).map(s => ({ id: s.id, score: s.score, breakdown: s.breakdown, scope: s.scope, forced: s.forced })),
+        };
+        // Emit a dedicated step so the inspector can render a "Skills loaded"
+        // panel. Same channel agentLoop uses for tool dispatches, so the
+        // renderer's existing onAgentStep listener picks it up.
+        const skillsStep = { type: 'skills-selected', runId, payload: skillsSelected };
+        controller.observe(skillsStep);
+        broadcastAgentStep(skillsStep, event.sender);
+      } catch (e) {
+        console.warn('skills resolve failed:', e.message);
+      }
+    }
+
     result = await agentLoop.runAgentLoop(userMessage, {
       aiFn,
       sysInfo,
@@ -3847,7 +3898,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       extraTools: [...mcpTools, ...pluginTools],
       personaId: activePersonaId,
       allowedToolGroups,
-      dispatchToolFn
+      dispatchToolFn,
+      skillsBlock,
+      skillsSelected
     });
   } catch (e) {
     result = { ok: false, error: e.message, steps: runRecord.steps };
@@ -4354,6 +4407,77 @@ ipcMain.handle('pluginToggle', (_, id) => {
   loadAgentModules();
   if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
   return pluginManager.toggleEnable(id);
+});
+
+// ── SKILLS (Claude Code-style markdown skills) ───────────────────────────────
+ipcMain.handle('skillsList', () => {
+  loadAgentModules();
+  if (!skillsManager) return [];
+  skillsManager.refreshIfStale();
+  return skillsManager.list();
+});
+
+ipcMain.handle('skillsRead', (_, id, scope) => {
+  loadAgentModules();
+  if (!skillsManager) return '';
+  return skillsManager.readSource(id, scope);
+});
+
+ipcMain.handle('skillsWrite', (_, id, content, scope) => {
+  loadAgentModules();
+  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
+  return skillsManager.writeSource(id, content, scope);
+});
+
+ipcMain.handle('skillsToggle', (_, id, scope) => {
+  loadAgentModules();
+  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
+  return skillsManager.toggleEnable(id, scope);
+});
+
+ipcMain.handle('skillsUninstall', (_, id, scope) => {
+  loadAgentModules();
+  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
+  return skillsManager.uninstall(id, scope);
+});
+
+ipcMain.handle('skillsInstallBundle', (_, bundle, opts) => {
+  loadAgentModules();
+  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
+  return skillsManager.installFromBundle(bundle, opts || {});
+});
+
+ipcMain.handle('skillsInstallFromUrl', (_, url) => {
+  loadAgentModules();
+  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
+  return skillsManager.installFromShareUrl(url);
+});
+
+ipcMain.handle('skillsShareUrl', (_, id) => {
+  loadAgentModules();
+  if (!skillsManager) return null;
+  return skillsManager.generateShareUrl(id);
+});
+
+ipcMain.handle('skillsPreviewMatch', (_, query, opts) => {
+  loadAgentModules();
+  if (!skillsManager) return { block: '', selected: [], scored: [] };
+  skillsManager.refreshIfStale();
+  return skillsManager.getSkillsBlock(query || '', opts || {});
+});
+
+// Forwarded to agent.js dispatchTool — gated by withPermission so the standard
+// approval UX fires before any helper script runs.
+ipcMain.handle('skillsRunHelper', async (event, skillId, helperRel, helperArgs, timeoutMs) => {
+  loadAgentModules();
+  if (!agentTools || !skillsManager) return { ok: false, error: 'Skills manager not loaded' };
+  return withPermission(
+    event.sender,
+    `skill_run_helper:${skillId || '?'}/${helperRel || '?'}`,
+    { skill: skillId, helper: helperRel, args: helperArgs },
+    `Run helper from skill "${skillId}"`,
+    () => agentTools.runSkillHelper(skillId, helperRel, helperArgs, timeoutMs)
+  );
 });
 
 ipcMain.handle('pluginExecTool', async (event, pluginId, toolName, args) => {

@@ -37,7 +37,7 @@ function toolAllowedByPersona(toolName, allowedGroups) {
       'get_running_apps', 'get_facts', 'recall', 'get_nutrition'
     ],
     'fs.write': ['write_file', 'remember', 'set_fact', 'log_meal'],
-    shell: ['run_code', 'run_powershell', 'run_shell', 'shell_command'],
+    shell: ['run_code', 'run_powershell', 'run_shell', 'shell_command', 'skill_run_helper'],
     'web.fetch': ['browser_open', 'open_site', 'get_location', 'get_weather', 'wikipedia'],
     'web.search': ['browser_search', 'web_search', 'wikipedia'],
     screenshot: ['screenshot', 'capture_screen', 'browser_screenshot'],
@@ -129,6 +129,16 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
     }
   } catch (_) { /* project rules are optional */ }
 
+  // Skills block — Claude Code-style SKILL.md content selected by relevance
+  // (or forced via /skill <name>). Caller (main.js) resolves the block via
+  // skillsManager.getSkillsBlock(userMessage) and passes the rendered string
+  // in here. Injected after project rules so workspace conventions still take
+  // precedence over loaded skills. See skillsManager.js for budget rules.
+  let skillsBlock = '';
+  if (typeof options.skillsBlock === 'string' && options.skillsBlock.trim()) {
+    skillsBlock = `\n\n## Skills loaded for this turn\n\n${options.skillsBlock.trim()}\n`;
+  }
+
   if (nativeTools) {
     return `
 You are Horizon AI, a real desktop AI agent created by Ernest Kostevich.
@@ -137,7 +147,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}` : ''}
-${projectRulesBlock || ''}
+${projectRulesBlock || ''}${skillsBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 
@@ -154,7 +164,7 @@ After tools finish, answer normally and concisely. If a tool fails twice, explai
 ${sysInfo?.active_window ? `Активное окно: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Местоположение: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Персона / стиль\n${personaBlock}\n` : ''}
-${projectRulesBlock || ''}
+${projectRulesBlock || ''}${skillsBlock || ''}
 Ты НАСТОЯЩИЙ агент. У тебя есть инструменты для управления ПК, запуска кода, работы с файлами и браузером.${personaBlock ? '' : '\nТы как ДЖАРВИС — умный, эффективный, всегда говори "Сэр".'}
 
 ## Как отвечать:
@@ -186,7 +196,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}\n` : ''}
-${projectRulesBlock || ''}
+${projectRulesBlock || ''}${skillsBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 
@@ -423,13 +433,19 @@ async function runAgentLoop(userMessage, opts = {}) {
     dispatchToolFn = dispatchTool,
     personaId = null,    // overrides settingsStore lookup in buildAgentSystemPrompt
     personaPrompt = null, // pre-resolved persona text (cheaper for hot paths)
-    allowedToolGroups = null
+    allowedToolGroups = null,
+    skillsBlock = '',    // pre-rendered "## Skills loaded for this turn" body (caller resolves via skillsManager.getSkillsBlock)
+    skillsSelected = null // optional metadata about which skills loaded — emitted to inspector listeners
   } = opts;
 
   // Select relevant tools for this query
   const selectedTools = filterToolsForPersona([...selectToolsForQuery(userMessage), ...extraTools], allowedToolGroups)
     .filter((tool, index, arr) => tool?.name && arr.findIndex(t => t?.name === tool.name) === index);
-  const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools, personaId, personaPrompt });
+  const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools, personaId, personaPrompt, skillsBlock });
+
+  if (skillsSelected) {
+    try { agentEvents.emit('skills:selected', { runId, ...skillsSelected }); } catch (_) {}
+  }
   
   const messages = [
     ...history.slice(-10), // last 10 messages for context

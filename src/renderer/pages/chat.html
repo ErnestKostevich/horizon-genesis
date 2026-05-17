@@ -38,6 +38,7 @@
     <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></symbol>
     <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
     <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.47 1.229 0 1.698l-2.609 2.609c-.47.47-1.229.47-1.698 0l-1.568-1.568a1.001 1.001 0 0 0-1.581.227l-.776 1.553a1 1 0 0 1-.894.553H10.39a.5.5 0 0 1-.5-.5v-3.342a.5.5 0 0 0-.379-.485l-1.5-.375a1 1 0 0 1-.728-.97V8.39a.5.5 0 0 1 .5-.5h3.342a.5.5 0 0 0 .485-.379l.375-1.5a1 1 0 0 1 .97-.728h.001"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
     <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
     <symbol id="i-store" viewBox="0 0 24 24"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M5 10v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9"/></symbol>
     <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
@@ -114,6 +115,9 @@
     </button>
     <button class="cs-act" data-shell-target="plugins" onclick="openHub()" title="Installed Plugins">
       <svg class="licon"><use href="#i-puzzle"/></svg><span>Plugins</span>
+    </button>
+    <button class="cs-act" data-shell-target="skills" onclick="openSkillHub()" title="Skills — markdown bundles auto-loaded by relevance">
+      <svg class="licon"><use href="#i-book"/></svg><span>Skills</span>
     </button>
     <button class="cs-act" data-shell-target="marketplace" onclick="openStore()" title="Marketplace">
       <svg class="licon"><use href="#i-store"/></svg><span>Store</span>
@@ -662,6 +666,22 @@
   <div class="fbody" id="hub-body"></div>
 </div>
 
+<!-- ═════════ SKILL HUB PANEL ═════════ -->
+<div class="fpanel" id="skills-panel">
+  <div class="fph" style="-webkit-app-region:drag">
+    <h2>📘 Skills</h2>
+    <div class="fph-r">
+      <button class="fph-x" onclick="closeSkillHub()">✕</button>
+    </div>
+  </div>
+  <div class="ftabs">
+    <button class="ftab on" id="skills-tab-installed" onclick="skillsTab('installed')">Installed</button>
+    <button class="ftab" id="skills-tab-edit" onclick="skillsTab('edit')">Editor</button>
+    <button class="ftab" id="skills-tab-import" onclick="skillsTab('import')">Import URL</button>
+  </div>
+  <div class="fbody" id="skills-body"></div>
+</div>
+
 <!-- ═════════ MARKETPLACE STORE PANEL ═════════ -->
 <div class="fpanel" id="store-panel">
   <div class="fph" style="-webkit-app-region:drag">
@@ -1001,6 +1021,7 @@
     <div class="insp-tabs">
       <button class="insp-tab on" data-tab="context" onclick="setInspectorTab('context')">Context</button>
       <button class="insp-tab"    data-tab="tools"   onclick="setInspectorTab('tools')">Tools</button>
+      <button class="insp-tab"    data-tab="skills"  onclick="setInspectorTab('skills')">Skills</button>
       <button class="insp-tab"    data-tab="cost"    onclick="setInspectorTab('cost')">Cost</button>
       <button class="insp-tab"    data-tab="log"     onclick="setInspectorTab('log')">Log</button>
     </div>
@@ -1033,6 +1054,15 @@
     <div class="insp-section">
       <div class="insp-h">MCP</div>
       <div id="insp-tools-mcp" class="insp-empty">No MCP servers connected.</div>
+    </div>
+  </div>
+  <!-- Skills tab — populated by chat-inspector.js refreshInspectorSkills().
+       Listens on H.onAgentStep for type='skills-selected' which main.js
+       emits right before runAgentLoop. -->
+  <div class="insp-body" id="insp-body-skills" style="display:none">
+    <div class="insp-section">
+      <div class="insp-h">Skills loaded for the last turn</div>
+      <div class="insp-empty">No skills resolved yet. Send a message and any matching SKILL.md will appear here with its score breakdown.</div>
     </div>
   </div>
   <div class="insp-body" id="insp-body-cost" style="display:none">
@@ -1188,8 +1218,8 @@ var audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 // window.history, so history.push(...) can crash before the AI request starts.
 var chatHistory=[];
 
-var SURFACE_NAMES = ['chat','code','workflows','plugins','marketplace','personas','settings','account','recorder'];
-var SURFACE_PANEL_IDS = ['hub-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
+var SURFACE_NAMES = ['chat','code','workflows','plugins','skills','marketplace','personas','settings','account','recorder'];
+var SURFACE_PANEL_IDS = ['hub-panel','skills-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
 var activeSurface = 'chat';
 var chatSidebarCollapsed = false;
 
@@ -2281,6 +2311,7 @@ document.addEventListener('keydown', (e) => {
     ['recorder-panel', 'closeRecorder'],
     ['wf-panel', 'closeWorkflows'],
     ['hub-panel', 'closeHub'],
+    ['skills-panel', 'closeSkillHub'],
     ['store-panel', 'closeStore'],
     ['acct-panel', 'closeAccount'],
     ['panel', 'closePanel'],
@@ -2606,10 +2637,16 @@ async function runAgent(text) {
         provider: currentProvider,
         model: currentModel,
         history: chatHistory.slice(-8),
-        maxSteps: 8
+        maxSteps: 8,
+        // /skill <name> sets window.forceSkillsNextTurn — one-shot, cleared
+        // after the turn so the same query without /skill goes back to
+        // pure relevance matching.
+        forcedSkillIds: Array.isArray(window.forceSkillsNextTurn) ? window.forceSkillsNextTurn.slice() : []
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Agent timed out')), agentTimeoutMs))
     ]);
+    // Drain the one-shot skill override now that the request is in flight.
+    window.forceSkillsNextTurn = [];
 
     // Final render
     rmTyping();
@@ -3543,6 +3580,10 @@ H.onMarketAuthenticated?.(async (user) => {
      hub UI, plugin lifecycle (toggle/share/remove), per-plugin
      settings, tool execution, create-from-form, install-from-URL. -->
 <script src="chat-plugin-hub.js"></script>
+<!-- Phase 2 — Skill Hub: browse/edit/toggle Claude Code-style SKILL.md bundles,
+     run helper scripts via skill_run_helper (permission-gated), preview
+     relevance match before save. Backed by skillsManager.js in main. -->
+<script src="chat-skills.js"></script>
 <!-- PR-V Phase 3.8 — Marketplace Store + Horizon Account (was 5249-5835).
      ~588 LOC: store browse/install/publish + account SSO + login/signup. -->
 <script src="chat-marketplace.js"></script>
