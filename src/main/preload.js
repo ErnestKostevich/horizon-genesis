@@ -159,6 +159,13 @@ contextBridge.exposeInMainWorld('H', {
   memGetFacts: ()              => ipcRenderer.invoke('memGetFacts'),
   memGetRecent:(lim)           => ipcRenderer.invoke('memGetRecent', lim),
   memSnapshot: (opts)          => ipcRenderer.invoke('memSnapshot', opts),
+  memEmbedStatus: ()           => ipcRenderer.invoke('memEmbedStatus'),
+  memEmbedReindex: ()          => ipcRenderer.invoke('memEmbedReindex'),
+  onMemoryEmbeddingProgress: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('memory:embeddingProgress', handler);
+    return () => ipcRenderer.removeListener('memory:embeddingProgress', handler);
+  },
   memSaveConversation: (u, a)  => ipcRenderer.invoke('memSaveConversation', u, a),
   memSearchConversations: (q, l) => ipcRenderer.invoke('memSearchConversations', q, l),
   githubAttachRepo: (repo)     => ipcRenderer.invoke('githubAttachRepo', repo),

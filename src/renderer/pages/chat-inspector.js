@@ -354,12 +354,33 @@ async function refreshInspectorLearned(){
     if (!snap?.ok) return;
     const statsHost = document.getElementById('insp-learned-stats');
     if (statsHost) {
+      let embedRow = '';
+      try {
+        const e = await H.memEmbedStatus?.();
+        if (e?.ok) {
+          if (e.available) {
+            const pct = e.totalMemories ? Math.round((e.indexed / e.totalMemories) * 100) : 100;
+            const status = e.indexed >= e.totalMemories
+              ? `<span style="color:var(--green)">${e.indexed}/${e.totalMemories} indexed</span>`
+              : `<span style="color:var(--amb,#facc15)">${e.indexed}/${e.totalMemories} (${pct}%)</span>`;
+            const errLine = e.lastError ? `<div class="insp-row" style="display:block;font-size:9px;color:var(--red);padding-left:6px">⚠ ${esc(e.lastError)}</div>` : '';
+            embedRow = `
+              <div class="insp-row"><span class="k">Semantic index</span><span class="v">${status} · ${esc(e.provider || '?')} · ${e.dim}d</span></div>
+              ${errLine}
+              <div class="insp-row" style="justify-content:flex-end;padding-top:4px"><button class="hub-btn" onclick="window._inspReindex?.()" title="Recompute embeddings for any memories that don't have one yet">Reindex now</button></div>
+            `;
+          } else {
+            embedRow = `<div class="insp-row" style="display:block;font-size:10px;color:var(--t3);line-height:1.5">Semantic recall is off — add an OpenAI or Gemini key in Settings → AI Providers and the memory index will populate automatically.</div>`;
+          }
+        }
+      } catch (_) {}
       statsHost.innerHTML = `
         <div class="insp-row"><span class="k">Facts</span><span class="v">${snap.stats.totalFacts}</span></div>
         <div class="insp-row"><span class="k">Memories</span><span class="v">${snap.stats.totalMemories}</span></div>
         <div class="insp-row"><span class="k">Conversations</span><span class="v">${snap.stats.conversations}</span></div>
         <div class="insp-row"><span class="k">Auto-learned</span><span class="v">${snap.stats.learnedItems}</span></div>
         ${snap.stats.lastLearnedAt ? `<div class="insp-row"><span class="k">Last learned</span><span class="v">${esc(new Date(snap.stats.lastLearnedAt).toLocaleString())}</span></div>` : ''}
+        ${embedRow}
       `;
     }
     const factsHost = document.getElementById('insp-learned-facts');
@@ -426,6 +447,30 @@ function refreshInspectorSkills(){
   `;
 }
 
+// Manual reindex hook + live progress updates from the embeddings backfill.
+// Wiring lives here (not in chat.html) so all the inspector-state ownership
+// stays in one file.
+window._inspReindex = async function _inspReindex() {
+  try {
+    const btn = event?.currentTarget;
+    if (btn) { btn.disabled = true; btn.textContent = 'Indexing…'; }
+    const r = await H.memEmbedReindex?.();
+    if (btn) { btn.disabled = false; btn.textContent = 'Reindex now'; }
+    if (r?.ok) {
+      H.notify?.('Memory', `Embeddings ready — ${r.indexed} indexed${r.failed ? `, ${r.failed} failed` : ''}`);
+      if (inspectorTab === 'learned') refreshInspectorLearned();
+    } else {
+      H.notify?.('Memory', r?.error || 'Reindex failed');
+    }
+  } catch (e) { H.notify?.('Memory', e.message); }
+};
+try {
+  H.onMemoryEmbeddingProgress?.((p) => {
+    // Only refresh if the Learned tab is visible; otherwise the next
+    // tab-open will pull fresh state via memEmbedStatus.
+    if (inspectorActive && inspectorTab === 'learned') refreshInspectorLearned();
+  });
+} catch (_) {}
 try {
   H.onAgentStep?.((step) => {
     try {
