@@ -375,7 +375,7 @@
         </div>
         <div class="ps">
           <div class="psl">Direct tool connections</div>
-          <div class="psview-sub" style="margin-bottom:10px">Token-based integrations become real agent tools when connected. Read actions run directly; write/send/create actions still pass through Permission Gate.</div>
+          <div class="psview-sub" style="margin-bottom:10px">Token-based integrations become real agent tools when connected. Slack, Notion, and Linear are agent-call tools. Telegram also has a live bot runtime that can listen and reply outside the app.</div>
           <div class="pf"><label><span class="d2" id="pd-slack-conn"></span>Slack Bot Token <span style="color:var(--t3);font-size:10px">channels + post message</span></label>
             <div class="pr"><input class="pi" type="password" id="pi-slack-conn" placeholder="xoxb-..." /><button class="psv" onclick="saveTokenConnection('slack')">Save</button><button class="psv" onclick="testTokenConnection('slack')">Test</button></div>
             <div class="local-status" id="conn-slack-status">Not saved.</div>
@@ -388,9 +388,15 @@
             <div class="pr"><input class="pi" type="password" id="pi-linear-conn" placeholder="lin_api_..." /><button class="psv" onclick="saveTokenConnection('linear')">Save</button><button class="psv" onclick="testTokenConnection('linear')">Test</button></div>
             <div class="local-status" id="conn-linear-status">Not saved.</div>
           </div>
-          <div class="pf"><label><span class="d2" id="pd-telegram_bot-conn"></span>Telegram Bot Token <span style="color:var(--t3);font-size:10px">updates + send message</span></label>
+          <div class="pf"><label><span class="d2" id="pd-telegram_bot-conn"></span>Telegram Bot Token <span style="color:var(--t3);font-size:10px">live replies + agent tools</span></label>
             <div class="pr"><input class="pi" type="password" id="pi-telegram_bot-conn" placeholder="123456:ABC..." /><button class="psv" onclick="saveTokenConnection('telegram_bot')">Save</button><button class="psv" onclick="testTokenConnection('telegram_bot')">Test</button></div>
             <div class="local-status" id="conn-telegram_bot-status">Not saved.</div>
+            <div class="pr" style="margin-top:8px">
+              <button class="psv" id="telegram-live-toggle" onclick="toggleTelegramLive()">Start live bot</button>
+              <button class="psv" onclick="refreshTelegramRuntimeStatus()">Refresh status</button>
+            </div>
+            <div class="local-status" id="telegram-live-status">Live bot is off. Start it to make Telegram messages wake Horizon and receive replies.</div>
+            <div class="local-status" id="telegram-live-log" style="margin-top:6px;max-height:110px;overflow:auto;font-family:var(--mono);font-size:10px"></div>
           </div>
         </div>
         <div class="ps">
