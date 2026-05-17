@@ -374,6 +374,26 @@
           <div id="github-repos" class="local-status" style="margin-top:8px"></div>
         </div>
         <div class="ps">
+          <div class="psl">Direct tool connections</div>
+          <div class="psview-sub" style="margin-bottom:10px">Token-based integrations become real agent tools when connected. Read actions run directly; write/send/create actions still pass through Permission Gate.</div>
+          <div class="pf"><label><span class="d2" id="pd-slack-conn"></span>Slack Bot Token <span style="color:var(--t3);font-size:10px">channels + post message</span></label>
+            <div class="pr"><input class="pi" type="password" id="pi-slack-conn" placeholder="xoxb-..." /><button class="psv" onclick="saveTokenConnection('slack')">Save</button><button class="psv" onclick="testTokenConnection('slack')">Test</button></div>
+            <div class="local-status" id="conn-slack-status">Not saved.</div>
+          </div>
+          <div class="pf"><label><span class="d2" id="pd-notion-conn"></span>Notion Integration Token <span style="color:var(--t3);font-size:10px">search + create page</span></label>
+            <div class="pr"><input class="pi" type="password" id="pi-notion-conn" placeholder="secret_..." /><button class="psv" onclick="saveTokenConnection('notion')">Save</button><button class="psv" onclick="testTokenConnection('notion')">Test</button></div>
+            <div class="local-status" id="conn-notion-status">Not saved.</div>
+          </div>
+          <div class="pf"><label><span class="d2" id="pd-linear-conn"></span>Linear API Key <span style="color:var(--t3);font-size:10px">issues + create issue</span></label>
+            <div class="pr"><input class="pi" type="password" id="pi-linear-conn" placeholder="lin_api_..." /><button class="psv" onclick="saveTokenConnection('linear')">Save</button><button class="psv" onclick="testTokenConnection('linear')">Test</button></div>
+            <div class="local-status" id="conn-linear-status">Not saved.</div>
+          </div>
+          <div class="pf"><label><span class="d2" id="pd-telegram_bot-conn"></span>Telegram Bot Token <span style="color:var(--t3);font-size:10px">updates + send message</span></label>
+            <div class="pr"><input class="pi" type="password" id="pi-telegram_bot-conn" placeholder="123456:ABC..." /><button class="psv" onclick="saveTokenConnection('telegram_bot')">Save</button><button class="psv" onclick="testTokenConnection('telegram_bot')">Test</button></div>
+            <div class="local-status" id="conn-telegram_bot-status">Not saved.</div>
+          </div>
+        </div>
+        <div class="ps">
           <div class="psl">MCP servers</div>
           <div class="psview-sub" style="margin-bottom:10px">Add stdio MCP servers. Tools appear in agent mode as <code>server__tool</code> and use the same Operator permission flow.</div>
           <div class="pf"><label>One-click install <span style="color:var(--t3);font-size:10px">(curated public servers)</span></label>

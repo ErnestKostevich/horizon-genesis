@@ -147,6 +147,7 @@ const ALLOWED_KEY_IDS = new Set([
   'gemini', 'groq', 'groq_voice', 'deepseek', 'mistral', 'qwen', 'grok',
   'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
   'perplexity', 'cohere', 'openrouter', 'github', 'google_client_secret',
+  'slack', 'notion', 'linear', 'telegram_bot',
 ]);
 const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
   'claude', 'openai', 'gemini', 'groq', 'deepseek',
@@ -2858,6 +2859,7 @@ let workflowEngine = null;
 let screenRecorder = null;
 let githubConnector = null;
 let mcpRegistry = null;
+let connectionsManager = null;
 const activeAgentRuns = new Map();
 const pendingAgentSteps = new Map();
 
@@ -2999,6 +3001,11 @@ function permissionScopeFor(tool, args = {}) {
 function classifyToolOperation(tool, args = {}) {
   const name = String(tool || '').toLowerCase();
   const base = name.includes('__') ? name.split('__').pop() : name;
+  if (base.startsWith('conn_')) {
+    if (/_(get|list|search|read|query|describe|status)_?/.test(base) || /_(get|list|search|read|query|describe|status)$/.test(base)) return 'read';
+    if (/(create|post|send|update|delete|remove|write|patch)/.test(base)) return 'side_effect';
+    return 'network';
+  }
   if (base === 'shell_command') return looksSafeReadOnlyShell(args.command || args.cmd) ? 'read_shell' : 'shell';
   if (/^(read|get|list|search|find|query|describe|status|inspect|recall|wikipedia|weather|calendar_list|gmail_search|github_read)/.test(base)) return 'read';
   if (/(write|save|create|delete|remove|update|move|rename|patch|commit|push|exec|shell|run|launch|kill|type|press|click|mouse|scroll|open|browser|fetch|http|post|put|send|email|calendar|remember|set_|log_meal|clipboard|screenshot|capture)/.test(base)) return base.includes('fetch') || base.includes('http') ? 'network' : 'side_effect';
@@ -3459,6 +3466,15 @@ function loadAgentModules() {
       console.error('GitHub connector failed:', e.message);
     }
   }
+  if (!connectionsManager) {
+    try {
+      const { ConnectionsManager } = require('./connectionsManager');
+      connectionsManager = new ConnectionsManager(keysStore, settingsStore);
+      console.log('Connections manager loaded');
+    } catch(e) {
+      console.error('Connections manager failed:', e.message);
+    }
+  }
 }
 
 // ── AGENT LOOP: autonomous multi-step task execution ─────────────────────────
@@ -3618,6 +3634,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   if (githubConnector) {
     try { sysInfo.github_repos = githubConnector.listRepos(); } catch (_) {}
   }
+  if (connectionsManager) {
+    try { sysInfo.connections = connectionsManager.list().filter(c => c.connected).map(c => ({ id: c.id, name: c.name, toolCount: c.toolCount })); } catch (_) {}
+  }
 
   // AI function wrapper
   const aiFn = async (messages, systemPrompt, agentMeta = {}) => {
@@ -3762,6 +3781,12 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     catch (e) { console.warn('Plugin tools unavailable:', e.message); }
   }
 
+  let connectionTools = [];
+  if (connectionsManager && typeof connectionsManager.toolsForAgent === 'function') {
+    try { connectionTools = connectionsManager.toolsForAgent() || []; }
+    catch (e) { console.warn('Connection tools unavailable:', e.message); }
+  }
+
   const activePersonaId = settingsStore.get('persona') || 'jarvis';
   let allowedToolGroups = null;
   try {
@@ -3786,6 +3811,10 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     if (mcpRegistry && String(tool || '').includes('__')) {
       const mcpResult = await mcpRegistry.dispatch(tool, args);
       if (mcpResult) return mcpResult;
+    }
+    if (String(tool || '').startsWith('conn_') && connectionsManager) {
+      const connResult = await connectionsManager.dispatch(tool, args || {});
+      if (connResult) return connResult;
     }
     // Plugin tool name format from pluginManager.getToolDefinitions():
     // `plugin_<pluginId>_<toolName>`. Look up the descriptor by name in
@@ -3896,7 +3925,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       runId,
       control: controller,
       nativeTools: provider === 'claude' || provider === 'openai',
-      extraTools: [...mcpTools, ...pluginTools],
+      extraTools: [...mcpTools, ...pluginTools, ...connectionTools],
       personaId: activePersonaId,
       allowedToolGroups,
       dispatchToolFn,
@@ -3920,9 +3949,22 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
 
   // Save to memory
   if (agentMemory) {
-    agentMemory.remember(`Task: ${userMessage}`, 'agent_task', 7);
-    if (result.ok && result.answer) {
-      agentMemory.remember(`Result: ${result.answer.slice(0, 200)}`, 'agent_result', 6);
+    try {
+      if (typeof agentMemory.learnFromTurn === 'function') {
+        agentMemory.learnFromTurn(userMessage, result?.answer || result?.error || '', {
+          provider,
+          model: runRecord.model,
+          persona: activePersonaId,
+          runId,
+        });
+      } else {
+        agentMemory.remember(`Task: ${userMessage}`, 'agent_task', 7);
+        if (result.ok && result.answer) {
+          agentMemory.remember(`Result: ${result.answer.slice(0, 200)}`, 'agent_result', 6);
+        }
+      }
+    } catch (e) {
+      console.warn('Memory learning failed:', e.message);
     }
   }
 
@@ -4030,6 +4072,19 @@ ipcMain.handle('githubRepoContext', async (_, fullName) => {
   loadAgentModules();
   if (!githubConnector) return { ok: false, error: 'GitHub connector not loaded' };
   try { return { ok: true, ...(await githubConnector.repoContext(fullName)) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('connectionsList', () => {
+  loadAgentModules();
+  try { return { ok: true, connections: connectionsManager ? connectionsManager.list() : [] }; }
+  catch (e) { return { ok: false, error: e.message, connections: [] }; }
+});
+
+ipcMain.handle('connectionsTest', async (_, id) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try { return await connectionsManager.testConnection(String(id || '')); }
   catch (e) { return { ok: false, error: e.message }; }
 });
 

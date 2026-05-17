@@ -115,7 +115,28 @@ class AgentMemory {
   constructor(dbPath) {
     this.filePath = dbPath.replace(/\.db$/, '.json');
     this.ready = false;
-    this._data = { memories: [], facts: {}, meals: [], conversations: [] };
+    this._data = { memories: [], facts: {}, meals: [], conversations: [], learning: { stats: {} } };
+  }
+
+  _ensureShape() {
+    this._data.memories = Array.isArray(this._data.memories) ? this._data.memories : [];
+    this._data.facts = this._data.facts && typeof this._data.facts === 'object' ? this._data.facts : {};
+    this._data.meals = Array.isArray(this._data.meals) ? this._data.meals : [];
+    this._data.conversations = Array.isArray(this._data.conversations) ? this._data.conversations : [];
+    this._data.learning = this._data.learning && typeof this._data.learning === 'object' ? this._data.learning : { stats: {} };
+    this._data.learning.stats = this._data.learning.stats && typeof this._data.learning.stats === 'object' ? this._data.learning.stats : {};
+  }
+
+  _hash(text) {
+    return crypto.createHash('sha1').update(String(text || '').toLowerCase().trim()).digest('hex').slice(0, 12);
+  }
+
+  _normalizeText(text, limit = 1200) {
+    return String(text || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+  }
+
+  _memoryKey(content, category) {
+    return `${category || 'general'}:${this._hash(content)}`;
   }
 
   init() {
@@ -123,12 +144,9 @@ class AgentMemory {
       if (fs.existsSync(this.filePath)) {
         const raw = fs.readFileSync(this.filePath, 'utf8');
         this._data = JSON.parse(raw);
-        // Ensure all arrays exist
-        this._data.memories = this._data.memories || [];
-        this._data.facts = this._data.facts || {};
-        this._data.meals = this._data.meals || [];
-        this._data.conversations = this._data.conversations || [];
+        this._ensureShape();
       } else {
+        this._ensureShape();
         this._save();
       }
       this.ready = true;
@@ -149,26 +167,53 @@ class AgentMemory {
 
   // Remember something with category and importance
   remember(content, category, importance) {
-    if (!this.ready || !content) return;
-    this._data.memories.push({
+    if (!this.ready || !content) return null;
+    this._ensureShape();
+    const normalized = this._normalizeText(content);
+    if (!normalized) return null;
+    const key = this._memoryKey(normalized, category || 'general');
+    const existing = this._data.memories.find(m => m.key === key);
+    if (existing) {
+      existing.lastSeen = Date.now();
+      existing.seen = (existing.seen || 1) + 1;
+      existing.importance = Math.max(existing.importance || 5, importance || 5);
+      this._save();
+      return existing;
+    }
+    const item = {
       id: Date.now(),
+      key,
       category: category || 'general',
-      content,
+      content: normalized,
       created: Date.now(),
+      lastSeen: Date.now(),
+      seen: 1,
       importance: importance || 5
-    });
+    };
+    this._data.memories.push(item);
     // Limit to last 2000 memories
     if (this._data.memories.length > 2000) {
       this._data.memories = this._data.memories.slice(-2000);
     }
     this._save();
+    return item;
   }
 
   // Set a persistent fact (key-value)
   setFact(key, value) {
-    if (!this.ready) return;
-    this._data.facts[key] = { value, updated: Date.now() };
+    if (!this.ready) return false;
+    this._ensureShape();
+    const safeKey = this._normalizeText(key, 120);
+    const safeValue = this._normalizeText(value, 1200);
+    if (!safeKey || !safeValue) return false;
+    const prev = this._data.facts[safeKey]?.value;
+    this._data.facts[safeKey] = {
+      value: safeValue,
+      updated: Date.now(),
+      seen: (this._data.facts[safeKey]?.seen || 0) + (prev === safeValue ? 1 : 0)
+    };
     this._save();
+    return true;
   }
 
   getFact(key) {
@@ -183,17 +228,22 @@ class AgentMemory {
 
   // Search memories by content (simple keyword match)
   recall(query, limit) {
+    this._ensureShape();
     const q = (query || '').toLowerCase();
-    const words = q.split(/\s+/).filter(w => w.length > 2);
+    const words = q.split(/[^\p{L}\p{N}_-]+/u).filter(w => w.length > 2);
+    const now = Date.now();
     
     return this._data.memories
       .map(m => {
-        const content = m.content.toLowerCase();
+        const content = String(m.content || '').toLowerCase();
         // Score based on word matches
-        const score = words.reduce((acc, w) => acc + (content.includes(w) ? 1 : 0), 0);
-        return { ...m, score };
+        const matches = words.reduce((acc, w) => acc + (content.includes(w) ? 1 : 0), 0);
+        const ageDays = Math.max(0, (now - (m.lastSeen || m.created || now)) / 86400000);
+        const recency = Math.max(0, 4 - Math.floor(ageDays / 14));
+        const score = (matches * 4) + (m.importance || 5) + recency + Math.min(3, m.seen || 1);
+        return { ...m, score, matches };
       })
-      .filter(m => m.score > 0 || q.length < 3)
+      .filter(m => m.matches > 0 || q.length < 3)
       .sort((a, b) => {
         // Sort by score, then importance, then recency
         if (b.score !== a.score) return b.score - a.score;
@@ -204,7 +254,64 @@ class AgentMemory {
   }
 
   getRecent(limit) {
+    this._ensureShape();
     return [...this._data.memories].reverse().slice(0, limit || 20);
+  }
+
+  learnFromTurn(userMessage, assistantReply, meta = {}) {
+    if (!this.ready) return { ok: false, learned: 0 };
+    this._ensureShape();
+    const user = this._normalizeText(userMessage, 1600);
+    const assistant = this._normalizeText(assistantReply, 1600);
+    if (!user) return { ok: false, learned: 0 };
+
+    const learned = [];
+    const stamp = new Date().toISOString();
+    const addFact = (key, value) => {
+      if (this.setFact(key, value)) learned.push({ type: 'fact', key, value });
+    };
+    const addMemory = (content, category = 'learned_preference', importance = 7) => {
+      const m = this.remember(content, category, importance);
+      if (m) learned.push({ type: 'memory', category, content: m.content });
+    };
+
+    const cleanValue = (v, max = 180) => this._normalizeText(v, max).replace(/[.?!,:;]+$/g, '').trim();
+    const nameMatch = user.match(/(?:меня зовут|зови меня|обращайся ко мне как|my name is|call me)\s+([^\n.!?,;]{2,48})/i);
+    if (nameMatch) addFact('user.name', cleanValue(nameMatch[1], 48));
+
+    const projectMatch = user.match(/(?:мой проект|проект называется|project is|project name is)\s+([^\n.!?,;]{2,80})/i);
+    if (projectMatch) addFact('project.name', cleanValue(projectMatch[1], 80));
+
+    const wants = [
+      { re: /(?:я хочу|мне нужно|i want|i need)\s+(.{8,220})/i, category: 'user_goal', prefix: 'User wants' },
+      { re: /(?:мне нравится|я люблю|i like|i prefer)\s+(.{4,180})/i, category: 'preference_like', prefix: 'User likes/prefers' },
+      { re: /(?:мне не нравится|я не люблю|не хочу|i dislike|i do not like|i don't like)\s+(.{4,180})/i, category: 'preference_dislike', prefix: 'User dislikes/avoids' },
+      { re: /(?:всегда|always)\s+(.{4,180})/i, category: 'preference_rule', prefix: 'User always wants' },
+      { re: /(?:никогда|never)\s+(.{4,180})/i, category: 'preference_rule', prefix: 'User never wants' },
+    ];
+    for (const item of wants) {
+      const match = user.match(item.re);
+      if (match) addMemory(`${item.prefix}: ${cleanValue(match[1], 220)}`, item.category, item.category === 'user_goal' ? 8 : 7);
+    }
+
+    if (/horizon|хорайзон|горизонт|cursor|кодекс|codex|claude code/i.test(user)) {
+      addMemory(`Project/workflow context (${stamp}): ${user}`, 'project_context', 6);
+    }
+
+    this.saveConversation(user, assistant || '', {
+      provider: meta.provider,
+      model: meta.model,
+      persona: meta.persona,
+      runId: meta.runId,
+      learned: learned.length
+    });
+
+    const stats = this._data.learning.stats;
+    stats.turns = (stats.turns || 0) + 1;
+    stats.learnedItems = (stats.learnedItems || 0) + learned.length;
+    stats.lastTurnAt = stamp;
+    this._save();
+    return { ok: true, learned: learned.length, items: learned };
   }
 
   // ═══ NUTRITION TRACKING (from jarvis) ═══
@@ -247,12 +354,14 @@ class AgentMemory {
   }
 
   // ═══ CONVERSATION MEMORY ═══
-  saveConversation(userMessage, assistantReply) {
+  saveConversation(userMessage, assistantReply, meta = {}) {
     if (!this.ready) return;
+    this._ensureShape();
     this._data.conversations.push({
       id: Date.now(),
-      user: userMessage,
-      assistant: assistantReply.slice(0, 1000),
+      user: this._normalizeText(userMessage, 1600),
+      assistant: this._normalizeText(assistantReply, 1600),
+      meta: meta && typeof meta === 'object' ? meta : {},
       time: new Date().toISOString()
     });
     // Keep last 500 conversations
@@ -263,10 +372,18 @@ class AgentMemory {
   }
 
   searchConversations(query, limit = 10) {
+    this._ensureShape();
     const q = (query || '').toLowerCase();
+    const words = q.split(/[^\p{L}\p{N}_-]+/u).filter(w => w.length > 2);
     return this._data.conversations
-      .filter(c => c.user.toLowerCase().includes(q) || c.assistant.toLowerCase().includes(q))
-      .slice(-limit);
+      .map(c => {
+        const body = `${c.user || ''}\n${c.assistant || ''}`.toLowerCase();
+        const score = words.reduce((acc, w) => acc + (body.includes(w) ? 1 : 0), 0);
+        return { ...c, score };
+      })
+      .filter(c => c.score > 0 || q.length < 3)
+      .sort((a, b) => (b.score - a.score) || (new Date(b.time).getTime() - new Date(a.time).getTime()))
+      .slice(0, limit);
   }
 }
 
