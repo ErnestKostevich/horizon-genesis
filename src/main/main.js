@@ -3363,6 +3363,43 @@ function loadAgentModules() {
       agentMemory = new AgentMemory(memPath);
       agentMemory.init();
       setMemoryInstance(agentMemory);
+
+      // Semantic recall — wire an EmbeddingService that shares the existing
+      // keysStore. Sidecar JSON lives next to horizon_memory.json. The
+      // service is lazy: if there's no OpenAI/Gemini key the index stays
+      // empty and recall transparently uses keyword scoring.
+      try {
+        const { EmbeddingService } = require('./embeddings');
+        const embedSvc = new EmbeddingService({
+          keysStore,
+          settingsStore,
+          memoryPath: memPath.replace(/\.db$/, '.json'),
+        });
+        agentMemory.setEmbeddingService(embedSvc);
+        module.exports.agentMemory = agentMemory;
+        // Kick off backfill in the background; don't block the renderer.
+        // First-time runs with thousands of memories take ~30-60s on
+        // OpenAI's small embedder, fully asynchronous so the UI stays
+        // responsive. Subsequent runs are no-ops since the sidecar is
+        // populated.
+        if (embedSvc.isAvailable() && agentMemory._data?.memories?.length) {
+          setTimeout(() => {
+            agentMemory.embedAllPending(progress => {
+              try {
+                const wins = BrowserWindow.getAllWindows();
+                for (const w of wins) {
+                  if (w && !w.isDestroyed() && w.webContents) {
+                    w.webContents.send('memory:embeddingProgress', progress);
+                  }
+                }
+              } catch (_) {}
+            }).then(r => console.log('✓ Embeddings backfill:', r))
+              .catch(e => console.warn('Embeddings backfill failed:', e.message));
+          }, 4000);
+        }
+      } catch (e) {
+        console.warn('EmbeddingService unavailable:', e.message);
+      }
       // Initialize ChatStore for multi-chat persistence
       if (!chatStore) {
         const chatPath = path.join(app.getPath('userData'), 'horizon_chats.db');
@@ -3718,9 +3755,17 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   sysInfo = sysInfo || {};
   if (agentMemory) {
     try {
+      // Prefer semantic recall when embeddings are available — paraphrased
+      // queries (e.g. "what's my project name" vs the stored fact
+      // "user told me they work on Horizon Genesis") now surface their
+      // matching memory. Falls back to keyword recall on missing key or
+      // embedding failure, no regression.
+      const relevant = (typeof agentMemory.semanticRecall === 'function')
+        ? await agentMemory.semanticRecall(userMessage, 8).catch(() => agentMemory.recall(userMessage, 8))
+        : agentMemory.recall(userMessage, 8);
       sysInfo.memory = {
         facts: agentMemory.getAllFacts(),
-        relevant: agentMemory.recall(userMessage, 8),
+        relevant,
         recentConversations: agentMemory.searchConversations(userMessage, 5),
       };
     } catch (_) {}
@@ -4113,6 +4158,31 @@ ipcMain.handle('memGetRecent', (_, limit) => {
   loadAgentModules();
   if (!agentMemory) return [];
   return agentMemory.getRecent(limit || 20);
+});
+
+// Embedding index status + manual reindex trigger. Used by the Learned tab
+// to show "X/Y indexed" and the optional "Reindex now" button.
+ipcMain.handle('memEmbedStatus', () => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  try { return { ok: true, ...agentMemory.embeddingStatus() }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('memEmbedReindex', async () => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  try {
+    const r = await agentMemory.embedAllPending(progress => {
+      try {
+        const wins = BrowserWindow.getAllWindows();
+        for (const w of wins) {
+          if (w && !w.isDestroyed() && w.webContents) w.webContents.send('memory:embeddingProgress', progress);
+        }
+      } catch (_) {}
+    });
+    return { ok: true, ...r };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // Single-shot snapshot for the inspector's Learned tab — facts + most-recent
