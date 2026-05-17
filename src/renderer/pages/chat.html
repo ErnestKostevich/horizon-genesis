@@ -119,6 +119,9 @@
     <button class="cs-act" data-shell-target="skills" onclick="openSkillHub()" title="Skills — markdown bundles auto-loaded by relevance">
       <svg class="licon"><use href="#i-book"/></svg><span>Skills</span>
     </button>
+    <button class="cs-act" data-shell-target="telegram" onclick="openTelegramHub()" title="Telegram chats — view bot conversations and reply from the desktop">
+      <svg class="licon"><use href="#i-send"/></svg><span>Telegram</span>
+    </button>
     <button class="cs-act" data-shell-target="marketplace" onclick="openStore()" title="Marketplace">
       <svg class="licon"><use href="#i-store"/></svg><span>Store</span>
     </button>
@@ -692,6 +695,30 @@
   <div class="fbody" id="hub-body"></div>
 </div>
 
+<!-- ═════════ TELEGRAM CHAT VIEWER PANEL ═════════
+     Two-column layout: chat list on the left, thread + composer on the right.
+     Backed by chat-telegram.js + connectionsManager Telegram runtime. -->
+<div class="fpanel" id="telegram-panel">
+  <div class="fph" style="-webkit-app-region:drag">
+    <h2>💬 Telegram</h2>
+    <div class="fph-r">
+      <button class="fph-x" onclick="closeTelegramHub()">✕</button>
+    </div>
+  </div>
+  <div class="tg-split">
+    <aside class="tg-side" id="tg-chat-list">
+      <div class="tg-empty">Loading…</div>
+    </aside>
+    <main class="tg-thread" id="tg-thread">
+      <div class="tg-empty" style="padding:40px 20px">
+        <div style="font-size:32px;opacity:.5;margin-bottom:8px">💬</div>
+        <strong>Pick a chat on the left</strong>
+        <p style="font-size:12px;color:var(--t3);max-width:280px;margin:0 auto;line-height:1.6">Conversations from your Telegram bot are stored locally (in <code>%APPDATA%</code> alongside your keys) and shown here. Up to 400 messages per chat.</p>
+      </div>
+    </main>
+  </div>
+</div>
+
 <!-- ═════════ SKILL HUB PANEL ═════════ -->
 <div class="fpanel" id="skills-panel">
   <div class="fph" style="-webkit-app-region:drag">
@@ -1048,6 +1075,7 @@
       <button class="insp-tab on" data-tab="context" onclick="setInspectorTab('context')">Context</button>
       <button class="insp-tab"    data-tab="tools"   onclick="setInspectorTab('tools')">Tools</button>
       <button class="insp-tab"    data-tab="skills"  onclick="setInspectorTab('skills')">Skills</button>
+      <button class="insp-tab"    data-tab="learned" onclick="setInspectorTab('learned')">Learned</button>
       <button class="insp-tab"    data-tab="cost"    onclick="setInspectorTab('cost')">Cost</button>
       <button class="insp-tab"    data-tab="log"     onclick="setInspectorTab('log')">Log</button>
     </div>
@@ -1089,6 +1117,26 @@
     <div class="insp-section">
       <div class="insp-h">Skills loaded for the last turn</div>
       <div class="insp-empty">No skills resolved yet. Send a message and any matching SKILL.md will appear here with its score breakdown.</div>
+    </div>
+  </div>
+  <!-- Learned tab — facts + memories AgentMemory accumulated. Snapshots via
+       H.memSnapshot. Also surfaces the latest agent reflection (goal_met). -->
+  <div class="insp-body" id="insp-body-learned" style="display:none">
+    <div class="insp-section">
+      <div class="insp-h">Latest reflection</div>
+      <div id="insp-reflection" class="insp-empty">No reflection yet — finish a task and the model's self-check lands here.</div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">Stats</div>
+      <div id="insp-learned-stats"><div class="insp-empty">Loading…</div></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">Known facts about you</div>
+      <div id="insp-learned-facts"><div class="insp-empty">No facts yet — Horizon learns from your conversations.</div></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">Recent memories</div>
+      <div id="insp-learned-memories"><div class="insp-empty">No memories yet.</div></div>
     </div>
   </div>
   <div class="insp-body" id="insp-body-cost" style="display:none">
@@ -1244,8 +1292,8 @@ var audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 // window.history, so history.push(...) can crash before the AI request starts.
 var chatHistory=[];
 
-var SURFACE_NAMES = ['chat','code','workflows','plugins','skills','marketplace','personas','settings','account','recorder'];
-var SURFACE_PANEL_IDS = ['hub-panel','skills-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
+var SURFACE_NAMES = ['chat','code','workflows','plugins','skills','telegram','marketplace','personas','settings','account','recorder'];
+var SURFACE_PANEL_IDS = ['hub-panel','skills-panel','telegram-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
 var activeSurface = 'chat';
 var chatSidebarCollapsed = false;
 
@@ -2399,6 +2447,7 @@ document.addEventListener('keydown', (e) => {
     ['wf-panel', 'closeWorkflows'],
     ['hub-panel', 'closeHub'],
     ['skills-panel', 'closeSkillHub'],
+    ['telegram-panel', 'closeTelegramHub'],
     ['store-panel', 'closeStore'],
     ['acct-panel', 'closeAccount'],
     ['panel', 'closePanel'],
@@ -3671,6 +3720,10 @@ H.onMarketAuthenticated?.(async (user) => {
      run helper scripts via skill_run_helper (permission-gated), preview
      relevance match before save. Backed by skillsManager.js in main. -->
 <script src="chat-skills.js"></script>
+<!-- Telegram chat viewer: shows the bot's local-stored conversations and
+     lets the user reply from the desktop. Backed by connectionsManager
+     Telegram runtime + IPC handlers (tgListChats / tgGetHistory / tgSendFromUI). -->
+<script src="chat-telegram.js"></script>
 <!-- PR-V Phase 3.8 — Marketplace Store + Horizon Account (was 5249-5835).
      ~588 LOC: store browse/install/publish + account SSO + login/signup. -->
 <script src="chat-marketplace.js"></script>
