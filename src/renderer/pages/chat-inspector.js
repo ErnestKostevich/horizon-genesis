@@ -100,7 +100,7 @@ function toggleInspectorMode(){
 function setInspectorTab(name){
   inspectorTab = name;
   document.querySelectorAll('.insp-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
-  ['context','tools','skills','cost','log'].forEach(t => {
+  ['context','tools','skills','learned','cost','log'].forEach(t => {
     const el = document.getElementById('insp-body-' + t);
     if (el) el.style.display = (t === name) ? 'block' : 'none';
   });
@@ -132,10 +132,11 @@ function refreshInspector(){
     document.getElementById('insp-voice').textContent = voiceProvider || '—';
   } catch(_) {}
 
-  if (inspectorTab === 'tools')  refreshInspectorTools();
-  if (inspectorTab === 'skills') refreshInspectorSkills();
-  if (inspectorTab === 'cost')   refreshInspectorCost();
-  if (inspectorTab === 'log')    refreshInspectorLog();
+  if (inspectorTab === 'tools')   refreshInspectorTools();
+  if (inspectorTab === 'skills')  refreshInspectorSkills();
+  if (inspectorTab === 'learned') refreshInspectorLearned();
+  if (inspectorTab === 'cost')    refreshInspectorCost();
+  if (inspectorTab === 'log')     refreshInspectorLog();
   // Connections row updates lazily
   refreshInspectorConnections();
 }
@@ -326,6 +327,70 @@ function renderStepRail(){
 // Auto-update Inspector and Step Rail from agent step events. Hooks into
 // the existing operator-side onAgentStep listener via a soft tap so we
 // don't fight Operator Mode's own subscriber.
+// Latest reflection event from agentLoop. Captured by the onAgentStep tap
+// below and rendered into the Learned tab. Persists across tab switches so
+// users can flip away and back without losing the data.
+var lastReflection = null;
+
+async function refreshInspectorLearned(){
+  // Reflection block — always render even if memSnapshot fails (offline-safe).
+  const refl = document.getElementById('insp-reflection');
+  if (refl) {
+    if (lastReflection) {
+      const r = lastReflection;
+      const verdictColor = r.goalMet === 'yes' ? 'var(--green)' : r.goalMet === 'partial' ? 'var(--amb,#facc15)' : 'var(--red)';
+      const conf = typeof r.confidence === 'number' ? ` · confidence ${(r.confidence * 100).toFixed(0)}%` : '';
+      refl.innerHTML = `
+        <div style="font-size:11px"><span style="color:${verdictColor};font-weight:700;text-transform:uppercase">${esc(r.goalMet || 'unknown')}</span>${conf}</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:6px;line-height:1.5">${esc(r.summary || '')}</div>
+        ${(r.gaps || []).length ? `<ul style="font-size:10px;color:var(--t3);margin:6px 0 0 16px;line-height:1.6">${r.gaps.map(g => `<li>${esc(g)}</li>`).join('')}</ul>` : ''}
+      `;
+    }
+  }
+
+  // Pull snapshot from main (facts + memories + learning stats in one shot).
+  try {
+    const snap = await H.memSnapshot?.({ factLimit: 40, memLimit: 30 });
+    if (!snap?.ok) return;
+    const statsHost = document.getElementById('insp-learned-stats');
+    if (statsHost) {
+      statsHost.innerHTML = `
+        <div class="insp-row"><span class="k">Facts</span><span class="v">${snap.stats.totalFacts}</span></div>
+        <div class="insp-row"><span class="k">Memories</span><span class="v">${snap.stats.totalMemories}</span></div>
+        <div class="insp-row"><span class="k">Conversations</span><span class="v">${snap.stats.conversations}</span></div>
+        <div class="insp-row"><span class="k">Auto-learned</span><span class="v">${snap.stats.learnedItems}</span></div>
+        ${snap.stats.lastLearnedAt ? `<div class="insp-row"><span class="k">Last learned</span><span class="v">${esc(new Date(snap.stats.lastLearnedAt).toLocaleString())}</span></div>` : ''}
+      `;
+    }
+    const factsHost = document.getElementById('insp-learned-facts');
+    if (factsHost) {
+      if (!snap.facts.length) {
+        factsHost.innerHTML = '<div class="insp-empty">No facts yet — Horizon learns from your conversations.</div>';
+      } else {
+        factsHost.innerHTML = snap.facts.map(f => `
+          <div class="insp-row" style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+            <span class="v" style="text-align:left;color:var(--tx);font-weight:600;flex-shrink:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.key)}">${esc(f.key)}</span>
+            <span class="k" style="text-align:right;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.value)}">${esc((f.value || '').toString().slice(0, 120))}${f.seen > 1 ? ` <span style="color:var(--t3)">×${f.seen}</span>` : ''}</span>
+          </div>
+        `).join('');
+      }
+    }
+    const memHost = document.getElementById('insp-learned-memories');
+    if (memHost) {
+      if (!snap.memories.length) {
+        memHost.innerHTML = '<div class="insp-empty">No memories yet.</div>';
+      } else {
+        memHost.innerHTML = snap.memories.slice(0, 20).map(m => `
+          <div class="insp-row" style="display:block;padding:6px 0;border-bottom:1px solid var(--b1)">
+            <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">${esc(m.category || 'general')}${m.importance ? ` · imp ${m.importance}` : ''}</div>
+            <div style="font-size:11px;color:var(--tx);margin-top:2px;line-height:1.5">${esc((m.content || '').toString().slice(0, 200))}</div>
+          </div>
+        `).join('');
+      }
+    }
+  } catch (e) { /* tab is best-effort */ }
+}
+
 function refreshInspectorSkills(){
   const host = document.getElementById('insp-body-skills');
   if (!host) return;
@@ -381,6 +446,12 @@ try {
       if (step?.type === 'skills-selected' && step.payload) {
         lastSkillsSelected = step.payload;
         if (inspectorActive && inspectorTab === 'skills') refreshInspectorSkills();
+      }
+      // Reflection — agentLoop emits after each finished run with goal_met,
+      // summary, gaps, confidence. Store + re-render the Learned tab.
+      if (step?.type === 'reflection') {
+        lastReflection = step;
+        if (inspectorActive && inspectorTab === 'learned') refreshInspectorLearned();
       }
       // Inspector log + cost auto-refresh on activity
       if (inspectorActive) {

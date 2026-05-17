@@ -260,28 +260,123 @@ class ConnectionsManager {
     }
   }
 
+  // ── Telegram chat memory ───────────────────────────────────────────────
+  // Storage layout in settingsStore (plain JSON in userData — same locality
+  // as keys, just not encrypted since chat content rarely qualifies as a
+  // secret; users who want crypto-grade privacy should disable the runtime):
+  //   connection.telegram_bot.chats          → [{chatId,title,user,lastMsg,lastMsgAt,count}]
+  //   connection.telegram_bot.history.<chatId> → [{role,content,at,name?}] (cap 400)
+  // 400 messages × ~200 chars ≈ 80 KB per chat — comfortable for years of casual use.
+  TG_HISTORY_CAP = 400;
+  TG_CTX_FOR_MODEL = 16; // how many recent messages to pass into the model
+
+  _tgHistoryKey(chatId) { return `connection.telegram_bot.history.${chatId}`; }
+
+  _tgReadHistory(chatId) {
+    const raw = this.settingsStore?.get?.(this._tgHistoryKey(chatId));
+    return Array.isArray(raw) ? raw : [];
+  }
+
+  _tgWriteHistory(chatId, history) {
+    const capped = history.slice(-this.TG_HISTORY_CAP);
+    this.settingsStore?.set?.(this._tgHistoryKey(chatId), capped);
+    return capped;
+  }
+
+  _tgUpdateChatMeta(chatId, patch) {
+    const list = Array.isArray(this.settingsStore?.get?.('connection.telegram_bot.chats'))
+      ? this.settingsStore.get('connection.telegram_bot.chats').slice()
+      : [];
+    const idx = list.findIndex(c => String(c.chatId) === String(chatId));
+    const prev = idx >= 0 ? list[idx] : { chatId, count: 0 };
+    const next = { ...prev, ...patch, chatId };
+    if (idx >= 0) list[idx] = next; else list.push(next);
+    // Keep most-recent first
+    list.sort((a, b) => (new Date(b.lastMsgAt || 0).getTime()) - (new Date(a.lastMsgAt || 0).getTime()));
+    this.settingsStore?.set?.('connection.telegram_bot.chats', list.slice(0, 200));
+    return next;
+  }
+
+  telegramListChats() {
+    const list = Array.isArray(this.settingsStore?.get?.('connection.telegram_bot.chats'))
+      ? this.settingsStore.get('connection.telegram_bot.chats')
+      : [];
+    return { ok: true, chats: list };
+  }
+
+  telegramGetHistory(chatId, limit) {
+    if (!chatId) return { ok: false, error: 'chatId required' };
+    const hist = this._tgReadHistory(chatId);
+    const lim = Math.max(1, Math.min(this.TG_HISTORY_CAP, Number(limit) || 200));
+    return { ok: true, chatId, history: hist.slice(-lim), total: hist.length };
+  }
+
+  telegramClearHistory(chatId) {
+    if (chatId) {
+      this.settingsStore?.set?.(this._tgHistoryKey(chatId), []);
+      const list = Array.isArray(this.settingsStore?.get?.('connection.telegram_bot.chats'))
+        ? this.settingsStore.get('connection.telegram_bot.chats').filter(c => String(c.chatId) !== String(chatId))
+        : [];
+      this.settingsStore?.set?.('connection.telegram_bot.chats', list);
+      try { this.eventBridge?.('telegram:chats', { chats: list }); } catch (_) {}
+      return { ok: true, cleared: chatId };
+    }
+    // Clear everything: enumerate keys via the chats list (settingsStore
+    // doesn't support prefix scans).
+    const list = this.settingsStore?.get?.('connection.telegram_bot.chats') || [];
+    for (const c of list) this.settingsStore?.set?.(this._tgHistoryKey(c.chatId), []);
+    this.settingsStore?.set?.('connection.telegram_bot.chats', []);
+    try { this.eventBridge?.('telegram:chats', { chats: [] }); } catch (_) {}
+    return { ok: true, cleared: 'all' };
+  }
+
+  /** Public: ingest a manual outbound message sent from the desktop UI so it
+   * lands in history exactly like a bot-sent reply. Used by the Telegram
+   * chat viewer's "send" composer. */
+  async telegramSendFromUI(chatId, text) {
+    if (!chatId) return { ok: false, error: 'chatId required' };
+    const trimmed = asText(text, 3900);
+    if (!trimmed) return { ok: false, error: 'empty text' };
+    const sent = await this.telegramSendMessage(chatId, trimmed);
+    if (!sent?.ok) return sent;
+    const entry = { role: 'assistant', content: trimmed, at: new Date().toISOString(), source: 'desktop-ui' };
+    const next = this._tgWriteHistory(chatId, [...this._tgReadHistory(chatId), entry]);
+    this._tgUpdateChatMeta(chatId, { lastMsg: trimmed.slice(0, 160), lastMsgAt: entry.at, count: (next.length) });
+    try { this.eventBridge?.('telegram:message', { chatId, entry }); } catch (_) {}
+    return { ok: true, entry };
+  }
+
   async handleTelegramUpdate(update, signal) {
     const msg = update?.message || update?.edited_message;
     const text = String(msg?.text || '').trim();
     const chatId = msg?.chat?.id;
     if (!text || !chatId || msg?.from?.is_bot) return;
     this.telegramLog(`Incoming message from ${chatId}: ${text.slice(0, 120)}`, 'message');
+    const user = msg?.from?.username || [msg?.from?.first_name, msg?.from?.last_name].filter(Boolean).join(' ') || 'Telegram user';
+    const chatTitle = msg?.chat?.title || msg?.chat?.username || [msg?.chat?.first_name, msg?.chat?.last_name].filter(Boolean).join(' ') || `chat ${chatId}`;
+    const now = new Date().toISOString();
+
+    // Persist the inbound message FIRST so the chat viewer shows it even if
+    // we hit /start, /status, or the AI reply fails.
+    const userEntry = { role: 'user', content: text, at: now, name: user };
+    const histAfterUser = this._tgWriteHistory(chatId, [...this._tgReadHistory(chatId), userEntry]);
+    this._tgUpdateChatMeta(chatId, { title: chatTitle, user, lastMsg: text.slice(0, 160), lastMsgAt: now, count: histAfterUser.length });
+    try { this.eventBridge?.('telegram:message', { chatId, entry: userEntry }); } catch (_) {}
+
     if (/^\/start(?:\s|$)/i.test(text)) {
-      await this.telegramSendMessage(chatId, 'Horizon is online. Send a message and I will reply through your selected Horizon model.');
+      await this.telegramSendFromUI(chatId, 'Horizon is online. Send a message and I will reply through your selected Horizon model.');
       return;
     }
     if (/^\/status(?:\s|$)/i.test(text)) {
-      await this.telegramSendMessage(chatId, `Horizon Telegram runtime: ${this.telegramRunning ? 'online' : 'offline'}.`);
+      await this.telegramSendFromUI(chatId, `Horizon Telegram runtime: ${this.telegramRunning ? 'online' : 'offline'}.`);
       return;
     }
     await this.telegramApi('sendChatAction', { chat_id: chatId, action: 'typing' }, signal).catch(() => {});
-    const historyKey = `connection.telegram_bot.history.${chatId}`;
-    const history = Array.isArray(this.settingsStore?.get?.(historyKey)) ? this.settingsStore.get(historyKey) : [];
-    const user = msg?.from?.username || [msg?.from?.first_name, msg?.from?.last_name].filter(Boolean).join(' ') || 'Telegram user';
-    const messages = [
-      ...history.slice(-8),
-      { role: 'user', content: text },
-    ];
+    // Build the model context from the LAST N entries (not from the full
+    // 400-message history — we don't want to blow the context window). Each
+    // entry's {role, content} subset is what the model expects.
+    const recent = this._tgReadHistory(chatId).slice(-this.TG_CTX_FOR_MODEL);
+    const messages = recent.map(({ role, content }) => ({ role, content }));
     const system = [
       'You are Horizon AI replying inside Telegram.',
       `Telegram user: ${user}. Chat id: ${chatId}.`,
@@ -291,9 +386,12 @@ class ConnectionsManager {
     const res = await this.replyFn({ messages, system, source: 'telegram', chatId, signal });
     if (signal.aborted) return;
     const reply = asText(res?.reply || res?.text || res?.error || 'No response', 3900);
-    await this.telegramSendMessage(chatId, reply || 'No response');
-    const nextHistory = [...messages, { role: 'assistant', content: reply }].slice(-10);
-    this.settingsStore?.set?.(historyKey, nextHistory);
+    const sendResult = await this.telegramSendMessage(chatId, reply || 'No response');
+    const replyAt = new Date().toISOString();
+    const assistantEntry = { role: 'assistant', content: reply, at: replyAt, source: 'telegram-runtime', provider: res?.provider, model: res?.model, ok: !!sendResult?.ok };
+    const histAfterReply = this._tgWriteHistory(chatId, [...this._tgReadHistory(chatId), assistantEntry]);
+    this._tgUpdateChatMeta(chatId, { lastMsg: reply.slice(0, 160), lastMsgAt: replyAt, count: histAfterReply.length });
+    try { this.eventBridge?.('telegram:message', { chatId, entry: assistantEntry }); } catch (_) {}
     this.telegramLog(`Replied to ${chatId} via ${res?.provider || 'provider'} / ${res?.model || 'model'}`, 'reply');
   }
 
