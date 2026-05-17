@@ -560,6 +560,50 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
   scrollbar-width:none;
 }
 .composer-toolbar::-webkit-scrollbar{display:none}
+.queued-skills-next-turn{
+  max-width:1080px;
+  width:100%;
+  margin:0 auto 8px;
+  display:none;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid rgba(86,210,255,.22);
+  background:linear-gradient(135deg,rgba(86,210,255,.10),rgba(255,179,102,.06));
+  color:#d7deeb;
+  font:700 11px/1 var(--font);
+  box-shadow:0 12px 34px rgba(0,0,0,.20);
+}
+.queued-skills-next-turn.show{display:flex}
+.qsk-label{
+  color:#8eeaff;
+  text-transform:uppercase;
+  letter-spacing:.8px;
+  font-size:9px;
+}
+.qsk-chip{
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(86,210,255,.12);
+  border:1px solid rgba(86,210,255,.20);
+  color:#e9f7ff;
+  max-width:220px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.qsk-clear{
+  margin-left:auto;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.04);
+  color:#aeb8c8;
+  border-radius:8px;
+  padding:4px 8px;
+  font:700 10px/1 var(--font);
+  cursor:pointer;
+}
+.qsk-clear:hover{color:#fff;border-color:rgba(255,255,255,.20)}
 .composer-chip{
   height:30px;
   display:inline-flex;

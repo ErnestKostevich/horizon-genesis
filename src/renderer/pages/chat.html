@@ -1622,8 +1622,65 @@ var STREAMING_CHAT_PROVIDERS = new Set([
   'perplexity', 'cohere', 'openrouter', 'ollama', 'lmstudio', 'localai'
 ]);
 
+function queuedSkillIds() {
+  return Array.isArray(window.forceSkillsNextTurn)
+    ? window.forceSkillsNextTurn.map(String).map(s => s.trim()).filter(Boolean)
+    : [];
+}
+
+function updateQueuedSkillUi() {
+  const ids = queuedSkillIds();
+  const wrap = document.querySelector('.inp-wrap');
+  const toolbar = document.getElementById('composer-toolbar');
+  if (!wrap || !toolbar) return;
+  let host = document.getElementById('queued-skills-next-turn');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'queued-skills-next-turn';
+    host.className = 'queued-skills-next-turn';
+    toolbar.parentNode.insertBefore(host, toolbar);
+  }
+  host.classList.toggle('show', ids.length > 0);
+  if (!ids.length) {
+    host.innerHTML = '';
+    return;
+  }
+  host.innerHTML = `
+    <span class="qsk-label">Skill next turn</span>
+    ${ids.map(id => `<span class="qsk-chip">${esc(id)}</span>`).join('')}
+    <button type="button" class="qsk-clear" onclick="clearQueuedSkillsForNextTurn()">Clear</button>
+  `;
+}
+
+function clearQueuedSkillsForNextTurn() {
+  window.forceSkillsNextTurn = [];
+  updateQueuedSkillUi();
+}
+
+function consumeQueuedSkillsForRequest(opts = {}) {
+  const incoming = Array.isArray(opts?.forcedSkillIds)
+    ? opts.forcedSkillIds.map(String).map(s => s.trim()).filter(Boolean)
+    : [];
+  const queued = queuedSkillIds();
+  const merged = Array.from(new Set([...incoming, ...queued]));
+  window.forceSkillsNextTurn = [];
+  updateQueuedSkillUi();
+  return {
+    ...(opts || {}),
+    useSkills: opts?.useSkills !== false,
+    ...(merged.length ? { forcedSkillIds: merged } : {}),
+  };
+}
+Object.assign(window, {
+  queuedSkillIds,
+  updateQueuedSkillUi,
+  clearQueuedSkillsForNextTurn,
+  consumeQueuedSkillsForRequest,
+});
+
 async function runNonStreamingAIVisible(messages, providerName, systemPrompt, opts = {}) {
   const p = providerName || prov || 'gemini';
+  const requestOpts = consumeQueuedSkillsForRequest(opts);
   rmTyping();
   const msgEl = addMsg('bot', '', { model: getSelectedModelForProvider?.(p) || p });
   const bubble = msgEl.querySelector('.bub');
@@ -1639,9 +1696,9 @@ async function runNonStreamingAIVisible(messages, providerName, systemPrompt, op
     return { error: 'AI bridge is unavailable', _rendered: true };
   }
   try {
-    const timeoutMs = Number(opts.requestTimeoutMs || 60000);
+    const timeoutMs = Number(requestOpts.requestTimeoutMs || 60000);
     const res = await Promise.race([
-      H.ai(messages, p, systemPrompt, opts),
+      H.ai(messages, p, systemPrompt, requestOpts),
       new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), timeoutMs))
     ]);
     if (res?.reply) {
@@ -1661,8 +1718,9 @@ async function runNonStreamingAIVisible(messages, providerName, systemPrompt, op
 
 async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
   const p = providerName || prov || 'gemini';
+  const requestOpts = consumeQueuedSkillsForRequest(opts);
   if (!window.H?.aiStream || !window.H?.onAIStreamChunk || !STREAMING_CHAT_PROVIDERS.has(p)) {
-    return runNonStreamingAIVisible(messages, p, systemPrompt, opts);
+    return runNonStreamingAIVisible(messages, p, systemPrompt, requestOpts);
   }
   const streamId = 'ui-' + Date.now().toString(36) + '-' + Math.random().toString(16).slice(2);
   let text = '';
@@ -1686,9 +1744,9 @@ async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
   const fallbackToNonStreaming = async (reason) => {
     try {
       setStatus(lang === 'ru' ? 'Повторяю без стриминга...' : 'Retrying without streaming...', true);
-      const requestTimeoutMs = Number(opts.requestTimeoutMs || 60000);
+      const requestTimeoutMs = Number(requestOpts.requestTimeoutMs || 60000);
       const fallback = await Promise.race([
-        H.ai(messages, p, systemPrompt, opts),
+        H.ai(messages, p, systemPrompt, requestOpts),
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), requestTimeoutMs))
       ]);
       if (fallback?.reply) {
@@ -1719,7 +1777,7 @@ async function runStreamingAI(messages, providerName, systemPrompt, opts = {}) {
       setTimeout(() => reject(new Error('Stream timed out')), timeoutMs);
     });
     const res = await Promise.race([
-      H.aiStream(messages, p, systemPrompt, { ...opts, streamId }),
+      H.aiStream(messages, p, systemPrompt, { ...requestOpts, streamId }),
       timeout
     ]);
     try { off?.(); } catch(_) {}
@@ -2652,8 +2710,7 @@ async function runAgent(text) {
   try {
     setStatus(lang === 'ru' ? 'Агент думает...' : 'Agent thinking...', true);
     const agentTimeoutMs = 60000;
-    const result = await Promise.race([
-      H.agentRun(text, {
+    const agentOpts = consumeQueuedSkillsForRequest({
         provider: currentProvider,
         model: currentModel,
         history: chatHistory.slice(-8),
@@ -2661,12 +2718,12 @@ async function runAgent(text) {
         // /skill <name> sets window.forceSkillsNextTurn — one-shot, cleared
         // after the turn so the same query without /skill goes back to
         // pure relevance matching.
-        forcedSkillIds: Array.isArray(window.forceSkillsNextTurn) ? window.forceSkillsNextTurn.slice() : []
-      }),
+        forcedSkillIds: []
+      });
+    const result = await Promise.race([
+      H.agentRun(text, agentOpts),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Agent timed out')), agentTimeoutMs))
     ]);
-    // Drain the one-shot skill override now that the request is in flight.
-    window.forceSkillsNextTurn = [];
 
     // Final render
     rmTyping();
@@ -3041,6 +3098,7 @@ ${fileContext}`}];
   }
   cleanup();
 }
+window.sendMsg = sendMsg;
 
 // PR-C5 — streaming send. Allocates a placeholder bubble, streams
 // chunks into it, switches the send button into a stop button, and

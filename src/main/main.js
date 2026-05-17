@@ -339,6 +339,61 @@ function normaliseUsage(d, provider) {
   } catch (_) { return null; }
 }
 
+function lastUserMessageText(messages) {
+  if (!Array.isArray(messages)) return '';
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] || {};
+    if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.trim()) {
+      return msg.content.trim();
+    }
+  }
+  const last = messages[messages.length - 1];
+  return typeof last?.content === 'string' ? last.content.trim() : '';
+}
+
+function resolveSkillsForMessages(messages, opts = {}) {
+  const forcedIds = Array.isArray(opts?.forcedSkillIds)
+    ? opts.forcedSkillIds.map(String).map(s => s.trim()).filter(Boolean)
+    : [];
+  const shouldUseSkills = opts?.useSkills === true || forcedIds.length > 0;
+  if (!shouldUseSkills) return { block: '', selected: [], scored: [] };
+  try {
+    loadAgentModules();
+    if (!skillsManager) return { block: '', selected: [], scored: [] };
+    const query = String(opts.skillQuery || lastUserMessageText(messages) || '').trim();
+    const res = skillsManager.getSkillsBlock(query, { forcedIds });
+    const selected = (res.selected || []).map(s => ({
+      id: s.id,
+      score: s.score,
+      breakdown: s.breakdown,
+      scope: s.scope,
+      forced: s.forced,
+      truncated: s.truncated,
+      bytes: s.bytes,
+    }));
+    const scored = (res.scored || []).map(s => ({
+      id: s.id,
+      score: s.score,
+      breakdown: s.breakdown,
+      scope: s.scope,
+      forced: s.forced,
+    }));
+    if (selected.length) {
+      try { skillsManager.recordUsage(selected.map(s => s.id), query, forcedIds.length ? 'forced' : 'selected'); } catch (_) {}
+    }
+    return { block: res.block || '', selected, scored };
+  } catch (e) {
+    console.warn('skills resolve failed:', e.message);
+    return { block: '', selected: [], scored: [], error: e.message };
+  }
+}
+
+function appendSkillsToSystemPrompt(systemPrompt, skillsResolved) {
+  const block = String(skillsResolved?.block || '').trim();
+  if (!block) return String(systemPrompt || '');
+  return `${String(systemPrompt || '').trim()}\n\n## Skills loaded for this turn\n\n${block}`;
+}
+
 async function readSseStream(response, onEvent) {
   let buffer = '';
   let eventName = 'message';
@@ -2081,7 +2136,11 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
   const runId = opts.streamId || _streamRunId();
   const abort = new AbortController();
   const p = provider || settingsStore.get('provider') || 'gemini';
-  const sysMsg = String(system || '').trim() || 'You are Horizon AI. Use Markdown.';
+  const skillsResolved = resolveSkillsForMessages(messages, opts);
+  const sysMsg = appendSkillsToSystemPrompt(
+    String(system || '').trim() || 'You are Horizon AI. Use Markdown.',
+    skillsResolved
+  );
   let reply = '';
   let reasoning = '';
   let usage = null;
@@ -2099,6 +2158,7 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
         model: payload.model || model,
         usage: payload.usage || usage,
         reasoning: payload.reasoning || reasoning,
+        skillsSelected: payload.skillsSelected || skillsResolved,
       });
       if (type === 'error') _broadcast('ai:done', {
         runId,
@@ -2217,8 +2277,8 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
       }
       if (chunk.done) emit('done-part', { usage });
     });
-    emit('done', { reply, model, usage, reasoning });
-    return { ok: true, reply, model, usage, reasoning, runId };
+    emit('done', { reply, model, usage, reasoning, skillsSelected: skillsResolved });
+    return { ok: true, reply, model, usage, reasoning, runId, skillsSelected: skillsResolved };
   } catch (e) {
     const msg = abort.signal.aborted ? 'aborted' : (e?.message || String(e));
     emit('error', { error: msg });
@@ -2286,7 +2346,8 @@ ipcMain.handle('ai', async (_, messages, provider, system, opts) => {
     sysParts.length = 0;
     sysParts.push(system);
   }
-  const sysMsg = sysParts.join('\n\n');
+  const skillsResolved = resolveSkillsForMessages(messages, opts || {});
+  const sysMsg = appendSkillsToSystemPrompt(sysParts.join('\n\n'), skillsResolved);
 
   // Normalise per-provider usage shapes to {prompt, completion, total}.
   // Returns null if the response didn't include usage info (e.g. local models

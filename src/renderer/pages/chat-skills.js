@@ -157,7 +157,10 @@ async function renderSkillsBody() {
       body.innerHTML = `<div style="color:var(--red);font-size:11px">${esc(e.message)}</div>`;
     }
   } else if (skillsCurrentTab === 'edit') {
-    const editing = skillsEditing || { id: '', scope: 'user', content: _newSkillStarter(), isNew: true };
+    if (!skillsEditing) {
+      skillsEditing = { id: '', scope: 'user', content: _newSkillStarter(), isNew: true };
+    }
+    const editing = skillsEditing;
     body.innerHTML = `
       <div class="sk-editor">
         <div class="sk-editor-head">
@@ -302,6 +305,8 @@ async function previewSkillMatch() {
 
 function useSkillNextTurn(id) {
   forceSkillForNextTurn(id);
+  closeSkillHub?.();
+  document.getElementById('inp')?.focus();
   H.notify?.('Skills', `${id} will be used on the next message`);
 }
 
@@ -377,4 +382,23 @@ async function runSkillHelperInteractive(skillId, helperRel) {
 function forceSkillForNextTurn(id) {
   if (!Array.isArray(window.forceSkillsNextTurn)) window.forceSkillsNextTurn = [];
   if (id && !window.forceSkillsNextTurn.includes(id)) window.forceSkillsNextTurn.push(id);
+  updateQueuedSkillUi?.();
 }
+
+Object.assign(window, {
+  openSkillHub,
+  closeSkillHub,
+  skillsTab,
+  renderSkillsBody,
+  toggleSkillEnabled,
+  editSkill,
+  saveSkillSource,
+  previewSkillMatch,
+  useSkillNextTurn,
+  previewSkillMatchFromCard,
+  shareSkill,
+  removeSkill,
+  installSkillFromUrl,
+  runSkillHelperInteractive,
+  forceSkillForNextTurn,
+});
