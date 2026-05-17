@@ -93,6 +93,9 @@ const PRO_HANDLERS = new Set([
   'skillsWrite', 'skillsToggle', 'skillsUninstall',
   'skillsInstallBundle', 'skillsInstallFromUrl',
   'skillsRunHelper',
+  // Telegram destructive/outbound — read paths (tgListChats/tgGetHistory)
+  // stay free so the UI can render without a pro check.
+  'tgClearHistory', 'tgSendFromUI',
 ]);
 
 let _licenseManagerRef = null;  // populated once licenseManager is constructed.
@@ -4112,6 +4115,44 @@ ipcMain.handle('memGetRecent', (_, limit) => {
   return agentMemory.getRecent(limit || 20);
 });
 
+// Single-shot snapshot for the inspector's Learned tab — facts + most-recent
+// memories + learning.stats in one IPC roundtrip. Cheap because everything
+// lives in-memory in AgentMemory._data; we just project it.
+ipcMain.handle('memSnapshot', (_, opts) => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  const factLimit = Math.max(1, Math.min(200, Number(opts?.factLimit) || 50));
+  const memLimit = Math.max(1, Math.min(200, Number(opts?.memLimit) || 30));
+  try {
+    const facts = agentMemory.getAllFacts ? agentMemory.getAllFacts() : {};
+    const factEntries = Object.entries(facts)
+      .map(([key, v]) => ({
+        key,
+        value: typeof v === 'object' && v !== null ? (v.value ?? '') : String(v ?? ''),
+        seen: typeof v === 'object' && v !== null ? (v.seen || 0) : 0,
+        updated: typeof v === 'object' && v !== null ? v.updated : null,
+      }))
+      .sort((a, b) => (b.updated || 0) - (a.updated || 0))
+      .slice(0, factLimit);
+    const recent = typeof agentMemory.getRecent === 'function' ? agentMemory.getRecent(memLimit) : [];
+    const stats = agentMemory._data?.learning?.stats || {};
+    return {
+      ok: true,
+      facts: factEntries,
+      memories: recent,
+      stats: {
+        totalFacts: Object.keys(facts).length,
+        totalMemories: agentMemory._data?.memories?.length || 0,
+        learnedItems: stats.learnedItems || 0,
+        lastLearnedAt: stats.lastLearnedAt || null,
+        conversations: agentMemory._data?.conversations?.length || 0,
+      },
+    };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // ── NUTRITION TRACKING (from jarvis) ─────────────────────────────────────────
 ipcMain.handle('nutritionLog', (_, description, calories, protein, carbs, fat) => {
   loadAgentModules();
@@ -4199,6 +4240,38 @@ ipcMain.handle('connectionsRuntimeStatus', async (_, id) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
+});
+
+// ── TELEGRAM CHAT VIEWER ─────────────────────────────────────────────────
+// Lets the desktop UI show the same chats the bot is having on Telegram.
+// History is persisted per-chat in settingsStore (see connectionsManager
+// TG_HISTORY_CAP); these handlers expose it + outbound send.
+ipcMain.handle('tgListChats', () => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded', chats: [] };
+  try { return connectionsManager.telegramListChats(); }
+  catch (e) { return { ok: false, error: e.message, chats: [] }; }
+});
+
+ipcMain.handle('tgGetHistory', (_, chatId, limit) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try { return connectionsManager.telegramGetHistory(chatId, limit); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('tgClearHistory', (_, chatId) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try { return connectionsManager.telegramClearHistory(chatId); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('tgSendFromUI', async (_, chatId, text) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try { return await connectionsManager.telegramSendFromUI(chatId, text); }
+  catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ── CHAT MANAGEMENT ──────────────────────────────────────────────────────────

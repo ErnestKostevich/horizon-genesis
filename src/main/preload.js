@@ -158,6 +158,7 @@ contextBridge.exposeInMainWorld('H', {
   memGetFact:  (k)             => ipcRenderer.invoke('memGetFact', k),
   memGetFacts: ()              => ipcRenderer.invoke('memGetFacts'),
   memGetRecent:(lim)           => ipcRenderer.invoke('memGetRecent', lim),
+  memSnapshot: (opts)          => ipcRenderer.invoke('memSnapshot', opts),
   memSaveConversation: (u, a)  => ipcRenderer.invoke('memSaveConversation', u, a),
   memSearchConversations: (q, l) => ipcRenderer.invoke('memSearchConversations', q, l),
   githubAttachRepo: (repo)     => ipcRenderer.invoke('githubAttachRepo', repo),
@@ -168,6 +169,23 @@ contextBridge.exposeInMainWorld('H', {
   connectionsTest:  (id)       => ipcRenderer.invoke('connectionsTest', id),
   connectionsSetLive: (id, enabled) => ipcRenderer.invoke('connectionsSetLive', id, enabled),
   connectionsRuntimeStatus: (id) => ipcRenderer.invoke('connectionsRuntimeStatus', id),
+  // Telegram chat viewer — read history persisted in settingsStore (same
+  // userData dir as keys), send outbound from the desktop UI, listen for
+  // live message events from the bot runtime.
+  tgListChats:      ()             => ipcRenderer.invoke('tgListChats'),
+  tgGetHistory:     (chatId, lim)  => ipcRenderer.invoke('tgGetHistory', chatId, lim),
+  tgClearHistory:   (chatId)       => ipcRenderer.invoke('tgClearHistory', chatId),
+  tgSendFromUI:     (chatId, text) => ipcRenderer.invoke('tgSendFromUI', chatId, text),
+  onTelegramMessage: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('telegram:message', handler);
+    return () => ipcRenderer.removeListener('telegram:message', handler);
+  },
+  onTelegramChats: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('telegram:chats', handler);
+    return () => ipcRenderer.removeListener('telegram:chats', handler);
+  },
   onConnectionsUpdated: (cb) => {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('connectionsUpdated', handler);

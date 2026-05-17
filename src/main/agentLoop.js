@@ -535,6 +535,23 @@ async function runAgentLoop(userMessage, opts = {}) {
   let lastToolName = null;
   let sameToolCount = 0;
   let modelPlanSeen = false;
+  // Track plan-step advancement so the rail moves visibly. We start at 1
+  // because step 0 is already highlighted by the initial plan emit above.
+  let planIdx = 1;
+  const totalPlanSteps = initialPlan.length;
+  function advancePlan(reason) {
+    if (!onStep || !totalPlanSteps) return;
+    const nextIdx = Math.min(planIdx, totalPlanSteps - 1);
+    try {
+      Promise.resolve(onStep({
+        type: 'plan-step',
+        runId,
+        idx: nextIdx,
+        reason,
+      })).catch(() => {});
+    } catch (_) {}
+    planIdx = Math.min(planIdx + 1, totalPlanSteps);
+  }
 
   for (let i = 0; i < maxSteps; i++) {
     if (control?.isStopped?.()) {
@@ -692,6 +709,11 @@ async function runAgentLoop(userMessage, opts = {}) {
       });
 
       if (executed.stopped) return { ok: false, stopped: true, error: executed.step.result.err, steps };
+
+      // Advance the visible plan: each tool execution checks off one plan
+      // step. Bounded so we don't overshoot if the agent runs more tools
+      // than the static plan anticipated.
+      advancePlan(`tool:${executed.step.tool}`);
     } else {
       // Unknown response type - treat as answer
       finalAnswer = aiResult.reply;
@@ -709,6 +731,53 @@ async function runAgentLoop(userMessage, opts = {}) {
 
   if (!finalAnswer) {
     finalAnswer = lang === 'ru' ? 'Задача выполнена.' : 'Task completed.';
+  }
+
+  // ── REFLECTION EPILOGUE ─────────────────────────────────────────────────
+  // One short follow-up call: ask the model to self-check whether the user's
+  // goal was actually met, list any gaps, and rate confidence. Opt-in via
+  // opts.reflect (default true for native tools, false otherwise — keeps
+  // simple JSON-mode chats fast). Failures are non-fatal: if the call errors
+  // or times out we just skip reflection.
+  const reflectEnabled = opts.reflect ?? (nativeTools || maxSteps > 1);
+  if (reflectEnabled && finalAnswer && onStep) {
+    try {
+      const reflectionPrompt = lang === 'ru'
+        ? 'Сделай короткую самопроверку (под 100 слов) для предыдущего ответа. Верни ТОЛЬКО валидный JSON: {"goal_met":"yes"|"partial"|"no","summary":"...","gaps":["..."],"confidence":0-1}. Не добавляй текст вне JSON.'
+        : 'Run a short self-check (under 100 words) on the previous answer. Return ONLY valid JSON: {"goal_met":"yes"|"partial"|"no","summary":"...","gaps":["..."],"confidence":0-1}. No text outside JSON.';
+      const reflectMessages = [
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: finalAnswer.slice(0, 4000) },
+        { role: 'user', content: reflectionPrompt },
+      ];
+      const reflectRes = await Promise.race([
+        aiFn(reflectMessages, systemPrompt, { tools: [], nativeTools: false, step: 'reflect' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('reflect timeout')), 15000))
+      ]).catch(e => ({ error: e.message }));
+      if (reflectRes && !reflectRes.error && reflectRes.reply) {
+        let parsed = null;
+        try { parsed = JSON.parse(reflectRes.reply.trim()); }
+        catch (_) {
+          const m = reflectRes.reply.match(/\{[\s\S]*?"goal_met"[\s\S]*?\}/);
+          if (m) { try { parsed = JSON.parse(m[0]); } catch (_) {} }
+        }
+        if (parsed && typeof parsed === 'object') {
+          const payload = {
+            type: 'reflection',
+            runId,
+            goalMet: String(parsed.goal_met || 'unknown').toLowerCase(),
+            summary: String(parsed.summary || '').slice(0, 400),
+            gaps: Array.isArray(parsed.gaps) ? parsed.gaps.slice(0, 5).map(g => String(g).slice(0, 160)) : [],
+            confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : null,
+          };
+          try { await Promise.resolve(onStep(payload)); } catch (_) {}
+          try { agentEvents.emit('reflection', payload); } catch (_) {}
+        }
+      }
+    } catch (e) {
+      // swallow — reflection is best-effort
+      console.warn('[agent] reflection failed:', e?.message || e);
+    }
   }
 
   return { ok: true, answer: finalAnswer, steps };
