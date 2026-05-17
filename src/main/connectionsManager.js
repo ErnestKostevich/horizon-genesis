@@ -94,6 +94,21 @@ class ConnectionsManager {
   constructor(keysStore, settingsStore) {
     this.keysStore = keysStore;
     this.settingsStore = settingsStore;
+    this.replyFn = null;
+    this.eventBridge = null;
+    this.telegramPollAbort = null;
+    this.telegramRunning = false;
+    this.telegramLoopPromise = null;
+    this.telegramLastError = '';
+    this.telegramLastEventAt = '';
+  }
+
+  setReplyFn(fn) {
+    this.replyFn = typeof fn === 'function' ? fn : null;
+  }
+
+  setEventBridge(fn) {
+    this.eventBridge = typeof fn === 'function' ? fn : null;
   }
 
   token(id) {
@@ -110,7 +125,12 @@ class ConnectionsManager {
       name: c.name,
       connected: this.has(c.keyId),
       envHint: c.envHint,
-      toolCount: c.tools.length
+      toolCount: c.tools.length,
+      liveSupported: c.id === 'telegram_bot',
+      liveEnabled: c.id === 'telegram_bot' ? this.telegramLiveEnabled() : false,
+      liveRunning: c.id === 'telegram_bot' ? this.telegramRunning : false,
+      lastError: c.id === 'telegram_bot' ? this.telegramLastError : '',
+      lastEventAt: c.id === 'telegram_bot' ? this.telegramLastEventAt : '',
     }));
   }
 
@@ -126,6 +146,155 @@ class ConnectionsManager {
     if (id === 'linear') return this.linearGraphql('{ viewer { id name } }');
     if (id === 'telegram_bot') return this.telegramApi('getMe', {});
     return { ok: false, error: `Unknown connection: ${id}` };
+  }
+
+  telegramLiveEnabled() {
+    return this.settingsStore?.get?.('connection.telegram_bot.live') === true;
+  }
+
+  _emitConnectionsUpdated() {
+    try { this.eventBridge?.('connectionsUpdated', { connections: this.list() }); } catch (_) {}
+  }
+
+  telegramLog(message, type = 'info') {
+    const line = { time: new Date().toISOString(), type, message: asText(message, 1000) };
+    const logs = Array.isArray(this.settingsStore?.get?.('connection.telegram_bot.logs'))
+      ? this.settingsStore.get('connection.telegram_bot.logs')
+      : [];
+    logs.push(line);
+    this.settingsStore?.set?.('connection.telegram_bot.logs', logs.slice(-120));
+    if (type === 'error') this.telegramLastError = line.message;
+    this.telegramLastEventAt = line.time;
+    this._emitConnectionsUpdated();
+  }
+
+  telegramStatus() {
+    return {
+      ok: true,
+      enabled: this.telegramLiveEnabled(),
+      running: this.telegramRunning,
+      connected: this.has('telegram_bot'),
+      lastError: this.telegramLastError,
+      lastEventAt: this.telegramLastEventAt,
+      offset: this.settingsStore?.get?.('connection.telegram_bot.offset') || 0,
+      logs: (this.settingsStore?.get?.('connection.telegram_bot.logs') || []).slice(-50),
+    };
+  }
+
+  async setTelegramLive(enabled) {
+    this.settingsStore?.set?.('connection.telegram_bot.live', !!enabled);
+    if (enabled) return this.startTelegramRuntime();
+    await this.stopTelegramRuntime();
+    return this.telegramStatus();
+  }
+
+  async startTelegramRuntime() {
+    if (!this.has('telegram_bot')) {
+      this.settingsStore?.set?.('connection.telegram_bot.live', false);
+      return { ok: false, error: 'Telegram bot token is not configured.' };
+    }
+    if (!this.replyFn) {
+      return { ok: false, error: 'AI reply function is not wired.' };
+    }
+    if (this.telegramRunning) return this.telegramStatus();
+    this.telegramPollAbort = new AbortController();
+    this.telegramRunning = true;
+    this.telegramLastError = '';
+    this.telegramLog('Telegram live replies started.', 'run');
+    this.telegramLoopPromise = this.telegramLoop(this.telegramPollAbort.signal)
+      .catch(e => {
+        if (!this.telegramPollAbort?.signal?.aborted) {
+          this.telegramLastError = e?.message || String(e);
+          this.telegramLog(this.telegramLastError, 'error');
+        }
+      })
+      .finally(() => {
+        this.telegramRunning = false;
+        this._emitConnectionsUpdated();
+      });
+    this._emitConnectionsUpdated();
+    return this.telegramStatus();
+  }
+
+  async stopTelegramRuntime() {
+    if (this.telegramPollAbort) {
+      try { this.telegramPollAbort.abort(); } catch (_) {}
+    }
+    this.telegramPollAbort = null;
+    this.telegramRunning = false;
+    this.telegramLog('Telegram live replies stopped.', 'run');
+    this._emitConnectionsUpdated();
+    return this.telegramStatus();
+  }
+
+  async startEnabledRuntimes() {
+    if (this.telegramLiveEnabled()) {
+      const r = await this.startTelegramRuntime();
+      if (!r.ok) this.telegramLog(r.error || 'Could not start Telegram runtime.', 'error');
+    }
+  }
+
+  async telegramLoop(signal) {
+    while (!signal.aborted && this.telegramLiveEnabled()) {
+      const offset = Number(this.settingsStore?.get?.('connection.telegram_bot.offset') || 0) || undefined;
+      let r;
+      try {
+        r = await this.telegramGetUpdates(20, offset, 25, signal);
+      } catch (e) {
+        if (signal.aborted) break;
+        this.telegramLog(`Telegram polling failed: ${e?.message || e}`, 'error');
+        await sleep(3000, signal);
+        continue;
+      }
+      if (!r?.ok) {
+        this.telegramLog(r?.err || r?.error || 'Telegram polling failed.', 'error');
+        await sleep(3000, signal);
+        continue;
+      }
+      const updates = Array.isArray(r.data) ? r.data : [];
+      for (const update of updates) {
+        const nextOffset = Number(update?.update_id) + 1;
+        if (Number.isFinite(nextOffset)) this.settingsStore?.set?.('connection.telegram_bot.offset', nextOffset);
+        await this.handleTelegramUpdate(update, signal);
+      }
+    }
+  }
+
+  async handleTelegramUpdate(update, signal) {
+    const msg = update?.message || update?.edited_message;
+    const text = String(msg?.text || '').trim();
+    const chatId = msg?.chat?.id;
+    if (!text || !chatId || msg?.from?.is_bot) return;
+    this.telegramLog(`Incoming message from ${chatId}: ${text.slice(0, 120)}`, 'message');
+    if (/^\/start(?:\s|$)/i.test(text)) {
+      await this.telegramSendMessage(chatId, 'Horizon is online. Send a message and I will reply through your selected Horizon model.');
+      return;
+    }
+    if (/^\/status(?:\s|$)/i.test(text)) {
+      await this.telegramSendMessage(chatId, `Horizon Telegram runtime: ${this.telegramRunning ? 'online' : 'offline'}.`);
+      return;
+    }
+    await this.telegramApi('sendChatAction', { chat_id: chatId, action: 'typing' }, signal).catch(() => {});
+    const historyKey = `connection.telegram_bot.history.${chatId}`;
+    const history = Array.isArray(this.settingsStore?.get?.(historyKey)) ? this.settingsStore.get(historyKey) : [];
+    const user = msg?.from?.username || [msg?.from?.first_name, msg?.from?.last_name].filter(Boolean).join(' ') || 'Telegram user';
+    const messages = [
+      ...history.slice(-8),
+      { role: 'user', content: text },
+    ];
+    const system = [
+      'You are Horizon AI replying inside Telegram.',
+      `Telegram user: ${user}. Chat id: ${chatId}.`,
+      'Keep replies concise, useful, and plain text. Do not mention implementation details unless asked.',
+      'If the user asks for desktop actions, explain that Telegram can chat and send connection tools, while destructive desktop actions require Horizon app approval.',
+    ].join('\n');
+    const res = await this.replyFn({ messages, system, source: 'telegram', chatId, signal });
+    if (signal.aborted) return;
+    const reply = asText(res?.reply || res?.text || res?.error || 'No response', 3900);
+    await this.telegramSendMessage(chatId, reply || 'No response');
+    const nextHistory = [...messages, { role: 'assistant', content: reply }].slice(-10);
+    this.settingsStore?.set?.(historyKey, nextHistory);
+    this.telegramLog(`Replied to ${chatId} via ${res?.provider || 'provider'} / ${res?.model || 'model'}`, 'reply');
   }
 
   async dispatch(toolName, args = {}) {
@@ -275,28 +444,37 @@ class ConnectionsManager {
     return { ok: true, out: jsonOut(r.data?.issueCreate || {}), data: r.data?.issueCreate };
   }
 
-  async telegramApi(method, body) {
+  async telegramApi(method, body, signal) {
     const token = this.token('telegram_bot');
     if (!token) return { ok: false, err: 'Telegram bot token is not configured.' };
-    const res = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/${method}`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body || {})
+      body: JSON.stringify(body || {}),
+      signal,
     });
     const data = await readJson(res);
     if (!res.ok || data.ok === false) return { ok: false, err: data.description || `Telegram HTTP ${res.status}`, data };
     return { ok: true, out: jsonOut(data.result), data: data.result };
   }
 
-  async telegramGetUpdates(limit = 20, offset = undefined) {
-    const body = { limit: Math.min(Math.max(Number(limit) || 20, 1), 100), timeout: 0 };
+  async telegramGetUpdates(limit = 20, offset = undefined, timeout = 0, signal) {
+    const body = { limit: Math.min(Math.max(Number(limit) || 20, 1), 100), timeout: Math.max(0, Math.min(Number(timeout) || 0, 50)) };
     if (Number.isFinite(Number(offset))) body.offset = Number(offset);
-    return this.telegramApi('getUpdates', body);
+    return this.telegramApi('getUpdates', body, signal);
   }
 
   async telegramSendMessage(chatId, text) {
     return this.telegramApi('sendMessage', { chat_id: chatId, text: asText(text, 4000) });
   }
+}
+
+function sleep(ms, signal) {
+  return new Promise(resolve => {
+    if (signal?.aborted) return resolve();
+    const t = setTimeout(resolve, ms);
+    if (signal) signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+  });
 }
 
 function extractNotionTitle(item) {

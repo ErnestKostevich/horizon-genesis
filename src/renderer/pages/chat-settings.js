@@ -494,6 +494,7 @@ async function loadTokenConnections(){
       for (const c of r.connections || []) _setConnStatus(c.id, !!c.connected);
     }
   } catch (_) {}
+  refreshTelegramRuntimeStatus().catch(()=>{});
 }
 async function saveTokenConnection(id){
   try {
@@ -503,6 +504,7 @@ async function saveTokenConnection(id){
     await H.saveKey(id, v);
     if (inp) { inp.value = ''; inp.placeholder = '••••••••••'; }
     _setConnStatus(id, true);
+    if (id === 'telegram_bot') refreshTelegramRuntimeStatus().catch(()=>{});
   } catch(e) {
     const st = document.getElementById('conn-' + id + '-status');
     if (st) st.textContent = e?.message || ('Could not save ' + _connectionLabel(id));
@@ -543,6 +545,63 @@ function _setConnStatus(svc, connected){
     }
   } catch(_){}
 }
+
+function _renderTelegramRuntimeStatus(status) {
+  const st = document.getElementById('telegram-live-status');
+  const btn = document.getElementById('telegram-live-toggle');
+  const log = document.getElementById('telegram-live-log');
+  if (btn) btn.textContent = status?.enabled ? (status.running ? 'Stop live bot' : 'Disable live bot') : 'Start live bot';
+  if (st) {
+    const parts = [];
+    if (!status?.connected) parts.push('Token is not saved.');
+    else if (status?.running) parts.push('Live bot is online. Telegram messages will receive Horizon replies.');
+    else if (status?.enabled) parts.push('Live bot is enabled but not running. Check token/model keys and press Refresh.');
+    else parts.push('Live bot is off. Start it to make Telegram messages wake Horizon and receive replies.');
+    if (status?.lastError) parts.push('Last error: ' + status.lastError);
+    if (status?.lastEventAt) parts.push('Last event: ' + new Date(status.lastEventAt).toLocaleString());
+    st.textContent = parts.join(' ');
+    st.classList.toggle('ok', !!status?.running);
+    st.classList.toggle('bad', !!status?.lastError);
+  }
+  if (log) {
+    const rows = Array.isArray(status?.logs) ? status.logs.slice(-8).reverse() : [];
+    log.innerHTML = rows.length
+      ? rows.map(x => `<div>[${_escHtml((x.time || '').replace('T',' ').replace('Z',''))}] ${_escHtml(x.type || 'info')}: ${_escHtml(x.message || '')}</div>`).join('')
+      : '<div>No Telegram runtime events yet.</div>';
+  }
+}
+
+async function refreshTelegramRuntimeStatus(){
+  try {
+    const r = await H.connectionsRuntimeStatus?.('telegram_bot');
+    _renderTelegramRuntimeStatus(r || {});
+    return r;
+  } catch(e) {
+    _renderTelegramRuntimeStatus({ ok:false, lastError: e?.message || String(e) });
+    return null;
+  }
+}
+
+async function toggleTelegramLive(){
+  const current = await refreshTelegramRuntimeStatus();
+  const next = !current?.enabled;
+  const st = document.getElementById('telegram-live-status');
+  if (st) st.textContent = next ? 'Starting Telegram live bot...' : 'Stopping Telegram live bot...';
+  try {
+    const r = await H.connectionsSetLive?.('telegram_bot', next);
+    _renderTelegramRuntimeStatus(r || {});
+    if (r && r.ok === false && st) st.textContent = r.error || 'Could not change Telegram live bot state.';
+  } catch(e) {
+    if (st) st.textContent = e?.message || 'Could not change Telegram live bot state.';
+  }
+}
+
+try {
+  H.onConnectionsUpdated?.((payload) => {
+    const tg = (payload?.connections || []).find(c => c.id === 'telegram_bot');
+    if (tg) refreshTelegramRuntimeStatus().catch(()=>{});
+  });
+} catch(_) {}
 
 // Profile for response generation (fast/balanced/deep)
 async function saveResponseProfile(profile){

@@ -166,6 +166,13 @@ contextBridge.exposeInMainWorld('H', {
   githubRepoContext:(repo)     => ipcRenderer.invoke('githubRepoContext', repo),
   connectionsList:  ()         => ipcRenderer.invoke('connectionsList'),
   connectionsTest:  (id)       => ipcRenderer.invoke('connectionsTest', id),
+  connectionsSetLive: (id, enabled) => ipcRenderer.invoke('connectionsSetLive', id, enabled),
+  connectionsRuntimeStatus: (id) => ipcRenderer.invoke('connectionsRuntimeStatus', id),
+  onConnectionsUpdated: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('connectionsUpdated', handler);
+    return () => ipcRenderer.removeListener('connectionsUpdated', handler);
+  },
 
   // ── CHAT MANAGEMENT ────────────────────────────────────────────────────────
   chatList:         ()              => ipcRenderer.invoke('chatList'),
