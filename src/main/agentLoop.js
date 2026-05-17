@@ -50,11 +50,60 @@ function toolAllowedByPersona(toolName, allowedGroups) {
   if (name.startsWith('plugin_') || name.includes('__')) {
     return allowed.has('plugins') || allowed.has('web.fetch') || allowed.has('fs.write') || allowed.has('shell');
   }
+  if (name.startsWith('conn_')) {
+    return allowed.has('connections') || allowed.has('web.fetch') || allowed.has('plugins');
+  }
   return false;
 }
 
 function filterToolsForPersona(tools, allowedGroups) {
   return (tools || []).filter(t => toolAllowedByPersona(t?.name, allowedGroups));
+}
+
+function buildVisiblePlan(userMessage, selectedTools = [], lang = 'en') {
+  const ru = lang === 'ru';
+  const q = String(userMessage || '');
+  const toolNames = new Set((selectedTools || []).map(t => String(t?.name || '').toLowerCase()));
+  const needsAction = [...toolNames].some(t => !['get_system_info', 'recall', 'get_facts'].includes(t));
+  const needsFiles = /file|файл|код|code|repo|workspace|проект|папк/i.test(q) || [...toolNames].some(t => /file|dir|search/.test(t));
+  const needsWeb = /web|internet|интернет|сайт|search|найди|http|url/i.test(q) || [...toolNames].some(t => /web|browser|fetch|wikipedia/.test(t));
+  const needsComputer = /click|клик|open|открой|запусти|press|type|мыш|окно/i.test(q) || [...toolNames].some(t => /mouse|press|type|open|shell|run/.test(t));
+
+  const steps = [];
+  steps.push(ru ? 'Понять цель и ограничения запроса' : 'Understand the goal and constraints');
+  steps.push(ru ? 'Поднять релевантную память, персону, skills и правила проекта' : 'Recall relevant memory, persona, skills, and project rules');
+  if (needsFiles) steps.push(ru ? 'Проверить нужные файлы или рабочую папку перед изменениями' : 'Inspect the needed files or workspace before edits');
+  if (needsWeb) steps.push(ru ? 'Получить свежий внешний контекст только если это нужно' : 'Fetch external context only when needed');
+  if (needsComputer) steps.push(ru ? 'Выполнить действия через tools с permission gate для побочных эффектов' : 'Run tools with permission gates for side effects');
+  if (!needsAction) steps.push(ru ? 'Сформировать ответ без лишних действий' : 'Answer directly without unnecessary actions');
+  steps.push(ru ? 'Проверить результат и явно назвать блокеры' : 'Verify the result and call out blockers');
+  steps.push(ru ? 'Сохранить полезные предпочтения в память' : 'Save useful preferences into memory');
+  return steps.slice(0, 7).map((text, index) => ({ id: `plan-${index + 1}`, text, status: index === 0 ? 'now' : 'next' }));
+}
+
+function deliberationProtocol(ru, nativeTools) {
+  const formatHint = nativeTools
+    ? (ru
+      ? 'Когда API поддерживает native tools, вызывай tools напрямую, без печати JSON.'
+      : 'When native tools are available, call tools directly instead of printing JSON.')
+    : (ru
+      ? 'Для многошаговой задачи можно сначала вернуть {"type":"plan","steps":["..."],"confidence":0.0-1.0}, затем продолжить tool/done JSON.'
+      : 'For a multi-step task you may first return {"type":"plan","steps":["..."],"confidence":0.0-1.0}, then continue with tool/done JSON.');
+  return ru ? `
+## Система размышлений Horizon
+- Думай приватно, но пользователю показывай только короткий план, проверки и результаты. Не раскрывай сырой chain-of-thought.
+- Работай по циклу: цель -> контекст/память -> план -> действие -> наблюдение -> самопроверка -> память.
+- Перед опасными действиями используй permission gate; если действие отклонено, не падай, а предложи безопасную альтернативу.
+- Если есть память о предпочтениях пользователя, применяй её без повторных вопросов.
+- ${formatHint}
+` : `
+## Horizon deliberation system
+- Reason privately, but show the user only concise plans, checks, and results. Do not reveal raw chain-of-thought.
+- Use the loop: goal -> context/memory -> plan -> action -> observation -> self-check -> memory.
+- Use the permission gate before side-effect actions; if denied, recover safely and suggest an alternative.
+- Apply remembered user preferences without asking again.
+- ${formatHint}
+`;
 }
 
 // Build the agent system prompt with available tools
@@ -70,6 +119,7 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
   const memoryRelevant = (memory.relevant || []).slice(0, 8).map(m => `- ${m.content}`).join('\n');
   const memoryBlock = [memoryFacts && `Known user facts:\n${memoryFacts}`, memoryRelevant && `Relevant memories:\n${memoryRelevant}`].filter(Boolean).join('\n');
   const githubBlock = (sysInfo?.github_repos || []).slice(0, 10).map(r => `- ${r.fullName} (${r.defaultBranch || 'main'}): ${r.description || r.url}`).join('\n');
+  const connectionsBlock = (sysInfo?.connections || []).slice(0, 12).map(c => `- ${c.name || c.id}: ${c.toolCount || 0} tools`).join('\n');
 
   // Persona block — read the user's selected persona from settingsStore
   // and prepend its system prompt + memories. Without this, the agent
@@ -150,6 +200,8 @@ ${personaBlock ? `\n## Persona / style\n${personaBlock}` : ''}
 ${projectRulesBlock || ''}${skillsBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
+${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}
+${deliberationProtocol(ru, true)}
 
 You can use the native tools supplied by the API to control the PC, run code, manage files and browse the web.
 Use tools when the task needs action. Do not print JSON tool calls when native tools are available.
@@ -165,6 +217,10 @@ ${sysInfo?.active_window ? `Активное окно: ${sysInfo.active_window}`
 ${sysInfo?.location ? `Местоположение: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Персона / стиль\n${personaBlock}\n` : ''}
 ${projectRulesBlock || ''}${skillsBlock || ''}
+${memoryBlock ? `\n## Контекст памяти\n${memoryBlock}\n` : ''}
+${githubBlock ? `\n## Подключенные GitHub-репозитории\n${githubBlock}\n` : ''}
+${connectionsBlock ? `\n## Активные подключения\n${connectionsBlock}\n` : ''}
+${deliberationProtocol(true, false)}
 Ты НАСТОЯЩИЙ агент. У тебя есть инструменты для управления ПК, запуска кода, работы с файлами и браузером.${personaBlock ? '' : '\nТы как ДЖАРВИС — умный, эффективный, всегда говори "Сэр".'}
 
 ## Как отвечать:
@@ -174,6 +230,9 @@ ${projectRulesBlock || ''}${skillsBlock || ''}
 
 Если нужно СДЕЛАТЬ что-то на ПК — используй инструмент:
 {"type": "tool", "tool": "имя_инструмента", "args": {...}, "reason": "почему"}
+
+Если задача сложная и нужно показать план перед действиями:
+{"type": "plan", "steps": ["шаг 1", "шаг 2", "шаг 3"], "confidence": 0.82}
 
 Когда задача ВЫПОЛНЕНА:
 {"type": "done", "text": "что сделано"}
@@ -199,6 +258,8 @@ ${personaBlock ? `\n## Persona / style\n${personaBlock}\n` : ''}
 ${projectRulesBlock || ''}${skillsBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
+${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}
+${deliberationProtocol(false, false)}
 
 You are a REAL agent with tools to control the PC, run code, manage files and browse the web.${personaBlock ? '' : '\nYou are like JARVIS — smart, efficient, always say "Sir".'}
 
@@ -209,6 +270,9 @@ For simple questions/answers — respond IMMEDIATELY:
 
 To USE a tool on the PC:
 {"type": "tool", "tool": "tool_name", "args": {...}, "reason": "why"}
+
+For a complex task, show a compact plan before actions:
+{"type": "plan", "steps": ["step 1", "step 2", "step 3"], "confidence": 0.82}
 
 When task is COMPLETE:
 {"type": "done", "text": "what was accomplished"}
@@ -446,6 +510,20 @@ async function runAgentLoop(userMessage, opts = {}) {
   if (skillsSelected) {
     try { agentEvents.emit('skills:selected', { runId, ...skillsSelected }); } catch (_) {}
   }
+
+  const initialPlan = buildVisiblePlan(userMessage, selectedTools, lang);
+  if (onStep && initialPlan.length) {
+    const planStep = {
+      type: 'plan',
+      runId,
+      source: 'horizon-deliberation',
+      title: lang === 'ru' ? 'План выполнения' : 'Execution plan',
+      steps: initialPlan,
+      currentIdx: 0
+    };
+    try { agentEvents.emit('plan', planStep); } catch (_) {}
+    await Promise.resolve(onStep(planStep));
+  }
   
   const messages = [
     ...history.slice(-10), // last 10 messages for context
@@ -456,10 +534,21 @@ async function runAgentLoop(userMessage, opts = {}) {
   let finalAnswer = null;
   let lastToolName = null;
   let sameToolCount = 0;
+  let modelPlanSeen = false;
 
   for (let i = 0; i < maxSteps; i++) {
     if (control?.isStopped?.()) {
       return { ok: false, stopped: true, error: 'Stopped by operator', steps };
+    }
+
+    if (onStep) {
+      await Promise.resolve(onStep({
+        type: 'thinking',
+        runId,
+        step: i + 1,
+        phase: i === 0 ? 'deliberate' : 'observe',
+        message: lang === 'ru' ? 'Разбираю цель и выбираю следующий шаг' : 'Deliberating and choosing the next step'
+      }));
     }
 
     // Call AI with timeout
@@ -531,6 +620,41 @@ async function runAgentLoop(userMessage, opts = {}) {
     if (parsed.type === 'done') {
       finalAnswer = parsed.text;
       break;
+    }
+
+    if (parsed.type === 'plan') {
+      const rawSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
+      const compactSteps = rawSteps.map((s, idx) => ({
+        id: `model-plan-${idx + 1}`,
+        text: typeof s === 'string' ? s : (s?.text || s?.title || `Step ${idx + 1}`),
+        status: idx === 0 ? 'now' : 'next'
+      })).filter(s => s.text).slice(0, 7);
+      if (compactSteps.length && onStep) {
+        await Promise.resolve(onStep({
+          type: 'plan',
+          runId,
+          source: 'model',
+          title: lang === 'ru' ? 'Уточненный план' : 'Refined plan',
+          steps: compactSteps,
+          confidence: parsed.confidence,
+          currentIdx: 0
+        }));
+      }
+      messages.push({ role: 'assistant', content: aiResult.reply });
+      messages.push({
+        role: 'user',
+        content: lang === 'ru'
+          ? 'План принят. Продолжай выполнение. Если нужны действия, используй tool JSON; если достаточно ответа, верни done JSON.'
+          : 'Plan accepted. Continue execution. Use tool JSON for actions; return done JSON if an answer is enough.'
+      });
+      if (modelPlanSeen) {
+        finalAnswer = lang === 'ru'
+          ? rawSteps.map((s, idx) => `${idx + 1}. ${typeof s === 'string' ? s : (s?.text || s?.title || '')}`).join('\n')
+          : rawSteps.map((s, idx) => `${idx + 1}. ${typeof s === 'string' ? s : (s?.text || s?.title || '')}`).join('\n');
+        break;
+      }
+      modelPlanSeen = true;
+      continue;
     }
 
     if (parsed.type === 'tool') {

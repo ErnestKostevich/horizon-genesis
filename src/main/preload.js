@@ -163,6 +163,8 @@ contextBridge.exposeInMainWorld('H', {
   githubListRepos:  ()         => ipcRenderer.invoke('githubListRepos'),
   githubRemoveRepo: (repo)     => ipcRenderer.invoke('githubRemoveRepo', repo),
   githubRepoContext:(repo)     => ipcRenderer.invoke('githubRepoContext', repo),
+  connectionsList:  ()         => ipcRenderer.invoke('connectionsList'),
+  connectionsTest:  (id)       => ipcRenderer.invoke('connectionsTest', id),
 
   // ── CHAT MANAGEMENT ────────────────────────────────────────────────────────
   chatList:         ()              => ipcRenderer.invoke('chatList'),
