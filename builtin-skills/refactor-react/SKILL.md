@@ -4,6 +4,9 @@ description: "Refactor React class components to function components with hooks,
 version: "0.1.0"
 author: "Horizon Team"
 tags: [react, refactor, hooks, javascript, typescript]
+aliases: [react-hooks, class-to-hooks, react-refactor]
+triggers: [refactor react class component, convert to hooks, clean up react component]
+examples: [convert this class component to hooks, refactor this React component safely]
 permissions: ["filesystem.read"]
 helpers: ["helpers/find-class-components.js"]
 ---

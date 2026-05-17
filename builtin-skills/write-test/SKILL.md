@@ -4,6 +4,9 @@ description: "Scaffold a unit test for an existing JavaScript or TypeScript func
 version: "0.1.0"
 author: "Horizon Team"
 tags: [test, testing, vitest, jest, unit, javascript, typescript]
+aliases: [tests, unit-test, test-writer]
+triggers: [write a test, add tests, scaffold unit test, create vitest test, create jest test]
+examples: [write tests for this module, add a unit test for this function]
 permissions: ["filesystem.read"]
 helpers: ["helpers/detect-runner.js"]
 ---
