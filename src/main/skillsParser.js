@@ -28,7 +28,8 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
 const ALLOWED_KEYS = new Set([
   'name', 'description', 'version', 'license', 'author',
-  'tags', 'permissions', 'helpers', 'homepage',
+  'tags', 'aliases', 'triggers', 'examples',
+  'permissions', 'helpers', 'homepage',
 ]);
 
 const NAME_RE = /^[a-z][a-z0-9-]{1,58}[a-z0-9]$/;
@@ -134,14 +135,9 @@ function validateFrontmatter(fm) {
       errors.push('tags: must be an array of strings');
     }
   }
-  if (fm.permissions !== undefined) {
-    if (!Array.isArray(fm.permissions) || fm.permissions.some(p => typeof p !== 'string')) {
-      errors.push('permissions: must be an array of strings');
-    }
-  }
-  if (fm.helpers !== undefined) {
-    if (!Array.isArray(fm.helpers) || fm.helpers.some(h => typeof h !== 'string')) {
-      errors.push('helpers: must be an array of file paths (strings)');
+  for (const key of ['aliases', 'triggers', 'examples', 'permissions', 'helpers']) {
+    if (fm[key] !== undefined && (!Array.isArray(fm[key]) || fm[key].some(v => typeof v !== 'string'))) {
+      errors.push(`${key}: must be an array of strings`);
     }
   }
   return { ok: errors.length === 0, errors };
@@ -186,7 +182,7 @@ function parseSkillMd(text) {
  * Values with colons or starting with special chars are double-quoted.
  */
 function serializeFrontmatter(fm) {
-  const order = ['name', 'description', 'version', 'license', 'author', 'tags', 'permissions', 'helpers', 'homepage'];
+  const order = ['name', 'description', 'version', 'license', 'author', 'tags', 'aliases', 'triggers', 'examples', 'permissions', 'helpers', 'homepage'];
   const lines = [];
   for (const key of order) {
     if (fm[key] === undefined || fm[key] === null) continue;

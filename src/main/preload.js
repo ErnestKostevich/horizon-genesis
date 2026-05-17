@@ -101,6 +101,7 @@ contextBridge.exposeInMainWorld('H', {
   skillsInstallFromUrl:    (url)           => ipcRenderer.invoke('skillsInstallFromUrl', url),
   skillsShareUrl:          (id)            => ipcRenderer.invoke('skillsShareUrl', id),
   skillsPreviewMatch:      (q, opts)       => ipcRenderer.invoke('skillsPreviewMatch', q, opts),
+  skillsPreviewSource:     (q, c, opts)    => ipcRenderer.invoke('skillsPreviewSource', q, c, opts),
   skillsRunHelper:         (id, helper, args, tmo) => ipcRenderer.invoke('skillsRunHelper', id, helper, args, tmo),
   // PR-D2 — workspace symbol index (built lazily on workspace open).
   wsIndexBuild:         (opts)       => ipcRenderer.invoke('wsIndexBuild', opts),

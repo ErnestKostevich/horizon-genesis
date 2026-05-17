@@ -2368,7 +2368,7 @@ function initWakeCalibrationUI(){
   // Reflect persisted settings on the toggles + slider when the panel opens.
   const strict = wakeCfg('strictMode', true);
   const beep   = wakeCfg('confirmBeep', false);
-  const vol    = wakeCfg('volumeThreshold', 18);
+  const vol    = wakeCfg('volumeThreshold', 10);
   document.getElementById('sw-wake-strict')?.classList.toggle('on', strict);
   document.getElementById('sw-wake-beep')?.classList.toggle('on', beep);
   const slider = document.getElementById('wake-sens');
