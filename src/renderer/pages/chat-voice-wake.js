@@ -647,36 +647,52 @@ function listenForCommand(){
   cmdRec.ondataavailable = e=>{ if(e.data?.size>0) cmdChunks.push(e.data); };
   cmdRec.onstop = async()=>{
     clearInterval(checkInterval);
-    document.getElementById('wb-bar').style.width='0%';
+    try { document.getElementById('wb-bar').style.width='0%'; } catch(_) {}
 
-    if(!wakeActive){ wakePhase='idle'; setWakeBar('idle'); return; }
-    if(cmdChunks.length===0 || !hasAudio){
+    // Hard guarantee: no matter what happens below (transcription error,
+    // unhandled exception in sendMsg, etc.) we ALWAYS return wakePhase to
+    // 'idle' and schedule the next wake chunk. The old code awaited the
+    // transcription and then ran user-handling code synchronously; if any
+    // step threw, the phase stayed at 'command' forever and the wake bar
+    // froze at "Слушаю команду" with no recovery. That's the "зависает"
+    // bug the user reported.
+    try {
+      if(!wakeActive){ wakePhase='idle'; setWakeBar('idle'); return; }
+      if(cmdChunks.length===0 || !hasAudio){
+        wakePhase='idle';
+        setWakeBar('idle');
+        scheduleNextChunk();
+        return;
+      }
+
+      setStatus(t('processing'), true);
+      const blob = new Blob(cmdChunks, {type: cmdRec.mimeType||'audio/webm'});
+      // transcribeWakeChunk now returns {ok,text,error} — used to be a
+      // plain string. Extract the text field and route any error through
+      // the same one-shot surfaced-error path the wake loop uses.
+      const result = await transcribeWakeChunk(blob);
+      if (result?.error) surfaceWakeTranscribeError(result.error);
+      const text = String(result?.text || '').trim();
+
+      if(text && text.length > 1){
+        const inp=document.getElementById('inp');
+        inp.value=text;
+        try { ar(inp); } catch(_){}
+        setTimeout(() => { try { sendMsg(); } catch(e){ console.warn('[wake] sendMsg failed:', e); } }, 100);
+      } else {
+        addMsg('bot', lang==='ru'
+          ? '◈ Не расслышал команду. Попробуй ещё — скажи «Горизонт» снова.'
+          : '◈ Didn\'t catch that. Say "Horizon" again.');
+      }
+    } catch (e) {
+      console.warn('[wake] command stop handler failed:', e);
+      try { addMsg('bot', lang==='ru' ? `◈ Ошибка обработки команды: ${e.message}` : `◈ Command error: ${e.message}`); } catch(_) {}
+    } finally {
+      // ALWAYS resume listening — this is the recovery path.
       wakePhase='idle';
       setWakeBar('idle');
-      scheduleNextChunk();
-      return;
+      wakeLoopTimer = setTimeout(runWakeChunk, 500);
     }
-
-    setStatus(t('processing'), true);
-    const blob = new Blob(cmdChunks, {type: cmdRec.mimeType||'audio/webm'});
-    const text = await transcribeWakeChunk(blob);
-
-    if(text && text.trim().length > 1){
-      // Show text in input and send
-      const inp=document.getElementById('inp');
-      inp.value=text.trim();
-      ar(inp);
-      setTimeout(sendMsg, 100);
-    } else {
-      addMsg('bot', lang==='ru'
-        ? '◈ Не расслышал команду. Попробуй ещё — скажи «Горизонт» снова.'
-        : '◈ Didn\'t catch that. Say "Horizon" again.');
-    }
-
-    // Resume wake listening
-    wakePhase='idle';
-    setWakeBar('idle');
-    wakeLoopTimer = setTimeout(runWakeChunk, 1000);
   };
 
   // Max 8 second timeout for command
