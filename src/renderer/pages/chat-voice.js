@@ -37,12 +37,12 @@ async function testMic(){
   // play it back so they hear themselves.
   const st = document.getElementById('mic-st');
   if (!st) return;
-  st.textContent = '🎙 Recording 3s — say something...'; st.style.color = 'var(--t2)';
+  st.textContent = 'Recording 3s - say something...'; st.style.color = 'var(--t2)';
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
   } catch (e) {
-    st.textContent = '❌ ' + e.message; st.style.color = 'var(--red)';
+    st.textContent = e.message; st.style.color = 'var(--red)';
     return;
   }
   // Measure peak via AudioContext analyser.
@@ -75,7 +75,7 @@ async function testMic(){
   }
   if (!rec) {
     stream.getTracks().forEach(t => t.stop());
-    st.textContent = '❌ MediaRecorder unsupported in this Electron build.';
+    st.textContent = 'MediaRecorder unsupported in this Electron build.';
     st.style.color = 'var(--red)';
     return;
   }
@@ -84,9 +84,9 @@ async function testMic(){
     stream.getTracks().forEach(t => t.stop());
     const peakDb = peak > 0 ? Math.round(20 * Math.log10(peak / 255) * 10) / 10 : -60;
     const verdict = peak < 20
-      ? '⚠ Too quiet — check mic gain'
-      : peak > 220 ? '⚠ Clipping — lower mic gain'
-      : '✅ Mic working';
+      ? 'Too quiet - check mic gain'
+      : peak > 220 ? 'Clipping - lower mic gain'
+      : 'Mic working';
     st.innerHTML = `${verdict}<br>` +
       `<span style="font:600 11px var(--mono);color:var(--t3)">` +
       `peak: ${peak.toFixed(0)} / 255 (~${peakDb} dB) · ` +
@@ -105,23 +105,17 @@ async function testMic(){
   setTimeout(() => { try { rec.stop(); } catch (_) {} }, 3000);
 }
 
-// Post-PR-V Phase 1.6 — wake-word transcription test.
-// Records 3 sec of the user saying "Horizon" (or whatever wake word
-// they want to test), transcribes it via the same Groq Whisper path
-// the actual wake engine uses, and shows the transcription result.
-// If the result doesn't contain "horizon"/"горизонт"/"хорайзон"/
-// "хоризонт", the engine wouldn't trigger either — user knows to
-// adjust sensitivity or check pronunciation.
 async function testWakeWord(){
   const st = document.getElementById('wake-test-st');
   if (!st) return;
-  st.textContent = '🎙 Recording 3s — say "Horizon" or "Горизонт"...';
+  st.textContent = 'Recording 2s - say "Horizon" or "Горизонт"...';
   st.style.color = 'var(--t2)';
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia(voiceAudioConstraints());
   } catch (e) {
-    st.textContent = '❌ ' + e.message; st.style.color = 'var(--red)';
+    st.textContent = 'Mic error: ' + e.message;
+    st.style.color = 'var(--red)';
     return;
   }
   const chunks = [];
@@ -130,41 +124,36 @@ async function testWakeWord(){
   catch (_) { try { rec = new MediaRecorder(stream); } catch (_) {} }
   if (!rec) {
     stream.getTracks().forEach(t => t.stop());
-    st.textContent = '❌ MediaRecorder unsupported.'; st.style.color = 'var(--red)';
+    st.textContent = 'MediaRecorder unsupported.';
+    st.style.color = 'var(--red)';
     return;
   }
   rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
   rec.onstop = async () => {
     stream.getTracks().forEach(t => t.stop());
-    st.textContent = '⏳ Transcribing via Groq Whisper...';
+    st.textContent = 'Transcribing...';
     st.style.color = 'var(--t3)';
     try {
       const blob = new Blob(chunks, { type: rec.mimeType });
-      // Use the same transcribeWakeChunk infra as the actual wake engine
-      // so the result matches what the engine would see live.
-      const text = (typeof transcribeWakeChunk === 'function')
-        ? await transcribeWakeChunk(blob)
-        : '';
-      const wouldFire = typeof isWakeWord === 'function' ? isWakeWord(text) : false;
+      const text = (typeof transcribeWakeChunk === 'function') ? await transcribeWakeChunk(blob) : '';
+      const match = (typeof matchWakeWord === 'function') ? matchWakeWord(text) : { ok: false, normalized: text || '', reason: 'matcher unavailable' };
       if (!text) {
-        st.innerHTML = `❌ Empty transcription — check Groq API key.<br>` +
-          `<span style="font:600 11px var(--mono);color:var(--t3)">Try Settings → Voice → Groq Key.</span>`;
+        st.innerHTML = 'Empty transcription - check Groq API key in Settings -> Voice.';
         st.style.color = 'var(--red)';
         return;
       }
-      st.innerHTML = `${wouldFire ? '✅' : '⚠'} Transcribed: <b>"${(text || '').slice(0, 80)}"</b><br>` +
-        `<span style="font:600 11px var(--mono);color:var(--t3)">` +
-        `Would fire wake? <b style="color:${wouldFire ? 'var(--green)' : 'var(--warn)'}">${wouldFire ? 'YES' : 'NO'}</b>` +
-        (wouldFire ? ' — engine ready.' : ' — adjust sensitivity or check pronunciation.') +
-        `</span>`;
-      st.style.color = wouldFire ? 'var(--green)' : 'var(--warn)';
+      st.innerHTML = `Transcript: <b>"${esc((text || '').slice(0, 120))}"</b><br>` +
+        `<span style="font:600 11px var(--mono);color:var(--t3)">normalized: ${esc(match.normalized || '')} · ` +
+        `wake: <b style="color:${match.ok ? 'var(--green)' : 'var(--warn)'}">${match.ok ? 'YES' : 'NO'}</b>` +
+        ` · confidence ${match.confidence || 0} · ${esc(match.reason || '')}</span>`;
+      st.style.color = match.ok ? 'var(--green)' : 'var(--warn)';
     } catch (e) {
-      st.innerHTML = `❌ Transcribe failed: ${e?.message || e}`;
+      st.innerHTML = 'Transcribe failed: ' + esc(e?.message || e);
       st.style.color = 'var(--red)';
     }
   };
-  rec.start();
-  setTimeout(() => { try { rec.stop(); } catch (_) {} }, 3000);
+  rec.start(100);
+  setTimeout(() => { try { rec.stop(); } catch (_) {} }, 1800);
 }
 
 function startLvl(stream){
@@ -203,7 +192,7 @@ async function startRec(){
     document.getElementById('vtxt').textContent=t('recording');
     setStatus(t('recording'),true);startLvl(stream);
     setVoiceButtonState('recording');
-  }catch(e){addMsg('bot',`⚠️ Mic: ${e.message}`);}
+  }catch(e){addMsg('bot',`Mic: ${e.message}`);}
 }
 
 function stopRec(){
@@ -238,7 +227,7 @@ async function processAudio(mimeType){
     const b64=reader.result.split(',')[1];
     const mime=mimeType.split(';')[0];
     const res=await H.transcribeAudio(b64,mime);
-    if(res.error){ addMsg('bot',`⚠️ ${res.error}`); }
+    if(res.error){ addMsg('bot',`${res.error}`); }
     else if(res.text?.trim()){
       const inp=document.getElementById('inp');
       inp.value=res.text;ar(inp);
@@ -287,7 +276,7 @@ async function startDictate() {
     document.getElementById('vtxt').textContent = lang === 'ru' ? 'Диктую…' : 'Dictating…';
     startLvl(dictateStream);
   } catch (e) {
-    addMsg('bot', `⚠️ Mic: ${e.message}`);
+    addMsg('bot', `Mic: ${e.message}`);
   }
 }
 
@@ -324,7 +313,7 @@ async function processDictation(mimeType) {
     const res = await H.transcribeAudio(b64, mime);
     
     if (res.error) {
-      addMsg('bot', `⚠️ ${res.error}`);
+      addMsg('bot', `${res.error}`);
     } else if (res.text?.trim()) {
       // Insert at cursor position (append to existing text)
       const inp = document.getElementById('inp');

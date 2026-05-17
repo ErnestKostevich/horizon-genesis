@@ -54,6 +54,7 @@
     "files": [
       "src/**/*",
       "assets/**/*",
+      "builtin-skills/**/*",
       "builtin-plugins/**/*"
     ],
     "directories": {

@@ -30,10 +30,28 @@ function _scopeBadge(scope) {
   return `<span class="sk-badge sk-badge-${tone}">${label}</span>`;
 }
 
+function _svgSkillIcon(path, extraAttrs) {
+  return `<svg class="sk-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extraAttrs || ''}>${path}</svg>`;
+}
+
 function _skillIcon(scope, hasHelpers) {
-  if (scope === 'workspace') return '📁';
-  if (scope === 'user') return '👤';
-  return hasHelpers ? '🛠️' : '📘';
+  if (scope === 'workspace') return _svgSkillIcon('<path d="M3 7.5h6l2 2h10v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7.5V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1.5"/>');
+  if (scope === 'user') return _svgSkillIcon('<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>');
+  if (hasHelpers) return _svgSkillIcon('<path d="m14.7 6.3 3 3"/><path d="M3 21l6.8-6.8"/><path d="m12 4 8 8-2.5 2.5a2.1 2.1 0 0 1-3 0L9.5 9.5a2.1 2.1 0 0 1 0-3z"/>');
+  return _svgSkillIcon('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/>');
+}
+
+function normalizeSkillUiIcons() {
+  const root = document.getElementById('skills-body');
+  if (!root) return;
+  root.querySelectorAll('button').forEach(btn => {
+    btn.textContent = btn.textContent
+      .replace(/.*Edit$/u, 'Edit')
+      .replace(/.*Preview match$/u, 'Preview match')
+      .replace(/.*Create skill$/u, 'Create skill')
+      .replace(/^.*\s(helpers\/.+)$/u, 'Run $1')
+      .trim();
+  });
 }
 
 function openSkillHub() {
@@ -68,7 +86,7 @@ async function renderSkillsBody() {
       if (!skills || !skills.length) {
         body.innerHTML = `
           <div class="empty-state">
-            <div class="es-icon">📘</div>
+            <div class="es-icon">${_svgSkillIcon('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/>')}</div>
             <h3>No skills installed</h3>
             <p>Skills are Claude Code-style markdown bundles. Horizon auto-loads them into the agent's system prompt when their description matches your request.</p>
             <p style="font-size:11px;color:var(--t3);margin-top:8px">Try writing your own with <strong>+ Create skill</strong> below, or drop a <code>SKILL.md</code> into <code>.horizon/skills/&lt;name&gt;/</code> in any workspace.</p>
@@ -93,7 +111,7 @@ async function renderSkillsBody() {
         const helpers = active.helpers || [];
         const tags = (active.tags || []).map(t => `<span class="sk-tag">${esc(t)}</span>`).join('');
         const parseErr = !active.parseOk
-          ? `<div class="sk-err">⚠ ${esc((active.parseErrors || []).join('; '))}</div>`
+          ? `<div class="sk-err">Warning: ${esc((active.parseErrors || []).join('; '))}</div>`
           : '';
         const shadowed = otherScopes.length
           ? `<div class="sk-shadow">also installed at: ${otherScopes.map(o => _scopeBadge(o.scope)).join(' ')}</div>`
@@ -105,6 +123,7 @@ async function renderSkillsBody() {
               <div class="sk-card-info">
                 <div class="sk-card-name">${esc(active.name)} ${_scopeBadge(active.scope)} <span style="font-size:9px;color:var(--t3);font-weight:400">v${esc(active.version || '0.1.0')}</span></div>
                 <div class="sk-card-desc">${esc(desc)}</div>
+                <div style="font-size:10px;color:var(--t3);margin-top:4px">Used ${active.usage?.count || 0} turns${active.usage?.lastUsedAt ? ` · last ${esc(active.usage.lastUsedAt.slice(0, 10))}` : ''}</div>
                 ${tags ? `<div class="sk-tags">${tags}</div>` : ''}
                 ${shadowed}
                 ${parseErr}
@@ -117,8 +136,9 @@ async function renderSkillsBody() {
               </div>
             ` : ''}
             <div class="sk-actions">
-              <button class="hub-btn" onclick="editSkill('${esc(id)}','${esc(active.scope)}')">✎ Edit</button>
-              <button class="hub-btn" onclick="previewSkillMatchFromCard('${esc(id)}')">🔎 Preview match</button>
+              <button class="hub-btn primary" onclick="useSkillNextTurn('${esc(id)}')">Use next turn</button>
+              <button class="hub-btn" onclick="editSkill('${esc(id)}','${esc(active.scope)}')">Edit</button>
+              <button class="hub-btn" onclick="previewSkillMatchFromCard('${esc(id)}')">Preview match</button>
               <button class="hub-btn share" onclick="shareSkill('${esc(id)}')">Share URL</button>
               ${active.scope === 'builtin' ? '' : `<button class="hub-btn remove" onclick="removeSkill('${esc(id)}','${esc(active.scope)}')">Remove</button>`}
             </div>
@@ -132,8 +152,9 @@ async function renderSkillsBody() {
         </div>
         ${rows.join('')}
       `;
+      normalizeSkillUiIcons();
     } catch (e) {
-      body.innerHTML = `<div style="color:var(--red);font-size:11px">❌ ${esc(e.message)}</div>`;
+      body.innerHTML = `<div style="color:var(--red);font-size:11px">${esc(e.message)}</div>`;
     }
   } else if (skillsCurrentTab === 'edit') {
     const editing = skillsEditing || { id: '', scope: 'user', content: _newSkillStarter(), isNew: true };
@@ -141,7 +162,7 @@ async function renderSkillsBody() {
       <div class="sk-editor">
         <div class="sk-editor-head">
           <div>
-            <div class="sk-editor-title">${editing.isNew ? '➕ New skill' : `✎ Editing <strong>${esc(editing.id)}</strong>`}</div>
+            <div class="sk-editor-title">${editing.isNew ? 'New skill' : `Editing <strong>${esc(editing.id)}</strong>`}</div>
             <div style="font-size:10px;color:var(--t3);margin-top:2px">Save target:
               <select id="sk-edit-scope" style="font-size:10px;background:var(--b1);color:var(--tx);border:1px solid var(--b2);border-radius:4px;padding:2px 4px">
                 <option value="user"${editing.scope === 'user' ? ' selected' : ''}>user (~/.horizon/skills)</option>
@@ -213,7 +234,7 @@ async function editSkill(id, scope) {
     const content = await H.skillsRead(id, scope);
     skillsEditing = { id, scope: scope === 'builtin' ? 'user' : scope, content, isNew: false };
     if (scope === 'builtin') {
-      addMsg?.('bot', `📘 Built-in skill **${id}** is read-only. Opened a copy you can save to your user or workspace scope.`);
+      addMsg?.('bot', `Built-in skill **${id}** is read-only. Opened a copy you can save to your user or workspace scope.`);
     }
     skillsTab('edit');
   } catch (e) { H.notify?.('Skills', e.message); }
@@ -227,7 +248,7 @@ async function saveSkillSource() {
     const idForWrite = skillsEditing.isNew ? '' : skillsEditing.id;
     const r = await H.skillsWrite(idForWrite, content, scope);
     if (r && r.ok) {
-      addMsg?.('bot', `📘 Skill **${esc(r.id)}** saved to ${scope} scope.`);
+      addMsg?.('bot', `Skill **${esc(r.id)}** saved to ${scope} scope.`);
       skillsEditing = null;
       skillsTab('installed');
     } else {
@@ -245,44 +266,43 @@ async function previewSkillMatch() {
     host.innerHTML = '<div style="color:var(--t3);font-size:11px">Enter a test query above to see whether this skill would load.</div>';
     return;
   }
-  if (!skillsEditing) {
-    host.innerHTML = '<div style="color:var(--red);font-size:11px">Open Edit tab first.</div>';
-    return;
-  }
-  // Roundtrip: save scratch to user scope first so the scorer can see it.
-  // Cheapest path that uses the real selectRelevantSkills — and the user
-  // probably wants to save anyway.
   try {
-    const written = await H.skillsWrite(skillsEditing.isNew ? '' : skillsEditing.id, content, 'user');
-    if (!written?.ok) {
-      host.innerHTML = `<div style="color:var(--red);font-size:11px">Save first to preview: ${esc(written?.error || 'unknown')}</div>`;
+    const res = await H.skillsPreviewSource(query, content, { scope: document.getElementById('sk-edit-scope')?.value || 'user' });
+    if (!res?.ok) {
+      host.innerHTML = `<div style="color:var(--red);font-size:11px">${esc(res?.error || 'Preview failed')}</div>`;
       return;
     }
-    skillsEditing.id = written.id;
-    skillsEditing.isNew = false;
-    const res = await H.skillsPreviewMatch(query, {});
-    const scored = (res?.scored || []).find(s => s.id === written.id);
-    const selected = (res?.selected || []).find(s => s.id === written.id);
+    const scored = (res.scored || []).find(s => s.id === res.id);
+    const selected = (res.selected || []).find(s => s.id === res.id);
     if (!scored) {
-      host.innerHTML = '<div style="color:var(--red);font-size:11px">Skill not found after save. Refresh and try again.</div>';
+      host.innerHTML = '<div style="color:var(--red);font-size:11px">Skill not found in preview result.</div>';
       return;
     }
     const badge = selected
-      ? '<span style="color:var(--green);font-weight:700">✓ would load</span>'
-      : '<span style="color:var(--t3)">below threshold — not loaded</span>';
+      ? '<span style="color:var(--green);font-weight:700">would load</span>'
+      : '<span style="color:var(--t3)">below threshold</span>';
+    const b = scored.breakdown || {};
     host.innerHTML = `
       <div class="sk-score">${badge} (score <strong>${scored.score}</strong>, threshold 0.15)</div>
-      <div style="font-size:10px;color:var(--t3);margin-top:6px">Breakdown:</div>
-      <table style="font-size:10px;color:var(--tx);margin-top:4px">
-        <tr><td style="padding:2px 8px 2px 0">description</td><td>${scored.breakdown.description}</td></tr>
-        <tr><td style="padding:2px 8px 2px 0">name</td><td>${scored.breakdown.name}</td></tr>
-        <tr><td style="padding:2px 8px 2px 0">tags</td><td>${scored.breakdown.tags}</td></tr>
+      <table style="font-size:10px;color:var(--tx);margin-top:8px">
+        <tr><td style="padding:2px 8px 2px 0">description</td><td>${b.description || 0}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0">name</td><td>${b.name || 0}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0">tags</td><td>${b.tags || 0}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0">aliases</td><td>${b.aliases || 0}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0">triggers</td><td>${b.triggers || 0}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0">examples</td><td>${b.examples || 0}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0">recent usage</td><td>${b.recentUsage || 0}</td></tr>
       </table>
-      <div style="font-size:10px;color:var(--t3);margin-top:8px">Other skills also matched: ${res.selected.filter(s => s.id !== written.id).map(s => `<code>${esc(s.id)}@${s.score}</code>`).join(', ') || '<em>none</em>'}.</div>
+      <div style="font-size:10px;color:var(--t3);margin-top:8px">Preview did not save this draft.</div>
     `;
   } catch (e) {
     host.innerHTML = `<div style="color:var(--red);font-size:11px">${esc(e.message)}</div>`;
   }
+}
+
+function useSkillNextTurn(id) {
+  forceSkillForNextTurn(id);
+  H.notify?.('Skills', `${id} will be used on the next message`);
 }
 
 async function previewSkillMatchFromCard(id) {
@@ -293,8 +313,8 @@ async function previewSkillMatchFromCard(id) {
     const scored = (res?.scored || []).find(s => s.id === id);
     const selected = (res?.selected || []).some(s => s.id === id);
     if (!scored) { addMsg?.('bot', `Skill ${id} not found.`); return; }
-    const verdict = selected ? '✓ **would load**' : '✗ below threshold (not loaded)';
-    addMsg?.('bot', `📘 **${id}** vs "${q}":\n${verdict} — score ${scored.score} (description ${scored.breakdown.description}, name ${scored.breakdown.name}, tags ${scored.breakdown.tags}).`);
+    const verdict = selected ? '**would load**' : 'below threshold (not loaded)';
+    addMsg?.('bot', `**${id}** vs "${q}":\n${verdict} — score ${scored.score} (description ${scored.breakdown.description}, name ${scored.breakdown.name}, tags ${scored.breakdown.tags}).`);
   } catch (e) { H.notify?.('Skills', e.message); }
 }
 
@@ -304,7 +324,7 @@ async function shareSkill(id) {
     if (!url) { H.notify?.('Skills', 'No skill to share'); return; }
     await H.copy(url);
     H.notify?.('Skills', 'Share URL copied to clipboard');
-    addMsg?.('bot', `🔗 Share URL for **${id}** copied to clipboard.`);
+    addMsg?.('bot', `Share URL for **${id}** copied to clipboard.`);
   } catch (e) { H.notify?.('Skills', e.message); }
 }
 
@@ -315,7 +335,7 @@ async function removeSkill(id, scope) {
   try {
     const r = await H.skillsUninstall(id, scope);
     if (r && r.ok) {
-      addMsg?.('bot', `📘 Skill **${id}** removed.`);
+      addMsg?.('bot', `Skill **${id}** removed.`);
       renderSkillsBody();
     } else {
       H.notify?.('Skills', (r && r.error) || 'Remove failed');
@@ -329,7 +349,7 @@ async function installSkillFromUrl() {
   try {
     const r = await H.skillsInstallFromUrl(url);
     if (r && r.ok) {
-      addMsg?.('bot', `📘 Skill **${esc(r.id)}** installed.`);
+      addMsg?.('bot', `Skill **${esc(r.id)}** installed.`);
       skillsTab('installed');
     } else { H.notify?.('Skills', (r && r.error) || 'Install failed'); }
   } catch (e) { H.notify?.('Skills', e.message); }
@@ -345,9 +365,9 @@ async function runSkillHelperInteractive(skillId, helperRel) {
     const r = await H.skillsRunHelper(skillId, helperRel, helperArgs, 30000);
     if (r && r.ok) {
       const out = (r.out || '').slice(0, 1500);
-      addMsg?.('bot', `🛠 **${skillId}/${helperRel}** ok\n\`\`\`\n${out}\n\`\`\``);
+      addMsg?.('bot', `**${skillId}/${helperRel}** ok\n\`\`\`\n${out}\n\`\`\``);
     } else {
-      addMsg?.('bot', `⚠️ **${skillId}/${helperRel}** failed: ${esc(r?.err || r?.error || 'unknown')}`);
+      addMsg?.('bot', `**${skillId}/${helperRel}** failed: ${esc(r?.err || r?.error || 'unknown')}`);
     }
   } catch (e) { H.notify?.('Skills', e.message); }
 }
