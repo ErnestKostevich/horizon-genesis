@@ -208,6 +208,25 @@ async function loadPanel(){
     if (profSel) profSel.value = savedProfile;
   } catch(_) {}
   try { updateThinkingHint(); } catch(_) {}
+  try {
+    const imageProvider = (await H.get('image.provider')) || 'auto';
+    const imageOpenAI = (await H.get('image.model.openai')) || 'gpt-image-2';
+    const imageGemini = (await H.get('image.model.gemini')) || 'gemini-2.5-flash-image';
+    const setSelect = (id, value) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (value && ![...el.options].some(o => o.value === value)) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = value + ' (saved)';
+        el.appendChild(opt);
+      }
+      el.value = value;
+    };
+    setSelect('ms-image-provider', imageProvider);
+    setSelect('ms-image-openai', imageOpenAI);
+    setSelect('ms-image-gemini', imageGemini);
+  } catch(_) {}
   await loadSettingsHealth();
 }
 
@@ -554,6 +573,21 @@ async function saveModelSetting(provider, model){
     try { updateThinkingHint(); updateStatusBar(); renderCodeContext(); updateShellChrome(); } catch(_){}
   } catch(e) { console.warn('saveModelSetting failed:', e?.message); }
 }
+
+async function saveImageGenerationSetting(key, value){
+  try {
+    const safeKey = String(key || '');
+    if (!['provider', 'model.openai', 'model.gemini'].includes(safeKey)) return;
+    const safeValue = String(value || '').trim();
+    await H.set('image.' + safeKey, safeValue);
+    setSettingsStatus('Image generation setting saved.', true);
+    H.notify?.('Image generation', 'Model selection saved.');
+  } catch(e) {
+    console.warn('saveImageGenerationSetting failed:', e?.message);
+    setSettingsStatus(`Could not save image setting: ${e?.message || e}`, false);
+  }
+}
+
 async function saveLang(){const next=document.getElementById('pi-lang').value;if(await saveSetting('lang',next,'Language')){lang=next;applyLang();showGreeting();}}
 async function saveVP(){
   voiceProvider=document.getElementById('pi-vprov').value;

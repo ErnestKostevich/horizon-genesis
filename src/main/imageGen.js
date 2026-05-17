@@ -17,13 +17,12 @@
  *     - gemini-3.1-flash-image-preview (Nano Banana 2 preview)
  *     - gemini-3-pro-image-preview (Nano Banana Pro preview)
  *     - gemini-2.5-flash-image (Nano Banana)
- *       Native image generation via the standard generateContent endpoint.
+ *       Native image generation via generateContent.
+ *     - imagen-4.0-generate-001, imagen-4.0-ultra-generate-001,
+ *       imagen-4.0-fast-generate-001 via the Gemini API :predict endpoint.
  *
- * NOTE: pure Imagen models (`imagen-3.0-generate-002`, `imagen-4...`)
- * live behind Vertex AI which requires a Google Cloud project +
- * OAuth/Application-Default-Credentials, NOT a plain Gemini API key.
- * v1 of this module tried that endpoint and got "model not found" on
- * any free key. v2 (this) uses the generateContent path that does work.
+ * Removed: imagen-3.0-generate-002. Google docs mark it discontinued,
+ * and users saw "model not found" with that stale ID.
  *
  * Returns { ok, images: [{ b64, mime, prompt, revised_prompt?, model, provider }], error }.
  */
@@ -43,6 +42,11 @@ const GEMINI_IMAGE_MODELS = new Set([
   'gemini-3.1-flash-image-preview',
   'gemini-3-pro-image-preview',
   'gemini-2.5-flash-image',
+]);
+const GEMINI_IMAGEN_MODELS = new Set([
+  'imagen-4.0-generate-001',
+  'imagen-4.0-ultra-generate-001',
+  'imagen-4.0-fast-generate-001',
 ]);
 
 const DEFAULTS = {
@@ -122,6 +126,9 @@ async function callOpenAI({ apiKey, prompt, size, quality, model, n }) {
 async function callGemini({ apiKey, prompt, size, model, n }) {
   if (!apiKey) throw new Error('Gemini API key not set. Add it in Settings → Providers → Gemini.');
   const modelId = model || DEFAULTS.gemini.model;
+  if (GEMINI_IMAGEN_MODELS.has(modelId)) {
+    return callImagen({ apiKey, prompt, size, model: modelId, n });
+  }
   const body = {
     contents: [{
       role: 'user',
@@ -181,6 +188,69 @@ async function callGemini({ apiKey, prompt, size, model, n }) {
   // Attach the optional text note as a revised_prompt so the UI can show it.
   if (textNote.trim()) images[0].revised_prompt = textNote.trim();
   return images;
+}
+
+function collectImagenPayloads(value, out = []) {
+  if (!value || typeof value !== 'object') return out;
+  if (typeof value.bytesBase64Encoded === 'string') {
+    out.push({ b64: value.bytesBase64Encoded, mime: value.mimeType || value.mime_type || 'image/png' });
+  }
+  if (typeof value.imageBytes === 'string') {
+    out.push({ b64: value.imageBytes, mime: value.mimeType || value.mime_type || 'image/png' });
+  }
+  if (typeof value.base64 === 'string') {
+    out.push({ b64: value.base64, mime: value.mimeType || value.mime_type || 'image/png' });
+  }
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) child.forEach(item => collectImagenPayloads(item, out));
+    else if (child && typeof child === 'object') collectImagenPayloads(child, out);
+  }
+  return out;
+}
+
+async function callImagen({ apiKey, prompt, size, model, n }) {
+  const modelId = model || 'imagen-4.0-generate-001';
+  const parameters = {
+    sampleCount: Math.max(1, Math.min(4, Number(n) || 1)),
+  };
+  if (size && /^2k$/i.test(size)) parameters.imageSize = '2K';
+  const body = {
+    instances: [{ prompt: String(prompt || '').slice(0, 4000) }],
+    parameters,
+  };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:predict`;
+  const res = await withTimeout(
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        'User-Agent': HORIZON_UA,
+      },
+      body: JSON.stringify(body),
+    }),
+    120_000,
+    'Imagen image-gen'
+  );
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error?.message || `HTTP ${res.status}`;
+    throw new Error(`Gemini Imagen: ${msg}`);
+  }
+  const payloads = collectImagenPayloads(json)
+    .filter(item => item && item.b64)
+    .slice(0, parameters.sampleCount);
+  if (!payloads.length) {
+    throw new Error(`Gemini Imagen returned no image payload. Raw response: ${JSON.stringify(json).slice(0, 240)}`);
+  }
+  return payloads.map(item => ({
+    b64: item.b64,
+    mime: item.mime || 'image/png',
+    prompt: body.instances[0].prompt,
+    revised_prompt: null,
+    model: modelId,
+    provider: 'gemini',
+  }));
 }
 
 /**
@@ -245,6 +315,9 @@ function listImageModels() {
       { id: 'gemini-2.5-flash-image',         label: 'Gemini 2.5 Flash Image (Nano Banana)' },
       { id: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image Preview (Nano Banana 2)' },
       { id: 'gemini-3-pro-image-preview',     label: 'Gemini 3 Pro Image Preview (Nano Banana Pro)' },
+      { id: 'imagen-4.0-generate-001',         label: 'Imagen 4' },
+      { id: 'imagen-4.0-ultra-generate-001',   label: 'Imagen 4 Ultra' },
+      { id: 'imagen-4.0-fast-generate-001',    label: 'Imagen 4 Fast' },
     ],
   };
 }
@@ -255,4 +328,5 @@ module.exports = {
   DEFAULTS,
   OPENAI_IMAGE_MODELS,
   GEMINI_IMAGE_MODELS,
+  GEMINI_IMAGEN_MODELS,
 };

@@ -68,23 +68,62 @@ var codeEditorReady = null;
 var codeLastAiPatch = null;
 var codeTerminal = null;
 var codeTerminalId = '';
+var opLogPersistTimer = null;
 
 function opLogStorageKey() {
   const id = (typeof currentChatId !== 'undefined' && currentChatId) ? currentChatId : 'scratch';
   return `horizon.operatorLog.${id}`;
 }
 
-function opPersistLogForCurrentChat() {
+async function opEnsureChatIdForLog() {
+  if (typeof currentChatId !== 'undefined' && currentChatId) return currentChatId;
+  if (typeof _ensureCurrentChatIdForPersist === 'function') {
+    return await _ensureCurrentChatIdForPersist();
+  }
+  try {
+    const cur = await window.H?.chatGetCurrent?.();
+    if (cur && cur.id && typeof currentChatId !== 'undefined') currentChatId = cur.id;
+    return cur?.id || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function opPersistLogForCurrentChat() {
   try {
     const trimmed = (operatorLogLines || []).slice(-300);
-    localStorage.setItem(opLogStorageKey(), JSON.stringify(trimmed));
+    const id = await opEnsureChatIdForLog();
+    if (id && window.H?.chatSetLogs) {
+      await window.H.chatSetLogs(id, trimmed);
+    }
+    // Keep a localStorage mirror only as an emergency migration fallback.
+    try { localStorage.setItem(opLogStorageKey(), JSON.stringify(trimmed)); } catch (_) {}
   } catch (_) {}
 }
 
-function loadOperatorLogForCurrentChat() {
+function opSchedulePersistLogForCurrentChat() {
+  if (opLogPersistTimer) clearTimeout(opLogPersistTimer);
+  opLogPersistTimer = setTimeout(() => {
+    opLogPersistTimer = null;
+    opPersistLogForCurrentChat().catch(() => {});
+  }, 160);
+}
+
+async function loadOperatorLogForCurrentChat() {
   try {
-    const raw = localStorage.getItem(opLogStorageKey());
-    const rows = raw ? JSON.parse(raw) : [];
+    const id = await opEnsureChatIdForLog();
+    let rows = [];
+    if (id && window.H?.chatGetLogs) {
+      const res = await window.H.chatGetLogs(id);
+      if (Array.isArray(res?.logs)) rows = res.logs;
+    }
+    if (!rows.length) {
+      const raw = localStorage.getItem(opLogStorageKey());
+      rows = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(rows) && rows.length && id && window.H?.chatSetLogs) {
+        window.H.chatSetLogs(id, rows.slice(-300)).catch(() => {});
+      }
+    }
     operatorLogLines = Array.isArray(rows) ? rows.slice(-300) : [];
   } catch (_) {
     operatorLogLines = [];
@@ -2164,7 +2203,7 @@ function opRefresh(){
   if(pauseBtn) pauseBtn.textContent=operatorPaused ? 'Resume' : 'Pause';
   opRender();
 }
-function opClear(){ operatorLogLines=[]; opPersistLogForCurrentChat(); opRender(); }
+function opClear(){ operatorLogLines=[]; opPersistLogForCurrentChat().catch(()=>{}); opRender(); }
 async function opCopy(){
   // Copy log as a structured JSON payload — easier to paste into a bug
   // report / share with another developer than the rendered DOM text.
@@ -2510,6 +2549,7 @@ function toggleOperatorMode() {
     document.body.classList.add('operator-mode-active');
     document.getElementById('operator-mode-btn').classList.add('proc');
     ensureOperatorAgentListener();
+    loadOperatorLogForCurrentChat().catch(()=>{});
     opLoadRuns().catch(()=>{});
     opRefresh();
   } else {
@@ -2521,7 +2561,7 @@ function toggleOperatorMode() {
 
 function opLog(msg, type='info') {
   operatorLogLines.push({time:new Date().toLocaleTimeString(), msg:String(msg), type});
-  opPersistLogForCurrentChat();
+  opSchedulePersistLogForCurrentChat();
   opRender();
   try { if (inspectorTab === 'log') refreshInspectorLog(); } catch (_) {}
 }
