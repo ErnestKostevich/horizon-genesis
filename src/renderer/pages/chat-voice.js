@@ -135,14 +135,23 @@ async function testWakeWord(){
     st.style.color = 'var(--t3)';
     try {
       const blob = new Blob(chunks, { type: rec.mimeType });
-      const text = (typeof transcribeWakeChunk === 'function') ? await transcribeWakeChunk(blob) : '';
-      const match = (typeof matchWakeWord === 'function') ? matchWakeWord(text) : { ok: false, normalized: text || '', reason: 'matcher unavailable' };
-      if (!text) {
-        st.innerHTML = 'Empty transcription - check Groq API key in Settings -> Voice.';
+      // transcribeWakeChunk now returns {ok,text,error}. Old code assumed a
+      // plain string and called .slice on it — that's the "(text || '').slice
+      // is not a function" the user saw on the Test Wake Word button.
+      const result = (typeof transcribeWakeChunk === 'function') ? await transcribeWakeChunk(blob) : { ok: false, text: '', error: 'wake module not loaded' };
+      const text = String(result?.text || '');
+      if (result?.error) {
+        st.innerHTML = 'Transcribe failed: ' + esc(result.error);
         st.style.color = 'var(--red)';
         return;
       }
-      st.innerHTML = `Transcript: <b>"${esc((text || '').slice(0, 120))}"</b><br>` +
+      const match = (typeof matchWakeWord === 'function') ? matchWakeWord(text) : { ok: false, normalized: text, reason: 'matcher unavailable' };
+      if (!text) {
+        st.innerHTML = 'Empty transcription — check voice provider key in Settings → Voice.';
+        st.style.color = 'var(--red)';
+        return;
+      }
+      st.innerHTML = `Transcript: <b>"${esc(text.slice(0, 120))}"</b><br>` +
         `<span style="font:600 11px var(--mono);color:var(--t3)">normalized: ${esc(match.normalized || '')} · ` +
         `wake: <b style="color:${match.ok ? 'var(--green)' : 'var(--warn)'}">${match.ok ? 'YES' : 'NO'}</b>` +
         ` · confidence ${match.confidence || 0} · ${esc(match.reason || '')}</span>`;
