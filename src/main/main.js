@@ -150,7 +150,7 @@ const ALLOWED_KEY_IDS = new Set([
   'gemini', 'groq', 'groq_voice', 'deepseek', 'mistral', 'qwen', 'grok',
   'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
   'perplexity', 'cohere', 'openrouter', 'github', 'google_client_secret',
-  'slack', 'notion', 'linear', 'telegram_bot',
+  'slack', 'notion', 'linear', 'telegram_bot', 'discord_bot',
 ]);
 const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
   'claude', 'openai', 'gemini', 'groq', 'deepseek',
@@ -159,6 +159,7 @@ const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
 ]);
 const ALLOWED_SETTING_KEYS = new Set([
   'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider', 'subagentProvider',
+  'executionMode', 'dockerWorkspaceMount',
   'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
   'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
   'mode', 'searchOn', 'responseProfile',
@@ -2987,6 +2988,8 @@ let screenRecorder = null;
 let githubConnector = null;
 let mcpRegistry = null;
 let connectionsManager = null;
+let executor = null;
+let skillSuggester = null;
 const activeAgentRuns = new Map();
 const pendingAgentSteps = new Map();
 // ── SUBAGENT INFRASTRUCTURE ────────────────────────────────────────────────
@@ -3736,6 +3739,39 @@ function loadAgentModules() {
       console.log('✓ Plugin manager loaded');
     } catch(e) {
       console.error('Plugin manager failed:', e.message);
+    }
+  }
+  if (!executor) {
+    try {
+      const { Executor } = require('./executor');
+      executor = new Executor({
+        settingsStore,
+        workspaceProvider: () => currentWorkspaceRoot(),
+      });
+      module.exports.executor = executor;
+      console.log('✓ Executor loaded (mode:', executor.status().mode + ')');
+    } catch (e) {
+      console.error('Executor failed:', e.message);
+    }
+  }
+  if (!skillSuggester) {
+    try {
+      const { SkillSuggester } = require('./skillSuggester');
+      skillSuggester = new SkillSuggester({
+        emit: (s) => {
+          // Broadcast to ALL renderer windows — the banner UI listens
+          // via H.onSkillSuggestion.
+          try {
+            const wins = BrowserWindow.getAllWindows();
+            for (const w of wins) {
+              if (w && !w.isDestroyed() && w.webContents) w.webContents.send('skill:suggestion', s);
+            }
+          } catch (_) {}
+        },
+      });
+      module.exports.skillSuggester = skillSuggester;
+    } catch (e) {
+      console.error('SkillSuggester failed:', e.message);
     }
   }
   if (!skillsManager) {
@@ -4551,6 +4587,29 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     }
   }
 
+  // PHASE Auto-skill suggester — feed the suggester after each turn so
+  // it can detect repeated query patterns / partial goals. Suggestions
+  // are broadcast to all renderer windows as `skill:suggestion` events.
+  if (skillSuggester) {
+    try {
+      // Refresh known-skill ids so we don't suggest a skill name that
+      // already exists.
+      if (skillsManager && typeof skillsManager.list === 'function') {
+        skillSuggester.setKnownSkills((skillsManager.list() || []).map(s => s.id));
+      }
+      // Find the latest reflection step for this run to feed goal_met.
+      // run-end carries result; reflection step has goalMet. We use the
+      // final answer + (if any) the cached reflection from the agent loop.
+      skillSuggester.ingestTurn(userMessage, {
+        goalMet: result?.reflection?.goalMet || null,
+        answer: result?.answer || '',
+        runId,
+      });
+    } catch (e) {
+      console.warn('SkillSuggester ingestTurn failed:', e.message);
+    }
+  }
+
   return { ...result, runId };
 });
 
@@ -4759,6 +4818,14 @@ ipcMain.handle('workspaceMemoryGet', () => {
     if (!root) return { ok: false, error: 'no workspace open' };
     return { ok: true, root, ...(_getWorkspaceMemory().get(root)) };
   } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Executor status — used by Settings UI to show "Docker available · Y" /
+// "Docker not installed · falling back to host". Read-only, no PRO gate.
+ipcMain.handle('executorStatus', () => {
+  loadAgentModules();
+  if (!executor) return { ok: false, error: 'executor not loaded' };
+  return { ok: true, ...executor.status() };
 });
 
 ipcMain.handle('workspaceMemoryWrite', (_, partial) => {

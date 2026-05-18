@@ -23,6 +23,24 @@ const SKILL_HELPER_TIMEOUT_MAX = 60_000;
 const SKILL_HELPER_TIMEOUT_DEFAULT = 30_000;
 const SKILL_HELPER_OUTPUT_MAX = 1024 * 1024; // 1 MB cap on stdout+stderr
 
+// PHASE Docker — when main.js wires an Executor instance, run_code etc.
+// route through it (host or docker per settingsStore.executionMode).
+// Without an executor the host path is used directly — no regression.
+function _getExecutor() {
+  try {
+    const mainMod = require.cache[require.resolve('./main')];
+    return (mainMod && mainMod.exports && mainMod.exports.executor) || null;
+  } catch (_) { return null; }
+}
+
+async function _routeExec(code, language, timeout) {
+  const exec = _getExecutor();
+  if (exec && typeof exec.run === 'function') {
+    return exec.run(code, language, { timeout });
+  }
+  return executeCode(code, language, timeout);
+}
+
 function _getSkillsManager() {
   // Resolved lazily through main.js's require cache so agent.js stays
   // standalone for tests. Same pattern agentLoop.js uses for settingsStore.
@@ -1283,13 +1301,13 @@ function setMemoryInstance(mem) {
 async function dispatchTool(name, args = {}, ctx = {}) {
   switch (name) {
     case 'run_code':
-      return executeCode(args.code, args.language);
+      return _routeExec(args.code, args.language || 'shell', args.timeout);
     case 'run_powershell':
-      return executeCode(args.code, 'powershell');
+      return _routeExec(args.code, 'powershell', args.timeout);
     case 'run_javascript':
-      return executeCode(args.code, 'javascript');
+      return _routeExec(args.code, 'javascript', args.timeout);
     case 'run_shell':
-      return executeCode(args.code, 'shell');
+      return _routeExec(args.code, 'shell', args.timeout);
     case 'read_file':
       return readFile(args.path);
     case 'write_file':

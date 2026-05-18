@@ -240,6 +240,17 @@ async function loadPanel(){
       modelInput.value = subProv ? ((await H.get(`subagentModel.${subProv}`)) || '') : '';
     }
   } catch(_) {}
+  // PHASE Docker — hydrate execution mode + workspace mount + run a status
+  // probe to tell the user whether Docker is actually installed.
+  try {
+    const execMode = (await H.get('executionMode')) || 'host';
+    const mount = (await H.get('dockerWorkspaceMount')) || 'none';
+    const em = document.getElementById('ms-execution-mode');
+    const mm = document.getElementById('ms-docker-mount');
+    if (em) em.value = execMode;
+    if (mm) mm.value = mount;
+    await refreshExecutorStatus();
+  } catch(_) {}
   await loadSettingsHealth();
 }
 
@@ -773,6 +784,34 @@ async function saveSubagentModel(value) {
     const safeValue = String(value || '').trim();
     await H.set(`subagentModel.${provider}`, safeValue);
   } catch (e) { console.warn('saveSubagentModel failed:', e?.message); }
+}
+
+async function saveExecutionMode(value) {
+  try {
+    const safe = (value === 'docker' || value === 'ask') ? value : 'host';
+    await H.set('executionMode', safe);
+    await refreshExecutorStatus();
+  } catch (e) { console.warn('saveExecutionMode failed:', e?.message); }
+}
+
+async function saveDockerWorkspaceMount(value) {
+  try {
+    const safe = (value === 'read-only' || value === 'read-write') ? value : 'none';
+    await H.set('dockerWorkspaceMount', safe);
+  } catch (e) { console.warn('saveDockerWorkspaceMount failed:', e?.message); }
+}
+
+async function refreshExecutorStatus() {
+  try {
+    const el = document.getElementById('ms-executor-status');
+    if (!el) return;
+    const r = await H.executorStatus?.();
+    if (!r?.ok) { el.textContent = r?.error || 'Executor unavailable.'; return; }
+    const dockerLabel = r.dockerAvailable
+      ? '<span style="color:var(--green)">✓ Docker installed</span>'
+      : '<span style="color:var(--red)">✗ Docker not installed — <code>host</code> fallback in effect</span>';
+    el.innerHTML = `Mode: <strong>${esc(r.mode)}</strong> · ${dockerLabel}${r.dockerLastError ? ' · ' + esc(r.dockerLastError) : ''}`;
+  } catch (e) { /* best-effort */ }
 }
 
 async function saveImageGenerationSetting(key, value){
