@@ -159,6 +159,12 @@ contextBridge.exposeInMainWorld('H', {
   memGetFacts: ()              => ipcRenderer.invoke('memGetFacts'),
   memGetRecent:(lim)           => ipcRenderer.invoke('memGetRecent', lim),
   memSnapshot: (opts)          => ipcRenderer.invoke('memSnapshot', opts),
+  memForgetFact: (key)         => ipcRenderer.invoke('memForgetFact', key),
+  memForgetMemory: (idOrKey)   => ipcRenderer.invoke('memForgetMemory', idOrKey),
+  memEditFact: (key, value)    => ipcRenderer.invoke('memEditFact', key, value),
+  memEditMemory: (idOrKey, p)  => ipcRenderer.invoke('memEditMemory', idOrKey, p),
+  memGetUserProfile: ()        => ipcRenderer.invoke('memGetUserProfile'),
+  memUpdateUserProfile: (p)    => ipcRenderer.invoke('memUpdateUserProfile', p),
   memEmbedStatus: ()           => ipcRenderer.invoke('memEmbedStatus'),
   memEmbedReindex: ()          => ipcRenderer.invoke('memEmbedReindex'),
   onMemoryEmbeddingProgress: (cb) => {

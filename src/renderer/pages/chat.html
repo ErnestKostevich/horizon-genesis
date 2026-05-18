@@ -1165,8 +1165,9 @@
       <div id="insp-subagent-tree" class="insp-empty">No subagents spawned yet. The agent calls <code>spawn_subagent</code> for parallel-friendly research / multi-source lookups (max depth 2, max 4 concurrent).</div>
     </div>
   </div>
-  <!-- Learned tab — facts + memories AgentMemory accumulated. Snapshots via
-       H.memSnapshot. Also surfaces the latest agent reflection (goal_met). -->
+  <!-- Learned tab — facts + memories AgentMemory accumulated + Big Five
+       user profile. Edit/forget UI lets the user curate what Horizon
+       remembers. Snapshots via H.memSnapshot. -->
   <div class="insp-body" id="insp-body-learned" style="display:none">
     <div class="insp-section">
       <div class="insp-h">Latest reflection</div>
@@ -1175,6 +1176,10 @@
     <div class="insp-section">
       <div class="insp-h">Stats</div>
       <div id="insp-learned-stats"><div class="insp-empty">Loading…</div></div>
+    </div>
+    <div class="insp-section">
+      <div class="insp-h">User profile · Big Five + communication style</div>
+      <div id="insp-learned-profile"><div class="insp-empty">Loading profile…</div></div>
     </div>
     <div class="insp-section">
       <div class="insp-h">Known facts about you</div>

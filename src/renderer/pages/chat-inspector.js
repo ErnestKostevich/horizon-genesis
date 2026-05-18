@@ -452,9 +452,16 @@ async function refreshInspectorLearned(){
         factsHost.innerHTML = '<div class="insp-empty">No facts yet — Horizon learns from your conversations.</div>';
       } else {
         factsHost.innerHTML = snap.facts.map(f => `
-          <div class="insp-row" style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-            <span class="v" style="text-align:left;color:var(--tx);font-weight:600;flex-shrink:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.key)}">${esc(f.key)}</span>
-            <span class="k" style="text-align:right;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.value)}">${esc((f.value || '').toString().slice(0, 120))}${f.seen > 1 ? ` <span style="color:var(--t3)">×${f.seen}</span>` : ''}</span>
+          <div class="mem-row mem-fact" data-key="${esc(f.key)}">
+            <div class="mem-row-head">
+              <span class="mem-row-key" title="${esc(f.key)}">${esc(f.key)}</span>
+              <span class="mem-row-source mem-src-${esc(f.lastSource || f.source || 'unknown')}" title="provenance">${esc(f.lastSource || f.source || '?')}</span>
+            </div>
+            <div class="mem-row-val" title="${esc(f.value)}">${esc((f.value || '').toString().slice(0, 200))}${f.seen > 1 ? ` <span class="mem-row-seen">×${f.seen}</span>` : ''}</div>
+            <div class="mem-row-actions">
+              <button class="mem-btn" onclick="_inspEditFact('${esc(f.key)}', this)" title="Edit value">✎</button>
+              <button class="mem-btn mem-btn-danger" onclick="_inspForgetFact('${esc(f.key)}', this)" title="Forget this fact">✕</button>
+            </div>
           </div>
         `).join('');
       }
@@ -464,12 +471,71 @@ async function refreshInspectorLearned(){
       if (!snap.memories.length) {
         memHost.innerHTML = '<div class="insp-empty">No memories yet.</div>';
       } else {
-        memHost.innerHTML = snap.memories.slice(0, 20).map(m => `
-          <div class="insp-row" style="display:block;padding:6px 0;border-bottom:1px solid var(--b1)">
-            <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">${esc(m.category || 'general')}${m.importance ? ` · imp ${m.importance}` : ''}</div>
-            <div style="font-size:11px;color:var(--tx);margin-top:2px;line-height:1.5">${esc((m.content || '').toString().slice(0, 200))}</div>
+        memHost.innerHTML = snap.memories.slice(0, 30).map(m => `
+          <div class="mem-row mem-mem" data-id="${esc(String(m.id))}" data-key="${esc(m.key || '')}">
+            <div class="mem-row-head">
+              <span class="mem-row-cat">${esc(m.category || 'general')}${m.importance ? ` · imp ${m.importance}` : ''}${m.seen > 1 ? ` · seen ${m.seen}` : ''}</span>
+              <span class="mem-row-source mem-src-${esc(m.lastSource || m.source || 'unknown')}" title="provenance">${esc(m.lastSource || m.source || '?')}</span>
+            </div>
+            <div class="mem-row-body">${esc((m.content || '').toString().slice(0, 300))}</div>
+            <div class="mem-row-actions">
+              <button class="mem-btn" onclick="_inspEditMemory('${esc(String(m.id))}', this)" title="Edit content">✎</button>
+              <button class="mem-btn mem-btn-danger" onclick="_inspForgetMemory('${esc(String(m.id))}', this)" title="Forget this memory">✕</button>
+            </div>
           </div>
         `).join('');
+      }
+    }
+    // User Profile (Big Five + communication style) — PHASE 5/8 memory type.
+    const profileHost = document.getElementById('insp-learned-profile');
+    if (profileHost) {
+      const p = snap.userProfile;
+      if (!p) {
+        profileHost.innerHTML = '<div class="insp-empty">User profile not initialised.</div>';
+      } else {
+        const bf = p.bigFive || {};
+        const cs = p.communicationStyle || {};
+        const bigFiveRow = (label, key) => `
+          <div class="mem-bf-row">
+            <span class="mem-bf-label">${label}</span>
+            <input class="mem-bf-slider" type="range" min="0" max="100" step="1" value="${Math.round((bf[key] || 0) * 100)}" oninput="_inspUpdateBigFive('${key}', this.value, this)"/>
+            <span class="mem-bf-val" data-bf="${key}">${Math.round((bf[key] || 0) * 100)}</span>
+          </div>
+        `;
+        profileHost.innerHTML = `
+          <div style="font-size:10px;color:var(--t3);margin-bottom:6px">Confidence ${(p.confidence * 100).toFixed(0)}%${p.observedAt ? ` · last updated ${esc(new Date(p.observedAt).toLocaleString())}` : ''}</div>
+          <div class="mem-bf-group">
+            <div class="mem-bf-h">Big Five (psychological dimensions)</div>
+            ${bigFiveRow('Openness', 'openness')}
+            ${bigFiveRow('Conscientiousness', 'conscientiousness')}
+            ${bigFiveRow('Extraversion', 'extraversion')}
+            ${bigFiveRow('Agreeableness', 'agreeableness')}
+            ${bigFiveRow('Neuroticism', 'neuroticism')}
+          </div>
+          <div class="mem-bf-group">
+            <div class="mem-bf-h">Communication style</div>
+            <div class="mem-bf-row">
+              <span class="mem-bf-label">Formality</span>
+              <select class="mem-bf-select" onchange="_inspUpdateStyle('formality', this.value)">
+                <option value="casual"${cs.formality === 'casual' ? ' selected' : ''}>Casual</option>
+                <option value="mixed"${cs.formality === 'mixed' ? ' selected' : ''}>Mixed</option>
+                <option value="professional"${cs.formality === 'professional' ? ' selected' : ''}>Professional</option>
+              </select>
+            </div>
+            <div class="mem-bf-row">
+              <span class="mem-bf-label">Verbosity</span>
+              <select class="mem-bf-select" onchange="_inspUpdateStyle('verbosity', this.value)">
+                <option value="brief"${cs.verbosity === 'brief' ? ' selected' : ''}>Brief</option>
+                <option value="medium"${cs.verbosity === 'medium' ? ' selected' : ''}>Medium</option>
+                <option value="verbose"${cs.verbosity === 'verbose' ? ' selected' : ''}>Verbose</option>
+              </select>
+            </div>
+            <div class="mem-bf-row">
+              <span class="mem-bf-label">Address</span>
+              <input class="mem-bf-input" type="text" value="${esc(cs.preferredAddress || '')}" placeholder="e.g. Сэр / boss / first name" oninput="_inspUpdateStyle('preferredAddress', this.value)"/>
+            </div>
+          </div>
+        `;
       }
     }
   } catch (e) { /* tab is best-effort */ }
@@ -513,6 +579,76 @@ function refreshInspectorSkills(){
 // Manual reindex hook + live progress updates from the embeddings backfill.
 // Wiring lives here (not in chat.html) so all the inspector-state ownership
 // stays in one file.
+// ── Edit / forget handlers for Learned tab ──────────────────────────────
+// Each updates AgentMemory through IPC, then re-renders the tab. Keep
+// inline so the buttons can call them as `onclick=...`. Fail-soft: any
+// error is shown in chat instead of breaking the inspector.
+window._inspEditFact = async function _inspEditFact(key) {
+  if (!key) return;
+  try {
+    const current = await H.memSnapshot?.({ factLimit: 200 });
+    const existing = (current?.facts || []).find(f => f.key === key);
+    const next = await customPrompt?.(`Edit fact "${key}":`, existing?.value || '');
+    if (next == null) return;
+    const r = await H.memEditFact?.(key, next);
+    if (r?.ok && inspectorTab === 'learned') refreshInspectorLearned();
+    else if (!r?.ok) H.notify?.('Memory', r?.error || 'Could not edit fact');
+  } catch (e) { H.notify?.('Memory', e.message); }
+};
+
+window._inspForgetFact = async function _inspForgetFact(key) {
+  if (!key) return;
+  const ok = await customConfirm?.(`Forget fact "${key}"? This cannot be undone.`, 'Forget');
+  if (!ok) return;
+  try {
+    const r = await H.memForgetFact?.(key);
+    if (r?.ok && inspectorTab === 'learned') refreshInspectorLearned();
+    else if (!r?.ok) H.notify?.('Memory', r?.error || 'Could not forget fact');
+  } catch (e) { H.notify?.('Memory', e.message); }
+};
+
+window._inspEditMemory = async function _inspEditMemory(idOrKey) {
+  if (!idOrKey) return;
+  try {
+    const current = await H.memSnapshot?.({ memLimit: 200 });
+    const mem = (current?.memories || []).find(m => String(m.id) === idOrKey || m.key === idOrKey);
+    const next = await customPrompt?.(`Edit memory:`, mem?.content || '');
+    if (next == null) return;
+    const r = await H.memEditMemory?.(idOrKey, { content: next });
+    if (r?.ok && inspectorTab === 'learned') refreshInspectorLearned();
+    else if (!r?.ok) H.notify?.('Memory', r?.error || 'Could not edit memory');
+  } catch (e) { H.notify?.('Memory', e.message); }
+};
+
+window._inspForgetMemory = async function _inspForgetMemory(idOrKey) {
+  if (!idOrKey) return;
+  const ok = await customConfirm?.('Forget this memory? Sidecar embedding is also dropped.', 'Forget');
+  if (!ok) return;
+  try {
+    const r = await H.memForgetMemory?.(idOrKey);
+    if (r?.ok && inspectorTab === 'learned') refreshInspectorLearned();
+    else if (!r?.ok) H.notify?.('Memory', r?.error || 'Could not forget memory');
+  } catch (e) { H.notify?.('Memory', e.message); }
+};
+
+window._inspUpdateBigFive = async function _inspUpdateBigFive(trait, value, sliderEl) {
+  try {
+    const v = Math.max(0, Math.min(1, (Number(value) || 0) / 100));
+    // Echo the new percent into the label next to the slider for instant
+    // visual feedback before the IPC roundtrip.
+    if (sliderEl) {
+      const lbl = sliderEl.parentElement?.querySelector(`[data-bf="${trait}"]`);
+      if (lbl) lbl.textContent = Math.round(v * 100);
+    }
+    await H.memUpdateUserProfile?.({ bigFive: { [trait]: v } });
+  } catch (e) { console.warn('[profile] bigfive update failed:', e); }
+};
+
+window._inspUpdateStyle = async function _inspUpdateStyle(key, value) {
+  try { await H.memUpdateUserProfile?.({ communicationStyle: { [key]: value } }); }
+  catch (e) { console.warn('[profile] style update failed:', e); }
+};
+
 window._inspReindex = async function _inspReindex(btn) {
   // Visible feedback BEFORE the IPC fires so user sees the click registered
   // even if the backend hangs or fails. Old version relied on the global
