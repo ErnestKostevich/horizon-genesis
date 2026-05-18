@@ -310,6 +310,73 @@ function useSkillNextTurn(id) {
   H.notify?.('Skills', `${id} will be used on the next message`);
 }
 
+// PHASE Auto-skill suggester — when main process detects a repeated
+// pattern (3+ similar queries, optionally with partial goal_met
+// reflections) it emits skill:suggestion. We show a non-blocking banner
+// in chat with two actions: "Create skill" opens the editor pre-filled,
+// "Dismiss" silences this specific pattern for the session.
+function _renderSkillSuggestionBanner(suggestion) {
+  if (!suggestion?.draft?.content) return;
+  // Avoid showing the same banner twice — use a quick dom-id check.
+  const bannerId = 'sk-sugg-' + (suggestion.draft.id || Date.now());
+  if (document.getElementById(bannerId)) return;
+  const msgs = document.getElementById('msgs');
+  if (!msgs) return;
+  const card = document.createElement('div');
+  card.id = bannerId;
+  card.className = 'msg bot sk-sugg-card';
+  const samples = (suggestion.sampleQueries || []).map(q => `<li>${esc(q)}</li>`).join('');
+  card.innerHTML = `
+    <div class="sk-sugg-head">
+      <span class="sk-sugg-icon">💡</span>
+      <strong>Skill suggestion: <code>${esc(suggestion.draft.name)}</code></strong>
+      <span class="sk-sugg-meta">${suggestion.occurrences || 3}× similar requests${suggestion.partials ? ` · ${suggestion.partials} partial` : ''}</span>
+    </div>
+    <div class="sk-sugg-body">${esc(suggestion.draft.description || '')}</div>
+    ${samples ? `<ul class="sk-sugg-samples">${samples}</ul>` : ''}
+    <div class="sk-sugg-actions">
+      <button class="hub-btn primary" onclick="_acceptSkillSuggestion('${esc(bannerId)}')">Create skill</button>
+      <button class="hub-btn" onclick="document.getElementById('${bannerId}')?.remove()">Dismiss</button>
+    </div>
+  `;
+  // Stash the draft on the element so the accept button can read it
+  // without us serialising it through onclick.
+  card._suggestion = suggestion;
+  msgs.appendChild(card);
+  try { msgs.scrollTop = msgs.scrollHeight; } catch (_) {}
+}
+
+window._acceptSkillSuggestion = function (bannerId) {
+  const card = document.getElementById(bannerId);
+  const sugg = card?._suggestion;
+  if (!sugg) return;
+  try {
+    skillsEditing = {
+      id: sugg.draft.id,
+      scope: 'user',
+      content: sugg.draft.content,
+      isNew: true,
+    };
+    openSkillHub?.();
+    skillsTab?.('edit');
+    H.notify?.('Skills', `Editing draft "${sugg.draft.id}" — review and save.`);
+  } catch (e) {
+    H.notify?.('Skills', e.message);
+  }
+  try { card.remove(); } catch (_) {}
+};
+
+// Subscribe once at load. Renderer can have multiple chat-skills.js
+// instances briefly during HMR; guard via a global flag.
+if (!window._skSuggestSubscribed && typeof H?.onSkillSuggestion === 'function') {
+  window._skSuggestSubscribed = true;
+  try {
+    H.onSkillSuggestion((s) => {
+      try { _renderSkillSuggestionBanner(s); } catch (e) { console.warn('skill suggestion render failed:', e); }
+    });
+  } catch (_) {}
+}
+
 async function previewSkillMatchFromCard(id) {
   const q = await customPrompt?.(`Preview match for "${id}" — test query:`, '');
   if (!q) return;
