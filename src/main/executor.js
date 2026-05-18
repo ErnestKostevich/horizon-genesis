@@ -21,7 +21,7 @@
  * 'docker'. UI surfaces this via Executor.status() so the user sees why.
  */
 
-const { exec, execFile, spawn } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const os = require('os');
 const path = require('path');
 
@@ -61,6 +61,15 @@ const DOCKER_RUN_LIMITS = ['--rm', '-i',
   '--tmpfs', '/tmp:rw,exec,size=64m',
 ];
 
+function describeDockerProbeError(err, cli) {
+  if (!err) return '';
+  if (err.code === 'ENOENT') return `${cli} not found on PATH`;
+  if (err.killed || err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT') return `${cli} --version timed out`;
+  if (typeof err.code === 'number') return `${cli} --version failed with exit code ${err.code}`;
+  if (err.code) return `${cli} --version failed (${err.code})`;
+  return `${cli} --version failed`;
+}
+
 class Executor {
   constructor(opts = {}) {
     this.settingsStore = opts.settingsStore || null;
@@ -74,10 +83,10 @@ class Executor {
   _probeDocker() {
     return new Promise(resolve => {
       const cli = IS_WIN ? 'docker.exe' : 'docker';
-      exec(`${cli} --version`, { timeout: 4000 }, (err, stdout) => {
+      execFile(cli, ['--version'], { timeout: 4000, windowsHide: true }, (err) => {
         if (err) {
           this.dockerCli = '';
-          this.dockerLastError = err.message || 'docker not found';
+          this.dockerLastError = describeDockerProbeError(err, cli);
         } else {
           this.dockerCli = cli;
           this.dockerLastError = '';
