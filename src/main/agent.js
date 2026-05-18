@@ -601,6 +601,23 @@ class AgentMemory {
       addMemory(`Project/workflow context (${stamp}): ${user}`, 'project_context', 6);
     }
 
+    // ── Auto-update User Profile from this turn ─────────────────────────
+    // Detects signals in the user's message and nudges Big Five + style
+    // values by small amounts. Signal weights kept SMALL (0.005–0.03 per
+    // turn) so a single accidental "пожалуйста" doesn't tilt the whole
+    // model — confidence rises over many turns. Manual UI edits hit
+    // larger deltas (+0.05) and overwrite the auto path.
+    try {
+      const profileChanges = this._detectProfileSignals(user);
+      if (Object.keys(profileChanges.bigFive || {}).length || Object.keys(profileChanges.communicationStyle || {}).length) {
+        this._applyProfileNudges(profileChanges);
+        learned.push({ type: 'profile', changes: profileChanges });
+      }
+    } catch (e) {
+      // Profile auto-update is best-effort; don't fail the whole turn.
+      console.warn('[profile] auto-update failed:', e?.message);
+    }
+
     this.saveConversation(user, assistant || '', {
       provider: meta.provider,
       model: meta.model,
@@ -615,6 +632,162 @@ class AgentMemory {
     stats.lastTurnAt = stamp;
     this._save();
     return { ok: true, learned: learned.length, items: learned };
+  }
+
+  /**
+   * Inspect a user message for behavioural signals. Returns `partial`
+   * suitable for `updateUserProfile`. Heuristics are intentionally small
+   * (per-turn deltas of 0.005..0.03) so one stray match doesn't move the
+   * model dramatically; signal accumulates over dozens of turns.
+   */
+  _detectProfileSignals(userMessage) {
+    const text = String(userMessage || '');
+    const lc = text.toLowerCase();
+    const bf = {};       // Big Five trait deltas
+    const cs = {};       // communicationStyle direct overwrites
+
+    // ── Communication style (direct settings, not nudges) ──────────────
+    // Explicit instructions — user TELLS us how they want to be addressed.
+    if (/обращайся.*формально|пишите?.*на.*вы\b|please be (more )?formal/i.test(text)) {
+      cs.formality = 'professional';
+    } else if (/без формальностей|на ты|less formal|informally/i.test(text)) {
+      cs.formality = 'casual';
+    }
+    if (/(коротко|короче|brief|shorter|less verbose|tldr|tl;dr)/i.test(text)) {
+      cs.verbosity = 'brief';
+    } else if (/(подробнее|развёрнут|verbose|in detail|more detail|explain.*step.by.step)/i.test(text)) {
+      cs.verbosity = 'verbose';
+    }
+    const callMatch = text.match(/(?:зови меня|обращайся ко мне как|call me|address me as)\s+([^\n.!?,;]{2,32})/i);
+    if (callMatch) cs.preferredAddress = callMatch[1].trim().replace(/[.?!,:;]+$/g, '');
+
+    // Language: very rough character-class check. >60% Cyrillic = ru.
+    const cyrillic = (text.match(/[а-яё]/gi) || []).length;
+    const latin = (text.match(/[a-z]/gi) || []).length;
+    if (cyrillic + latin > 12) {
+      cs.lang = (cyrillic / (cyrillic + latin)) > 0.6 ? 'ru' : 'en';
+    }
+
+    // ── Big Five (tiny nudges, accumulate over turns) ──────────────────
+    // Openness: openness to new experiences, ideas, creativity.
+    if (/(экспериментир|пробу[йе]м.*новое|давай попробуем|let'?s try|experiment|brainstorm|creative|идеи|inspire)/i.test(lc)) {
+      bf.openness = 0.015;
+    }
+    // Conscientiousness: planning, order, methodical work.
+    if (/(по плану|сначала проверим|сначала проверь|step.by.step|methodical|план,? потом|first plan|prioriti[sz]e)/i.test(lc)) {
+      bf.conscientiousness = 0.02;
+    }
+    // Strong demand for thoroughness → conscientiousness up
+    if (/(всегда тестируй|always test|sanity check|double.check|перепроверь|тщательно)/i.test(lc)) {
+      bf.conscientiousness = 0.025;
+    }
+    // Extraversion: social / collaborative phrasing. Rare in coding chat.
+    if (/(давай вместе|let'?s work together|команд[аы]|collaborate|обсудим)/i.test(lc)) {
+      bf.extraversion = 0.01;
+    }
+    // Agreeableness: politeness markers.
+    if (/(пожалуйста|please|спасибо|thanks|thank you|appreciate)/i.test(lc)) {
+      bf.agreeableness = 0.005;
+    }
+    // Neuroticism: stress / anxiety markers.
+    if (/(стресс|переживаю|беспокоит|worried|anxious|урgent|срочно|deadline|panic)/i.test(lc)) {
+      bf.neuroticism = 0.015;
+    }
+    // Negative neuroticism signal — calm, relaxed language.
+    if (/(спокойно|relax|no rush|можно не торопиться|take your time)/i.test(lc)) {
+      bf.neuroticism = -0.01;
+    }
+
+    return { bigFive: bf, communicationStyle: cs };
+  }
+
+  /**
+   * Apply small bigFive deltas (additive, clamped 0..1) and style
+   * overwrites (last-write-wins). Confidence creeps up by 0.005 per
+   * turn that produces any signal, capped at 0.7 — manual UI edits can
+   * still push confidence higher.
+   */
+  _applyProfileNudges(changes) {
+    this._ensureShape();
+    const up = this._data.userProfile;
+    let touched = false;
+    if (changes.bigFive) {
+      for (const [k, delta] of Object.entries(changes.bigFive)) {
+        if (typeof delta !== 'number' || !(k in up.bigFive)) continue;
+        const next = Math.max(0, Math.min(1, (up.bigFive[k] || 0.5) + delta));
+        if (next !== up.bigFive[k]) {
+          up.bigFive[k] = Number(next.toFixed(4));
+          touched = true;
+        }
+      }
+    }
+    if (changes.communicationStyle) {
+      for (const [k, v] of Object.entries(changes.communicationStyle)) {
+        if (!(k in up.communicationStyle)) continue;
+        const safeV = String(v || '').slice(0, 120);
+        if (safeV && safeV !== up.communicationStyle[k]) {
+          up.communicationStyle[k] = safeV;
+          touched = true;
+        }
+      }
+    }
+    if (touched) {
+      up.confidence = Math.min(0.7, (up.confidence || 0) + 0.005);
+      up.observedAt = new Date().toISOString();
+      up.source = MEMORY_SOURCES.LEARN;
+      // _save is called by learnFromTurn at the end; no need to double-save.
+    }
+  }
+
+  /**
+   * Render the user profile as a markdown block ready to inject into the
+   * agent's system prompt. Returns empty string when confidence is too
+   * low to be useful (< 0.2 — we'd be inventing a model without
+   * evidence). The block is short on purpose — a few high-signal bullets,
+   * not the raw schema.
+   */
+  buildUserProfileBlock() {
+    this._ensureShape();
+    const up = this._data.userProfile;
+    if (!up || (up.confidence || 0) < 0.2) return '';
+
+    const lines = [];
+    const cs = up.communicationStyle || {};
+    if (cs.formality && cs.formality !== 'casual') lines.push(`- Address style: ${cs.formality}`);
+    if (cs.preferredAddress) lines.push(`- Address the user as "${cs.preferredAddress}"`);
+    if (cs.verbosity && cs.verbosity !== 'medium') {
+      lines.push(`- Reply length preference: ${cs.verbosity === 'brief' ? 'keep replies short and to the point' : 'detailed, explain step-by-step'}`);
+    }
+
+    // Big Five → behavioural hints. Only mention traits that have moved
+    // noticeably away from the neutral 0.5 baseline. Each hint is
+    // actionable: tells the model what to DO, not just a number.
+    const bf = up.bigFive || {};
+    const hint = (k, low, high, threshold = 0.15) => {
+      const v = bf[k];
+      if (typeof v !== 'number') return null;
+      if (v >= 0.5 + threshold) return high;
+      if (v <= 0.5 - threshold) return low;
+      return null;
+    };
+    const h = [
+      hint('openness',
+        'User prefers proven approaches over novel ones — stick with the standard library and conventional patterns unless asked otherwise.',
+        'User enjoys exploring novel approaches — when relevant, suggest a creative alternative alongside the conventional one.'),
+      hint('conscientiousness',
+        null,
+        'User values methodical work — outline the plan before changing code, include checks/tests, mention edge cases.'),
+      hint('agreeableness',
+        'User prefers direct technical answers without softening language; skip "let me know if you have questions" closers.',
+        null),
+      hint('neuroticism',
+        null,
+        'User signals stress under deadlines — acknowledge urgency, give a short fix path before the deeper explanation.'),
+    ].filter(Boolean);
+    lines.push(...h);
+
+    if (!lines.length) return '';
+    return `\n\n## User profile (confidence ${(up.confidence * 100).toFixed(0)}%)\n${lines.join('\n')}\n`;
   }
 
   // ═══ NUTRITION TRACKING (from jarvis) ═══
