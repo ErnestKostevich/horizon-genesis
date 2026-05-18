@@ -15,8 +15,18 @@ const CONNECTIONS = [
         params: { limit: 'number optional' }
       },
       {
+        name: 'conn_slack_find_channel',
+        desc: '[Connection: Slack] Find a channel by name or partial name. Use before posting if you only know the human channel name.',
+        params: { query: 'string channel name or partial name', limit: 'number optional' }
+      },
+      {
+        name: 'conn_slack_read_messages',
+        desc: '[Connection: Slack] Read recent messages from a channel visible to the bot.',
+        params: { channel: 'string channel id or name', limit: 'number optional' }
+      },
+      {
         name: 'conn_slack_post_message',
-        desc: '[Connection: Slack] Post a message to a Slack channel. Requires permission approval.',
+        desc: '[Connection: Slack] Post a message to a Slack channel id or human channel name. Requires permission approval.',
         params: { channel: 'string channel id or name', text: 'string' }
       }
     ]
@@ -33,9 +43,19 @@ const CONNECTIONS = [
         params: { query: 'string', limit: 'number optional' }
       },
       {
+        name: 'conn_notion_read_page',
+        desc: '[Connection: Notion] Read a page and its first blocks. The page must be shared with the integration.',
+        params: { pageId: 'string Notion page id or URL', blockLimit: 'number optional' }
+      },
+      {
         name: 'conn_notion_create_page',
         desc: '[Connection: Notion] Create a page under a parent page/database. Requires permission approval.',
-        params: { parentId: 'string', title: 'string', content: 'string optional' }
+        params: { parentId: 'string page/database id or URL', parentType: 'page|database optional', title: 'string', content: 'string optional' }
+      },
+      {
+        name: 'conn_notion_append_to_page',
+        desc: '[Connection: Notion] Append paragraph text to an existing page. Requires permission approval.',
+        params: { pageId: 'string Notion page id or URL', content: 'string' }
       }
     ]
   },
@@ -51,9 +71,24 @@ const CONNECTIONS = [
         params: { query: 'string optional', limit: 'number optional' }
       },
       {
+        name: 'conn_linear_list_teams',
+        desc: '[Connection: Linear] List teams so the agent can create issues without guessing team ids.',
+        params: { query: 'string optional', limit: 'number optional' }
+      },
+      {
+        name: 'conn_linear_get_issue',
+        desc: '[Connection: Linear] Get one issue by identifier/id, e.g. HOR-123.',
+        params: { issue: 'string issue id or identifier' }
+      },
+      {
         name: 'conn_linear_create_issue',
-        desc: '[Connection: Linear] Create a Linear issue in a team. Requires permission approval.',
-        params: { teamId: 'string', title: 'string', description: 'string optional' }
+        desc: '[Connection: Linear] Create a Linear issue. team can be team id, key, or name. Requires permission approval.',
+        params: { team: 'string team id/key/name', teamId: 'string optional legacy alias', title: 'string', description: 'string optional' }
+      },
+      {
+        name: 'conn_linear_comment_issue',
+        desc: '[Connection: Linear] Add a comment to an issue. Requires permission approval.',
+        params: { issue: 'string issue id or identifier', body: 'string' }
       }
     ]
   },
@@ -399,16 +434,30 @@ class ConnectionsManager {
     switch (toolName) {
       case 'conn_slack_list_channels':
         return this.slackListChannels(args.limit);
+      case 'conn_slack_find_channel':
+        return this.slackFindChannel(args.query, args.limit);
+      case 'conn_slack_read_messages':
+        return this.slackReadMessages(args.channel, args.limit);
       case 'conn_slack_post_message':
         return this.slackPostMessage(args.channel, args.text);
       case 'conn_notion_search':
         return this.notionSearch(args.query, args.limit);
+      case 'conn_notion_read_page':
+        return this.notionReadPage(args.pageId || args.id, args.blockLimit || args.limit);
       case 'conn_notion_create_page':
-        return this.notionCreatePage(args.parentId, args.title, args.content);
+        return this.notionCreatePage(args.parentId || args.parent, args.title, args.content, args.parentType);
+      case 'conn_notion_append_to_page':
+        return this.notionAppendToPage(args.pageId || args.id, args.content);
       case 'conn_linear_list_issues':
         return this.linearListIssues(args.query, args.limit);
+      case 'conn_linear_list_teams':
+        return this.linearListTeams(args.query, args.limit);
+      case 'conn_linear_get_issue':
+        return this.linearGetIssue(args.issue || args.id || args.identifier);
       case 'conn_linear_create_issue':
-        return this.linearCreateIssue(args.teamId, args.title, args.description);
+        return this.linearCreateIssue(args.team || args.teamId || args.teamKey, args.title, args.description);
+      case 'conn_linear_comment_issue':
+        return this.linearCommentIssue(args.issue || args.issueId || args.identifier, args.body || args.text);
       case 'conn_telegram_get_updates':
         return this.telegramGetUpdates(args.limit, args.offset);
       case 'conn_telegram_send_message':
@@ -444,8 +493,46 @@ class ConnectionsManager {
     return { ok: true, out: jsonOut(channels), channels };
   }
 
+  async slackFindChannel(query = '', limit = 10) {
+    const needle = asText(query, 120).replace(/^#/, '').toLowerCase();
+    const r = await this.slackListChannels(200);
+    if (!r.ok) return r;
+    const channels = (r.channels || [])
+      .filter(c => !needle || String(c.name || '').toLowerCase().includes(needle) || String(c.id || '').toLowerCase() === needle)
+      .slice(0, Math.min(Math.max(Number(limit) || 10, 1), 50));
+    return { ok: true, out: jsonOut(channels), channels };
+  }
+
+  async slackResolveChannel(channel) {
+    const raw = asText(channel, 160).trim();
+    if (!raw) return null;
+    if (/^[CDG][A-Z0-9]{6,}$/i.test(raw)) return raw;
+    const found = await this.slackFindChannel(raw, 5);
+    if (!found.ok) return null;
+    const cleaned = raw.replace(/^#/, '').toLowerCase();
+    const exact = (found.channels || []).find(c => String(c.name || '').toLowerCase() === cleaned);
+    return (exact || found.channels?.[0])?.id || null;
+  }
+
+  async slackReadMessages(channel, limit = 20) {
+    const token = this.token('slack');
+    if (!token) return { ok: false, err: 'Slack token is not configured.' };
+    const channelId = await this.slackResolveChannel(channel);
+    if (!channelId) return { ok: false, err: `Slack channel not found: ${channel || ''}` };
+    const params = new URLSearchParams({ channel: channelId, limit: String(Math.min(Math.max(Number(limit) || 20, 1), 100)) });
+    const res = await fetch(`https://slack.com/api/conversations.history?${params}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await readJson(res);
+    if (!res.ok || data.ok === false) return { ok: false, err: data.error || `Slack HTTP ${res.status}`, data };
+    const messages = (data.messages || []).map(m => ({ ts: m.ts, user: m.user || m.username || m.bot_id || '', text: m.text || '', type: m.type }));
+    return { ok: true, out: jsonOut(messages), channel: channelId, messages };
+  }
+
   async slackPostMessage(channel, text) {
-    return this.slackApi('chat.postMessage', { channel: asText(channel, 120), text: asText(text, 4000) });
+    const channelId = await this.slackResolveChannel(channel);
+    if (!channelId) return { ok: false, err: `Slack channel not found: ${channel || ''}` };
+    return this.slackApi('chat.postMessage', { channel: channelId, text: asText(text, 4000) });
   }
 
   async notionSearch(query = '', limit = 10) {
@@ -471,13 +558,35 @@ class ConnectionsManager {
     return { ok: true, out: jsonOut(results), results };
   }
 
-  async notionCreatePage(parentId, title, content = '') {
+  async notionReadPage(pageId, blockLimit = 25) {
     const token = this.token('notion');
     if (!token) return { ok: false, err: 'Notion token is not configured.' };
-    const parent = String(parentId || '').replace(/-/g, '');
+    const id = normalizeNotionId(pageId);
+    if (!id) return { ok: false, err: 'pageId is required.' };
+    const pageRes = await fetch(`https://api.notion.com/v1/pages/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${token}`, 'Notion-Version': '2022-06-28' }
+    });
+    const page = await readJson(pageRes);
+    if (!pageRes.ok) return { ok: false, err: page.message || `Notion HTTP ${pageRes.status}`, data: page };
+    const params = new URLSearchParams({ page_size: String(Math.min(Math.max(Number(blockLimit) || 25, 1), 100)) });
+    const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${encodeURIComponent(id)}/children?${params}`, {
+      headers: { Authorization: `Bearer ${token}`, 'Notion-Version': '2022-06-28' }
+    });
+    const blocksData = await readJson(blocksRes);
+    if (!blocksRes.ok) return { ok: false, err: blocksData.message || `Notion HTTP ${blocksRes.status}`, data: blocksData };
+    const blocks = (blocksData.results || []).map(blockSummary);
+    const out = { id: page.id, url: page.url, title: extractNotionTitle(page), blocks };
+    return { ok: true, out: jsonOut(out), data: out };
+  }
+
+  async notionCreatePage(parentId, title, content = '', parentType = '') {
+    const token = this.token('notion');
+    if (!token) return { ok: false, err: 'Notion token is not configured.' };
+    const parent = normalizeNotionId(parentId);
     if (!parent) return { ok: false, err: 'parentId is required.' };
+    const type = String(parentType || '').toLowerCase();
     const body = {
-      parent: { page_id: parentId },
+      parent: type === 'database' ? { database_id: parent } : { page_id: parent },
       properties: {
         title: { title: [{ text: { content: asText(title || 'Untitled', 200) } }] }
       },
@@ -499,6 +608,33 @@ class ConnectionsManager {
     const data = await readJson(res);
     if (!res.ok) return { ok: false, err: data.message || `Notion HTTP ${res.status}`, data };
     return { ok: true, out: `Created Notion page: ${data.url || data.id}`, data };
+  }
+
+  async notionAppendToPage(pageId, content = '') {
+    const token = this.token('notion');
+    if (!token) return { ok: false, err: 'Notion token is not configured.' };
+    const id = normalizeNotionId(pageId);
+    const text = asText(content, 1800);
+    if (!id) return { ok: false, err: 'pageId is required.' };
+    if (!text) return { ok: false, err: 'content is required.' };
+    const res = await fetch(`https://api.notion.com/v1/blocks/${encodeURIComponent(id)}/children`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28'
+      },
+      body: JSON.stringify({
+        children: [{
+          object: 'block',
+          type: 'paragraph',
+          paragraph: { rich_text: [{ type: 'text', text: { content: text } }] }
+        }]
+      })
+    });
+    const data = await readJson(res);
+    if (!res.ok) return { ok: false, err: data.message || `Notion HTTP ${res.status}`, data };
+    return { ok: true, out: `Appended to Notion page ${id}`, data };
   }
 
   async linearGraphql(query, variables = {}) {
@@ -530,16 +666,102 @@ class ConnectionsManager {
     return { ok: true, out: jsonOut(issues), issues };
   }
 
-  async linearCreateIssue(teamId, title, description = '') {
+  async linearListTeams(queryText = '', limit = 50) {
+    const first = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    const q = `
+      query Teams($first: Int!, $filter: TeamFilter) {
+        teams(first: $first, filter: $filter) {
+          nodes { id key name description }
+        }
+      }`;
+    const variables = { first };
+    if (queryText) variables.filter = { name: { containsIgnoreCase: asText(queryText, 120) } };
+    const r = await this.linearGraphql(q, variables);
+    if (!r.ok) return r;
+    const teams = r.data?.teams?.nodes || [];
+    return { ok: true, out: jsonOut(teams), teams };
+  }
+
+  async linearResolveTeamId(team) {
+    const raw = asText(team, 120).trim();
+    if (!raw) return '';
+    if (/^[0-9a-f-]{20,}$/i.test(raw)) return raw;
+    const r = await this.linearListTeams(raw, 100);
+    if (!r.ok) return '';
+    const needle = raw.toLowerCase();
+    const exact = (r.teams || []).find(t => String(t.key || '').toLowerCase() === needle || String(t.name || '').toLowerCase() === needle);
+    return (exact || r.teams?.[0])?.id || '';
+  }
+
+  async linearGetIssue(issue) {
+    const raw = asText(issue, 120).trim();
+    if (!raw) return { ok: false, err: 'issue is required.' };
+    const byIdentifier = async () => {
+      const q = `
+        query Issues($first: Int!, $filter: IssueFilter) {
+          issues(first: $first, filter: $filter) {
+            nodes {
+              id identifier title description url priority estimate createdAt updatedAt
+              state { name }
+              team { id key name }
+              assignee { name email }
+              labels { nodes { name } }
+            }
+          }
+        }`;
+      const r = await this.linearGraphql(q, {
+        first: 5,
+        filter: { identifier: { eq: raw.toUpperCase() } }
+      });
+      if (!r.ok) return r;
+      const found = r.data?.issues?.nodes?.[0] || null;
+      return { ok: true, out: jsonOut(found || {}), issue: found };
+    };
+    if (/^[A-Z]+-\d+$/i.test(raw)) return byIdentifier();
+    const q = `
+      query Issue($id: String!) {
+        issue(id: $id) {
+          id identifier title description url priority estimate createdAt updatedAt
+          state { name }
+          team { id key name }
+          assignee { name email }
+          labels { nodes { name } }
+        }
+      }`;
+    const r = await this.linearGraphql(q, { id: raw });
+    if (!r.ok) return r;
+    if (r.data?.issue) return { ok: true, out: jsonOut(r.data.issue), issue: r.data.issue };
+    return byIdentifier();
+  }
+
+  async linearCreateIssue(team, title, description = '') {
+    const teamId = await this.linearResolveTeamId(team);
+    if (!teamId) return { ok: false, err: `Linear team not found: ${team || ''}. Use conn_linear_list_teams first.` };
     const q = `
       mutation IssueCreate($input: IssueCreateInput!) {
         issueCreate(input: $input) { success issue { id identifier title url } }
       }`;
     const r = await this.linearGraphql(q, {
-      input: { teamId: asText(teamId, 80), title: asText(title, 240), description: asText(description, 4000) }
+      input: { teamId, title: asText(title, 240), description: asText(description, 4000) }
     });
     if (!r.ok) return r;
     return { ok: true, out: jsonOut(r.data?.issueCreate || {}), data: r.data?.issueCreate };
+  }
+
+  async linearCommentIssue(issue, body = '') {
+    const raw = asText(issue, 120).trim();
+    const text = asText(body, 4000);
+    if (!raw) return { ok: false, err: 'issue is required.' };
+    if (!text) return { ok: false, err: 'body is required.' };
+    const issueResult = await this.linearGetIssue(raw);
+    if (!issueResult.ok || !issueResult.issue?.id) return issueResult.ok ? { ok: false, err: `Linear issue not found: ${raw}` } : issueResult;
+    const q = `
+      mutation CommentCreate($input: CommentCreateInput!) {
+        commentCreate(input: $input) { success comment { id url body } }
+      }`;
+    const r = await this.linearGraphql(q, { input: { issueId: issueResult.issue.id, body: text } });
+    if (!r.ok) return r;
+    return { ok: true, out: jsonOut(r.data?.commentCreate || {}), data: r.data?.commentCreate };
   }
 
   async telegramApi(method, body, signal) {
@@ -585,6 +807,44 @@ function extractNotionTitle(item) {
     }
   }
   return item?.object || item?.id || 'Untitled';
+}
+
+function normalizeNotionId(value) {
+  const raw = asText(value, 600).trim();
+  if (!raw) return '';
+  const compactMatch = raw.replace(/-/g, '').match(/[0-9a-f]{32}/i);
+  if (!compactMatch) return raw.replace(/-/g, '');
+  const compact = compactMatch[0];
+  return [
+    compact.slice(0, 8),
+    compact.slice(8, 12),
+    compact.slice(12, 16),
+    compact.slice(16, 20),
+    compact.slice(20)
+  ].join('-');
+}
+
+function richTextPlain(rich) {
+  if (!Array.isArray(rich)) return '';
+  return rich.map(part => part?.plain_text || part?.text?.content || '').join('').trim();
+}
+
+function blockSummary(block) {
+  const type = block?.type || 'unknown';
+  const data = block?.[type] || {};
+  let text = '';
+  if (Array.isArray(data.rich_text)) text = richTextPlain(data.rich_text);
+  else if (data.title) text = richTextPlain(data.title);
+  else if (data.caption) text = richTextPlain(data.caption);
+  if (!text && type === 'to_do') text = `${data.checked ? '[x]' : '[ ]'} ${richTextPlain(data.rich_text)}`.trim();
+  if (!text && data.url) text = data.url;
+  if (!text && data.name) text = data.name;
+  return {
+    id: block?.id || '',
+    type,
+    text: text.slice(0, 1200),
+    has_children: Boolean(block?.has_children),
+  };
 }
 
 module.exports = { ConnectionsManager, CONNECTIONS };
