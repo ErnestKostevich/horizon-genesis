@@ -363,27 +363,31 @@ function refreshInspectorSubagents() {
   const parents = Array.from(byParent.entries()).reverse();
   const html = parents.map(([parentId, subs]) => {
     const rows = subs.slice().reverse().map(s => {
-      const statusColor = s.status === 'done' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : 'var(--amb,#facc15)';
-      const statusLabel = s.status === 'done' ? '✓ done' : s.status === 'error' ? '✗ error' : '◌ running';
+      const statusClass = s.status === 'done' ? 'sub-status-done'
+        : s.status === 'error' ? 'sub-status-error'
+        : 'sub-status-running';
+      const statusLabel = s.status === 'done' ? '✓ done'
+        : s.status === 'error' ? '✗ error'
+        : '◌ running';
       const out = s.status === 'done' && s.answer
-        ? `<div style="font-size:10px;color:var(--t2);margin-top:4px;line-height:1.4;border-left:2px solid var(--b2);padding-left:8px">${esc(String(s.answer).slice(0,200))}</div>`
+        ? `<div class="sub-card-out">${esc(String(s.answer).slice(0,200))}</div>`
         : s.status === 'error' && s.error
-        ? `<div style="font-size:10px;color:var(--red);margin-top:4px;line-height:1.4">${esc(String(s.error).slice(0,200))}</div>`
+        ? `<div class="sub-card-err">${esc(String(s.error).slice(0,200))}</div>`
         : '';
       return `
-        <div style="padding:6px 0;border-bottom:1px solid var(--b1)">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-            <span class="v" style="text-align:left;color:var(--tx);font-size:11px">${esc(String(s.task).slice(0,80))}</span>
-            <span style="color:${statusColor};font-size:9px;font-weight:700;text-transform:uppercase">${statusLabel}</span>
+        <div class="sub-card">
+          <div class="sub-card-head">
+            <span class="sub-card-task">${esc(String(s.task).slice(0,80))}</span>
+            <span class="sub-card-status ${statusClass}">${statusLabel}</span>
           </div>
-          <div style="font-size:9px;color:var(--t3);margin-top:2px">depth ${s.depth} · ${s.stepsCount || 0} step${s.stepsCount === 1 ? '' : 's'} · <code style="font-size:9px">${esc(s.runId.split('.').pop() || s.runId.slice(-8))}</code></div>
+          <div class="sub-card-meta">depth ${s.depth} · ${s.stepsCount || 0} step${s.stepsCount === 1 ? '' : 's'} · <code>${esc(s.runId.split('.').pop() || s.runId.slice(-8))}</code></div>
           ${out}
         </div>
       `;
     }).join('');
     return `
-      <div class="insp-row" style="display:block;border:1px solid var(--b1);border-radius:8px;padding:8px 10px;margin-bottom:8px">
-        <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">parent <code style="font-size:9px">${esc(String(parentId).slice(-12))}</code> · ${subs.length} subagent${subs.length === 1 ? '' : 's'}</div>
+      <div class="sub-parent-group">
+        <div class="sub-parent-head">parent <code>${esc(String(parentId).slice(-12))}</code> · ${subs.length} subagent${subs.length === 1 ? '' : 's'}</div>
         ${rows}
       </div>
     `;
@@ -426,7 +430,7 @@ async function refreshInspectorLearned(){
             embedRow = `
               <div class="insp-row"><span class="k">Semantic index</span><span class="v">${status} · ${esc(e.provider || '?')} · ${e.dim}d</span></div>
               ${errLine}
-              <div class="insp-row" style="justify-content:flex-end;padding-top:4px"><button class="hub-btn" onclick="window._inspReindex?.()" title="Recompute embeddings for any memories that don't have one yet">Reindex now</button></div>
+              <div class="insp-row" style="justify-content:flex-end;padding-top:4px"><button class="hub-btn" onclick="window._inspReindex?.(this)" title="Recompute embeddings for any memories that don't have one yet">Reindex now</button></div>
             `;
           } else {
             embedRow = `<div class="insp-row" style="display:block;font-size:10px;color:var(--t3);line-height:1.5">Semantic recall is off — add an OpenAI or Gemini key in Settings → AI Providers and the memory index will populate automatically.</div>`;
@@ -509,19 +513,45 @@ function refreshInspectorSkills(){
 // Manual reindex hook + live progress updates from the embeddings backfill.
 // Wiring lives here (not in chat.html) so all the inspector-state ownership
 // stays in one file.
-window._inspReindex = async function _inspReindex() {
+window._inspReindex = async function _inspReindex(btn) {
+  // Visible feedback BEFORE the IPC fires so user sees the click registered
+  // even if the backend hangs or fails. Old version relied on the global
+  // `event` object which is unreliable in modern Chromium — that's why
+  // "nothing happens" was the user's perception.
+  if (btn && btn instanceof HTMLElement) {
+    btn.disabled = true;
+    btn.dataset._origText = btn.dataset._origText || btn.textContent;
+    btn.textContent = 'Indexing…';
+  }
   try {
-    const btn = event?.currentTarget;
-    if (btn) { btn.disabled = true; btn.textContent = 'Indexing…'; }
+    addMsg?.('bot', '🧠 Reindexing memories — this can take 5-30s depending on memory count and provider.');
     const r = await H.memEmbedReindex?.();
-    if (btn) { btn.disabled = false; btn.textContent = 'Reindex now'; }
-    if (r?.ok) {
-      H.notify?.('Memory', `Embeddings ready — ${r.indexed} indexed${r.failed ? `, ${r.failed} failed` : ''}`);
-      if (inspectorTab === 'learned') refreshInspectorLearned();
-    } else {
-      H.notify?.('Memory', r?.error || 'Reindex failed');
+    if (!r) {
+      addMsg?.('bot', '⚠️ Reindex returned no response — embeddings IPC may not be loaded yet.');
+      return;
     }
-  } catch (e) { H.notify?.('Memory', e.message); }
+    if (inspectorTab === 'learned') refreshInspectorLearned();
+    if (r.indexed > 0) {
+      addMsg?.('bot', `✓ Reindexed **${r.indexed}** memor${r.indexed === 1 ? 'y' : 'ies'}${r.failed ? ` (${r.failed} failed: ${esc(String(r.error || 'unknown')).slice(0, 200)})` : ''}.`);
+    } else if (r.failed > 0) {
+      // Surface the actual error in the chat — user can see what went wrong.
+      addMsg?.('bot', `❌ Reindex failed: ${esc(String(r.error || 'no error message'))}\n\nFix hints:\n• Gemini key may not have embedding-API access — try another key or add an OpenAI key (text-embedding-3-small is cheap).\n• Check console for the raw HTTP error.`);
+    } else if (r.skipped > 0) {
+      addMsg?.('bot', `✓ All ${r.skipped} memories already indexed — nothing to do.`);
+    } else if (r.error) {
+      addMsg?.('bot', `❌ ${esc(String(r.error))}`);
+    } else {
+      addMsg?.('bot', '⚠️ Reindex returned no results.');
+    }
+  } catch (e) {
+    addMsg?.('bot', `❌ Reindex exception: ${esc(e.message)}`);
+    console.error('[reindex] exception:', e);
+  } finally {
+    if (btn && btn instanceof HTMLElement) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._origText || 'Reindex now';
+    }
+  }
 };
 try {
   H.onMemoryEmbeddingProgress?.((p) => {
