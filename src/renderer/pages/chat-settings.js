@@ -565,7 +565,7 @@ async function loadTelegramAllowedUsers() {
   if (inp) inp.value = ids.join(', ');
   if (st) {
     st.textContent = ids.length
-      ? `Owner lock active: ${ids.length} Telegram user ID${ids.length === 1 ? '' : 's'} allowed.`
+      ? `Telegram access active: ${ids.length} user ID${ids.length === 1 ? '' : 's'} allowed.`
       : 'Locked: no Telegram user IDs are allowed yet. Send /start to the bot and it will reply with your Telegram user ID.';
     st.classList.toggle('ok', ids.length > 0);
     st.classList.toggle('bad', ids.length === 0);
