@@ -590,11 +590,27 @@ async function fireWake(){
 
   addMsg('bot', `◈ ${reply}`);
   wakeLastFireAt = Date.now();
-  setTimeout(()=>{
-    if(!wakeActive){ wakePhase='idle'; setWakeBar('idle'); return; }
-    setWakeBar('command');
-    listenForCommand();
-  }, 120);
+  // Wait for TTS to actually finish playing before opening the command
+  // recorder. Otherwise the bot's own voice leaks into the mic (laptop
+  // speakers + AEC ≠ silence), and providers like Deepgram strip the
+  // resulting garbled clip down to an empty transcript. We poll the
+  // existing isSpeaking flag (set by speak() in chat-voice.js) until it
+  // clears + the ECHO_COOLDOWN window passes, with a hard 5s ceiling
+  // so we never get permanently stuck waiting on a broken TTS.
+  const waitStart = Date.now();
+  const MAX_TTS_WAIT = 5000;
+  const tick = () => {
+    if (!wakeActive) { wakePhase='idle'; setWakeBar('idle'); return; }
+    const elapsed = Date.now() - waitStart;
+    const cooled = !isSpeaking && (Date.now() - speakEndTime) >= ECHO_COOLDOWN;
+    if (cooled || elapsed >= MAX_TTS_WAIT) {
+      setWakeBar('command');
+      listenForCommand();
+      return;
+    }
+    setTimeout(tick, 120);
+  };
+  setTimeout(tick, 120);
 }
 
 // Record the command (up to 8 seconds of silence detection)

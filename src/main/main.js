@@ -1057,13 +1057,44 @@ ipcMain.handle('transcribeAudio', async (_, base64Audio, mimeType) => {
       const key = keysStore.get('k_deepgram');
       if (!key) { cleanup(); return { error: 'Deepgram key needed -> Settings -> Voice.' }; }
       const audioData = fs.readFileSync(tmp);
-      const r = await fetch('https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&language=multi', {
+      // Deepgram param tuning for wake/command clips:
+      //  - `smart_format=true` was the previous default; it formats numbers /
+      //    dates / punctuation. On its own that's harmless, but combined with
+      //    `language=multi` it tends to drop low-confidence segments to
+      //    empty for clips that include echo of the bot's TTS reply. We turn
+      //    it off — short transcripts don't need smart formatting anyway.
+      //  - Pick an explicit language code per user setting (ru/en) instead of
+      //    `multi`. Explicit-language gives much more reliable transcripts on
+      //    Nova-2 for short utterances; `multi` was useful when we didn't
+      //    know the user's tongue, but Horizon already has `lang` in
+      //    settings.
+      //  - `punctuate=true` produces cleaner output (capitals + punctuation)
+      //    for the command-send path.
+      //  - `filler_words=false` strips "um/ah" that often poisons matching.
+      const userLang = String(settingsStore.get('lang') || 'en').toLowerCase();
+      const dgLang = userLang.startsWith('ru') ? 'ru' : 'en';
+      const dgParams = new URLSearchParams({
+        model: 'nova-2',
+        language: dgLang,
+        punctuate: 'true',
+        filler_words: 'false',
+      }).toString();
+      const r = await fetch(`https://api.deepgram.com/v1/listen?${dgParams}`, {
         method: 'POST', headers: { 'Authorization': `Token ${key}`, 'Content-Type': mimeType.split(';')[0] }, body: audioData
       });
       const d = await r.json();
       cleanup();
-      if (d.err_msg) return { error: d.err_msg };
-      return { text: d.results?.channels[0]?.alternatives[0]?.transcript || '' };
+      // Deepgram error shapes vary by error class:
+      //   - top-level { err_code, err_msg } for legacy paths
+      //   - { error: "..." } or { message: "..." } for newer / auth errors
+      //   - HTTP 4xx with empty body for rate limits
+      if (!r.ok) {
+        return { error: d?.err_msg || d?.message || d?.error || `Deepgram HTTP ${r.status}` };
+      }
+      if (d?.err_msg || d?.error) {
+        return { error: d.err_msg || (typeof d.error === 'string' ? d.error : 'Deepgram error') };
+      }
+      return { text: d.results?.channels?.[0]?.alternatives?.[0]?.transcript || '' };
     }
 
     cleanup();
