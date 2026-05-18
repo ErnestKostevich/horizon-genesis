@@ -437,12 +437,23 @@ async function refreshInspectorLearned(){
           }
         }
       } catch (_) {}
+      // PHASE 6/8 — FTS stats (in-memory inverted index over memories +
+      // facts + conversations).
+      let ftsRow = '';
+      try {
+        const fts = await H.memFtsStats?.();
+        if (fts?.ok && fts.stats) {
+          const t = fts.stats.byType || {};
+          ftsRow = `<div class="insp-row"><span class="k">FTS index</span><span class="v">${fts.stats.docs} docs · ${fts.stats.tokens} tokens · m${t.memory||0} f${t.fact||0} c${t.conversation||0}</span></div>`;
+        }
+      } catch (_) {}
       statsHost.innerHTML = `
         <div class="insp-row"><span class="k">Facts</span><span class="v">${snap.stats.totalFacts}</span></div>
         <div class="insp-row"><span class="k">Memories</span><span class="v">${snap.stats.totalMemories}</span></div>
         <div class="insp-row"><span class="k">Conversations</span><span class="v">${snap.stats.conversations}</span></div>
         <div class="insp-row"><span class="k">Auto-learned</span><span class="v">${snap.stats.learnedItems}</span></div>
         ${snap.stats.lastLearnedAt ? `<div class="insp-row"><span class="k">Last learned</span><span class="v">${esc(new Date(snap.stats.lastLearnedAt).toLocaleString())}</span></div>` : ''}
+        ${ftsRow}
         ${embedRow}
       `;
     }
@@ -471,19 +482,28 @@ async function refreshInspectorLearned(){
       if (!snap.memories.length) {
         memHost.innerHTML = '<div class="insp-empty">No memories yet.</div>';
       } else {
-        memHost.innerHTML = snap.memories.slice(0, 30).map(m => `
+        memHost.innerHTML = snap.memories.slice(0, 30).map(m => {
+          // PHASE 7/8 — persona badges show which persona(s) re-asserted
+          // the memory. Active persona match boosts recall ×1.2.
+          const personas = Array.isArray(m.personas) ? m.personas : (m.personaId ? [m.personaId] : []);
+          const personaBadges = personas.length
+            ? personas.slice(0, 3).map(p => `<span class="mem-persona" title="persona context">${esc(p)}</span>`).join('')
+            : '';
+          return `
           <div class="mem-row mem-mem" data-id="${esc(String(m.id))}" data-key="${esc(m.key || '')}">
             <div class="mem-row-head">
               <span class="mem-row-cat">${esc(m.category || 'general')}${m.importance ? ` · imp ${m.importance}` : ''}${m.seen > 1 ? ` · seen ${m.seen}` : ''}</span>
               <span class="mem-row-source mem-src-${esc(m.lastSource || m.source || 'unknown')}" title="provenance">${esc(m.lastSource || m.source || '?')}</span>
             </div>
             <div class="mem-row-body">${esc((m.content || '').toString().slice(0, 300))}</div>
+            ${personaBadges ? `<div class="mem-personas">${personaBadges}</div>` : ''}
             <div class="mem-row-actions">
               <button class="mem-btn" onclick="_inspEditMemory('${esc(String(m.id))}', this)" title="Edit content">✎</button>
               <button class="mem-btn mem-btn-danger" onclick="_inspForgetMemory('${esc(String(m.id))}', this)" title="Forget this memory">✕</button>
             </div>
           </div>
-        `).join('');
+          `;
+        }).join('');
       }
     }
     // User Profile (Big Five + communication style) — PHASE 5/8 memory type.
@@ -539,6 +559,38 @@ async function refreshInspectorLearned(){
       }
     }
   } catch (e) { /* tab is best-effort */ }
+
+  // PHASE 8/8 — Workspace memory (committable .horizon/memory.json).
+  // Read-only view; users edit the JSON in their editor of choice (or
+  // via the upcoming workspaceMemoryWrite IPC from an editor plugin).
+  try {
+    const wsHost = document.getElementById('insp-learned-workspace');
+    if (wsHost) {
+      const ws = await H.workspaceMemoryGet?.();
+      if (!ws?.ok) {
+        wsHost.innerHTML = `<div class="insp-empty">${esc(ws?.error || 'No workspace open.')}</div>`;
+      } else if (!ws.exists) {
+        wsHost.innerHTML = `
+          <div class="insp-empty">
+            <p>No <code>.horizon/memory.json</code> in <code>${esc((ws.root || '').slice(-40))}</code>.</p>
+            <p style="font-size:10px;margin-top:6px">Create it to share conventions / glossary / decisions across your team. Commit it to git — every Horizon instance opening the repo loads it automatically.</p>
+          </div>`;
+      } else {
+        const conv = ws.conventions || [];
+        const gloss = ws.glossary || {};
+        const dec = ws.decisions || [];
+        const donot = ws.do_not || [];
+        const partsLines = [];
+        if (ws.workspace?.name) partsLines.push(`<div class="insp-row"><span class="k">Workspace</span><span class="v">${esc(ws.workspace.name)}${ws.workspace.owner ? ` · ${esc(ws.workspace.owner)}` : ''}</span></div>`);
+        partsLines.push(`<div class="insp-row"><span class="k">Conventions</span><span class="v">${conv.length}</span></div>`);
+        partsLines.push(`<div class="insp-row"><span class="k">Glossary</span><span class="v">${Object.keys(gloss).length}</span></div>`);
+        partsLines.push(`<div class="insp-row"><span class="k">Decisions</span><span class="v">${dec.length}</span></div>`);
+        partsLines.push(`<div class="insp-row"><span class="k">Do NOT</span><span class="v">${donot.length}</span></div>`);
+        if ((ws.errors || []).length) partsLines.push(`<div class="insp-row" style="display:block;font-size:9px;color:var(--red);padding:4px 6px">${(ws.errors || []).map(esc).join('<br>')}</div>`);
+        wsHost.innerHTML = partsLines.join('') + `<div style="font-size:9px;color:var(--t3);margin-top:8px">Edit <code>.horizon/memory.json</code> in your editor — auto-reloads on mtime change. Injected into every agent turn's system prompt.</div>`;
+      }
+    }
+  } catch (_) {}
 }
 
 function refreshInspectorSkills(){
