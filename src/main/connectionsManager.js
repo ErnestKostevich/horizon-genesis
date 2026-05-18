@@ -202,6 +202,15 @@ class ConnectionsManager {
     return allowed.length > 0 && allowed.includes(String(userId || '').trim());
   }
 
+  telegramUserIdSetupMessage(userId) {
+    return [
+      `Your Telegram user ID: ${userId}`,
+      '',
+      'Paste this number into Horizon Settings > Connections > Telegram > Allowed Telegram user IDs, then press Save users.',
+      'After that, send any message here and Horizon will reply only to this owner ID.',
+    ].join('\n');
+  }
+
   _emitConnectionsUpdated() {
     try { this.eventBridge?.('connectionsUpdated', { connections: this.list() }); } catch (_) {}
   }
@@ -414,6 +423,14 @@ class ConnectionsManager {
     const user = msg?.from?.username || [msg?.from?.first_name, msg?.from?.last_name].filter(Boolean).join(' ') || 'Telegram user';
     const userLabel = msg?.from?.username ? `@${msg.from.username}` : user;
     if (!this.telegramUserAllowed(userId)) {
+      if (/^\/start(?:\s|$)/i.test(text)) {
+        await this.telegramSendMessage(chatId, this.telegramUserIdSetupMessage(userId));
+        this.telegramLog(
+          `Sent Telegram user ID setup message to ${userId}${userLabel ? ` (${userLabel})` : ''} in chat ${chatId}.`,
+          'setup'
+        );
+        return;
+      }
       this.telegramLog(
         `Blocked Telegram user ${userId}${userLabel ? ` (${userLabel})` : ''} in chat ${chatId}. Add this user ID in Settings > Connections > Telegram to enable replies.`,
         'blocked'
