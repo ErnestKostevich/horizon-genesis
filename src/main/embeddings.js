@@ -208,29 +208,40 @@ class EmbeddingService {
   async _embedGemini(texts) {
     const key = this._key('gemini');
     if (!key) throw new Error('no gemini key');
-    // Gemini batch endpoint
-    const out = [];
-    for (const text of texts) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${encodeURIComponent(key)}`;
-      const res = await this._fetchWithTimeout(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'models/text-embedding-004',
-          content: { parts: [{ text }] },
-          outputDimensionality: this.dim,
-        }),
-      });
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`Gemini embeddings HTTP ${res.status}: ${errText.slice(0, 200)}`);
-      }
-      const data = await res.json();
-      const vec = data?.embedding?.values || [];
-      if (!Array.isArray(vec) || !vec.length) throw new Error('Gemini embeddings: empty vector');
-      out.push(Float32Array.from(vec));
+    // Use the BATCH endpoint — text-embedding-004:batchEmbedContents takes
+    // an array of {content, outputDimensionality} in a single request. The
+    // sequential one-call-per-text path was the cause of "reindex hangs":
+    // 159 memories × ~400ms per request = 60+ seconds with no visible
+    // progress until each batch finished. batchEmbedContents collapses
+    // this to one network round-trip per batch.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key=${encodeURIComponent(key)}`;
+    const body = {
+      requests: texts.map(text => ({
+        model: 'models/text-embedding-004',
+        content: { parts: [{ text }] },
+        outputDimensionality: this.dim,
+      })),
+    };
+    const res = await this._fetchWithTimeout(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Gemini embeddings HTTP ${res.status}: ${errText.slice(0, 300)}`);
     }
-    return out;
+    const data = await res.json();
+    if (!Array.isArray(data?.embeddings)) {
+      // Some Gemini API tiers / wrong-model errors return a wrapped error
+      // object instead of an HTTP failure. Make the message visible.
+      throw new Error(`Gemini embeddings: malformed response (${JSON.stringify(data).slice(0, 200)})`);
+    }
+    return data.embeddings.map(e => {
+      const vec = e?.values || [];
+      if (!Array.isArray(vec) || !vec.length) return null;
+      return Float32Array.from(vec);
+    });
   }
 
   async _fetchWithTimeout(url, init) {
@@ -351,24 +362,42 @@ class EmbeddingService {
     }
     let indexed = 0;
     let failed = 0;
+    let consecutiveTotalFailures = 0;  // count batches where 100% failed
     for (let i = 0; i < work.length; i += BATCH_SIZE) {
       const slice = work.slice(i, i + BATCH_SIZE);
       const vecs = await this.embedBatch(slice.map(s => s.text));
+      let batchOk = 0;
+      let batchFail = 0;
       for (let j = 0; j < slice.length; j++) {
         const vec = vecs[j];
         if (vec && vec.length) {
           this.setVector(slice[j].key, vec);
           indexed++;
+          batchOk++;
         } else {
           failed++;
+          batchFail++;
         }
       }
       // Save after every batch — interrupted runs keep partial progress.
       this.saveSidecar();
       onProgress({ done: i + slice.length, total: work.length, indexed, failed, lastError: this.lastError });
-      if (failed >= 3 && this.lastError) break; // bail on persistent failures
+      // Bail only if TWO batches in a row had zero success — that's almost
+      // certainly an auth/quota/network issue, not a per-item bad input.
+      if (batchOk === 0 && batchFail > 0) {
+        consecutiveTotalFailures++;
+        if (consecutiveTotalFailures >= 2) break;
+      } else {
+        consecutiveTotalFailures = 0;
+      }
     }
-    return { ok: failed === 0, indexed, failed, skipped: items.length - work.length };
+    return {
+      ok: indexed > 0 && failed === 0,
+      indexed,
+      failed,
+      skipped: items.length - work.length,
+      error: failed > 0 ? this.lastError : '',
+    };
   }
 }
 

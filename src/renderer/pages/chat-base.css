@@ -1444,6 +1444,24 @@ body:not(.settings-scroll) .ps-toc { display: none !important; }
 .tg-empty strong{display:block;font-size:13px;color:var(--t2);margin-bottom:6px}
 .tg-empty p{font-size:11px;line-height:1.6;margin-top:6px}
 
+/* Subagent inspector tab — tree of parent run → child runs. Each child shows
+   task / depth / step count / status badge + optional answer/error preview. */
+.sub-parent-group{display:block;border:1px solid var(--b1);border-radius:8px;padding:8px 10px;margin-bottom:8px;background:rgba(255,255,255,.015)}
+.sub-parent-head{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.sub-parent-head code{font-size:9px;background:rgba(255,255,255,.04);padding:1px 4px;border-radius:3px}
+.sub-card{padding:6px 0;border-bottom:1px solid var(--b1)}
+.sub-card:last-child{border-bottom:none}
+.sub-card-head{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.sub-card-task{text-align:left;color:var(--tx);font-size:11px;line-height:1.4}
+.sub-card-meta{font-size:9px;color:var(--t3);margin-top:2px}
+.sub-card-meta code{font-size:9px;background:rgba(255,255,255,.04);padding:1px 4px;border-radius:3px}
+.sub-card-status{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.sub-status-running{color:var(--amb,#facc15)}
+.sub-status-done{color:var(--green,#34d399)}
+.sub-status-error{color:var(--red,#f87171)}
+.sub-card-out{font-size:10px;color:var(--t2);margin-top:4px;line-height:1.4;border-left:2px solid var(--b2);padding-left:8px}
+.sub-card-err{font-size:10px;color:var(--red,#f87171);margin-top:4px;line-height:1.4}
+
 /* Empty state */
 .empty-state{text-align:center;padding:50px 20px;color:var(--t3)}
 .empty-state .es-icon{font-size:48px;margin-bottom:16px;opacity:.4}
