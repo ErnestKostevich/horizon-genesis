@@ -142,10 +142,20 @@ const MEMORY_SOURCES = Object.freeze({
   IMPORT: 'import',             // bulk import / migration
 });
 
+// Lazy-loaded FTS index (PHASE 6/8). Pure-JS inverted index, no native
+// deps. Built in-memory on AgentMemory.init() from existing memories +
+// conversations; kept incremental thereafter.
+const { InvertedIndex } = require('./memoryFts');
+
 class AgentMemory {
   constructor(dbPath) {
     this.filePath = dbPath.replace(/\.db$/, '.json');
     this.ready = false;
+    this.fts = new InvertedIndex();
+    // Active persona id at the time of write — captured in remember()
+    // when caller doesn't pass an explicit personaId. Set by main.js
+    // via setActivePersona() so AgentMemory doesn't import settingsStore.
+    this._activePersonaId = '';
     this._data = {
       memories: [],
       facts: {},
@@ -261,11 +271,42 @@ class AgentMemory {
         this._save();
       }
       this.ready = true;
+      // PHASE 6/8 — build FTS index from existing memories +
+      // conversations. Cheap (~30ms for 2000 entries on a modern laptop)
+      // and avoids sidecar IO. Re-built on every app restart.
+      this._rebuildFts();
     } catch (e) {
       console.error('Memory init error:', e.message);
       this.ready = true;
     }
     return true;
+  }
+
+  setActivePersona(id) {
+    this._activePersonaId = String(id || '');
+  }
+
+  _rebuildFts() {
+    try {
+      this.fts = new InvertedIndex();
+      for (const m of this._data.memories || []) {
+        if (m && m.content) {
+          this.fts.add(m.key || ('mem-' + m.id), m.content, {
+            type: 'memory', personaId: m.personaId || null, kind: m.category || 'general'
+          });
+        }
+      }
+      for (const [k, v] of Object.entries(this._data.facts || {})) {
+        const value = (v && typeof v === 'object') ? v.value : v;
+        if (value) this.fts.add('fact:' + k, `${k} ${value}`, { type: 'fact', kind: k });
+      }
+      for (const c of this._data.conversations || []) {
+        const txt = `${c.user || ''} ${c.assistant || ''}`.trim();
+        if (txt) this.fts.add('conv:' + c.id, txt, { type: 'conversation', kind: c.source || 'chat' });
+      }
+    } catch (e) {
+      console.warn('FTS rebuild failed:', e.message);
+    }
   }
 
   _save() {
@@ -280,13 +321,16 @@ class AgentMemory {
   // `source` (PHASE: memory provenance) records WHERE the memory came from
   // — chat / agent_task / telegram / tool / learn / manual — so the
   // review UI can show provenance and let users selectively forget.
-  remember(content, category, importance, source) {
+  // `personaId` (PHASE 7/8) ties the memory to a specific persona so
+  // recall can boost matches when that persona is active.
+  remember(content, category, importance, source, personaId) {
     if (!this.ready || !content) return null;
     this._ensureShape();
     const normalized = this._normalizeText(content);
     if (!normalized) return null;
     const key = this._memoryKey(normalized, category || 'general');
     const tag = String(source || MEMORY_SOURCES.TOOL);
+    const persona = String(personaId || this._activePersonaId || '');
     const existing = this._data.memories.find(m => m.key === key);
     if (existing) {
       existing.lastSeen = Date.now();
@@ -295,6 +339,13 @@ class AgentMemory {
       // Track the most recent source we observed this memory from. Useful
       // for the UI ("seen 3 times — last from telegram").
       if (tag) existing.lastSource = tag;
+      // Track which personas have re-asserted this memory. Stored as a
+      // small set on the record so recall can boost without overwriting
+      // the original persona.
+      if (persona) {
+        existing.personas = Array.isArray(existing.personas) ? existing.personas : (existing.personaId ? [existing.personaId] : []);
+        if (!existing.personas.includes(persona)) existing.personas.push(persona);
+      }
       this._save();
       return existing;
     }
@@ -309,19 +360,23 @@ class AgentMemory {
       importance: importance || 5,
       source: tag,
       lastSource: tag,
+      personaId: persona || null,
+      personas: persona ? [persona] : [],
     };
     this._data.memories.push(item);
     // Limit to last 2000 memories
     if (this._data.memories.length > 2000) {
       const dropped = this._data.memories.splice(0, this._data.memories.length - 2000);
-      // Drop their embeddings too — sidecar would otherwise hold orphans.
+      // Drop their embeddings + FTS too — sidecar would otherwise hold orphans.
       if (this.embeddings) {
         for (const m of dropped) this.embeddings.removeVector(m.key);
         try { this.embeddings.saveSidecar(); } catch (_) {}
       }
+      try { for (const m of dropped) this.fts.remove(m.key); } catch (_) {}
     }
     this._save();
-    // Fire-and-forget: index the new memory in the background.
+    // Index in FTS (sync, in-memory — cheap) + embedding (async, network).
+    try { this.fts.add(item.key, item.content, { type: 'memory', personaId: item.personaId, kind: item.category }); } catch (_) {}
     this._queueEmbedding(item.key);
     return item;
   }
@@ -347,6 +402,9 @@ class AgentMemory {
       lastSource: tag,
     };
     this._save();
+    // PHASE 6/8 — keep FTS in sync with facts so a query like "yerba mate"
+    // can surface the fact alongside any memories.
+    try { this.fts.add('fact:' + safeKey, `${safeKey} ${safeValue}`, { type: 'fact', kind: safeKey }); } catch (_) {}
     return true;
   }
 
@@ -357,6 +415,7 @@ class AgentMemory {
     const safeKey = this._normalizeText(key, 120);
     if (!safeKey || !(safeKey in this._data.facts)) return false;
     delete this._data.facts[safeKey];
+    try { this.fts.remove('fact:' + safeKey); } catch (_) {}
     this._save();
     return true;
   }
@@ -365,15 +424,20 @@ class AgentMemory {
     if (!this.ready) return false;
     this._ensureShape();
     const target = String(idOrKey || '');
+    // Capture the actual memory keys we're dropping so we can also clean
+    // FTS + embeddings sidecar (target might be the id, not the key).
+    const dropping = this._data.memories.filter(m => String(m.id) === target || m.key === target);
     const before = this._data.memories.length;
     this._data.memories = this._data.memories.filter(m => String(m.id) !== target && m.key !== target);
     const removed = before - this._data.memories.length;
-    if (removed > 0 && this.embeddings) {
-      // Also drop sidecar embeddings for the forgotten memory(s).
-      try {
-        for (const key of [target]) this.embeddings.removeVector(key);
-        this.embeddings.saveSidecar();
-      } catch (_) {}
+    if (removed > 0) {
+      if (this.embeddings) {
+        try {
+          for (const m of dropping) this.embeddings.removeVector(m.key);
+          this.embeddings.saveSidecar();
+        } catch (_) {}
+      }
+      try { for (const m of dropping) this.fts.remove(m.key); } catch (_) {}
     }
     this._save();
     return removed > 0;
@@ -512,6 +576,14 @@ class AgentMemory {
    *
    * Returns the same record shape as recall() plus {semantic, kw, score}.
    */
+  /** Pure FTS search across memories + facts + conversations. Returns
+   *  flat results with `{id, score, meta}`. Used by Inspector + advanced
+   *  search; semanticRecall blends a small share of this signal into its
+   *  ranking. */
+  ftsSearch(query, limit = 20) {
+    return this.fts.search(query, limit);
+  }
+
   async semanticRecall(query, limit, opts = {}) {
     this._ensureShape();
     const q = String(query || '').trim();
@@ -524,26 +596,55 @@ class AgentMemory {
     catch (e) { /* fall through */ }
     if (!queryVec) return this.recall(q, lim);
 
-    const semWeight = typeof opts.semanticWeight === 'number' ? opts.semanticWeight : 0.6;
-    const kwWeight = 1 - semWeight;
+    // Weighted blend across three signals:
+    //   semantic (cosine, 0..1)  ×  default 0.55
+    //   keyword (normalised, 0..1)  ×  default 0.30
+    //   FTS (normalised, 0..1)       ×  default 0.15  ← PHASE 6/8
+    // Plus PHASE 7/8 persona boost: ×1.2 when the memory's personaId
+    // matches the currently-active persona.
+    const semWeight = typeof opts.semanticWeight === 'number' ? opts.semanticWeight : 0.55;
+    const kwWeight  = typeof opts.kwWeight === 'number' ? opts.kwWeight : 0.30;
+    const ftsWeight = typeof opts.ftsWeight === 'number' ? opts.ftsWeight : 0.15;
+    const activePersona = String(opts.activePersona || this._activePersonaId || '');
+    const personaBoost = typeof opts.personaBoost === 'number' ? opts.personaBoost : 1.2;
+
     const kw = this._keywordScore(q);
-    // Normalise keyword scores to [0,1] for blending. Empirically a kwScore
-    // above ~18 is "strong match" (importance up to 10 + matches × 4 + ...).
     const kwMax = Math.max(1, ...kw.map(m => m.kwScore || 0));
+    // FTS scores keyed by memory key (FTS adds memories with their key
+    // directly). Normalise so the blend weight is meaningful.
+    const ftsResults = this.ftsSearch(q, 200);
+    const ftsByKey = new Map();
+    const ftsMax = Math.max(1, ...ftsResults.map(r => r.score));
+    for (const r of ftsResults) {
+      if (r.meta?.type === 'memory') ftsByKey.set(r.id, r.score / ftsMax);
+    }
+
     const blended = kw.map(m => {
       const vec = this.embeddings.index.get(m.key);
       const sem = vec ? Math.max(0, require('./embeddings').cosine(queryVec, vec)) : 0;
       const kwNorm = (m.kwScore || 0) / kwMax;
-      const score = (semWeight * sem) + (kwWeight * kwNorm);
-      return { ...m, semantic: Number(sem.toFixed(4)), kw: Number(kwNorm.toFixed(4)), score: Number(score.toFixed(4)) };
+      const ftsNorm = ftsByKey.get(m.key) || 0;
+      let score = (semWeight * sem) + (kwWeight * kwNorm) + (ftsWeight * ftsNorm);
+      const personaMatch = activePersona && (m.personaId === activePersona || (Array.isArray(m.personas) && m.personas.includes(activePersona)));
+      if (personaMatch) score *= personaBoost;
+      return {
+        ...m,
+        semantic: Number(sem.toFixed(4)),
+        kw: Number(kwNorm.toFixed(4)),
+        fts: Number(ftsNorm.toFixed(4)),
+        personaMatch: !!personaMatch,
+        score: Number(score.toFixed(4)),
+      };
     });
-    // Require some signal — either decent semantic overlap (≥0.18, the
-    // empirical "vaguely related" floor for small-256 embeddings) or any
-    // keyword match. Avoids dumping unrelated memories at low cutoffs.
+    // Require some signal — semantic, keyword, or FTS.
     return blended
-      .filter(m => m.semantic >= 0.18 || m.matches > 0)
+      .filter(m => m.semantic >= 0.18 || m.matches > 0 || m.fts >= 0.15)
       .sort((a, b) => (b.score - a.score) || (b.importance - a.importance) || (b.created - a.created))
       .slice(0, lim);
+  }
+
+  ftsStats() {
+    return this.fts.stats();
   }
 
   embeddingStatus() {
@@ -834,17 +935,29 @@ class AgentMemory {
     if (!this.ready) return;
     this._ensureShape();
     const safeMeta = meta && typeof meta === 'object' ? meta : {};
+    const convId = Date.now();
+    const userText = this._normalizeText(userMessage, 1600);
+    const assistantText = this._normalizeText(assistantReply, 1600);
     this._data.conversations.push({
-      id: Date.now(),
-      user: this._normalizeText(userMessage, 1600),
-      assistant: this._normalizeText(assistantReply, 1600),
+      id: convId,
+      user: userText,
+      assistant: assistantText,
       meta: safeMeta,
       source: safeMeta.source || MEMORY_SOURCES.CHAT,
       time: new Date().toISOString()
     });
+    // PHASE 6/8 — FTS index gets each conversation so search can return
+    // historical turns alongside facts/memories. Capped via the 500-conv
+    // limit below.
+    try {
+      this.fts.add('conv:' + convId, `${userText} ${assistantText}`, {
+        type: 'conversation', kind: safeMeta.source || MEMORY_SOURCES.CHAT,
+      });
+    } catch (_) {}
     // Keep last 500 conversations
     if (this._data.conversations.length > 500) {
-      this._data.conversations = this._data.conversations.slice(-500);
+      const dropped = this._data.conversations.splice(0, this._data.conversations.length - 500);
+      try { for (const d of dropped) this.fts.remove('conv:' + d.id); } catch (_) {}
     }
     this._save();
   }
