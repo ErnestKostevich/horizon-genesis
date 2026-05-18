@@ -3,15 +3,24 @@
 // Output formats:
 //   --json   (default in non-TTY) → one JSON object per line (NDJSON).
 //            Last line has type='run-end' with the full result.
-//   --human  (default in TTY) → pretty step-by-step with spinner.
+//   --human  (default in TTY) → live step rail with gradient spinner.
 //   --quiet  → only the final answer.
+//
+// Live step rail features:
+//   - GradientSpinner during thinking/executing phases
+//   - Plan printed as a tree on first plan event
+//   - Each tool result committed as a fixed line (✓ or ✗)
+//   - Reflection epilogue colour-coded (green/yellow/red)
+//   - Markdown rendering for the final answer
 //
 // Permission flags:
 //   --auto-approve   approve every tool call (for unattended cron)
 //   --never-approve  reject every tool call (read-only safe mode)
 //   default          interactive prompt for shell/file-write tools
 
-const { fmt, Spinner, promptYesNo, isTTY } = require('../tty');
+const { fmt, promptYesNo, isTTY } = require('../tty');
+const { renderMarkdown } = require('../markdown');
+const { GradientSpinner } = require('../banner');
 
 function fmtArgs(a) {
   if (!a) return '';
@@ -30,16 +39,16 @@ async function run({ runtime, args, flags }) {
 
   const human = flags.human || (!flags.json && isTTY);
   const quiet = !!flags.quiet;
+  const wantMarkdown = human && !quiet && !flags.plain;
 
   let spinner = null;
   if (human && !quiet) {
-    spinner = new Spinner('starting…').start();
+    spinner = new GradientSpinner('starting…').start();
   }
 
   const askPermission = async ({ tool, args, reason }) => {
     if (flags['auto-approve']) return true;
     if (flags['never-approve']) return false;
-    // Only prompt for destructive-ish tools. Read-only is auto.
     const dangerous = /^(run_code|run_shell|run_python|write_file|delete_file|move_file|conn_.*_send|conn_.*_post|conn_.*_create|conn_.*_append|conn_.*_comment|mouse_click|mouse_drag|keyboard_type|keyboard_press|click_image|smart_click)$/i.test(tool);
     if (!dangerous) return true;
     if (spinner) spinner.stop();
@@ -47,7 +56,7 @@ async function run({ runtime, args, flags }) {
       fmt.warn(`approve ${fmt.bold(tool)} ${fmt.dim(fmtArgs(args))}? ${fmt.dim('(' + (reason || 'agent step') + ')')}\n`)
     );
     const ok = await promptYesNo(fmt.cyan('  y/N:'));
-    if (human && !quiet) spinner = new Spinner('working…').start();
+    if (human && !quiet) spinner = new GradientSpinner('working…').start();
     return ok;
   };
 
@@ -60,13 +69,18 @@ async function run({ runtime, args, flags }) {
     switch (event.type) {
       case 'plan':
         if (spinner) spinner.stop();
-        process.stderr.write(fmt.bold('plan') + ' ' +
-          (event.plan?.steps || []).map((s, i) =>
-            `\n  ${fmt.dim((i+1) + '.')} ${s}`).join('') + '\n');
-        spinner = new Spinner('working…').start();
+        if (event.plan?.steps?.length) {
+          process.stderr.write('\n' + fmt.bold('plan') + '\n');
+          event.plan.steps.forEach((s, i) => {
+            const txt = typeof s === 'string' ? s : (s.text || JSON.stringify(s));
+            process.stderr.write(`  ${fmt.dim((i + 1) + '.')} ${txt}\n`);
+          });
+          process.stderr.write('\n');
+        }
+        spinner = new GradientSpinner('working…').start();
         break;
       case 'thinking':
-        if (spinner) spinner.update('thinking… ' + (event.text ? event.text.slice(0, 60) : ''));
+        if (spinner) spinner.update(event.message || 'thinking…');
         break;
       case 'executing':
         if (spinner) spinner.update(`${event.tool}(${fmtArgs(event.args)})`);
@@ -74,27 +88,28 @@ async function run({ runtime, args, flags }) {
       case 'result':
         if (spinner) spinner.stop();
         if (event.ok) {
-          process.stderr.write(fmt.arrow(`${fmt.cyan(event.tool)} ${fmt.dim(fmtArgs(event.args))}`) + '\n');
-          const out = (event.result?.out || event.result?.results ? JSON.stringify(event.result?.results) : '') || '';
-          if (out) {
-            const trimmed = out.length > 120 ? out.slice(0, 117) + '…' : out;
-            process.stderr.write('  ' + fmt.dim(trimmed) + '\n');
+          const tag = fmt.green('✓');
+          process.stderr.write(`  ${tag} ${fmt.cyan(event.tool)} ${fmt.dim(fmtArgs(event.args))}\n`);
+          const out = String(event.result?.out || '');
+          if (out && out.length < 400) {
+            for (const l of out.split('\n').slice(0, 4)) {
+              process.stderr.write('    ' + fmt.dim(l) + '\n');
+            }
           }
         } else {
-          process.stderr.write(fmt.err(`${event.tool} failed: ${event.result?.err || event.result?.error || 'unknown'}`) + '\n');
+          const err = event.result?.err || event.result?.error || 'unknown';
+          process.stderr.write(`  ${fmt.red('✗')} ${fmt.cyan(event.tool)} ${fmt.red(String(err).slice(0, 120))}\n`);
         }
-        spinner = new Spinner('thinking…').start();
+        spinner = new GradientSpinner('thinking…').start();
         break;
       case 'reflection':
         if (spinner) spinner.stop();
-        const tag = event.goalMet === 'yes' ? fmt.green('goal-met')
-                  : event.goalMet === 'partial' ? fmt.yellow('partial')
-                  : fmt.red('not-met');
-        process.stderr.write(
-          fmt.dim('reflection ') + tag +
-          fmt.dim(` confidence=${event.confidence || '?'}`) + '\n'
-        );
-        spinner = new Spinner('thinking…').start();
+        const tag = event.goalMet === 'yes' ? fmt.green('● goal met')
+                  : event.goalMet === 'partial' ? fmt.yellow('● partial')
+                  : fmt.red('● not met');
+        const conf = event.confidence ? fmt.dim(` confidence=${event.confidence}`) : '';
+        process.stderr.write(`  ${tag}${conf}\n`);
+        spinner = new GradientSpinner('finishing…').start();
         break;
     }
   };
@@ -126,7 +141,7 @@ async function run({ runtime, args, flags }) {
       return 1;
     }
     if (result.answer) {
-      process.stdout.write('\n' + result.answer.trim() + '\n');
+      process.stdout.write('\n' + (wantMarkdown ? renderMarkdown(result.answer) : result.answer.trim()) + '\n');
     }
     if (human && !quiet) {
       process.stderr.write(

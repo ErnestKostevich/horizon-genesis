@@ -350,6 +350,31 @@ function createHorizonRuntime(opts = {}) {
     return r;
   }
 
+  // Streaming variant — emits onToken(chunk) as the AI produces each token,
+  // resolves to the same final {reply, model, usage, error?} shape.
+  async function runChatStream(message, opts = {}, onToken = () => {}) {
+    const provider = opts.provider || settingsStore.get('provider') || 'gemini';
+    const lang = opts.lang || settingsStore.get('lang') || 'en';
+    const system = buildSystemPrompt({
+      lang,
+      persona: opts.persona,
+      system: opts.system,
+    });
+    const history = Array.isArray(opts.history) ? opts.history : [];
+    const messages = [...history, { role: 'user', content: message }];
+    const r = await aiClient.completeStream(messages, {
+      provider, model: opts.model, system,
+    }, onToken);
+    if (r.reply && !opts.skipLearn) {
+      try {
+        agentMemory.learnFromTurn(message, r.reply, {
+          source: 'cli-chat-stream', provider, model: r.model, persona: opts.persona,
+        });
+      } catch (_) {}
+    }
+    return r;
+  }
+
   return {
     // Stores
     keysStore, settingsStore, userDataDir, workspaceDir,
@@ -358,7 +383,7 @@ function createHorizonRuntime(opts = {}) {
     personas, executor, skillsManager, connectionsManager,
     aiClient,
     // High-level entry points
-    runAgent, runChat,
+    runAgent, runChat, runChatStream,
     buildSystemPrompt,
     // Raw access for advanced consumers (TUI, serve)
     dispatchTool: async (name, args) => {
