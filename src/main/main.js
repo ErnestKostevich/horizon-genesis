@@ -1673,6 +1673,20 @@ function _getProjectConfig() {
 module.exports.getProjectConfig = _getProjectConfig;
 module.exports.currentWorkspaceRoot = currentWorkspaceRoot;
 
+// PHASE 8/8 — Workspace memory loader. Reads .horizon/memory.json on
+// demand; agentLoop injects it into the system prompt right after the
+// project rules block. Cache-invalidated by mtime; manual edits via
+// the renderer go through writeWorkspaceMemory IPC.
+let _workspaceMemory = null;
+function _getWorkspaceMemory() {
+  if (!_workspaceMemory) {
+    const { WorkspaceMemory } = require('./workspaceMemory');
+    _workspaceMemory = new WorkspaceMemory();
+  }
+  return _workspaceMemory;
+}
+module.exports.getWorkspaceMemory = _getWorkspaceMemory;
+
 ipcMain.handle('projectConfigGet', () => {
   try {
     const root = currentWorkspaceRoot();
@@ -4150,8 +4164,14 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       // "user told me they work on Horizon Genesis") now surface their
       // matching memory. Falls back to keyword recall on missing key or
       // embedding failure, no regression.
+      // Tell AgentMemory which persona is active so any remember()
+      // call during this turn is tagged correctly. PHASE 7/8.
+      const personaForMemory = opts.personaId || settingsStore.get('persona') || 'jarvis';
+      if (typeof agentMemory.setActivePersona === 'function') {
+        agentMemory.setActivePersona(personaForMemory);
+      }
       const relevant = (typeof agentMemory.semanticRecall === 'function')
-        ? await agentMemory.semanticRecall(userMessage, 8).catch(() => agentMemory.recall(userMessage, 8))
+        ? await agentMemory.semanticRecall(userMessage, 8, { activePersona: personaForMemory }).catch(() => agentMemory.recall(userMessage, 8))
         : agentMemory.recall(userMessage, 8);
       sysInfo.memory = {
         facts: agentMemory.getAllFacts(),
@@ -4167,6 +4187,16 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       };
     } catch (_) {}
   }
+  // PHASE 8/8 — workspace memory injection. Read .horizon/memory.json
+  // from the active workspace and pass the rendered block to
+  // agentLoop so it lands in the system prompt right after rules.md.
+  try {
+    const ws = currentWorkspaceRoot();
+    if (ws) {
+      const block = _getWorkspaceMemory().buildSystemBlock(ws);
+      if (block) sysInfo.workspaceMemoryBlock = block;
+    }
+  } catch (_) {}
   if (githubConnector) {
     try { sysInfo.github_repos = githubConnector.listRepos(); } catch (_) {}
   }
@@ -4707,6 +4737,36 @@ ipcMain.handle('memUpdateUserProfile', (_, partial) => {
   loadAgentModules();
   if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
   return { ok: true, profile: agentMemory.updateUserProfile(partial || {}, 'manual') };
+});
+
+// PHASE 6/8 — Full-text search across memories + facts + conversations.
+ipcMain.handle('memFtsSearch', (_, query, limit) => {
+  loadAgentModules();
+  if (!agentMemory || typeof agentMemory.ftsSearch !== 'function') return { ok: false, error: 'fts unavailable' };
+  return { ok: true, results: agentMemory.ftsSearch(String(query || ''), Math.max(1, Math.min(200, Number(limit) || 30))), stats: agentMemory.ftsStats?.() || {} };
+});
+
+ipcMain.handle('memFtsStats', () => {
+  loadAgentModules();
+  if (!agentMemory || typeof agentMemory.ftsStats !== 'function') return { ok: false, error: 'fts unavailable' };
+  return { ok: true, stats: agentMemory.ftsStats() };
+});
+
+// PHASE 8/8 — Workspace memory (committable .horizon/memory.json).
+ipcMain.handle('workspaceMemoryGet', () => {
+  try {
+    const root = currentWorkspaceRoot();
+    if (!root) return { ok: false, error: 'no workspace open' };
+    return { ok: true, root, ...(_getWorkspaceMemory().get(root)) };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('workspaceMemoryWrite', (_, partial) => {
+  try {
+    const root = currentWorkspaceRoot();
+    if (!root) return { ok: false, error: 'no workspace open' };
+    return _getWorkspaceMemory().write(root, partial || {});
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ── NUTRITION TRACKING (from jarvis) ─────────────────────────────────────────
