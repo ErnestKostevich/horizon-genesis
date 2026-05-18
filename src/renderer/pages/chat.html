@@ -503,6 +503,10 @@
           <div class="tinfo">Confirm beep<small>Short tone after wake fires.</small></div>
           <button class="sw" id="sw-wake-beep" onclick="toggleWakeBeep()"></button>
         </div>
+        <div class="trow" style="padding:6px 0">
+          <div class="tinfo">Talk Mode<small>After the bot replies, keep listening for your next message without saying "Horizon" again. Stop speaking for 8s to return to wake-word mode.</small></div>
+          <button class="sw" id="sw-wake-talk" onclick="toggleWakeTalkMode()"></button>
+        </div>
         <div style="margin-top:8px">
           <label style="font-size:10px;color:var(--t2);display:flex;justify-content:space-between;margin-bottom:4px">
             <span>Sensitivity</span>
@@ -2512,6 +2516,11 @@ function toggleWakeBeep(){
   setWakeCfg('confirmBeep', !cur);
   document.getElementById('sw-wake-beep').classList.toggle('on', !cur);
 }
+function toggleWakeTalkMode(){
+  const cur = wakeCfg('talkMode', false);
+  setWakeCfg('talkMode', !cur);
+  document.getElementById('sw-wake-talk').classList.toggle('on', !cur);
+}
 function setWakeSens(v){
   const n = Math.max(5, Math.min(50, +v || 18));
   setWakeCfg('volumeThreshold', n);
@@ -2522,9 +2531,11 @@ function initWakeCalibrationUI(){
   // Reflect persisted settings on the toggles + slider when the panel opens.
   const strict = wakeCfg('strictMode', true);
   const beep   = wakeCfg('confirmBeep', false);
+  const talk   = wakeCfg('talkMode', false);
   const vol    = wakeCfg('volumeThreshold', 10);
   document.getElementById('sw-wake-strict')?.classList.toggle('on', strict);
   document.getElementById('sw-wake-beep')?.classList.toggle('on', beep);
+  document.getElementById('sw-wake-talk')?.classList.toggle('on', talk);
   const slider = document.getElementById('wake-sens');
   const lbl    = document.getElementById('wake-sens-val');
   if (slider) slider.value = vol;

@@ -104,6 +104,31 @@ window._handleSlashCommand = async function _handleSlashCommand(raw) {
         }
         return true;
       }
+      case 'spawn_subagent':
+      case 'subagent': {
+        // Test mode: directly dispatch the spawn_subagent tool through the
+        // existing tool path (H.agentTool). The result lands in chat for
+        // visibility, no AI-loop needed. Useful for verifying subagent
+        // wiring and inspecting the resulting child run-id in the
+        // Subagents inspector tab.
+        if (!arg) {
+          window.addMsg?.('bot', '**`/spawn_subagent <task>`** — fire a one-off subagent with the given task. Use for debugging the subagent runtime. Result appears in chat + Inspector → Subagents tab.\n\nExample: `/subagent найди 3 React testing библиотеки и сравни`');
+          return true;
+        }
+        try {
+          window.addMsg?.('bot', `🤖 Spawning subagent for: _${arg}_`);
+          const r = await window.H?.agentTool?.('spawn_subagent', { task: arg, maxSteps: 4 });
+          if (r?.ok) {
+            const out = String(r.out || r.answer || '').slice(0, 1500);
+            window.addMsg?.('bot', `✓ Subagent done (${r.steps || 0} steps, runId \`${(r.runId || '').slice(-12)}\`):\n\n${out}`);
+          } else {
+            window.addMsg?.('bot', `❌ Subagent failed: ${r?.err || r?.error || 'unknown error'}`);
+          }
+        } catch (e) {
+          window.addMsg?.('bot', `❌ Subagent exception: ${e.message}`);
+        }
+        return true;
+      }
       case 'help': {
         window.addMsg?.('bot',
           '**Slash commands**\n' +
