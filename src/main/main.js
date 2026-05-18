@@ -3078,7 +3078,7 @@ function classifyToolOperation(tool, args = {}) {
   const name = String(tool || '').toLowerCase();
   const base = name.includes('__') ? name.split('__').pop() : name;
   if (base.startsWith('conn_')) {
-    if (/_(get|list|search|read|query|describe|status)_?/.test(base) || /_(get|list|search|read|query|describe|status)$/.test(base)) return 'read';
+    if (/_(get|list|search|read|query|describe|status|find|context|today)_?/.test(base) || /_(get|list|search|read|query|describe|status|find|context|today)$/.test(base)) return 'read';
     if (/(create|post|send|update|delete|remove|write|patch)/.test(base)) return 'side_effect';
     return 'network';
   }
@@ -3609,6 +3609,156 @@ function loadAgentModules() {
 }
 
 // ── AGENT LOOP: autonomous multi-step task execution ─────────────────────────
+const GOOGLE_CONNECTION_TOOLS = [
+  {
+    name: 'conn_google_gmail_search',
+    desc: '[Connection: Google Gmail] Search Gmail messages visible to the connected Google account.',
+    params: { query: 'string Gmail search query', limit: 'number optional' },
+    connectionId: 'google'
+  },
+  {
+    name: 'conn_google_gmail_read',
+    desc: '[Connection: Google Gmail] Read a Gmail message by message id.',
+    params: { messageId: 'string' },
+    connectionId: 'google'
+  },
+  {
+    name: 'conn_google_gmail_send',
+    desc: '[Connection: Google Gmail] Send an email through the connected Google account. Requires permission approval.',
+    params: { to: 'string', subject: 'string', body: 'string', cc: 'string optional', bcc: 'string optional' },
+    connectionId: 'google'
+  },
+  {
+    name: 'conn_google_calendar_list',
+    desc: '[Connection: Google Calendar] List upcoming calendar events.',
+    params: { calendarId: 'string optional default primary', limit: 'number optional', timeMin: 'ISO date optional' },
+    connectionId: 'google'
+  },
+  {
+    name: 'conn_google_calendar_today',
+    desc: '[Connection: Google Calendar] List today calendar events.',
+    params: { calendarId: 'string optional default primary' },
+    connectionId: 'google'
+  },
+  {
+    name: 'conn_google_calendar_quick_add',
+    desc: '[Connection: Google Calendar] Create an event from natural language. Requires permission approval.',
+    params: { calendarId: 'string optional default primary', text: 'string' },
+    connectionId: 'google'
+  },
+  {
+    name: 'conn_google_calendar_create',
+    desc: '[Connection: Google Calendar] Create a calendar event. Requires permission approval.',
+    params: { calendarId: 'string optional default primary', summary: 'string', start: 'ISO date/time', end: 'ISO date/time', description: 'string optional', location: 'string optional', attendees: 'array optional' },
+    connectionId: 'google'
+  }
+];
+
+const GITHUB_CONNECTION_TOOLS = [
+  { name: 'conn_github_list_repos', desc: '[Connection: GitHub] List repositories attached in Horizon settings.', params: {}, connectionId: 'github' },
+  { name: 'conn_github_repo_context', desc: '[Connection: GitHub] Read attached repository metadata and README.', params: { repo: 'owner/repo optional; defaults to first attached repo' }, connectionId: 'github' },
+  { name: 'conn_github_read_file', desc: '[Connection: GitHub] Read one file or directory listing from a GitHub repo.', params: { repo: 'owner/repo optional', path: 'string', ref: 'branch/sha optional' }, connectionId: 'github' },
+  { name: 'conn_github_search_code', desc: '[Connection: GitHub] Search code in an attached GitHub repo.', params: { repo: 'owner/repo optional', query: 'string', limit: 'number optional' }, connectionId: 'github' },
+  { name: 'conn_github_list_issues', desc: '[Connection: GitHub] List issues in an attached GitHub repo.', params: { repo: 'owner/repo optional', state: 'open|closed|all optional', limit: 'number optional' }, connectionId: 'github' },
+  { name: 'conn_github_create_issue', desc: '[Connection: GitHub] Create an issue in a GitHub repo. Requires permission approval.', params: { repo: 'owner/repo optional', title: 'string', body: 'string optional' }, connectionId: 'github' }
+];
+
+async function ensureGoogleWorkspaceTools() {
+  if (!googleAuth || !mcpManager || !googleAuth.isAuthenticated?.()) {
+    return { ok: false, error: 'Google Workspace is not connected.' };
+  }
+  const result = await googleAuth.getAccessToken();
+  if (!result?.ok || !result.token) return { ok: false, error: result?.error || 'Google access token unavailable.' };
+  mcpManager.setGmailToken(result.token);
+  mcpManager.setCalendarToken(result.token);
+  return { ok: true };
+}
+
+function googleConnectionToolsForAgent() {
+  try {
+    if (googleAuth?.isAuthenticated?.()) return GOOGLE_CONNECTION_TOOLS;
+  } catch (_) {}
+  return [];
+}
+
+function githubConnectionToolsForAgent() {
+  try {
+    if (!githubConnector) return [];
+    const repos = githubConnector.listRepos?.() || [];
+    return repos.length ? GITHUB_CONNECTION_TOOLS : [GITHUB_CONNECTION_TOOLS[0]];
+  } catch (_) {
+    return [];
+  }
+}
+
+async function dispatchGoogleConnectionTool(tool, args = {}) {
+  const ready = await ensureGoogleWorkspaceTools();
+  if (!ready.ok) return { ok: false, err: ready.error, error: ready.error };
+  const calendarId = args.calendarId || args.calendar || 'primary';
+  switch (tool) {
+    case 'conn_google_gmail_search':
+      return mcpManager.searchEmails(args.query || '', args.limit || args.maxResults || 10);
+    case 'conn_google_gmail_read':
+      return mcpManager.readEmail(args.messageId || args.id);
+    case 'conn_google_gmail_send':
+      return mcpManager.sendEmail(args.to, args.subject || '', args.body || '', args.cc || '', args.bcc || '');
+    case 'conn_google_calendar_list':
+      return mcpManager.listEvents(calendarId, args.limit || args.maxResults || 10, args.timeMin || null);
+    case 'conn_google_calendar_today':
+      return mcpManager.getTodayEvents(calendarId);
+    case 'conn_google_calendar_quick_add':
+      return mcpManager.quickAddEvent(calendarId, args.text || args.query || '');
+    case 'conn_google_calendar_create':
+      return mcpManager.createEvent(
+        calendarId,
+        args.summary || args.title || '',
+        args.start || args.startTime,
+        args.end || args.endTime,
+        args.description || '',
+        args.location || '',
+        Array.isArray(args.attendees) ? args.attendees : []
+      );
+    default:
+      return { ok: false, err: `Unknown Google connection tool: ${tool}` };
+  }
+}
+
+async function dispatchGithubConnectionTool(tool, args = {}) {
+  if (!githubConnector) return { ok: false, err: 'GitHub connector not loaded.' };
+  try {
+    switch (tool) {
+      case 'conn_github_list_repos': {
+        const repos = githubConnector.listRepos();
+        return { ok: true, repos, out: JSON.stringify(repos, null, 2) };
+      }
+      case 'conn_github_repo_context': {
+        const data = await githubConnector.repoContext(args.repo || args.repository || args.fullName || '');
+        return { ok: true, ...data, out: JSON.stringify(data, null, 2).slice(0, 30000) };
+      }
+      case 'conn_github_read_file': {
+        const data = await githubConnector.readFile(args.repo || args.repository || '', args.path || args.file || '', args.ref || '');
+        return { ok: true, ...data, out: data.content || JSON.stringify(data, null, 2).slice(0, 30000) };
+      }
+      case 'conn_github_search_code': {
+        const data = await githubConnector.searchCode(args.repo || args.repository || '', args.query || '', args.limit || 10);
+        return { ok: true, ...data, out: JSON.stringify(data, null, 2).slice(0, 30000) };
+      }
+      case 'conn_github_list_issues': {
+        const data = await githubConnector.listIssues(args.repo || args.repository || '', args.state || 'open', args.limit || 20);
+        return { ok: true, ...data, out: JSON.stringify(data, null, 2).slice(0, 30000) };
+      }
+      case 'conn_github_create_issue': {
+        const data = await githubConnector.createIssue(args.repo || args.repository || '', args.title || '', args.body || '');
+        return { ok: true, ...data, out: JSON.stringify(data, null, 2).slice(0, 30000) };
+      }
+      default:
+        return { ok: false, err: `Unknown GitHub connection tool: ${tool}` };
+    }
+  } catch (e) {
+    return { ok: false, err: e.message, error: e.message };
+  }
+}
+
 ipcMain.handle('mcpServersList', async () => {
   loadAgentModules();
   if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded', servers: [] };
@@ -3776,6 +3926,12 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   if (connectionsManager) {
     try { sysInfo.connections = connectionsManager.list().filter(c => c.connected).map(c => ({ id: c.id, name: c.name, toolCount: c.toolCount })); } catch (_) {}
   }
+  if (googleAuth) {
+    try {
+      sysInfo.google_workspace = { connected: Boolean(googleAuth.isAuthenticated?.()) };
+      if (sysInfo.google_workspace.connected) await ensureGoogleWorkspaceTools().catch(() => null);
+    } catch (_) {}
+  }
 
   // AI function wrapper
   const aiFn = async (messages, systemPrompt, agentMeta = {}) => {
@@ -3925,6 +4081,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     try { connectionTools = connectionsManager.toolsForAgent() || []; }
     catch (e) { console.warn('Connection tools unavailable:', e.message); }
   }
+  connectionTools.push(...googleConnectionToolsForAgent(), ...githubConnectionToolsForAgent());
 
   const activePersonaId = settingsStore.get('persona') || 'jarvis';
   let allowedToolGroups = null;
@@ -3951,7 +4108,14 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       const mcpResult = await mcpRegistry.dispatch(tool, args);
       if (mcpResult) return mcpResult;
     }
-    if (String(tool || '').startsWith('conn_') && connectionsManager) {
+    const connToolName = String(tool || '');
+    if (connToolName.startsWith('conn_google_')) {
+      return dispatchGoogleConnectionTool(connToolName, args || {});
+    }
+    if (connToolName.startsWith('conn_github_')) {
+      return dispatchGithubConnectionTool(connToolName, args || {});
+    }
+    if (connToolName.startsWith('conn_') && connectionsManager) {
       const connResult = await connectionsManager.dispatch(tool, args || {});
       if (connResult) return connResult;
     }
@@ -4111,12 +4275,40 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
 });
 
 // ── DIRECT TOOL CALLS (from chat toolbar/quick actions) ──────────────────────
-ipcMain.handle('agentTool', async (_, toolName, args) => {
+ipcMain.handle('agentTool', async (event, toolName, args) => {
   loadAgentModules();
   if (!agentTools) return { ok: false, err: 'Agent not loaded' };
   if (mcpRegistry && String(toolName || '').includes('__')) {
     const mcpResult = await mcpRegistry.dispatch(toolName, args);
     if (mcpResult) return mcpResult;
+  }
+  const tool = String(toolName || '');
+  if (tool.startsWith('conn_google_')) {
+    return withPermission(
+      event.sender,
+      tool,
+      args || {},
+      'Run Google connection tool',
+      () => dispatchGoogleConnectionTool(tool, args || {})
+    );
+  }
+  if (tool.startsWith('conn_github_')) {
+    return withPermission(
+      event.sender,
+      tool,
+      args || {},
+      'Run GitHub connection tool',
+      () => dispatchGithubConnectionTool(tool, args || {})
+    );
+  }
+  if (tool.startsWith('conn_') && connectionsManager) {
+    return withPermission(
+      event.sender,
+      tool,
+      args || {},
+      'Run connection tool',
+      () => connectionsManager.dispatch(tool, args || {})
+    );
   }
   return agentTools.dispatchTool(toolName, args);
 });
