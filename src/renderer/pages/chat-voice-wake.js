@@ -140,6 +140,7 @@ var WAKE_SETTING_KEYS = {
   strictMode: 'wakeStrictMode',
   volumeThreshold: 'wakeVolumeThreshold',
   confirmBeep: 'wakeConfirmBeep',
+  talkMode: 'wakeTalkMode',
 };
 var wakeSettings = {
   strictMode: true,
@@ -150,6 +151,11 @@ var wakeSettings = {
   // catches normal voice. User can still raise via Settings → Voice.
   volumeThreshold: 6,
   confirmBeep: false,
+  // Continuous Talk Mode: when ON, after the bot finishes replying we
+  // automatically reopen the command listener for ~10s, so the user can
+  // keep speaking without saying "Horizon" again. When the window passes
+  // with no speech, we fall back to normal wake-word listening.
+  talkMode: false,
 };
 // Last raw transcription so debugSurfacing tools and the wake bar can show
 // what Whisper heard. Surfaced via window.getWakeDebug() and the wake bar
@@ -181,9 +187,11 @@ async function loadWakeSettings() {
   const strict = await H.get('wakeStrictMode').catch(() => null);
   const vol = await H.get('wakeVolumeThreshold').catch(() => null);
   const beep = await H.get('wakeConfirmBeep').catch(() => null);
+  const talk = await H.get('wakeTalkMode').catch(() => null);
   wakeSettings.strictMode = strict === null ? localWakeCfg('strictMode', true) : !!strict;
   wakeSettings.volumeThreshold = vol === null ? localWakeCfg('volumeThreshold', 10) : Math.max(5, Math.min(50, +vol || 10));
   wakeSettings.confirmBeep = beep === null ? localWakeCfg('confirmBeep', false) : !!beep;
+  wakeSettings.talkMode = talk === null ? localWakeCfg('talkMode', false) : !!talk;
 }
 
 // Hot window
@@ -518,6 +526,36 @@ function scheduleNextChunk(){
   wakeLoopTimer = setTimeout(()=>{ if (wakeActive && wakePhase !== 'command') runWakeChunk(); }, 30);
 }
 
+// Continuous Talk Mode follow-up: after a successful command + bot reply,
+// wait for TTS to finish playing through speakers, then open another
+// command listener — no wake-word required. Mirrors the fireWake TTS-wait
+// pattern: poll isSpeaking with a hard ceiling so a stuck TTS can't strand
+// the user in command-prep limbo. If user stays silent, listenForCommand's
+// own 8s silenceTimer + "no audio" early-return falls back to the regular
+// wake-word loop — that's how you exit Talk Mode (just stop talking).
+function scheduleTalkModeFollowup() {
+  const start = Date.now();
+  const MAX_WAIT = 8000;
+  const tick = () => {
+    if (!wakeActive) { wakePhase='idle'; setWakeBar('idle'); return; }
+    const elapsed = Date.now() - start;
+    const cooled = !isSpeaking && (Date.now() - speakEndTime) >= ECHO_COOLDOWN;
+    if (cooled || elapsed >= MAX_WAIT) {
+      if (!wakeActive) return;
+      wakePhase = 'command';
+      setWakeBar('command');
+      try {
+        const txt = document.getElementById('wb-txt');
+        if (txt) txt.textContent = lang === 'ru' ? '◈ Talk mode — говори дальше…' : '◈ Talk mode — keep going…';
+      } catch (_) {}
+      listenForCommand();
+      return;
+    }
+    setTimeout(tick, 120);
+  };
+  setTimeout(tick, 120);
+}
+
 // Returns the FULL transcription result so the caller can surface errors —
 // the old version dropped `{error}` results with `res?.text || ''` and the
 // wake loop fell silent forever. Now: `{ ok, text, error }`.
@@ -660,6 +698,10 @@ function listenForCommand(){
     try{cmdRec?.stop();}catch(_){}
   }
 
+  // Continuous Talk Mode tracking — if a real command was transcribed AND
+  // the user has Talk Mode enabled, we'll reopen the command listener after
+  // the bot's reply (no need to say "Хорайзон" again for the follow-up).
+  let commandSucceeded = false;
   cmdRec.ondataavailable = e=>{ if(e.data?.size>0) cmdChunks.push(e.data); };
   cmdRec.onstop = async()=>{
     clearInterval(checkInterval);
@@ -691,6 +733,7 @@ function listenForCommand(){
       const text = String(result?.text || '').trim();
 
       if(text && text.length > 1){
+        commandSucceeded = true;
         const inp=document.getElementById('inp');
         inp.value=text;
         try { ar(inp); } catch(_){}
@@ -707,7 +750,17 @@ function listenForCommand(){
       // ALWAYS resume listening — this is the recovery path.
       wakePhase='idle';
       setWakeBar('idle');
-      wakeLoopTimer = setTimeout(runWakeChunk, 500);
+      // Continuous Talk Mode: if Talk Mode is on AND the user gave a real
+      // command this turn, queue up another command listener once the bot's
+      // reply finishes playing. No wake-word needed for follow-up. If no
+      // command was given (silence/no transcript) we fall back to normal
+      // wake-word listening — that's also the natural way to exit Talk Mode
+      // (just stop speaking; next cycle returns to wake-word).
+      if (wakeCfg('talkMode', false) && commandSucceeded) {
+        scheduleTalkModeFollowup();
+      } else {
+        wakeLoopTimer = setTimeout(runWakeChunk, 500);
+      }
     }
   };
 

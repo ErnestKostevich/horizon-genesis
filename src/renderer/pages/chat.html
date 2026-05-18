@@ -1080,12 +1080,13 @@
 <div class="inspector-pane" id="inspector-pane">
   <div class="insp-head">
     <div class="insp-tabs">
-      <button class="insp-tab on" data-tab="context" onclick="setInspectorTab('context')">Context</button>
-      <button class="insp-tab"    data-tab="tools"   onclick="setInspectorTab('tools')">Tools</button>
-      <button class="insp-tab"    data-tab="skills"  onclick="setInspectorTab('skills')">Skills</button>
-      <button class="insp-tab"    data-tab="learned" onclick="setInspectorTab('learned')">Learned</button>
-      <button class="insp-tab"    data-tab="cost"    onclick="setInspectorTab('cost')">Cost</button>
-      <button class="insp-tab"    data-tab="log"     onclick="setInspectorTab('log')">Log</button>
+      <button class="insp-tab on" data-tab="context"   onclick="setInspectorTab('context')">Context</button>
+      <button class="insp-tab"    data-tab="tools"     onclick="setInspectorTab('tools')">Tools</button>
+      <button class="insp-tab"    data-tab="skills"    onclick="setInspectorTab('skills')">Skills</button>
+      <button class="insp-tab"    data-tab="subagents" onclick="setInspectorTab('subagents')">Subagents</button>
+      <button class="insp-tab"    data-tab="learned"   onclick="setInspectorTab('learned')">Learned</button>
+      <button class="insp-tab"    data-tab="cost"      onclick="setInspectorTab('cost')">Cost</button>
+      <button class="insp-tab"    data-tab="log"       onclick="setInspectorTab('log')">Log</button>
     </div>
     <button class="insp-close" onclick="toggleInspectorMode()" title="Close inspector">&times;</button>
   </div>
@@ -1125,6 +1126,15 @@
     <div class="insp-section">
       <div class="insp-h">Skills loaded for the last turn</div>
       <div class="insp-empty">No skills resolved yet. Send a message and any matching SKILL.md will appear here with its score breakdown.</div>
+    </div>
+  </div>
+  <!-- Subagents tab — populated by chat-inspector.js from subagent-spawned /
+       subagent-end / subagent-step events broadcast by spawnSubagent in
+       main.js. Tree view: parent run → its subagents → their step counts. -->
+  <div class="insp-body" id="insp-body-subagents" style="display:none">
+    <div class="insp-section">
+      <div class="insp-h">Subagent runs</div>
+      <div id="insp-subagent-tree" class="insp-empty">No subagents spawned yet. The agent calls <code>spawn_subagent</code> for parallel-friendly research / multi-source lookups (max depth 2, max 4 concurrent).</div>
     </div>
   </div>
   <!-- Learned tab — facts + memories AgentMemory accumulated. Snapshots via

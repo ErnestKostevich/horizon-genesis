@@ -793,7 +793,8 @@ const TOOL_DEFINITIONS = [
   { name: 'wikipedia', desc: 'Search Wikipedia', params: { query: 'string' } },
   { name: 'smart_click', desc: 'Click on a UI element by visual description (uses AI vision)', params: { target: 'string describing what to click' } },
   { name: 'open_site', desc: 'Open a website: google, youtube, gmail, github, etc', params: { name: 'string' } },
-  { name: 'skill_run_helper', desc: 'Run a helper script bundled with a loaded skill. Use when a SKILL.md tells you to invoke one of its helpers.', params: { skill: 'string skill id', helper: 'string helper path (e.g. helpers/find-stale.js)', args: 'object passed as JSON on stdin', timeoutMs: 'number (default 30000)' } }
+  { name: 'skill_run_helper', desc: 'Run a helper script bundled with a loaded skill. Use when a SKILL.md tells you to invoke one of its helpers.', params: { skill: 'string skill id', helper: 'string helper path (e.g. helpers/find-stale.js)', args: 'object passed as JSON on stdin', timeoutMs: 'number (default 30000)' } },
+  { name: 'spawn_subagent', desc: 'Delegate a self-contained sub-task to an isolated sub-agent that runs in parallel-friendly mode (its own history, own steps, max 4 turns). Use for research / multi-source lookups / independent fact-finding before composing the final answer. Returns { ok, answer, steps }. Subagents cannot themselves spawn deeper subagents (depth cap = 2).', params: { task: 'string — concrete self-contained goal (e.g. "list 3 GitHub repos matching React testing")', tools: 'string[] optional — restrict the subagent to specific tool names', maxSteps: 'number optional (default 4)', timeoutMs: 'number optional (default 60000)' } }
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -806,7 +807,7 @@ function setMemoryInstance(mem) {
   memoryInstance = mem;
 }
 
-async function dispatchTool(name, args = {}) {
+async function dispatchTool(name, args = {}, ctx = {}) {
   switch (name) {
     case 'run_code':
       return executeCode(args.code, args.language);
@@ -898,6 +899,27 @@ async function dispatchTool(name, args = {}) {
       return { ok: false, err: 'Memory not initialized' };
     case 'skill_run_helper':
       return runSkillHelper(args.skill, args.helper, args.args, args.timeoutMs);
+    case 'spawn_subagent': {
+      // Delegated to main.js so the subagent reuses the parent's aiFn /
+      // sysInfo / persona / event-bridge without us re-implementing them
+      // here. Lazy require.cache lookup keeps agent.js standalone for
+      // tests.
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const spawn = mainMod?.exports?.spawnSubagent;
+        if (typeof spawn !== 'function') return { ok: false, err: 'subagent runtime not initialised' };
+        return await spawn({
+          task: String(args.task || '').trim(),
+          parentRunId: ctx.runId || null,
+          event: ctx.event || null,
+          allowedTools: Array.isArray(args.tools) ? args.tools : null,
+          maxSteps: Number(args.maxSteps) || undefined,
+          timeoutMs: Number(args.timeoutMs) || undefined,
+        });
+      } catch (e) {
+        return { ok: false, err: 'spawn_subagent failed: ' + e.message };
+      }
+    }
     default:
       return { ok: false, err: `Unknown tool: ${name}` };
   }

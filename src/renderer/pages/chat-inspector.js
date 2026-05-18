@@ -100,7 +100,7 @@ function toggleInspectorMode(){
 function setInspectorTab(name){
   inspectorTab = name;
   document.querySelectorAll('.insp-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
-  ['context','tools','skills','learned','cost','log'].forEach(t => {
+  ['context','tools','skills','subagents','learned','cost','log'].forEach(t => {
     const el = document.getElementById('insp-body-' + t);
     if (el) el.style.display = (t === name) ? 'block' : 'none';
   });
@@ -132,11 +132,12 @@ function refreshInspector(){
     document.getElementById('insp-voice').textContent = voiceProvider || '—';
   } catch(_) {}
 
-  if (inspectorTab === 'tools')   refreshInspectorTools();
-  if (inspectorTab === 'skills')  refreshInspectorSkills();
-  if (inspectorTab === 'learned') refreshInspectorLearned();
-  if (inspectorTab === 'cost')    refreshInspectorCost();
-  if (inspectorTab === 'log')     refreshInspectorLog();
+  if (inspectorTab === 'tools')     refreshInspectorTools();
+  if (inspectorTab === 'skills')    refreshInspectorSkills();
+  if (inspectorTab === 'subagents') refreshInspectorSubagents();
+  if (inspectorTab === 'learned')   refreshInspectorLearned();
+  if (inspectorTab === 'cost')      refreshInspectorCost();
+  if (inspectorTab === 'log')       refreshInspectorLog();
   // Connections row updates lazily
   refreshInspectorConnections();
 }
@@ -332,6 +333,64 @@ function renderStepRail(){
 // users can flip away and back without losing the data.
 var lastReflection = null;
 
+// Subagent registry — keyed by child runId. Updated live from
+// subagent-spawned / subagent-step / subagent-end agent-step events.
+// Capped to last 60 entries to avoid bloat from long sessions.
+var subagentRegistry = new Map();
+var SUBAGENT_REGISTRY_CAP = 60;
+function _pruneSubagentRegistry() {
+  if (subagentRegistry.size <= SUBAGENT_REGISTRY_CAP) return;
+  const drop = subagentRegistry.size - SUBAGENT_REGISTRY_CAP;
+  const it = subagentRegistry.keys();
+  for (let i = 0; i < drop; i++) { const k = it.next().value; subagentRegistry.delete(k); }
+}
+
+function refreshInspectorSubagents() {
+  const host = document.getElementById('insp-subagent-tree');
+  if (!host) return;
+  if (!subagentRegistry.size) {
+    host.classList.add('insp-empty');
+    host.innerHTML = 'No subagents spawned yet. The agent calls <code>spawn_subagent</code> for parallel-friendly research / multi-source lookups (max depth 2, max 4 concurrent).';
+    return;
+  }
+  host.classList.remove('insp-empty');
+  // Group by parentRunId, newest parent first.
+  const byParent = new Map();
+  for (const [, sub] of subagentRegistry) {
+    if (!byParent.has(sub.parentRunId)) byParent.set(sub.parentRunId, []);
+    byParent.get(sub.parentRunId).push(sub);
+  }
+  const parents = Array.from(byParent.entries()).reverse();
+  const html = parents.map(([parentId, subs]) => {
+    const rows = subs.slice().reverse().map(s => {
+      const statusColor = s.status === 'done' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : 'var(--amb,#facc15)';
+      const statusLabel = s.status === 'done' ? '✓ done' : s.status === 'error' ? '✗ error' : '◌ running';
+      const out = s.status === 'done' && s.answer
+        ? `<div style="font-size:10px;color:var(--t2);margin-top:4px;line-height:1.4;border-left:2px solid var(--b2);padding-left:8px">${esc(String(s.answer).slice(0,200))}</div>`
+        : s.status === 'error' && s.error
+        ? `<div style="font-size:10px;color:var(--red);margin-top:4px;line-height:1.4">${esc(String(s.error).slice(0,200))}</div>`
+        : '';
+      return `
+        <div style="padding:6px 0;border-bottom:1px solid var(--b1)">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+            <span class="v" style="text-align:left;color:var(--tx);font-size:11px">${esc(String(s.task).slice(0,80))}</span>
+            <span style="color:${statusColor};font-size:9px;font-weight:700;text-transform:uppercase">${statusLabel}</span>
+          </div>
+          <div style="font-size:9px;color:var(--t3);margin-top:2px">depth ${s.depth} · ${s.stepsCount || 0} step${s.stepsCount === 1 ? '' : 's'} · <code style="font-size:9px">${esc(s.runId.split('.').pop() || s.runId.slice(-8))}</code></div>
+          ${out}
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="insp-row" style="display:block;border:1px solid var(--b1);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+        <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">parent <code style="font-size:9px">${esc(String(parentId).slice(-12))}</code> · ${subs.length} subagent${subs.length === 1 ? '' : 's'}</div>
+        ${rows}
+      </div>
+    `;
+  }).join('');
+  host.innerHTML = html;
+}
+
 async function refreshInspectorLearned(){
   // Reflection block — always render even if memSnapshot fails (offline-safe).
   const refl = document.getElementById('insp-reflection');
@@ -497,6 +556,37 @@ try {
       if (step?.type === 'reflection') {
         lastReflection = step;
         if (inspectorActive && inspectorTab === 'learned') refreshInspectorLearned();
+      }
+      // Subagent lifecycle events from spawnSubagent in main.js.
+      if (step?.type === 'subagent-spawned' && step.runId) {
+        subagentRegistry.set(step.runId, {
+          runId: step.runId,
+          parentRunId: step.parentRunId || 'root',
+          depth: step.depth || 1,
+          task: step.task || '',
+          startedAt: step.startedAt,
+          status: 'running',
+          stepsCount: 0,
+        });
+        _pruneSubagentRegistry();
+        if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
+      }
+      if (step?.type === 'subagent-end' && step.runId) {
+        const existing = subagentRegistry.get(step.runId);
+        if (existing) {
+          existing.status = step.status || (step.error ? 'error' : 'done');
+          existing.stepsCount = step.stepsCount || existing.stepsCount;
+          existing.answer = step.answer;
+          existing.error = step.error;
+          existing.endedAt = step.endedAt;
+        }
+        if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
+      }
+      // Increment stepsCount when subagent tools fire (any step tagged isSubagent).
+      if (step?.isSubagent && step.runId && (step.type === 'result' || step.type === 'executing')) {
+        const existing = subagentRegistry.get(step.runId);
+        if (existing && step.type === 'result') existing.stepsCount = (existing.stepsCount || 0) + 1;
+        if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
       }
       // Inspector log + cost auto-refresh on activity
       if (inspectorActive) {
