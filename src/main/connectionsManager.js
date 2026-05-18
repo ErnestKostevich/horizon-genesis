@@ -172,6 +172,14 @@ class ConnectionsManager {
     this.telegramLoopPromise = null;
     this.telegramLastError = '';
     this.telegramLastEventAt = '';
+    // Discord Gateway runtime — populated when discordLive=true. Mirrors
+    // the Telegram pattern but uses WebSocket Gateway instead of HTTP
+    // long-poll. handleDiscordMessage routes inbound messages through
+    // the same replyFn + history persistence shape.
+    this.discordGateway = null;
+    this.discordRunning = false;
+    this.discordLastError = '';
+    this.discordLastEventAt = '';
   }
 
   setReplyFn(fn) {
@@ -191,18 +199,22 @@ class ConnectionsManager {
   }
 
   list() {
-    return CONNECTIONS.map(c => ({
-      id: c.id,
-      name: c.name,
-      connected: this.has(c.keyId),
-      envHint: c.envHint,
-      toolCount: c.tools.length,
-      liveSupported: c.id === 'telegram_bot',
-      liveEnabled: c.id === 'telegram_bot' ? this.telegramLiveEnabled() : false,
-      liveRunning: c.id === 'telegram_bot' ? this.telegramRunning : false,
-      lastError: c.id === 'telegram_bot' ? this.telegramLastError : '',
-      lastEventAt: c.id === 'telegram_bot' ? this.telegramLastEventAt : '',
-    }));
+    return CONNECTIONS.map(c => {
+      const isTelegram = c.id === 'telegram_bot';
+      const isDiscord = c.id === 'discord';
+      return {
+        id: c.id,
+        name: c.name,
+        connected: this.has(c.keyId),
+        envHint: c.envHint,
+        toolCount: c.tools.length,
+        liveSupported: isTelegram || isDiscord,
+        liveEnabled: isTelegram ? this.telegramLiveEnabled() : (isDiscord ? this.discordLiveEnabled() : false),
+        liveRunning: isTelegram ? this.telegramRunning : (isDiscord ? this.discordRunning : false),
+        lastError: isTelegram ? this.telegramLastError : (isDiscord ? this.discordLastError : ''),
+        lastEventAt: isTelegram ? this.telegramLastEventAt : (isDiscord ? this.discordLastEventAt : ''),
+      };
+    });
   }
 
   toolsForAgent() {
@@ -337,6 +349,231 @@ class ConnectionsManager {
       const r = await this.startTelegramRuntime();
       if (!r.ok) this.telegramLog(r.error || 'Could not start Telegram runtime.', 'error');
     }
+    if (this.discordLiveEnabled()) {
+      const r = await this.startDiscordRuntime();
+      if (!r.ok) this.discordLog(r.error || 'Could not start Discord runtime.', 'error');
+    }
+  }
+
+  // ── Discord Gateway runtime (bidirectional) ─────────────────────────────
+  discordLiveEnabled() {
+    return this.settingsStore?.get?.('connection.discord.live') === true;
+  }
+
+  discordLog(message, type = 'info') {
+    const line = { time: new Date().toISOString(), type, message: asText(message, 1000) };
+    const logs = Array.isArray(this.settingsStore?.get?.('connection.discord.logs'))
+      ? this.settingsStore.get('connection.discord.logs')
+      : [];
+    logs.push(line);
+    this.settingsStore?.set?.('connection.discord.logs', logs.slice(-120));
+    if (type === 'error') this.discordLastError = line.message;
+    this.discordLastEventAt = line.time;
+    this._emitConnectionsUpdated();
+  }
+
+  discordStatus() {
+    const gw = this.discordGateway?.status?.() || {};
+    return {
+      ok: true,
+      enabled: this.discordLiveEnabled(),
+      running: this.discordRunning,
+      connected: this.has('discord_bot'),
+      lastError: this.discordLastError,
+      lastEventAt: this.discordLastEventAt,
+      logs: (this.settingsStore?.get?.('connection.discord.logs') || []).slice(-50),
+      gateway: gw,
+    };
+  }
+
+  async setDiscordLive(enabled) {
+    this.settingsStore?.set?.('connection.discord.live', !!enabled);
+    if (enabled) return this.startDiscordRuntime();
+    await this.stopDiscordRuntime();
+    return this.discordStatus();
+  }
+
+  async startDiscordRuntime() {
+    if (!this.has('discord_bot')) {
+      this.settingsStore?.set?.('connection.discord.live', false);
+      return { ok: false, error: 'Discord bot token is not configured.' };
+    }
+    if (!this.replyFn) {
+      return { ok: false, error: 'AI reply function is not wired.' };
+    }
+    if (this.discordRunning) return this.discordStatus();
+    try {
+      const { DiscordGateway } = require('./discordGateway');
+      this.discordGateway = new DiscordGateway({ token: this.token('discord_bot') });
+    } catch (e) {
+      this.discordLog('Failed to load Discord Gateway: ' + e.message, 'error');
+      return { ok: false, error: e.message };
+    }
+
+    this.discordGateway.on('open', () => this.discordLog('Discord WS connection opened', 'run'));
+    this.discordGateway.on('ready', (info) => {
+      this.discordRunning = true;
+      this.discordLog(`Discord ready as ${info.user?.username || '?'} · ${info.guildCount} guilds`, 'run');
+    });
+    this.discordGateway.on('resumed', () => this.discordLog('Discord session resumed', 'run'));
+    this.discordGateway.on('close', ({ code, reason }) => {
+      this.discordRunning = false;
+      this.discordLog(`Discord WS closed (${code}) ${reason}`.trim(), 'info');
+    });
+    this.discordGateway.on('fatal', ({ code, message }) => {
+      this.discordRunning = false;
+      this.discordLog(message, 'error');
+      this.setDiscordLive(false).catch(() => {});
+    });
+    this.discordGateway.on('error', (err) => {
+      this.discordLog('Discord error: ' + (err?.message || err), 'error');
+    });
+    this.discordGateway.on('guildUpdated', (g) => {
+      this.discordLog(`Guild ${g.name} (${g.channelCount} channels)`, 'info');
+    });
+    this.discordGateway.on('message', (msg) => {
+      this.handleDiscordMessage(msg).catch(e => this.discordLog('handleDiscordMessage failed: ' + e.message, 'error'));
+    });
+
+    const ok = await this.discordGateway.connect();
+    if (!ok) {
+      this.discordRunning = false;
+      return { ok: false, error: this.discordGateway.lastError || 'Failed to connect to Discord Gateway' };
+    }
+    this.discordRunning = true;
+    this._emitConnectionsUpdated();
+    return this.discordStatus();
+  }
+
+  async stopDiscordRuntime() {
+    if (this.discordGateway) {
+      try { this.discordGateway.disconnect(); } catch (_) {}
+      this.discordGateway = null;
+    }
+    this.discordRunning = false;
+    this.discordLog('Discord runtime stopped.', 'run');
+    this._emitConnectionsUpdated();
+    return this.discordStatus();
+  }
+
+  // Chat memory mirrors Telegram. Storage keys:
+  //   connection.discord.chats          → [{channelId, channelName, guildName, lastMsg, lastMsgAt, count}]
+  //   connection.discord.history.<chId> → [{role, content, at, name?}] cap 400
+  DC_HISTORY_CAP = 400;
+  DC_CTX_FOR_MODEL = 16;
+  _dcHistoryKey(channelId) { return `connection.discord.history.${channelId}`; }
+  _dcReadHistory(channelId) {
+    const raw = this.settingsStore?.get?.(this._dcHistoryKey(channelId));
+    return Array.isArray(raw) ? raw : [];
+  }
+  _dcWriteHistory(channelId, history) {
+    const capped = history.slice(-this.DC_HISTORY_CAP);
+    this.settingsStore?.set?.(this._dcHistoryKey(channelId), capped);
+    return capped;
+  }
+  _dcUpdateChatMeta(channelId, patch) {
+    const list = Array.isArray(this.settingsStore?.get?.('connection.discord.chats'))
+      ? this.settingsStore.get('connection.discord.chats').slice() : [];
+    const idx = list.findIndex(c => String(c.channelId) === String(channelId));
+    const prev = idx >= 0 ? list[idx] : { channelId, count: 0 };
+    const next = { ...prev, ...patch, channelId };
+    if (idx >= 0) list[idx] = next; else list.push(next);
+    list.sort((a, b) => (new Date(b.lastMsgAt || 0).getTime()) - (new Date(a.lastMsgAt || 0).getTime()));
+    this.settingsStore?.set?.('connection.discord.chats', list.slice(0, 200));
+    return next;
+  }
+
+  discordListChats() {
+    const list = Array.isArray(this.settingsStore?.get?.('connection.discord.chats'))
+      ? this.settingsStore.get('connection.discord.chats') : [];
+    return { ok: true, chats: list };
+  }
+
+  discordGetHistory(channelId, limit) {
+    if (!channelId) return { ok: false, error: 'channelId required' };
+    const hist = this._dcReadHistory(channelId);
+    const lim = Math.max(1, Math.min(this.DC_HISTORY_CAP, Number(limit) || 200));
+    return { ok: true, channelId, history: hist.slice(-lim), total: hist.length };
+  }
+
+  discordClearHistory(channelId) {
+    if (channelId) {
+      this.settingsStore?.set?.(this._dcHistoryKey(channelId), []);
+      const list = Array.isArray(this.settingsStore?.get?.('connection.discord.chats'))
+        ? this.settingsStore.get('connection.discord.chats').filter(c => String(c.channelId) !== String(channelId)) : [];
+      this.settingsStore?.set?.('connection.discord.chats', list);
+      try { this.eventBridge?.('discord:chats', { chats: list }); } catch (_) {}
+      return { ok: true, cleared: channelId };
+    }
+    const list = this.settingsStore?.get?.('connection.discord.chats') || [];
+    for (const c of list) this.settingsStore?.set?.(this._dcHistoryKey(c.channelId), []);
+    this.settingsStore?.set?.('connection.discord.chats', []);
+    try { this.eventBridge?.('discord:chats', { chats: [] }); } catch (_) {}
+    return { ok: true, cleared: 'all' };
+  }
+
+  /** Manual outbound from the desktop UI — stores in history and emits
+   *  telegram-style bridge events. */
+  async discordSendFromUI(channelId, content) {
+    if (!channelId) return { ok: false, error: 'channelId required' };
+    const trimmed = asText(content, 2000);
+    if (!trimmed) return { ok: false, error: 'empty content' };
+    const sent = await this.discordSendMessage(channelId, trimmed);
+    if (!sent?.ok) return sent;
+    const entry = { role: 'assistant', content: trimmed, at: new Date().toISOString(), source: 'desktop-ui' };
+    const next = this._dcWriteHistory(channelId, [...this._dcReadHistory(channelId), entry]);
+    this._dcUpdateChatMeta(channelId, { lastMsg: trimmed.slice(0, 160), lastMsgAt: entry.at, count: next.length });
+    try { this.eventBridge?.('discord:message', { channelId, entry }); } catch (_) {}
+    return { ok: true, entry };
+  }
+
+  async handleDiscordMessage(msg) {
+    const channelId = msg.channelId;
+    const text = (msg.content || '').trim();
+    if (!channelId || !text) return;
+    this.discordLog(`Incoming from #${msg.channelName || channelId}: ${text.slice(0, 120)}`, 'message');
+
+    const now = new Date().toISOString();
+    // Persist inbound BEFORE we run AI — keeps chat viewer correct even
+    // if the model fails. Mirrors handleTelegramUpdate.
+    const userEntry = { role: 'user', content: text, at: now, name: msg.author };
+    const histAfterUser = this._dcWriteHistory(channelId, [...this._dcReadHistory(channelId), userEntry]);
+    this._dcUpdateChatMeta(channelId, {
+      channelName: msg.channelName || `#${channelId}`,
+      guildName: msg.guildName || '',
+      lastMsg: text.slice(0, 160),
+      lastMsgAt: now,
+      count: histAfterUser.length,
+    });
+    try { this.eventBridge?.('discord:message', { channelId, entry: userEntry }); } catch (_) {}
+
+    // Slash commands (Discord channel context).
+    if (/^!horizon\s+status\b/i.test(text)) {
+      await this.discordSendFromUI(channelId, `Horizon Discord runtime: ${this.discordRunning ? 'online' : 'offline'}`);
+      return;
+    }
+
+    // Build model context from last N entries.
+    const recent = this._dcReadHistory(channelId).slice(-this.DC_CTX_FOR_MODEL);
+    const messages = recent.map(({ role, content }) => ({ role, content }));
+    const system = [
+      'You are Horizon AI replying inside a Discord channel.',
+      `Discord user: ${msg.author}. Channel: #${msg.channelName || channelId} in ${msg.guildName || 'a server'}.`,
+      'Keep replies concise. Markdown is OK; messages cap at 2000 chars.',
+      'For destructive actions, explain that Horizon\'s permission gates require desktop approval.',
+    ].join('\n');
+    const res = await this.replyFn({ messages, system, source: 'discord', chatId: channelId });
+    const reply = asText(res?.reply || res?.text || res?.error || 'No response', 1990);
+    const sendResult = await this.discordSendMessage(channelId, reply || 'No response');
+    const replyAt = new Date().toISOString();
+    const assistantEntry = {
+      role: 'assistant', content: reply, at: replyAt,
+      source: 'discord-runtime', provider: res?.provider, model: res?.model, ok: !!sendResult?.ok,
+    };
+    const histAfter = this._dcWriteHistory(channelId, [...this._dcReadHistory(channelId), assistantEntry]);
+    this._dcUpdateChatMeta(channelId, { lastMsg: reply.slice(0, 160), lastMsgAt: replyAt, count: histAfter.length });
+    try { this.eventBridge?.('discord:message', { channelId, entry: assistantEntry }); } catch (_) {}
+    this.discordLog(`Replied to #${msg.channelName || channelId} via ${res?.provider}/${res?.model}`, 'reply');
   }
 
   async telegramLoop(signal) {
