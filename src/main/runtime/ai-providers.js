@@ -274,7 +274,256 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
     };
   }
 
-  return { complete, asAgentAiFn, selectModel };
+  /**
+   * Streaming completion — emits tokens via onToken(text) as they arrive,
+   * then resolves to the same shape `complete()` returns.
+   *
+   * Supports: claude, openai (+ all openai-compat), gemini, ollama,
+   * lmstudio, localai. cohere falls back to non-streaming.
+   *
+   * @param {Array} messages
+   * @param {object} opts             same shape as complete()
+   * @param {Function} onToken        called with each delta string
+   * @returns {Promise<{reply, model, usage, error?}>}
+   */
+  async function completeStream(messages, opts = {}, onToken = () => {}) {
+    const provider = opts.provider || settingsStore.get('provider') || 'gemini';
+    const system = opts.system || '';
+    const model = selectModel(provider, opts);
+    const respProfile = settingsStore.get('responseProfile') || 'balanced';
+
+    try {
+      if (provider === 'claude') {
+        const k = keysStore.get('k_claude');
+        if (!k) return { error: 'Claude key not set' };
+        const body = { model, max_tokens: 4096, system, messages, stream: true };
+        if (respProfile === 'deep') {
+          body.thinking = { type: 'enabled', budget_tokens: 8000 };
+          body.max_tokens = 16000;
+        }
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': k, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          return { error: d.error?.message || `HTTP ${r.status}` };
+        }
+        return readSseClaude(r, onToken, model);
+      }
+
+      if (provider === 'gemini') {
+        const k = keysStore.get('k_gemini');
+        if (!k) return { error: 'Gemini key not set' };
+        const { contents } = normaliseGeminiMessages(messages);
+        const generationConfig = { maxOutputTokens: 4096, temperature: 0.7 };
+        if (/^gemini-(2\.5|3)/.test(model)) {
+          if (respProfile === 'deep') generationConfig.thinkingConfig = { thinkingBudget: -1 };
+          else if (respProfile === 'fast') generationConfig.thinkingConfig = { thinkingBudget: 0 };
+        }
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${k}`;
+        const r = await fetch(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents, generationConfig,
+          }),
+        });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          return { error: d.error?.message || `HTTP ${r.status}` };
+        }
+        return readSseGemini(r, onToken, model);
+      }
+
+      // OpenAI-compatible (openai/groq/deepseek/grok/mistral/qwen/perplexity/
+      // openrouter/ollama/lmstudio/localai) — share the same SSE format.
+      const isLocal = ['ollama', 'lmstudio', 'localai'].includes(provider);
+      let endpoint = OPENAI_COMPAT_ENDPOINTS[provider];
+      let headers = { 'Content-Type': 'application/json' };
+      if (!isLocal) {
+        const k = keysStore.get(KEY_NAMES[provider]);
+        if (!k) return { error: `${provider} key not set` };
+        headers['Authorization'] = `Bearer ${k}`;
+      } else {
+        const baseKey = provider === 'ollama' ? 'ollamaUrl'
+                      : provider === 'lmstudio' ? 'lmStudioUrl' : 'localAiUrl';
+        const defaultUrl = provider === 'ollama' ? 'http://127.0.0.1:11434'
+                         : provider === 'lmstudio' ? 'http://127.0.0.1:1234'
+                         : 'http://127.0.0.1:8080';
+        const base = settingsStore.get(baseKey) || defaultUrl;
+        endpoint = `${base}/v1/chat/completions`;
+      }
+      if (!endpoint) return { error: `streaming not supported for ${provider}` };
+      const body = {
+        model, max_tokens: 4096, stream: true,
+        messages: [{ role: 'system', content: system }, ...messages],
+      };
+      if (provider === 'openai') {
+        const isReasoning = /^o[134]/.test(model) || /thinking|reasoning/.test(model);
+        if (isReasoning) {
+          if (respProfile === 'deep') body.reasoning_effort = 'high';
+          else if (respProfile === 'fast') body.reasoning_effort = 'low';
+        }
+      }
+      const r = await fetch(endpoint, {
+        method: 'POST', headers, body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        return { error: d.error?.message || `HTTP ${r.status}` };
+      }
+      return readSseOpenAi(r, onToken, model);
+    } catch (e) {
+      return { error: e.message || String(e) };
+    }
+  }
+
+  return { complete, completeStream, asAgentAiFn, selectModel };
+}
+
+// ── SSE readers ──────────────────────────────────────────────────────────
+// Each fetch() returns either a WHATWG ReadableStream (Node 18+ global fetch)
+// or a node-fetch Response with .body as a Readable. Treat both uniformly.
+
+async function readBodyLines(response, onLine) {
+  const decoder = new TextDecoder('utf-8');
+  let buf = '';
+  const body = response.body;
+  if (body && typeof body.getReader === 'function') {
+    // WHATWG ReadableStream
+    const reader = body.getReader();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).replace(/\r$/, '');
+        buf = buf.slice(idx + 1);
+        if (line) onLine(line);
+      }
+    }
+  } else if (body && typeof body.on === 'function') {
+    // node-fetch Readable
+    await new Promise((resolve, reject) => {
+      body.on('data', chunk => {
+        buf += chunk.toString('utf8');
+        let idx;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, idx).replace(/\r$/, '');
+          buf = buf.slice(idx + 1);
+          if (line) onLine(line);
+        }
+      });
+      body.on('end', resolve);
+      body.on('error', reject);
+    });
+  } else {
+    throw new Error('response body has no readable interface');
+  }
+  if (buf) onLine(buf);
+}
+
+async function readSseClaude(response, onToken, model) {
+  let reply = '';
+  let usage = null;
+  await readBodyLines(response, (line) => {
+    if (!line.startsWith('data: ')) return;
+    const payload = line.slice(6).trim();
+    if (!payload || payload === '[DONE]') return;
+    try {
+      const evt = JSON.parse(payload);
+      if (evt.type === 'content_block_delta' && evt.delta?.text) {
+        reply += evt.delta.text;
+        onToken(evt.delta.text);
+      } else if (evt.type === 'message_delta' && evt.usage) {
+        usage = {
+          prompt: evt.usage.input_tokens || 0,
+          completion: evt.usage.output_tokens || 0,
+          total: (evt.usage.input_tokens || 0) + (evt.usage.output_tokens || 0),
+        };
+      }
+    } catch (_) { /* malformed event, skip */ }
+  });
+  return { reply, model, usage };
+}
+
+async function readSseOpenAi(response, onToken, model) {
+  let reply = '';
+  let usage = null;
+  await readBodyLines(response, (line) => {
+    if (!line.startsWith('data: ')) return;
+    const payload = line.slice(6).trim();
+    if (!payload || payload === '[DONE]') return;
+    try {
+      const evt = JSON.parse(payload);
+      const delta = evt.choices?.[0]?.delta?.content;
+      if (delta) {
+        reply += delta;
+        onToken(delta);
+      }
+      if (evt.usage) {
+        usage = {
+          prompt: evt.usage.prompt_tokens || 0,
+          completion: evt.usage.completion_tokens || 0,
+          total: evt.usage.total_tokens || 0,
+        };
+      }
+    } catch (_) { /* malformed event */ }
+  });
+  return { reply, model, usage };
+}
+
+async function readSseGemini(response, onToken, model) {
+  let reply = '';
+  let usage = null;
+  await readBodyLines(response, (line) => {
+    if (!line.startsWith('data: ')) return;
+    const payload = line.slice(6).trim();
+    if (!payload) return;
+    try {
+      const evt = JSON.parse(payload);
+      const delta = evt.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (delta) {
+        reply += delta;
+        onToken(delta);
+      }
+      if (evt.usageMetadata) {
+        usage = {
+          prompt: evt.usageMetadata.promptTokenCount || 0,
+          completion: evt.usageMetadata.candidatesTokenCount || 0,
+          total: evt.usageMetadata.totalTokenCount || 0,
+        };
+      }
+    } catch (_) {}
+  });
+  return { reply, model, usage };
+}
+
+// Shared between complete() and completeStream() for Gemini's strict
+// alternating user/model rule.
+function normaliseGeminiMessages(messages) {
+  const raw = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content || '...' }],
+  }));
+  const contents = [];
+  for (const msg of raw) {
+    if (!contents.length) {
+      if (msg.role === 'user') contents.push(msg);
+    } else if (contents[contents.length - 1].role !== msg.role) {
+      contents.push(msg);
+    } else {
+      contents[contents.length - 1].parts[0].text += '\n' + msg.parts[0].text;
+    }
+  }
+  if (!contents.length) contents.push({ role: 'user', parts: [{ text: '...' }] });
+  if (contents[contents.length - 1].role !== 'user') {
+    contents.push({ role: 'user', parts: [{ text: '...' }] });
+  }
+  return { contents };
 }
 
 module.exports = {
