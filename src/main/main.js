@@ -96,6 +96,8 @@ const PRO_HANDLERS = new Set([
   // Telegram destructive/outbound — read paths (tgListChats/tgGetHistory)
   // stay free so the UI can render without a pro check.
   'tgClearHistory', 'tgSendFromUI',
+  // Discord destructive/outbound — same shape as Telegram.
+  'dcClearHistory', 'dcSendFromUI',
 ]);
 
 let _licenseManagerRef = null;  // populated once licenseManager is constructed.
@@ -4908,6 +4910,7 @@ ipcMain.handle('connectionsSetLive', async (_, id, enabled) => {
   if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
   try {
     if (String(id || '') === 'telegram_bot') return await connectionsManager.setTelegramLive(!!enabled);
+    if (String(id || '') === 'discord') return await connectionsManager.setDiscordLive(!!enabled);
     return { ok: false, error: `Live runtime is not available for ${id}` };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -4919,10 +4922,43 @@ ipcMain.handle('connectionsRuntimeStatus', async (_, id) => {
   if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
   try {
     if (String(id || '') === 'telegram_bot') return connectionsManager.telegramStatus();
+    if (String(id || '') === 'discord') return connectionsManager.discordStatus();
     return { ok: false, error: `Runtime status is not available for ${id}` };
   } catch (e) {
     return { ok: false, error: e.message };
   }
+});
+
+// ── Discord chat viewer ─────────────────────────────────────────────────
+// Mirrors the Telegram tg* IPC. discord runtime stores per-channel history
+// in settingsStore (same locality as keys). These handlers expose it +
+// outbound send.
+ipcMain.handle('dcListChats', () => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded', chats: [] };
+  try { return connectionsManager.discordListChats(); }
+  catch (e) { return { ok: false, error: e.message, chats: [] }; }
+});
+
+ipcMain.handle('dcGetHistory', (_, channelId, limit) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try { return connectionsManager.discordGetHistory(channelId, limit); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('dcClearHistory', (_, channelId) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try { return connectionsManager.discordClearHistory(channelId); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('dcSendFromUI', async (_, channelId, content) => {
+  loadAgentModules();
+  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
+  try { return await connectionsManager.discordSendFromUI(channelId, content); }
+  catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ── TELEGRAM CHAT VIEWER ─────────────────────────────────────────────────

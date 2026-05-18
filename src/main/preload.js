@@ -209,6 +209,21 @@ contextBridge.exposeInMainWorld('H', {
     ipcRenderer.on('telegram:chats', handler);
     return () => ipcRenderer.removeListener('telegram:chats', handler);
   },
+  // Discord bidirectional — mirrors the Telegram IPC.
+  dcListChats:      ()              => ipcRenderer.invoke('dcListChats'),
+  dcGetHistory:     (channelId, lim) => ipcRenderer.invoke('dcGetHistory', channelId, lim),
+  dcClearHistory:   (channelId)     => ipcRenderer.invoke('dcClearHistory', channelId),
+  dcSendFromUI:     (channelId, content) => ipcRenderer.invoke('dcSendFromUI', channelId, content),
+  onDiscordMessage: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('discord:message', handler);
+    return () => ipcRenderer.removeListener('discord:message', handler);
+  },
+  onDiscordChats: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('discord:chats', handler);
+    return () => ipcRenderer.removeListener('discord:chats', handler);
+  },
   onConnectionsUpdated: (cb) => {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('connectionsUpdated', handler);
