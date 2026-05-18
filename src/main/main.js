@@ -4621,32 +4621,37 @@ ipcMain.handle('memEmbedReindex', async () => {
 });
 
 // Single-shot snapshot for the inspector's Learned tab — facts + most-recent
-// memories + learning.stats in one IPC roundtrip. Cheap because everything
-// lives in-memory in AgentMemory._data; we just project it.
+// memories + learning.stats + user profile in one IPC roundtrip. Cheap
+// because everything lives in-memory in AgentMemory._data.
 ipcMain.handle('memSnapshot', (_, opts) => {
   loadAgentModules();
   if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
   const factLimit = Math.max(1, Math.min(200, Number(opts?.factLimit) || 50));
   const memLimit = Math.max(1, Math.min(200, Number(opts?.memLimit) || 30));
   try {
-    const facts = agentMemory.getAllFacts ? agentMemory.getAllFacts() : {};
-    const factEntries = Object.entries(facts)
+    // Project raw facts dict into UI-friendly array with provenance.
+    const factsRaw = agentMemory._data?.facts || {};
+    const factEntries = Object.entries(factsRaw)
       .map(([key, v]) => ({
         key,
         value: typeof v === 'object' && v !== null ? (v.value ?? '') : String(v ?? ''),
         seen: typeof v === 'object' && v !== null ? (v.seen || 0) : 0,
         updated: typeof v === 'object' && v !== null ? v.updated : null,
+        source: typeof v === 'object' && v !== null ? (v.source || 'unknown') : 'unknown',
+        lastSource: typeof v === 'object' && v !== null ? (v.lastSource || v.source || 'unknown') : 'unknown',
       }))
       .sort((a, b) => (b.updated || 0) - (a.updated || 0))
       .slice(0, factLimit);
     const recent = typeof agentMemory.getRecent === 'function' ? agentMemory.getRecent(memLimit) : [];
     const stats = agentMemory._data?.learning?.stats || {};
+    const userProfile = typeof agentMemory.getUserProfile === 'function' ? agentMemory.getUserProfile() : null;
     return {
       ok: true,
       facts: factEntries,
       memories: recent,
+      userProfile,
       stats: {
-        totalFacts: Object.keys(facts).length,
+        totalFacts: Object.keys(factsRaw).length,
         totalMemories: agentMemory._data?.memories?.length || 0,
         learnedItems: stats.learnedItems || 0,
         lastLearnedAt: stats.lastLearnedAt || null,
@@ -4656,6 +4661,45 @@ ipcMain.handle('memSnapshot', (_, opts) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
+});
+
+// ── Memory edit/forget + user profile IPC ───────────────────────────────
+// Used by the Inspector → Learned tab edit/delete UI. Each handler returns
+// {ok, ...} so the renderer can show success/failure inline.
+ipcMain.handle('memForgetFact', (_, key) => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  return { ok: agentMemory.forgetFact(String(key || '')) };
+});
+
+ipcMain.handle('memForgetMemory', (_, idOrKey) => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  return { ok: agentMemory.forgetMemory(String(idOrKey || '')) };
+});
+
+ipcMain.handle('memEditFact', (_, key, value) => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  return { ok: agentMemory.setFact(String(key || ''), String(value || ''), 'manual') };
+});
+
+ipcMain.handle('memEditMemory', (_, idOrKey, partial) => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  return { ok: agentMemory.editMemory(String(idOrKey || ''), partial || {}) };
+});
+
+ipcMain.handle('memGetUserProfile', () => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  return { ok: true, profile: agentMemory.getUserProfile() };
+});
+
+ipcMain.handle('memUpdateUserProfile', (_, partial) => {
+  loadAgentModules();
+  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+  return { ok: true, profile: agentMemory.updateUserProfile(partial || {}, 'manual') };
 });
 
 // ── NUTRITION TRACKING (from jarvis) ─────────────────────────────────────────

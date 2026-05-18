@@ -1462,6 +1462,39 @@ body:not(.settings-scroll) .ps-toc { display: none !important; }
 .sub-card-out{font-size:10px;color:var(--t2);margin-top:4px;line-height:1.4;border-left:2px solid var(--b2);padding-left:8px}
 .sub-card-err{font-size:10px;color:var(--red,#f87171);margin-top:4px;line-height:1.4}
 
+/* Inspector Learned tab — memory rows with edit/forget + provenance badge.
+   .mem-* mirrors the .sk-*/.sub-* visual language: dim border, compact
+   row, action buttons on hover. */
+.mem-row{position:relative;padding:8px 10px;border:1px solid var(--b1);border-radius:8px;margin-bottom:6px;background:rgba(255,255,255,.015);transition:border-color .15s}
+.mem-row:hover{border-color:var(--b2)}
+.mem-row-head{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px}
+.mem-row-key{font-size:11px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+.mem-row-cat{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em}
+.mem-row-source{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:4px;border:1px solid var(--b1);background:rgba(255,255,255,.03);color:var(--t3);flex-shrink:0}
+.mem-src-chat{color:var(--acc);background:rgba(108,140,255,.08);border-color:rgba(108,140,255,.25)}
+.mem-src-telegram{color:#3b82f6;background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25)}
+.mem-src-agent_task,.mem-src-agent_result{color:#a855f7;background:rgba(168,85,247,.08);border-color:rgba(168,85,247,.25)}
+.mem-src-learn{color:#facc15;background:rgba(250,204,21,.08);border-color:rgba(250,204,21,.25)}
+.mem-src-manual,.mem-src-profile{color:#34d399;background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.25)}
+.mem-src-tool{color:#f97316;background:rgba(249,115,22,.08);border-color:rgba(249,115,22,.25)}
+.mem-row-val,.mem-row-body{font-size:11px;color:var(--tx);line-height:1.5;word-wrap:break-word}
+.mem-row-seen{font-size:9px;color:var(--t3);margin-left:4px}
+.mem-row-actions{display:flex;justify-content:flex-end;gap:4px;margin-top:6px;opacity:0;transition:opacity .15s}
+.mem-row:hover .mem-row-actions{opacity:1}
+.mem-btn{padding:2px 8px;border-radius:5px;border:1px solid var(--b1);background:none;color:var(--t3);font-size:11px;cursor:pointer;transition:all .15s;font-family:var(--font)}
+.mem-btn:hover{border-color:rgba(108,140,255,.4);color:var(--acc)}
+.mem-btn-danger:hover{border-color:rgba(248,113,113,.3);color:var(--red,#f87171)}
+
+/* User Profile (Big Five + communication style) editor. Sliders inline-look. */
+.mem-bf-group{margin-bottom:10px;padding:8px 10px;border:1px solid var(--b1);border-radius:8px;background:rgba(255,255,255,.015)}
+.mem-bf-h{font-size:10px;color:var(--t2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;font-weight:600}
+.mem-bf-row{display:flex;align-items:center;gap:8px;padding:4px 0}
+.mem-bf-label{font-size:11px;color:var(--tx);min-width:120px;flex-shrink:0}
+.mem-bf-slider{flex:1;height:4px;cursor:pointer;accent-color:var(--acc)}
+.mem-bf-val{font-size:10px;color:var(--t3);min-width:30px;text-align:right;font-family:var(--mono,ui-monospace)}
+.mem-bf-select,.mem-bf-input{flex:1;background:rgba(0,0,0,.18);border:1px solid var(--b1);border-radius:6px;padding:4px 8px;color:var(--tx);font-size:11px;font-family:var(--font);outline:none}
+.mem-bf-select:focus,.mem-bf-input:focus{border-color:rgba(108,140,255,.45)}
+
 /* Empty state */
 .empty-state{text-align:center;padding:50px 20px;color:var(--t3)}
 .empty-state .es-icon{font-size:48px;margin-bottom:16px;opacity:.4}

@@ -111,11 +111,56 @@ function sh(cmd, timeout) {
 // LONG-TERM MEMORY (inspired by jarvis)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Default User Profile shape (Big Five + communication style). Stored at
+// _data.userProfile. Users edit it manually via Inspector → Learned UI;
+// learnFromTurn nudges values when it detects strong signals (e.g.
+// "обращайся ко мне формально" → formality='professional').
+const DEFAULT_USER_PROFILE = Object.freeze({
+  bigFive: { openness: 0.5, conscientiousness: 0.5, extraversion: 0.5, agreeableness: 0.5, neuroticism: 0.5 },
+  communicationStyle: { formality: 'casual', verbosity: 'medium', preferredAddress: '', lang: '' },
+  expertise: [],   // [{topic, level: 'novice'|'intermediate'|'expert', noticed: ISO}]
+  goals: [],       // [{goal, priority: 'low'|'mid'|'high', addedAt: ISO}]
+  preferences: {}, // freeform key-value (likes, dislikes, "always"/"never" rules)
+  confidence: 0.0, // overall self-assessed confidence — bumped by manual edits
+  observedAt: null,
+  source: 'default',
+});
+
+// Source tags for memory provenance. Every memory/fact/conversation knows
+// where it came from so the Learned-tab review UI can filter / colour them.
+const MEMORY_SOURCES = Object.freeze({
+  CHAT: 'chat',                // user typed in desktop chat
+  AGENT_TASK: 'agent_task',    // agent's runAgentLoop steps
+  AGENT_RESULT: 'agent_result',// agent reply summary
+  TELEGRAM: 'telegram',        // bot conversation
+  SLACK: 'slack',
+  DISCORD: 'discord',
+  TOOL: 'tool',                // remember-tool dispatch
+  LEARN: 'learn',              // learnFromTurn extraction
+  PROFILE: 'profile',          // user-profile editing
+  MANUAL: 'manual',            // direct UI edit
+  IMPORT: 'import',             // bulk import / migration
+});
+
 class AgentMemory {
   constructor(dbPath) {
     this.filePath = dbPath.replace(/\.db$/, '.json');
     this.ready = false;
-    this._data = { memories: [], facts: {}, meals: [], conversations: [], learning: { stats: {} } };
+    this._data = {
+      memories: [],
+      facts: {},
+      meals: [],
+      conversations: [],
+      learning: { stats: {} },
+      // ── PHASE 8-TYPE MEMORY ARCHITECTURE — see docs/memory-architecture.md ──
+      // 1. facts             — key-value preferences (existing)
+      // 2. memories          — timestamped episodic (existing)
+      // 3. conversations     — full transcript history (existing)
+      // 4. semantic index    — embeddings sidecar (existing, separate file)
+      // 5. userProfile       — Honcho-style Big Five + communication style (NEW)
+      // 6+. fts / persona-memory / workspace-conventions — planned next sprint
+      userProfile: { ...DEFAULT_USER_PROFILE, bigFive: { ...DEFAULT_USER_PROFILE.bigFive }, communicationStyle: { ...DEFAULT_USER_PROFILE.communicationStyle }, expertise: [], goals: [], preferences: {} },
+    };
     // Embeddings service is wired post-construct via setEmbeddingService.
     // While null, recall() stays on the keyword scorer — no regression for
     // users who haven't added an OpenAI/Gemini key.
@@ -177,6 +222,20 @@ class AgentMemory {
     this._data.conversations = Array.isArray(this._data.conversations) ? this._data.conversations : [];
     this._data.learning = this._data.learning && typeof this._data.learning === 'object' ? this._data.learning : { stats: {} };
     this._data.learning.stats = this._data.learning.stats && typeof this._data.learning.stats === 'object' ? this._data.learning.stats : {};
+    // User profile — Big Five + communication style. Hydrate from saved
+    // state but fill in missing keys from DEFAULT_USER_PROFILE so the
+    // shape is stable for the UI.
+    const up = (this._data.userProfile && typeof this._data.userProfile === 'object') ? this._data.userProfile : {};
+    this._data.userProfile = {
+      bigFive: { ...DEFAULT_USER_PROFILE.bigFive, ...(up.bigFive || {}) },
+      communicationStyle: { ...DEFAULT_USER_PROFILE.communicationStyle, ...(up.communicationStyle || {}) },
+      expertise: Array.isArray(up.expertise) ? up.expertise : [],
+      goals: Array.isArray(up.goals) ? up.goals : [],
+      preferences: (up.preferences && typeof up.preferences === 'object') ? up.preferences : {},
+      confidence: typeof up.confidence === 'number' ? up.confidence : 0.0,
+      observedAt: up.observedAt || null,
+      source: up.source || 'default',
+    };
   }
 
   _hash(text) {
@@ -217,18 +276,25 @@ class AgentMemory {
     }
   }
 
-  // Remember something with category and importance
-  remember(content, category, importance) {
+  // Remember something with category and importance.
+  // `source` (PHASE: memory provenance) records WHERE the memory came from
+  // — chat / agent_task / telegram / tool / learn / manual — so the
+  // review UI can show provenance and let users selectively forget.
+  remember(content, category, importance, source) {
     if (!this.ready || !content) return null;
     this._ensureShape();
     const normalized = this._normalizeText(content);
     if (!normalized) return null;
     const key = this._memoryKey(normalized, category || 'general');
+    const tag = String(source || MEMORY_SOURCES.TOOL);
     const existing = this._data.memories.find(m => m.key === key);
     if (existing) {
       existing.lastSeen = Date.now();
       existing.seen = (existing.seen || 1) + 1;
       existing.importance = Math.max(existing.importance || 5, importance || 5);
+      // Track the most recent source we observed this memory from. Useful
+      // for the UI ("seen 3 times — last from telegram").
+      if (tag) existing.lastSource = tag;
       this._save();
       return existing;
     }
@@ -240,7 +306,9 @@ class AgentMemory {
       created: Date.now(),
       lastSeen: Date.now(),
       seen: 1,
-      importance: importance || 5
+      importance: importance || 5,
+      source: tag,
+      lastSource: tag,
     };
     this._data.memories.push(item);
     // Limit to last 2000 memories
@@ -258,21 +326,134 @@ class AgentMemory {
     return item;
   }
 
-  // Set a persistent fact (key-value)
-  setFact(key, value) {
+  // Set a persistent fact (key-value). `source` records provenance for the
+  // review UI; defaults to MANUAL when not specified.
+  setFact(key, value, source) {
     if (!this.ready) return false;
     this._ensureShape();
     const safeKey = this._normalizeText(key, 120);
     const safeValue = this._normalizeText(value, 1200);
     if (!safeKey || !safeValue) return false;
-    const prev = this._data.facts[safeKey]?.value;
+    const prev = this._data.facts[safeKey];
+    const tag = String(source || MEMORY_SOURCES.MANUAL);
     this._data.facts[safeKey] = {
       value: safeValue,
       updated: Date.now(),
-      seen: (this._data.facts[safeKey]?.seen || 0) + (prev === safeValue ? 1 : 0)
+      seen: (prev?.seen || 0) + (prev?.value === safeValue ? 1 : 0),
+      // Preserve the ORIGINAL source on subsequent updates; track the most
+      // recent in `lastSource`. Helps the user see "you set this manually
+      // but Telegram confirmed it twice".
+      source: prev?.source || tag,
+      lastSource: tag,
     };
     this._save();
     return true;
+  }
+
+  // ── Memory provenance helpers ────────────────────────────────────────
+  forgetFact(key) {
+    if (!this.ready) return false;
+    this._ensureShape();
+    const safeKey = this._normalizeText(key, 120);
+    if (!safeKey || !(safeKey in this._data.facts)) return false;
+    delete this._data.facts[safeKey];
+    this._save();
+    return true;
+  }
+
+  forgetMemory(idOrKey) {
+    if (!this.ready) return false;
+    this._ensureShape();
+    const target = String(idOrKey || '');
+    const before = this._data.memories.length;
+    this._data.memories = this._data.memories.filter(m => String(m.id) !== target && m.key !== target);
+    const removed = before - this._data.memories.length;
+    if (removed > 0 && this.embeddings) {
+      // Also drop sidecar embeddings for the forgotten memory(s).
+      try {
+        for (const key of [target]) this.embeddings.removeVector(key);
+        this.embeddings.saveSidecar();
+      } catch (_) {}
+    }
+    this._save();
+    return removed > 0;
+  }
+
+  editMemory(idOrKey, partial) {
+    if (!this.ready) return false;
+    this._ensureShape();
+    const target = String(idOrKey || '');
+    const mem = this._data.memories.find(m => String(m.id) === target || m.key === target);
+    if (!mem) return false;
+    if (typeof partial?.content === 'string') {
+      const norm = this._normalizeText(partial.content);
+      if (norm) {
+        mem.content = norm;
+        // Re-key when content changes so dedup logic stays consistent.
+        const newKey = this._memoryKey(norm, mem.category || 'general');
+        if (newKey !== mem.key && this.embeddings) {
+          // Move the embedding vector to the new key + re-embed in the background.
+          try { this.embeddings.removeVector(mem.key); } catch (_) {}
+          mem.key = newKey;
+          this._queueEmbedding(newKey);
+        } else if (newKey === mem.key) {
+          this._queueEmbedding(newKey); // refresh anyway
+        }
+      }
+    }
+    if (typeof partial?.importance === 'number') {
+      mem.importance = Math.max(1, Math.min(10, partial.importance));
+    }
+    if (typeof partial?.category === 'string' && partial.category.trim()) {
+      mem.category = partial.category.trim();
+    }
+    mem.lastSeen = Date.now();
+    mem.lastSource = MEMORY_SOURCES.MANUAL;
+    this._save();
+    return true;
+  }
+
+  // ── User Profile (Big Five + communication style + preferences) ──────
+  // PHASE 5/8 memory type — "Honcho-style dialectic user model". Stored
+  // alongside facts/memories in the same JSON; the UI lets the user
+  // directly tune it; learnFromTurn can nudge values when it detects
+  // strong signals (e.g. "обращайся ко мне формально").
+  getUserProfile() {
+    this._ensureShape();
+    return JSON.parse(JSON.stringify(this._data.userProfile));
+  }
+
+  updateUserProfile(partial = {}, source = MEMORY_SOURCES.MANUAL) {
+    if (!this.ready) return null;
+    this._ensureShape();
+    const up = this._data.userProfile;
+    if (partial.bigFive && typeof partial.bigFive === 'object') {
+      for (const [k, v] of Object.entries(partial.bigFive)) {
+        if (k in up.bigFive && typeof v === 'number') {
+          up.bigFive[k] = Math.max(0, Math.min(1, v));
+        }
+      }
+    }
+    if (partial.communicationStyle && typeof partial.communicationStyle === 'object') {
+      for (const [k, v] of Object.entries(partial.communicationStyle)) {
+        if (k in up.communicationStyle) up.communicationStyle[k] = String(v || '').slice(0, 120);
+      }
+    }
+    if (Array.isArray(partial.expertise)) up.expertise = partial.expertise.slice(0, 50);
+    if (Array.isArray(partial.goals))     up.goals     = partial.goals.slice(0, 50);
+    if (partial.preferences && typeof partial.preferences === 'object') {
+      up.preferences = { ...up.preferences, ...partial.preferences };
+    }
+    if (typeof partial.confidence === 'number') {
+      up.confidence = Math.max(0, Math.min(1, partial.confidence));
+    } else {
+      // Manual edits bump confidence — user has told us something explicit.
+      if (source === MEMORY_SOURCES.MANUAL) up.confidence = Math.min(1, up.confidence + 0.05);
+    }
+    up.observedAt = new Date().toISOString();
+    up.source = source;
+    this._save();
+    return JSON.parse(JSON.stringify(up));
   }
 
   getFact(key) {
@@ -385,11 +566,15 @@ class AgentMemory {
 
     const learned = [];
     const stamp = new Date().toISOString();
+    // Source tag for everything learnFromTurn writes — surfaces in the
+    // review UI so users can tell "this fact came from chat learning" vs
+    // "this was manually entered" or "this is from a Telegram message".
+    const learnSource = String(meta?.source || MEMORY_SOURCES.LEARN);
     const addFact = (key, value) => {
-      if (this.setFact(key, value)) learned.push({ type: 'fact', key, value });
+      if (this.setFact(key, value, learnSource)) learned.push({ type: 'fact', key, value });
     };
     const addMemory = (content, category = 'learned_preference', importance = 7) => {
-      const m = this.remember(content, category, importance);
+      const m = this.remember(content, category, importance, learnSource);
       if (m) learned.push({ type: 'memory', category, content: m.content });
     };
 
@@ -475,11 +660,13 @@ class AgentMemory {
   saveConversation(userMessage, assistantReply, meta = {}) {
     if (!this.ready) return;
     this._ensureShape();
+    const safeMeta = meta && typeof meta === 'object' ? meta : {};
     this._data.conversations.push({
       id: Date.now(),
       user: this._normalizeText(userMessage, 1600),
       assistant: this._normalizeText(assistantReply, 1600),
-      meta: meta && typeof meta === 'object' ? meta : {},
+      meta: safeMeta,
+      source: safeMeta.source || MEMORY_SOURCES.CHAT,
       time: new Date().toISOString()
     });
     // Keep last 500 conversations
@@ -862,7 +1049,7 @@ async function dispatchTool(name, args = {}, ctx = {}) {
     // Memory tools
     case 'remember':
       if (memoryInstance) {
-        memoryInstance.remember(args.content, args.category, args.importance);
+        memoryInstance.remember(args.content, args.category, args.importance, 'tool');
         return { ok: true, out: 'Remembered.' };
       }
       return { ok: false, err: 'Memory not initialized' };
@@ -874,7 +1061,7 @@ async function dispatchTool(name, args = {}, ctx = {}) {
       return { ok: false, err: 'Memory not initialized' };
     case 'set_fact':
       if (memoryInstance) {
-        memoryInstance.setFact(args.key, args.value);
+        memoryInstance.setFact(args.key, args.value, 'tool');
         return { ok: true, out: `Fact saved: ${args.key}` };
       }
       return { ok: false, err: 'Memory not initialized' };
@@ -1148,6 +1335,8 @@ class ChatStore {
 module.exports = {
   AgentMemory,
   ChatStore,
+  MEMORY_SOURCES,
+  DEFAULT_USER_PROFILE,
   dispatchTool,
   setMemoryInstance,
   executeCode,
