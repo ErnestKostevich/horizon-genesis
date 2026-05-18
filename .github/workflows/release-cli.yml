@@ -1,0 +1,174 @@
+# Builds standalone CLI binaries (no Node.js required for users) for
+# Windows, macOS Intel + ARM, and Linux. Triggered by either:
+#   - pushing a tag like `cli-v1.0.0`
+#   - manual workflow_dispatch
+#
+# Outputs land as assets on a GitHub Release named `Horizon CLI <tag>`.
+# Users on the project site download one file per platform and run it.
+# No npm, no git, no Node install required.
+
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - 'cli-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or commit to build'
+        required: true
+        default: 'main'
+      tag:
+        description: 'Tag for the release (e.g. cli-v1.0.0)'
+        required: true
+        default: 'cli-v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: win-x64
+            script: cli:pkg:win
+            asset: dist-cli/horizon-win-x64.exe
+          - os: ubuntu-latest
+            label: linux-x64
+            script: cli:pkg:linux
+            asset: dist-cli/horizon-linux-x64
+          - os: macos-latest
+            label: macos-x64
+            script: cli:pkg:mac
+            asset: dist-cli/horizon-macos-x64
+          - os: macos-latest
+            label: macos-arm64
+            script: cli:pkg:mac:arm
+            asset: dist-cli/horizon-macos-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies (skip Electron)
+        run: npm ci --omit=optional
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: Build standalone CLI binary
+        run: npm run ${{ matrix.script }}
+
+      - name: Verify binary runs
+        if: matrix.label != 'macos-arm64' && matrix.label != 'win-x64'
+        run: |
+          chmod +x ${{ matrix.asset }}
+          ./${{ matrix.asset }} version --json | head -c 200
+          echo ""
+
+      - name: Compute SHA256
+        shell: bash
+        run: |
+          if [[ "${{ matrix.label }}" == "win-x64" ]]; then
+            # Built on Linux but produces a .exe — sha256sum works
+            sha256sum ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            shasum -a 256 ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          else
+            sha256sum ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
+          fi
+          cat ${{ matrix.asset }}.sha256
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: horizon-cli-${{ matrix.label }}
+          path: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish CLI release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/cli-v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: cli-assets
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-cli
+          find cli-assets -type f -exec cp {} release-cli/ \;
+          ls -lh release-cli/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Horizon CLI ${{ env.RELEASE_TAG }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          draft: false
+          prerelease: ${{ contains(env.RELEASE_TAG, '-rc') || contains(env.RELEASE_TAG, '-beta') }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: release-cli/*
+          body: |
+            ## Horizon CLI ${{ env.RELEASE_TAG }}
+
+            Standalone command-line + TUI + headless HTTP API binaries.
+            No Node.js install required — download one file, run it.
+
+            ### Downloads
+
+            | OS | File |
+            |---|---|
+            | Windows x64        | `horizon-win-x64.exe`        |
+            | macOS Intel x64    | `horizon-macos-x64`          |
+            | macOS Apple Silicon| `horizon-macos-arm64`        |
+            | Linux x64          | `horizon-linux-x64`          |
+
+            ### Quick start
+
+            ```bash
+            # macOS / Linux
+            curl -L https://github.com/ErnestKostevich/horizon-genesis/releases/download/${{ env.RELEASE_TAG }}/horizon-linux-x64 -o horizon
+            chmod +x horizon
+            ./horizon setup       # first-run wizard
+            ./horizon             # launch the TUI
+
+            # Windows (PowerShell)
+            iwr https://github.com/ErnestKostevich/horizon-genesis/releases/download/${{ env.RELEASE_TAG }}/horizon-win-x64.exe -OutFile horizon.exe
+            ./horizon.exe setup
+            ./horizon.exe
+            ```
+
+            ### What's included
+
+            - `horizon` — CLI with subcommands (agent / chat / skill / mem / cost / connect / model / persona / setup / serve / tui)
+            - `horizon-tui` — interactive shell with banner, streaming, markdown, gradient spinner
+            - `horizon-serve` — headless HTTP API for PWA / cron / mobile clients
+
+            All read the same encrypted keys and 8-type memory the Electron app
+            uses — set up once in the GUI, use anywhere.
+
+            See `docs/cli.md` and `docs/deploy.md` for full reference.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

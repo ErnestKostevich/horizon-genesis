@@ -29,6 +29,11 @@
     "cli": "node bin/horizon.js",
     "tui": "node bin/horizon-tui.js",
     "serve": "node bin/horizon-serve.js",
+    "cli:pkg": "pkg bin/horizon.js --config package.json --out-path dist-cli",
+    "cli:pkg:win": "pkg bin/horizon.js --config package.json --targets node22-win-x64    --output dist-cli/horizon-win-x64.exe",
+    "cli:pkg:mac": "pkg bin/horizon.js --config package.json --targets node22-macos-x64  --output dist-cli/horizon-macos-x64",
+    "cli:pkg:mac:arm": "pkg bin/horizon.js --config package.json --targets node22-macos-arm64 --output dist-cli/horizon-macos-arm64",
+    "cli:pkg:linux": "pkg bin/horizon.js --config package.json --targets node22-linux-x64  --output dist-cli/horizon-linux-x64",
     "build:win": "npm run stamp-build -- --runner=windows && electron-builder --win",
     "build:win:portable": "npm run stamp-build -- --runner=windows-portable && electron-builder --win portable",
     "build:mac": "npm run stamp-build -- --runner=mac && electron-builder --mac",
@@ -47,6 +52,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
+    "@yao-pkg/pkg": "^6.19.0",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.0",
     "png-to-ico": "^2.1.8",
@@ -141,5 +147,27 @@
   },
   "optionalDependencies": {
     "node-pty": "^1.1.0"
+  },
+  "pkg": {
+    "scripts": [
+      "bin/**/*.js",
+      "src/main/runtime/**/*.js",
+      "src/main/agent.js",
+      "src/main/agentLoop.js",
+      "src/main/skillsManager.js",
+      "src/main/embeddings.js",
+      "src/main/personas.js",
+      "src/main/executor.js",
+      "src/main/connectionsManager.js",
+      "src/main/discordGateway.js",
+      "src/main/workspaceMemory.js",
+      "src/main/memoryFts.js",
+      "src/main/skillSuggester.js"
+    ],
+    "assets": [
+      "builtin-skills/**/*",
+      "package.json"
+    ],
+    "outputPath": "dist-cli"
   }
 }

@@ -34,6 +34,14 @@ const fs = require('fs');
 
 const { initStores, defaultUserDataDir } = require('./store-shim');
 const { createAiClient } = require('./ai-providers');
+const { CostTracker } = require('./cost-tracker');
+
+// Provider preference order for `--provider auto`. Picks the first one
+// that has a key configured (or is a local provider). Order = "cheap +
+// reliable first". Local Ollama beats hosted Gemini Flash because users
+// who installed Ollama explicitly want it.
+const AUTO_ORDER = ['ollama', 'lmstudio', 'localai', 'gemini', 'groq',
+                    'deepseek', 'mistral', 'openrouter', 'claude', 'openai'];
 
 function safeRequire(modulePath) {
   try { return require(modulePath); } catch (e) { return { __error: e.message }; }
@@ -175,6 +183,65 @@ function createHorizonRuntime(opts = {}) {
 
   // ── AI client ─────────────────────────────────────────────────────────
   const aiClient = createAiClient({ keysStore, settingsStore });
+
+  // ── Cost tracker ─────────────────────────────────────────────────────
+  const costTracker = new CostTracker(userDataDir);
+
+  /**
+   * Pick a provider when caller passed `auto`. Walks AUTO_ORDER and
+   * returns the first one that's actually usable on this install
+   * (key set, or local provider).
+   */
+  function resolveAutoProvider() {
+    for (const id of AUTO_ORDER) {
+      if (['ollama', 'lmstudio', 'localai'].includes(id)) {
+        // Local providers — assume usable; we'll fail fast at call time
+        // if the daemon isn't running. Only return local if user has
+        // explicitly configured a URL — otherwise prefer hosted Gemini
+        // which "just works" with a key.
+        const urlKey = id === 'ollama' ? 'ollamaUrl'
+                     : id === 'lmstudio' ? 'lmStudioUrl' : 'localAiUrl';
+        if (settingsStore.get(urlKey)) return id;
+        continue;
+      }
+      if (keysStore.get('k_' + id)) return id;
+    }
+    return settingsStore.get('provider') || 'gemini';
+  }
+
+  // Wrap aiClient.complete + completeStream to record usage automatically.
+  const _origComplete = aiClient.complete;
+  aiClient.complete = async (messages, opts = {}) => {
+    if (opts.provider === 'auto') opts = { ...opts, provider: resolveAutoProvider() };
+    const r = await _origComplete(messages, opts);
+    if (r && r.usage) {
+      try {
+        costTracker.record({
+          provider: opts.provider || settingsStore.get('provider') || 'gemini',
+          model: r.model,
+          usage: r.usage,
+          source: opts.source || 'cli',
+        });
+      } catch (_) {}
+    }
+    return r;
+  };
+  const _origStream = aiClient.completeStream;
+  aiClient.completeStream = async (messages, opts = {}, onToken) => {
+    if (opts.provider === 'auto') opts = { ...opts, provider: resolveAutoProvider() };
+    const r = await _origStream(messages, opts, onToken);
+    if (r && r.usage) {
+      try {
+        costTracker.record({
+          provider: opts.provider || settingsStore.get('provider') || 'gemini',
+          model: r.model,
+          usage: r.usage,
+          source: opts.source || 'cli-stream',
+        });
+      } catch (_) {}
+    }
+    return r;
+  };
 
   // ── Agent loop ────────────────────────────────────────────────────────
   const agentLoopModule = safeRequire('../agentLoop');
@@ -381,7 +448,8 @@ function createHorizonRuntime(opts = {}) {
     // Modules
     agentMemory, embeddingService, workspaceMemory,
     personas, executor, skillsManager, connectionsManager,
-    aiClient,
+    aiClient, costTracker,
+    resolveAutoProvider,
     // High-level entry points
     runAgent, runChat, runChatStream,
     buildSystemPrompt,
