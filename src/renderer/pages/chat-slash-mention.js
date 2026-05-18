@@ -48,6 +48,14 @@ var SLASH_COMMANDS = [
   { id: 'plugins',  label: '/plugins',        hint: 'Open Plugin Hub',                                  exec: () => { try { openHub?.(); } catch(_){} } },
   { id: 'store',    label: '/store',          hint: 'Open Marketplace',                                 exec: () => { try { openStore?.(); } catch(_){} } },
   { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                    exec: () => { try { openCmdPalette?.(); } catch(_){} } },
+  // Skills system (Phase 2 — Claude Code-style SKILL.md bundles).
+  { id: 'skills',   label: '/skills',         hint: 'Open Skill Hub (browse / edit / toggle SKILL.md)', exec: () => { try { openSkillHub?.(); } catch(_){} } },
+  { id: 'skill',    label: '/skill <id> [message]', hint: 'Force-load a skill on the next turn',     exec: (arg) => { try { window._handleSlashCommand?.('/skill ' + (arg || '')); } catch(_){} } },
+  // Subagents (parallel-friendly research / multi-source lookups).
+  { id: 'spawn_subagent', label: '/spawn_subagent <task>', hint: 'Fire a one-off subagent — bypasses the AI loop. Test mode for debugging.', exec: (arg) => { try { window._handleSlashCommand?.('/spawn_subagent ' + (arg || '')); } catch(_){} } },
+  { id: 'subagent', label: '/subagent <task>', hint: 'Alias for /spawn_subagent — see Subagents inspector tab.', exec: (arg) => { try { window._handleSlashCommand?.('/subagent ' + (arg || '')); } catch(_){} } },
+  // Telegram chats (Phase Telegram chat viewer).
+  { id: 'telegram', label: '/telegram',       hint: 'Open Telegram chat viewer',                        exec: () => { try { openTelegramHub?.(); } catch(_){} } },
 ];
 var _slashState = null; // { items, activeIdx, inputEl, query } when open
 
