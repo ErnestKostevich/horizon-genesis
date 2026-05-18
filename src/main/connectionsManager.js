@@ -265,7 +265,7 @@ class ConnectionsManager {
     const allowedUserIds = this.telegramAllowedUserIds();
     this.telegramLog(
       allowedUserIds.length
-        ? `Telegram live replies started. Owner lock allows ${allowedUserIds.length} Telegram user ID(s).`
+        ? `Telegram live replies started. ${allowedUserIds.length} Telegram user ID(s) allowed.`
         : 'Telegram live replies started in locked mode. Add allowed Telegram user IDs before replies are sent.',
       'run'
     );
