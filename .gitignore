@@ -6,6 +6,7 @@ yarn-error.log*
 
 # Build output — installers are uploaded to GitHub Releases, not committed
 dist/
+dist-cli/
 out/
 build/
 *.exe
