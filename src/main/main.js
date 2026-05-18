@@ -4157,6 +4157,13 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         facts: agentMemory.getAllFacts(),
         relevant,
         recentConversations: agentMemory.searchConversations(userMessage, 5),
+        // PHASE 5/8 memory: user profile block (Big Five + style) ready
+        // to inject into the system prompt. Empty string when confidence
+        // is still below the 0.2 threshold (we don't invent a profile
+        // we can't justify).
+        userProfileBlock: typeof agentMemory.buildUserProfileBlock === 'function'
+          ? agentMemory.buildUserProfileBlock()
+          : '',
       };
     } catch (_) {}
   }

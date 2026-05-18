@@ -118,6 +118,13 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
   const memoryFacts = Object.entries(memory.facts || {}).slice(0, 20).map(([k, v]) => `- ${k}: ${v}`).join('\n');
   const memoryRelevant = (memory.relevant || []).slice(0, 8).map(m => `- ${m.content}`).join('\n');
   const memoryBlock = [memoryFacts && `Known user facts:\n${memoryFacts}`, memoryRelevant && `Relevant memories:\n${memoryRelevant}`].filter(Boolean).join('\n');
+  // User profile block (Big Five + communication style) — pre-rendered by
+  // AgentMemory.buildUserProfileBlock based on confidence > 0.2. Injected
+  // separately from memoryBlock so the prompt structure stays readable
+  // and we can A/B the format without touching memory logic.
+  const userProfileBlock = (typeof memory.userProfileBlock === 'string' && memory.userProfileBlock.trim())
+    ? memory.userProfileBlock
+    : '';
   const githubBlock = (sysInfo?.github_repos || []).slice(0, 10).map(r => `- ${r.fullName} (${r.defaultBranch || 'main'}): ${r.description || r.url}`).join('\n');
   const connectionsBlock = (sysInfo?.connections || []).slice(0, 12).map(c => `- ${c.name || c.id}: ${c.toolCount || 0} tools`).join('\n');
 
@@ -197,7 +204,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}` : ''}
-${projectRulesBlock || ''}${skillsBlock || ''}
+${projectRulesBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 ${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}
@@ -216,7 +223,7 @@ After tools finish, answer normally and concisely. If a tool fails twice, explai
 ${sysInfo?.active_window ? `Активное окно: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Местоположение: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Персона / стиль\n${personaBlock}\n` : ''}
-${projectRulesBlock || ''}${skillsBlock || ''}
+${projectRulesBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Контекст памяти\n${memoryBlock}\n` : ''}
 ${githubBlock ? `\n## Подключенные GitHub-репозитории\n${githubBlock}\n` : ''}
 ${connectionsBlock ? `\n## Активные подключения\n${connectionsBlock}\n` : ''}
@@ -255,7 +262,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}\n` : ''}
-${projectRulesBlock || ''}${skillsBlock || ''}
+${projectRulesBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 ${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}
