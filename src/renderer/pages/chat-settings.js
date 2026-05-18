@@ -566,7 +566,7 @@ async function loadTelegramAllowedUsers() {
   if (st) {
     st.textContent = ids.length
       ? `Owner lock active: ${ids.length} Telegram user ID${ids.length === 1 ? '' : 's'} allowed.`
-      : 'Locked: no Telegram user IDs are allowed yet. Start the bot, send /start, then copy your blocked user ID from the runtime log.';
+      : 'Locked: no Telegram user IDs are allowed yet. Send /start to the bot and it will reply with your Telegram user ID.';
     st.classList.toggle('ok', ids.length > 0);
     st.classList.toggle('bad', ids.length === 0);
   }
@@ -597,7 +597,7 @@ function _renderTelegramRuntimeStatus(status) {
   if (st) {
     const parts = [];
     if (!status?.connected) parts.push('Token is not saved.');
-    else if (status?.running && status?.locked) parts.push('Live bot is online but locked. It will only log blocked Telegram user IDs and will not call AI.');
+    else if (status?.running && status?.locked) parts.push('Live bot is online but locked. /start replies with the sender user ID; other messages do not call AI.');
     else if (status?.running) parts.push(`Live bot is online. Replies are limited to ${status?.allowedUserIds?.length || 0} allowed Telegram user ID(s).`);
     else if (status?.enabled) parts.push('Live bot is enabled but not running. Check token/model keys and press Refresh.');
     else parts.push('Live bot is off. Start it to make Telegram messages wake Horizon and receive replies.');
