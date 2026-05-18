@@ -16,11 +16,19 @@
     "url": "https://github.com/ErnestKostevich/horizon-genesis/issues"
   },
   "main": "src/main/main.js",
+  "bin": {
+    "horizon": "bin/horizon.js",
+    "horizon-tui": "bin/horizon-tui.js",
+    "horizon-serve": "bin/horizon-serve.js"
+  },
   "scripts": {
     "start": "electron .",
     "stamp-build": "node scripts/stamp-build-info.js",
     "rebuild:native": "electron-rebuild -f -w node-pty",
     "icon:generate": "node scripts/generate-icon.js",
+    "cli": "node bin/horizon.js",
+    "tui": "node bin/horizon-tui.js",
+    "serve": "node bin/horizon-serve.js",
     "build:win": "npm run stamp-build -- --runner=windows && electron-builder --win",
     "build:win:portable": "npm run stamp-build -- --runner=windows-portable && electron-builder --win portable",
     "build:mac": "npm run stamp-build -- --runner=mac && electron-builder --mac",
@@ -30,6 +38,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@xterm/xterm": "^6.0.0",
+    "conf": "^10.2.0",
     "electron-store": "^8.1.0",
     "form-data": "^4.0.0",
     "monaco-editor": "^0.55.1",
@@ -55,6 +64,7 @@
     "files": [
       "src/**/*",
       "assets/**/*",
+      "bin/**/*",
       "builtin-skills/**/*",
       "builtin-plugins/**/*"
     ],
