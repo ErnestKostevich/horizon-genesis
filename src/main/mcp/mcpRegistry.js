@@ -181,14 +181,34 @@ class MCPRegistry {
         }));
       }
     }
-    return this.toolCache;
+    // PHASE: anti-loop fix. setEnabled() / removeServer() can run between
+    // refreshTools cycles, but the cached toolCache wasn't invalidated —
+    // so the agent kept seeing tools from disabled servers, called them,
+    // got "MCP server not enabled" errors, and looped (e.g. the
+    // system-monitor__status spam the user reported). Filter the cache
+    // through the CURRENT enabled-server list on every call. Cheap —
+    // toolCache is usually <100 entries.
+    const liveServers = new Set(
+      this.getServers().filter(s => s.enabled !== false).map(s => s.id)
+    );
+    return this.toolCache.filter(t => liveServers.has(t.serverId));
   }
 
   async dispatch(toolName, args = {}) {
     const parsed = splitNamespacedTool(toolName);
     if (!parsed) return null;
     const server = this.getServers().find(s => s.id === parsed.serverId && s.enabled);
-    if (!server) return { ok: false, err: `MCP server not enabled: ${parsed.serverId}` };
+    if (!server) {
+      // PHASE: anti-loop — same fix as pluginManager.executeTool. Return
+      // an unambiguous "do not retry" message so the LLM doesn't repeat
+      // the same disabled tool call across turns.
+      return {
+        ok: false,
+        error: `MCP server "${parsed.serverId}" is disabled or not configured. Do NOT call ${toolName} again — answer the user directly or pick a different tool.`,
+        err: `Tool unavailable: ${parsed.serverId}. Switch strategy.`,
+        unavailable: true,
+      };
+    }
     const client = this.getClient(server);
     return client.callTool(parsed.toolName, args);
   }
