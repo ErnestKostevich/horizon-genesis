@@ -221,6 +221,30 @@
         <option value="deep">🧠 Deep (Reasoning)</option>
       </select></div>
       <div class="local-status" id="thinking-hint" style="margin-top:6px;font-size:10.5px">Deep mode uses provider-native reasoning/thinking only when the selected model supports it.</div></div>
+
+      <!-- Subagent model — used by spawn_subagent for parallel-friendly
+           research / multi-source lookups. Defaults to "same as main",
+           but you typically want a cheaper/faster model here (e.g. Gemini
+           Flash for subagents while Claude Opus drives the main loop). -->
+      <div class="pf"><label>Subagent provider <small style="color:var(--t3);font-weight:400">used by <code>spawn_subagent</code></small></label><div class="pr"><select class="pi ms-sel" id="ms-subagent-provider" onchange="saveSubagentProvider(this.value)">
+        <option value="">Same as main agent</option>
+        <option value="claude">Claude (Anthropic)</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Gemini (Google)</option>
+        <option value="groq">Groq</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="grok">Grok (xAI)</option>
+        <option value="mistral">Mistral</option>
+        <option value="qwen">Qwen</option>
+        <option value="perplexity">Perplexity</option>
+        <option value="cohere">Cohere</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="ollama">Ollama (local)</option>
+        <option value="lmstudio">LM Studio (local)</option>
+      </select></div>
+      <div class="local-status" style="margin-top:6px;font-size:10.5px">Picking a cheaper/faster model here keeps parallel subagent work affordable when the main agent runs a flagship model.</div></div>
+      <div class="pf"><label>Subagent model</label><div class="pr"><input class="pi" id="ms-subagent-model" type="text" placeholder="Leave empty to use the provider's default" oninput="saveSubagentModel(this.value)"/></div>
+      <div class="local-status" style="margin-top:6px;font-size:10.5px">Exact model id (e.g. <code>gemini-2.5-flash</code>, <code>gpt-5.4-mini</code>, <code>claude-haiku-4-5</code>). Empty = whichever model is selected for that provider in the rows below.</div></div>
       <div class="pf"><label>Image generation (BYOK)</label><div class="pr"><select class="pi ms-sel" id="ms-image-provider" onchange="saveImageGenerationSetting('provider', this.value)">
         <option value="auto">Auto from active provider/key</option>
         <option value="gemini">Gemini image</option>
