@@ -1,24 +1,27 @@
 #!/usr/bin/env node
-// Horizon TUI — interactive terminal shell.
+// Horizon TUI — interactive terminal shell with streaming, markdown,
+// and a live agent step rail.
 //
-// Built on the Node stdlib `readline` + ANSI escapes. Not as polished as
-// `ink` would be (no React, no spinners-in-place, no syntax-highlighted
-// markdown rendering), but: zero extra deps, instant startup, works over
-// SSH, and reuses the exact same headless runtime the CLI runs.
+// Phase 4 polish features:
+//   - ASCII banner with gradient at startup
+//   - Token-by-token streaming for chat replies (when the provider
+//     supports it: claude / openai-compat / gemini)
+//   - Markdown rendering in ANSI for finalised replies
+//   - Live step rail in agent mode: each step's status updates in place
+//     instead of accumulating; gradient spinner while the agent is
+//     thinking
+//   - Slash command autocomplete via Tab
+//   - Persistent chat history (the user/assistant turns are in-memory;
+//     long-term memory keeps everything via AgentMemory.learnFromTurn)
 //
-// Surface (matches the plan):
-//   - persistent chat history at the top
-//   - composer at the bottom — multiline (Enter sends; Shift+Enter for
-//     newline is hard in pure readline, so use \\ at end of line to
-//     continue)
-//   - slash commands: /help /quit /skills /skill X /persona X /model X
-//                     /persona-list /model-list /mem "q" /reset /clear
-//   - streaming-style output (agent step rail printed inline)
+// Built on Node stdlib `readline` + ANSI. Zero extra deps.
 
 const path = require('path');
 const readline = require('readline');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
 const { fmt, isTTY } = require('./lib/tty');
+const { renderMarkdown } = require('./lib/markdown');
+const { bannerBig, bannerCompact, GradientSpinner } = require('./lib/banner');
 
 const SLASH_HELP = `
 ${fmt.bold('Slash commands')}
@@ -38,22 +41,37 @@ ${fmt.bold('Slash commands')}
   /mem "query"          semantic memory search
   /agent <task>         run the full agent loop (multi-step + tools)
   /chat <message>       force single-turn chat (no agent loop)
-  /verbose              toggle boot/step verbosity
+  /stream on|off        toggle token-by-token streaming
+  /markdown on|off      toggle markdown rendering for replies
+  /banner               redraw the welcome banner
+  /verbose              note about boot-time verbose flag
 `;
+
+const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill-show',
+                    '/persona','/persona-list','/model','/model-list','/mem','/agent',
+                    '/chat','/stream','/markdown','/banner','/verbose'];
 
 function clearScreen() {
   process.stdout.write('\x1b[2J\x1b[H');
 }
 
-function banner(rt) {
+function bannerHeader(rt) {
   const provider = rt.settingsStore.get('provider') || 'gemini';
   const persona = rt.settingsStore.get('persona') || 'jarvis';
   const memCount = rt.agentMemory?._data?.memories?.length || 0;
   const skillCount = rt.skillsManager?.list().length || 0;
+  const lang = rt.settingsStore.get('lang') || 'en';
+
+  process.stdout.write('\n');
+  process.stdout.write(bannerBig() + '\n\n');
   process.stdout.write(
-    `\n${fmt.bold('Horizon AI')} ${fmt.dim('TUI')}\n` +
-    `${fmt.dim(`provider=${provider} · persona=${persona} · memory=${memCount} · skills=${skillCount}`)}\n` +
-    `${fmt.dim('type /help for commands · empty Enter to send · /quit to exit')}\n\n`
+    `  ${fmt.dim('provider')} ${fmt.cyan(provider)}   ` +
+    `${fmt.dim('persona')} ${fmt.cyan(persona)}   ` +
+    `${fmt.dim('lang')} ${fmt.cyan(lang)}\n` +
+    `  ${fmt.dim('memory')} ${fmt.green(memCount + '')}   ` +
+    `${fmt.dim('skills')} ${fmt.green(skillCount + '')}   ` +
+    `${fmt.dim('workspace')} ${fmt.cyan(path.basename(rt.workspaceDir))}\n\n` +
+    `  ${fmt.dim('Type /help for commands · Tab to autocomplete · /quit to exit')}\n\n`
   );
 }
 
@@ -65,40 +83,62 @@ function fmtArgs(a) {
   } catch (_) { return ''; }
 }
 
-function makeOnStep() {
-  return (event) => {
-    switch (event.type) {
-      case 'plan':
-        if (event.plan?.steps) {
-          process.stdout.write('\n' + fmt.bold('plan'));
-          event.plan.steps.forEach((s, i) =>
-            process.stdout.write(`\n  ${fmt.dim((i+1) + '.')} ${s}`));
-          process.stdout.write('\n');
+// Live step rail — keeps a single mutable line per active step instead of
+// printing N lines. When a step finalises, the line gets committed and
+// a new spinner appears for the next step.
+class StepRail {
+  constructor() {
+    this.spinner = null;
+    this.activeTool = '';
+  }
+  startThinking(text = 'thinking…') {
+    if (this.spinner) this.spinner.stop();
+    this.spinner = new GradientSpinner(text).start();
+  }
+  showPlan(steps) {
+    if (this.spinner) this.spinner.stop();
+    process.stdout.write('\n' + fmt.bold('plan') + '\n');
+    steps.forEach((s, i) => {
+      const txt = typeof s === 'string' ? s : (s.text || JSON.stringify(s));
+      process.stdout.write(`  ${fmt.dim((i+1) + '.')} ${txt}\n`);
+    });
+    process.stdout.write('\n');
+    this.spinner = new GradientSpinner('starting…').start();
+  }
+  executing(tool, args) {
+    this.activeTool = tool;
+    if (this.spinner) this.spinner.update(`${tool}(${fmtArgs(args)})`);
+  }
+  result(tool, ok, result) {
+    if (this.spinner) this.spinner.stop();
+    if (ok) {
+      const tag = fmt.green('✓');
+      process.stdout.write(`  ${tag} ${fmt.cyan(tool)} ${fmt.dim(fmtArgs(result?.out ? { out: result.out } : result || {}))}\n`);
+      const out = String(result?.out || '');
+      if (out && out.length < 400) {
+        for (const l of out.split('\n').slice(0, 4)) {
+          process.stdout.write('    ' + fmt.dim(l) + '\n');
         }
-        break;
-      case 'executing':
-        process.stdout.write(fmt.arrow(`${fmt.cyan(event.tool)} ${fmt.dim(fmtArgs(event.args))}`) + '\n');
-        break;
-      case 'result':
-        if (event.ok) {
-          const out = event.result?.out || '';
-          if (out) {
-            const trimmed = String(out).length > 200 ? String(out).slice(0, 197) + '…' : out;
-            process.stdout.write('  ' + fmt.dim(trimmed) + '\n');
-          }
-        } else {
-          process.stdout.write('  ' + fmt.red(event.result?.err || 'error') + '\n');
-        }
-        break;
-      case 'reflection': {
-        const tag = event.goalMet === 'yes' ? fmt.green('goal-met')
-                  : event.goalMet === 'partial' ? fmt.yellow('partial')
-                  : fmt.red('not-met');
-        process.stdout.write(fmt.dim('reflection ') + tag + '\n');
-        break;
       }
+    } else {
+      const tag = fmt.red('✗');
+      const err = result?.err || result?.error || 'failed';
+      process.stdout.write(`  ${tag} ${fmt.cyan(tool)} ${fmt.red(String(err).slice(0, 120))}\n`);
     }
-  };
+    this.spinner = new GradientSpinner('thinking…').start();
+  }
+  reflection(goalMet, confidence) {
+    if (this.spinner) this.spinner.stop();
+    const tag = goalMet === 'yes' ? fmt.green('● goal met')
+              : goalMet === 'partial' ? fmt.yellow('● partial')
+              : fmt.red('● not met');
+    const conf = confidence ? fmt.dim(` confidence=${confidence}`) : '';
+    process.stdout.write(`  ${tag}${conf}\n`);
+    this.spinner = new GradientSpinner('finishing…').start();
+  }
+  stop() {
+    if (this.spinner) { this.spinner.stop(); this.spinner = null; }
+  }
 }
 
 async function main({ flags } = {}) {
@@ -109,188 +149,268 @@ async function main({ flags } = {}) {
   });
 
   if (!isTTY) {
-    process.stderr.write(fmt.warn('TUI needs an interactive terminal. Pipe input?') + '\n');
+    process.stderr.write(fmt.warn('TUI works best in an interactive terminal') + '\n');
   }
 
   clearScreen();
-  banner(runtime);
+  bannerHeader(runtime);
 
-  const history = []; // chat history for the AI (role/content)
-  let mode = 'chat'; // 'chat' or 'agent' — flips per command
+  const state = {
+    history: [], // chat history for the AI (role/content)
+    mode: 'chat',
+    stream: true,    // token-by-token by default
+    markdown: true,  // render markdown in finalised replies
+  };
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: fmt.cyan('› '),
+    completer: (line) => {
+      if (!line.startsWith('/')) return [[], line];
+      const hits = SLASH_LIST.filter(c => c.startsWith(line));
+      return [hits, line];
+    },
   });
-
   rl.prompt();
 
   rl.on('line', async (line) => {
     const raw = line.trim();
     if (!raw) { rl.prompt(); return; }
 
-    // Slash commands ─────────────────────────────────────────────────────
     if (raw.startsWith('/')) {
-      const tokens = raw.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-      const head = tokens[0];
-      const rest = tokens.slice(1).map(t => t.replace(/^"|"$/g, ''));
-
-      if (head === '/quit' || head === '/exit') {
-        process.stdout.write(fmt.dim('bye\n'));
-        rl.close();
-        return;
-      }
-      if (head === '/help') { process.stdout.write(SLASH_HELP); rl.prompt(); return; }
-      if (head === '/clear') { clearScreen(); banner(runtime); rl.prompt(); return; }
-      if (head === '/reset') {
-        history.length = 0;
-        process.stdout.write(fmt.dim('chat history cleared (memory retained)\n'));
-        rl.prompt(); return;
-      }
-      if (head === '/skills') {
-        const list = runtime.skillsManager?.list() || [];
-        for (const s of list) {
-          process.stdout.write(`  ${fmt.cyan(s.id.padEnd(20))} ${fmt.dim('· ' + (s.description || ''))}\n`);
-        }
-        rl.prompt(); return;
-      }
-      if (head === '/skill-show') {
-        const id = rest[0];
-        if (!id) { process.stdout.write(fmt.err('usage: /skill-show <id>\n')); rl.prompt(); return; }
-        const raw = runtime.skillsManager?.readSource(id);
-        if (raw) process.stdout.write(raw + '\n');
-        else process.stdout.write(fmt.err('not found\n'));
-        rl.prompt(); return;
-      }
-      if (head === '/skill') {
-        const id = rest[0];
-        if (!id) { process.stdout.write(fmt.err('usage: /skill <id> [task]\n')); rl.prompt(); return; }
-        mode = 'agent';
-        await runOne(runtime, history, rest.slice(1).join(' ') || `Apply skill ${id} on context.`, { mode: 'agent' });
-        rl.prompt(); return;
-      }
-      if (head === '/agent') {
-        const task = rest.join(' ');
-        if (!task) { process.stdout.write(fmt.err('usage: /agent <task>\n')); rl.prompt(); return; }
-        await runOne(runtime, history, task, { mode: 'agent' });
-        rl.prompt(); return;
-      }
-      if (head === '/chat') {
-        const msg = rest.join(' ');
-        if (!msg) { process.stdout.write(fmt.err('usage: /chat <message>\n')); rl.prompt(); return; }
-        await runOne(runtime, history, msg, { mode: 'chat' });
-        rl.prompt(); return;
-      }
-      if (head === '/persona') {
-        const id = rest[0];
-        if (!id) {
-          process.stdout.write(`${fmt.cyan(runtime.settingsStore.get('persona') || 'jarvis')}\n`);
-        } else {
-          runtime.settingsStore.set('persona', id);
-          process.stdout.write(fmt.ok('persona → ' + fmt.cyan(id)) + '\n');
-        }
-        rl.prompt(); return;
-      }
-      if (head === '/persona-list') {
-        const list = runtime.personas?.getAllPersonas?.() || [];
-        const active = runtime.settingsStore.get('persona') || 'jarvis';
-        for (const p of list) {
-          const star = p.id === active ? fmt.green('●') : ' ';
-          process.stdout.write(`  ${star} ${fmt.cyan(p.id.padEnd(14))} ${fmt.dim(p.tagline || p.description || '')}\n`);
-        }
-        rl.prompt(); return;
-      }
-      if (head === '/model') {
-        const newProv = rest[0];
-        if (!newProv) {
-          const current = runtime.settingsStore.get('provider') || 'gemini';
-          const m = runtime.settingsStore.get('model.' + current) || '';
-          process.stdout.write(`${fmt.cyan(current)} ${fmt.dim('(' + m + ')')}\n`);
-        } else {
-          runtime.settingsStore.set('provider', newProv);
-          process.stdout.write(fmt.ok('provider → ' + fmt.cyan(newProv)) + '\n');
-        }
-        rl.prompt(); return;
-      }
-      if (head === '/model-list') {
-        const { DEFAULT_PROVIDER_MODELS } = require('../src/main/runtime/ai-providers');
-        for (const [p, m] of Object.entries(DEFAULT_PROVIDER_MODELS)) {
-          const has = ['ollama','lmstudio','localai'].includes(p)
-            ? '—' : (runtime.keysStore.get('k_' + p) ? fmt.green('✓') : fmt.dim('·'));
-          process.stdout.write(`  ${has}  ${fmt.cyan(p.padEnd(13))} ${fmt.dim(m)}\n`);
-        }
-        rl.prompt(); return;
-      }
-      if (head === '/mem') {
-        const q = rest.join(' ');
-        if (!q) { process.stdout.write(fmt.err('usage: /mem "query"\n')); rl.prompt(); return; }
-        const results = await runtime.agentMemory.semanticRecall(q, 5, {});
-        if (!results.length) {
-          process.stdout.write(fmt.dim('no matches\n'));
-        } else {
-          for (const m of results) {
-            const score = typeof m.score === 'number' ? fmt.dim(`(${m.score.toFixed(2)}) `) : '';
-            process.stdout.write(`${score}${m.content || m.text || ''}\n`);
-          }
-        }
-        rl.prompt(); return;
-      }
-      if (head === '/verbose') {
-        // toggle by re-creating? simpler: just print a note.
-        process.stdout.write(fmt.dim('verbose toggle: restart with --verbose\n'));
-        rl.prompt(); return;
-      }
-      process.stdout.write(fmt.err('unknown slash command: ' + head) + '\n');
-      rl.prompt(); return;
+      const handled = await handleSlash(raw, state, runtime, rl);
+      if (handled !== 'continue') rl.prompt();
+      return;
     }
 
-    // Plain message → run in current mode (chat by default).
-    await runOne(runtime, history, raw, { mode });
+    await runOne(runtime, state, raw);
     rl.prompt();
   });
 
   rl.on('close', () => process.exit(0));
 }
 
-async function runOne(runtime, history, message, { mode = 'chat' } = {}) {
+async function handleSlash(raw, state, runtime, rl) {
+  const tokens = raw.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  const head = tokens[0];
+  const rest = tokens.slice(1).map(t => t.replace(/^"|"$/g, ''));
+
+  if (head === '/quit' || head === '/exit') {
+    process.stdout.write(fmt.dim('bye 👋\n'));
+    rl.close();
+    return 'continue';
+  }
+  if (head === '/help') { process.stdout.write(SLASH_HELP); return 'done'; }
+  if (head === '/clear') { clearScreen(); bannerHeader(runtime); return 'done'; }
+  if (head === '/banner') { bannerHeader(runtime); return 'done'; }
+  if (head === '/reset') {
+    state.history.length = 0;
+    process.stdout.write(fmt.dim('chat history cleared (memory retained)\n'));
+    return 'done';
+  }
+  if (head === '/stream') {
+    if (rest[0] === 'on')  state.stream = true;
+    if (rest[0] === 'off') state.stream = false;
+    process.stdout.write(fmt.dim('streaming: ') + (state.stream ? fmt.green('on') : fmt.red('off')) + '\n');
+    return 'done';
+  }
+  if (head === '/markdown') {
+    if (rest[0] === 'on')  state.markdown = true;
+    if (rest[0] === 'off') state.markdown = false;
+    process.stdout.write(fmt.dim('markdown: ') + (state.markdown ? fmt.green('on') : fmt.red('off')) + '\n');
+    return 'done';
+  }
+  if (head === '/skills') {
+    const list = runtime.skillsManager?.list() || [];
+    for (const s of list) {
+      process.stdout.write(`  ${fmt.cyan(s.id.padEnd(20))} ${fmt.dim('· ' + (s.description || ''))}\n`);
+    }
+    return 'done';
+  }
+  if (head === '/skill-show') {
+    const id = rest[0];
+    if (!id) { process.stdout.write(fmt.err('usage: /skill-show <id>\n')); return 'done'; }
+    const src = runtime.skillsManager?.readSource(id);
+    if (src) process.stdout.write(state.markdown ? renderMarkdown(src) + '\n' : src + '\n');
+    else process.stdout.write(fmt.err('not found\n'));
+    return 'done';
+  }
+  if (head === '/skill') {
+    const id = rest[0];
+    if (!id) { process.stdout.write(fmt.err('usage: /skill <id> [task]\n')); return 'done'; }
+    await runOne(runtime, state, rest.slice(1).join(' ') || `Apply skill ${id}.`, { mode: 'agent' });
+    return 'done';
+  }
+  if (head === '/agent') {
+    const task = rest.join(' ');
+    if (!task) { process.stdout.write(fmt.err('usage: /agent <task>\n')); return 'done'; }
+    await runOne(runtime, state, task, { mode: 'agent' });
+    return 'done';
+  }
+  if (head === '/chat') {
+    const msg = rest.join(' ');
+    if (!msg) { process.stdout.write(fmt.err('usage: /chat <message>\n')); return 'done'; }
+    await runOne(runtime, state, msg, { mode: 'chat' });
+    return 'done';
+  }
+  if (head === '/persona') {
+    const id = rest[0];
+    if (!id) process.stdout.write(`${fmt.cyan(runtime.settingsStore.get('persona') || 'jarvis')}\n`);
+    else {
+      runtime.settingsStore.set('persona', id);
+      process.stdout.write(fmt.ok('persona → ' + fmt.cyan(id)) + '\n');
+    }
+    return 'done';
+  }
+  if (head === '/persona-list') {
+    const list = runtime.personas?.getAllPersonas?.() || [];
+    const active = runtime.settingsStore.get('persona') || 'jarvis';
+    for (const p of list) {
+      const star = p.id === active ? fmt.green('●') : ' ';
+      process.stdout.write(`  ${star} ${fmt.cyan(p.id.padEnd(14))} ${fmt.dim(p.tagline || p.description || '')}\n`);
+    }
+    return 'done';
+  }
+  if (head === '/model') {
+    const newProv = rest[0];
+    if (!newProv) {
+      const current = runtime.settingsStore.get('provider') || 'gemini';
+      const m = runtime.settingsStore.get('model.' + current) || '';
+      process.stdout.write(`${fmt.cyan(current)} ${fmt.dim('(' + m + ')')}\n`);
+    } else {
+      runtime.settingsStore.set('provider', newProv);
+      process.stdout.write(fmt.ok('provider → ' + fmt.cyan(newProv)) + '\n');
+    }
+    return 'done';
+  }
+  if (head === '/model-list') {
+    const { DEFAULT_PROVIDER_MODELS } = require('../src/main/runtime/ai-providers');
+    for (const [p, m] of Object.entries(DEFAULT_PROVIDER_MODELS)) {
+      const has = ['ollama','lmstudio','localai'].includes(p)
+        ? '—' : (runtime.keysStore.get('k_' + p) ? fmt.green('✓') : fmt.dim('·'));
+      process.stdout.write(`  ${has}  ${fmt.cyan(p.padEnd(13))} ${fmt.dim(m)}\n`);
+    }
+    return 'done';
+  }
+  if (head === '/mem') {
+    const q = rest.join(' ');
+    if (!q) { process.stdout.write(fmt.err('usage: /mem "query"\n')); return 'done'; }
+    const results = await runtime.agentMemory.semanticRecall(q, 5, {});
+    if (!results.length) process.stdout.write(fmt.dim('no matches\n'));
+    else for (const m of results) {
+      const score = typeof m.score === 'number' ? fmt.dim(`(${m.score.toFixed(2)}) `) : '';
+      process.stdout.write(`${score}${m.content || m.text || ''}\n`);
+    }
+    return 'done';
+  }
+  if (head === '/verbose') {
+    process.stdout.write(fmt.dim('verbose toggle: restart with --verbose\n'));
+    return 'done';
+  }
+  process.stdout.write(fmt.err('unknown slash command: ' + head) + '\n');
+  return 'done';
+}
+
+async function runOne(runtime, state, message, opts = {}) {
+  const mode = opts.mode || state.mode;
   if (mode === 'agent') {
-    const onStep = makeOnStep();
-    const r = await runtime.runAgent(message, {
-      onStep,
-      history,
-      askPermission: async ({ tool, args, reason }) => {
-        // Auto-approve for read-only-ish tools, prompt for the rest.
-        const dangerous = /^(run_code|run_shell|run_python|write_file|delete_file|move_file|conn_.*_send|conn_.*_post|conn_.*_create|conn_.*_append|conn_.*_comment|mouse_click|keyboard_type|smart_click)$/i.test(tool);
-        if (!dangerous) return true;
-        // simple synchronous-ish prompt — readline is busy so use raw question
-        return new Promise(resolve => {
-          process.stdout.write(fmt.warn(`approve ${fmt.bold(tool)} ${fmt.dim(fmtArgs(args))} (${reason || 'agent step'}) y/N: `));
-          const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
-          rl2.question('', (ans) => {
-            rl2.close();
-            const yes = /^(y|yes|д|да)/i.test(ans.trim());
-            resolve(yes);
-          });
-        });
-      },
+    await runAgent(runtime, state, message);
+  } else {
+    await runChat(runtime, state, message);
+  }
+}
+
+async function runChat(runtime, state, message) {
+  // Print the "Horizon: " prefix once, then stream tokens.
+  process.stdout.write('\n' + fmt.bold('Horizon: '));
+  if (state.stream) {
+    const spinner = new GradientSpinner('thinking…').start();
+    let firstToken = true;
+    const r = await runtime.runChatStream(message, {
+      history: state.history,
+    }, (chunk) => {
+      if (firstToken) { spinner.stop(); firstToken = false; }
+      process.stdout.write(chunk);
     });
-    if (r.answer) {
-      process.stdout.write('\n' + fmt.bold('Horizon: ') + r.answer.trim() + '\n');
-      history.push({ role: 'user', content: message });
-      history.push({ role: 'assistant', content: r.answer });
-    } else if (r.error) {
-      process.stdout.write(fmt.err(r.error) + '\n');
+    if (!firstToken) {
+      // tokens did stream — finalise with a newline + optional markdown re-render
+      process.stdout.write('\n');
+      if (state.markdown && r.reply && /[*_`#>-]/.test(r.reply)) {
+        // Re-render with markdown formatting under a "formatted" divider so
+        // the raw streamed text and rendered version are both visible.
+        process.stdout.write(fmt.dim('─── rendered ───') + '\n');
+        process.stdout.write(renderMarkdown(r.reply) + '\n');
+      }
+    } else {
+      spinner.stop();
+      if (r.error) {
+        process.stdout.write(fmt.err(r.error) + '\n');
+        return;
+      }
+      // streaming returned nothing — likely cohere or some provider that
+      // doesn't support stream. Fall back to non-stream.
+      const r2 = await runtime.runChat(message, { history: state.history });
+      if (r2.reply) {
+        process.stdout.write((state.markdown ? renderMarkdown(r2.reply) : r2.reply) + '\n');
+      } else if (r2.error) {
+        process.stdout.write(fmt.err(r2.error) + '\n');
+      }
+    }
+    if (r.reply) {
+      state.history.push({ role: 'user', content: message });
+      state.history.push({ role: 'assistant', content: r.reply });
     }
   } else {
-    const r = await runtime.runChat(message, { history });
+    const spinner = new GradientSpinner('thinking…').start();
+    const r = await runtime.runChat(message, { history: state.history });
+    spinner.stop();
     if (r.reply) {
-      process.stdout.write(fmt.bold('Horizon: ') + r.reply.trim() + '\n');
-      history.push({ role: 'user', content: message });
-      history.push({ role: 'assistant', content: r.reply });
+      process.stdout.write((state.markdown ? renderMarkdown(r.reply) : r.reply) + '\n');
+      state.history.push({ role: 'user', content: message });
+      state.history.push({ role: 'assistant', content: r.reply });
     } else if (r.error) {
       process.stdout.write(fmt.err(r.error) + '\n');
     }
+  }
+}
+
+async function runAgent(runtime, state, task) {
+  const rail = new StepRail();
+  rail.startThinking('planning…');
+  const r = await runtime.runAgent(task, {
+    history: state.history,
+    onStep: (event) => {
+      switch (event.type) {
+        case 'plan': if (event.plan?.steps) rail.showPlan(event.plan.steps); break;
+        case 'thinking': /* keep spinner; could update label */ break;
+        case 'executing': rail.executing(event.tool, event.args); break;
+        case 'result':    rail.result(event.tool, event.ok, event.result); break;
+        case 'reflection': rail.reflection(event.goalMet, event.confidence); break;
+      }
+    },
+    askPermission: async ({ tool, args, reason }) => {
+      const dangerous = /^(run_code|run_shell|run_python|write_file|delete_file|move_file|conn_.*_send|conn_.*_post|conn_.*_create|conn_.*_append|conn_.*_comment|mouse_click|keyboard_type|smart_click)$/i.test(tool);
+      if (!dangerous) return true;
+      rail.stop();
+      return new Promise(resolve => {
+        process.stdout.write(fmt.warn(`approve ${fmt.bold(tool)} ${fmt.dim(fmtArgs(args))} (${reason || 'agent step'}) y/N: `));
+        const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+        rl2.question('', (ans) => {
+          rl2.close();
+          resolve(/^(y|yes|д|да)/i.test(ans.trim()));
+        });
+      });
+    },
+  });
+  rail.stop();
+  if (r.answer) {
+    process.stdout.write('\n' + fmt.bold('Horizon: '));
+    process.stdout.write((state.markdown ? renderMarkdown(r.answer) : r.answer) + '\n');
+    state.history.push({ role: 'user', content: task });
+    state.history.push({ role: 'assistant', content: r.answer });
+  } else if (r.error) {
+    process.stdout.write(fmt.err(r.error) + '\n');
   }
 }
 
