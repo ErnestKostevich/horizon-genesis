@@ -201,7 +201,20 @@ class PluginManager {
   }
 
   async executeTool(pluginId, toolName, args) {
-    if (!this.enabled.has(pluginId)) return { ok: false, error: `Plugin ${pluginId} is disabled` };
+    if (!this.enabled.has(pluginId)) {
+      // PHASE: anti-loop — when the agent calls a disabled plugin (often
+      // because the LLM remembers the tool name from a previous turn even
+      // though we no longer expose it in the prompt), return BOTH `ok:false`
+      // AND a strong message that tells the model to stop trying and fall
+      // back to a direct text answer. The previous "Plugin X is disabled"
+      // was too neutral — models retried 3-5 times before giving up.
+      return {
+        ok: false,
+        error: `Plugin ${pluginId} is disabled or no longer available. Do NOT call this tool again — answer the user's question directly without it.`,
+        err: `Tool unavailable: ${pluginId}. Switch strategy.`,
+        unavailable: true,
+      };
+    }
     const manifest = this.plugins.get(pluginId) || {};
     if (!this.isTrusted(manifest)) {
       return { ok: false, error: 'Community plugin execution is disabled until sandboxing ships.' };
