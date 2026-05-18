@@ -37,9 +37,12 @@
     <symbol id="i-terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
     <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></symbol>
     <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
-    <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.47 1.229 0 1.698l-2.609 2.609c-.47.47-1.229.47-1.698 0l-1.568-1.568a1.001 1.001 0 0 0-1.581.227l-.776 1.553a1 1 0 0 1-.894.553H10.39a.5.5 0 0 1-.5-.5v-3.342a.5.5 0 0 0-.379-.485l-1.5-.375a1 1 0 0 1-.728-.97V8.39a.5.5 0 0 1 .5-.5h3.342a.5.5 0 0 0 .485-.379l.375-1.5a1 1 0 0 1 .97-.728h.001"/></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+    <symbol id="i-git-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
     <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="5" rx="1.5"/><rect x="15" y="4" width="6" height="5" rx="1.5"/><rect x="9" y="15" width="6" height="5" rx="1.5"/><path d="M9 6.5h6"/><path d="M6 9v2a4 4 0 0 0 4 4h2"/><path d="M18 9v2a4 4 0 0 1-4 4h-2"/></symbol>
+    <symbol id="i-discord" viewBox="0 0 24 24"><path d="M7.5 8.5c3-1.2 6-1.2 9 0"/><path d="M8 17c-1.7-.5-3.1-1.3-4-2.4.4-3.4 1.3-6 2.7-7.9A13 13 0 0 1 10 5.6l.7 1.4"/><path d="M16 17c1.7-.5 3.1-1.3 4-2.4-.4-3.4-1.3-6-2.7-7.9A13 13 0 0 0 14 5.6L13.3 7"/><path d="M9 15c2 1 4 1 6 0"/><circle cx="9.5" cy="12" r=".8"/><circle cx="14.5" cy="12" r=".8"/></symbol>
     <symbol id="i-store" viewBox="0 0 24 24"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M5 10v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9"/></symbol>
     <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
     <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></symbol>
@@ -111,7 +114,7 @@
       <svg class="licon"><use href="#i-code"/></svg><span>Code</span>
     </button>
     <button class="cs-act" data-shell-target="workflows" onclick="openWorkflows()" title="Workflows">
-      <svg class="licon"><use href="#i-zap"/></svg><span>Flows</span>
+      <svg class="licon"><use href="#i-workflow"/></svg><span>Flows</span>
     </button>
     <button class="cs-act" data-shell-target="plugins" onclick="openHub()" title="Installed Plugins">
       <svg class="licon"><use href="#i-puzzle"/></svg><span>Plugins</span>
@@ -123,7 +126,7 @@
       <svg class="licon"><use href="#i-send"/></svg><span>Telegram</span>
     </button>
     <button class="cs-act" data-shell-target="discord" onclick="openDiscordHub()" title="Discord channels — bidirectional bot via Gateway WebSocket">
-      <svg class="licon"><use href="#i-zap"/></svg><span>Discord</span>
+      <svg class="licon"><use href="#i-discord"/></svg><span>Discord</span>
     </button>
     <button class="cs-act" data-shell-target="marketplace" onclick="openStore()" title="Marketplace">
       <svg class="licon"><use href="#i-store"/></svg><span>Store</span>
@@ -194,10 +197,10 @@
       <!-- ───────── ACCOUNT ───────── -->
       <section data-pane="account" class="on">
         <div class="psview-h">Account</div>
-        <div class="psview-sub">Sign-in state and identity badges. Sign in or out via the 👤 button on the title bar; this section reflects what the marketplace knows about you.</div>
+        <div class="psview-sub">Sign-in state and identity badges. Sign in or out via the Account button on the title bar; this section reflects what the marketplace knows about you.</div>
         <div class="ps">
           <div id="settings-account-card" class="info-box">
-            Open the 👤 menu in the title bar to sign in. After login your name, badges (Owner / Official / Pro / Verified) and license state appear here automatically.
+            Open the Account menu in the title bar to sign in. After login your name, badges (Owner / Official / Pro / Verified) and license state appear here automatically.
           </div>
         </div>
       </section>
@@ -621,7 +624,7 @@
         <div class="psview-sub">Installed plugins extend Horizon with extra tools and integrations. Browse the marketplace for more.</div>
         <div class="ps">
           <div id="plugin-list" style="margin-bottom:8px"></div>
-          <button class="mic-test-btn" onclick="closePanel();openStore()" style="border-color:rgba(108,140,255,.3);color:var(--acc)">🏪 Open Marketplace</button>
+          <button class="mic-test-btn" onclick="closePanel();openStore()" style="border-color:rgba(108,140,255,.3);color:var(--acc)"><svg class="licon"><use href="#i-store"/></svg> Open Marketplace</button>
         </div>
       </section>
 
@@ -694,7 +697,7 @@
          refreshGitBranchChip() when a workspace is open and is a git
          repo. Click opens the recent-branches dropdown. -->
     <button class="shell-chip subtle" id="shell-git-branch" onclick="toggleGitBranchDropdown(event)" title="Git branch (click for recent branches)" style="display:none">
-      <svg class="licon" style="margin-right:4px"><use href="#i-puzzle"/></svg>
+      <svg class="licon" style="margin-right:4px"><use href="#i-git-branch"/></svg>
       <span id="shell-git-branch-name">main</span>
     </button>
   </div>
@@ -735,7 +738,7 @@
 <!-- ═════════ PLUGIN HUB PANEL ═════════ -->
 <div class="fpanel" id="hub-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>🧩 Plugin Hub</h2>
+    <h2><svg class="licon"><use href="#i-puzzle"/></svg>Plugin Hub</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeHub()">✕</button>
     </div>
@@ -753,7 +756,7 @@
      Discord Gateway runtime in connectionsManager.js. -->
 <div class="fpanel" id="discord-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>🎮 Discord</h2>
+    <h2><svg class="licon"><use href="#i-discord"/></svg>Discord</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeDiscordHub()">✕</button>
     </div>
@@ -764,7 +767,7 @@
     </aside>
     <main class="tg-thread" id="dc-thread">
       <div class="tg-empty" style="padding:40px 20px">
-        <div style="font-size:32px;opacity:.5;margin-bottom:8px">🎮</div>
+        <div style="opacity:.55;margin-bottom:8px"><svg class="licon lg"><use href="#i-discord"/></svg></div>
         <strong>Pick a channel on the left</strong>
         <p style="font-size:12px;color:var(--t3);max-width:280px;margin:0 auto;line-height:1.6">Discord channels with bot conversations appear here. Enable Discord runtime in Settings → Connections. Up to 400 messages per channel cached locally in <code>%APPDATA%</code>.</p>
       </div>
@@ -777,7 +780,7 @@
      Backed by chat-telegram.js + connectionsManager Telegram runtime. -->
 <div class="fpanel" id="telegram-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>💬 Telegram</h2>
+    <h2><svg class="licon"><use href="#i-send"/></svg>Telegram</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeTelegramHub()">✕</button>
     </div>
@@ -788,7 +791,7 @@
     </aside>
     <main class="tg-thread" id="tg-thread">
       <div class="tg-empty" style="padding:40px 20px">
-        <div style="font-size:32px;opacity:.5;margin-bottom:8px">💬</div>
+        <div style="opacity:.55;margin-bottom:8px"><svg class="licon lg"><use href="#i-message"/></svg></div>
         <strong>Pick a chat on the left</strong>
         <p style="font-size:12px;color:var(--t3);max-width:280px;margin:0 auto;line-height:1.6">Conversations from your Telegram bot are stored locally (in <code>%APPDATA%</code> alongside your keys) and shown here. Up to 400 messages per chat.</p>
       </div>
@@ -799,7 +802,7 @@
 <!-- ═════════ SKILL HUB PANEL ═════════ -->
 <div class="fpanel" id="skills-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>📘 Skills</h2>
+    <h2><svg class="licon"><use href="#i-book"/></svg>Skills</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeSkillHub()">✕</button>
     </div>
@@ -815,7 +818,7 @@
 <!-- ═════════ MARKETPLACE STORE PANEL ═════════ -->
 <div class="fpanel" id="store-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>🏪 Marketplace</h2>
+    <h2><svg class="licon"><use href="#i-store"/></svg>Marketplace</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeStore()">✕</button>
     </div>
@@ -831,7 +834,7 @@
 <!-- ═════════ HORIZON ACCOUNT PANEL ═════════ -->
 <div class="fpanel" id="acct-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>👤 Horizon Account</h2>
+    <h2><svg class="licon"><use href="#i-user"/></svg>Horizon Account</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeAccount()">✕</button>
     </div>
@@ -846,7 +849,7 @@
 <!-- ═════════ WORKFLOWS PANEL ═════════ -->
 <div class="fpanel" id="wf-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>⚡ Workflows</h2>
+    <h2><svg class="licon"><use href="#i-workflow"/></svg>Workflows</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeWorkflows()">✕</button>
     </div>
@@ -863,7 +866,7 @@
 <!-- ═════════ SCREEN RECORDER PANEL ═════════ -->
 <div class="fpanel" id="recorder-panel">
   <div class="fph" style="-webkit-app-region:drag">
-    <h2>⏺ Screen Recorder + AI Narrator</h2>
+    <h2><svg class="licon"><use href="#i-circle"/></svg>Screen Recorder + AI Narrator</h2>
     <div class="fph-r">
       <button class="fph-x" onclick="closeRecorder()">✕</button>
     </div>
@@ -3710,7 +3713,7 @@ async function installPluginTemplate(id) {
   try {
     const result = await H.pluginInstallTpl(id);
     if (result.ok) {
-      addMsg('bot', lang === 'ru' ? `🧩 Плагин **${result.name}** установлен!` : `🧩 Plugin **${result.name}** installed!`);
+      addMsg('bot', lang === 'ru' ? `Плагин **${result.name}** установлен.` : `Plugin **${result.name}** installed.`);
       loadPluginList();
     }
   } catch(_) {}
