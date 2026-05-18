@@ -122,6 +122,9 @@
     <button class="cs-act" data-shell-target="telegram" onclick="openTelegramHub()" title="Telegram chats — view bot conversations and reply from the desktop">
       <svg class="licon"><use href="#i-send"/></svg><span>Telegram</span>
     </button>
+    <button class="cs-act" data-shell-target="discord" onclick="openDiscordHub()" title="Discord channels — bidirectional bot via Gateway WebSocket">
+      <svg class="licon"><use href="#i-zap"/></svg><span>Discord</span>
+    </button>
     <button class="cs-act" data-shell-target="marketplace" onclick="openStore()" title="Marketplace">
       <svg class="licon"><use href="#i-store"/></svg><span>Store</span>
     </button>
@@ -745,6 +748,30 @@
   <div class="fbody" id="hub-body"></div>
 </div>
 
+<!-- ═════════ DISCORD CHAT VIEWER PANEL ═════════
+     Two-column layout mirroring the Telegram panel, but backed by the
+     Discord Gateway runtime in connectionsManager.js. -->
+<div class="fpanel" id="discord-panel">
+  <div class="fph" style="-webkit-app-region:drag">
+    <h2>🎮 Discord</h2>
+    <div class="fph-r">
+      <button class="fph-x" onclick="closeDiscordHub()">✕</button>
+    </div>
+  </div>
+  <div class="tg-split">
+    <aside class="tg-side" id="dc-chat-list">
+      <div class="tg-empty">Loading…</div>
+    </aside>
+    <main class="tg-thread" id="dc-thread">
+      <div class="tg-empty" style="padding:40px 20px">
+        <div style="font-size:32px;opacity:.5;margin-bottom:8px">🎮</div>
+        <strong>Pick a channel on the left</strong>
+        <p style="font-size:12px;color:var(--t3);max-width:280px;margin:0 auto;line-height:1.6">Discord channels with bot conversations appear here. Enable Discord runtime in Settings → Connections. Up to 400 messages per channel cached locally in <code>%APPDATA%</code>.</p>
+      </div>
+    </main>
+  </div>
+</div>
+
 <!-- ═════════ TELEGRAM CHAT VIEWER PANEL ═════════
      Two-column layout: chat list on the left, thread + composer on the right.
      Backed by chat-telegram.js + connectionsManager Telegram runtime. -->
@@ -1363,8 +1390,8 @@ var audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 // window.history, so history.push(...) can crash before the AI request starts.
 var chatHistory=[];
 
-var SURFACE_NAMES = ['chat','code','workflows','plugins','skills','telegram','marketplace','personas','settings','account','recorder'];
-var SURFACE_PANEL_IDS = ['hub-panel','skills-panel','telegram-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
+var SURFACE_NAMES = ['chat','code','workflows','plugins','skills','telegram','discord','marketplace','personas','settings','account','recorder'];
+var SURFACE_PANEL_IDS = ['hub-panel','skills-panel','telegram-panel','discord-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
 var activeSurface = 'chat';
 var chatSidebarCollapsed = false;
 
@@ -2519,6 +2546,7 @@ document.addEventListener('keydown', (e) => {
     ['hub-panel', 'closeHub'],
     ['skills-panel', 'closeSkillHub'],
     ['telegram-panel', 'closeTelegramHub'],
+    ['discord-panel', 'closeDiscordHub'],
     ['store-panel', 'closeStore'],
     ['acct-panel', 'closeAccount'],
     ['panel', 'closePanel'],
@@ -3802,6 +3830,9 @@ H.onMarketAuthenticated?.(async (user) => {
      lets the user reply from the desktop. Backed by connectionsManager
      Telegram runtime + IPC handlers (tgListChats / tgGetHistory / tgSendFromUI). -->
 <script src="chat-telegram.js"></script>
+<!-- Discord chat viewer: same shape as Telegram but driven by Discord
+     Gateway WebSocket runtime. dc* IPC + onDiscordMessage events. -->
+<script src="chat-discord.js"></script>
 <!-- PR-V Phase 3.8 — Marketplace Store + Horizon Account (was 5249-5835).
      ~588 LOC: store browse/install/publish + account SSO + login/signup. -->
 <script src="chat-marketplace.js"></script>
