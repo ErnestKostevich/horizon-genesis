@@ -158,7 +158,7 @@ const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
   'openrouter', 'ollama', 'lmstudio', 'localai',
 ]);
 const ALLOWED_SETTING_KEYS = new Set([
-  'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider',
+  'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider', 'subagentProvider',
   'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
   'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
   'mode', 'searchOn', 'responseProfile',
@@ -234,6 +234,12 @@ function assertAllowedSetting(key) {
   const safeKey = String(key || '');
   if (safeKey.startsWith('model.')) {
     const provider = safeKey.slice('model.'.length);
+    if (ALLOWED_MODEL_SETTING_PROVIDERS.has(provider)) return;
+  }
+  // Subagent model override: subagentModel.<provider> — uses the same
+  // provider allowlist as the main model picker.
+  if (safeKey.startsWith('subagentModel.')) {
+    const provider = safeKey.slice('subagentModel.'.length);
     if (ALLOWED_MODEL_SETTING_PROVIDERS.has(provider)) return;
   }
   if (!ALLOWED_SETTING_KEYS.has(safeKey)) {
@@ -3016,18 +3022,31 @@ async function spawnSubagent(opts = {}) {
   subagentDepthByRunId.set(childRunId, childDepth);
   activeSubagents.add(childRunId);
 
-  const provider = settingsStore.get('provider') || 'gemini';
+  const parentProvider = settingsStore.get('provider') || 'gemini';
+  // ── Subagent model selection ─────────────────────────────────────────
+  // Users can pick a different (usually cheaper / faster) model for
+  // subagents than for the main agent. Common setup: Claude Opus 4.7 for
+  // the parent, Gemini 2.5 Flash for subagents — slashes cost & latency
+  // for parallel-friendly research tasks while keeping the main loop
+  // smart. Falls back to the main provider/model when not configured,
+  // so existing behaviour is preserved.
+  const subProvider = settingsStore.get('subagentProvider') || parentProvider;
+  const subModelOverride = settingsStore.get(`subagentModel.${subProvider}`) || '';
   const lang = settingsStore.get('lang') || 'en';
   const userName = settingsStore.get('userName') || 'User';
   const personaId = settingsStore.get('persona') || 'jarvis';
 
   // Subagent aiFn — thin wrapper around runAiCompletion (already handles
   // model selection, persona injection, key lookup for all 13 providers).
+  // We force the configured subagent provider/model via opts.model, which
+  // selectedModel() in main.js already honours as an explicit override.
   // No native tools — subagent uses JSON tool-call format which is more
   // portable across providers.
   const aiFn = async (messages, systemPrompt) => {
     try {
-      const res = await runAiCompletion(null, messages || [], provider, systemPrompt || '', { source: 'subagent', subagent: true });
+      const aiOpts = { source: 'subagent', subagent: true };
+      if (subModelOverride) aiOpts.model = subModelOverride;
+      const res = await runAiCompletion(null, messages || [], subProvider, systemPrompt || '', aiOpts);
       return { reply: res?.reply || '', model: res?.model, usage: res?.usage, error: res?.error };
     } catch (e) {
       return { error: e.message || 'subagent aiFn failed' };
