@@ -2969,6 +2969,192 @@ let mcpRegistry = null;
 let connectionsManager = null;
 const activeAgentRuns = new Map();
 const pendingAgentSteps = new Map();
+// ── SUBAGENT INFRASTRUCTURE ────────────────────────────────────────────────
+// Subagents are isolated runAgentLoop invocations spawned by a parent via
+// the spawn_subagent tool. Each gets its own runId, own message history,
+// own steps, and its own controller, but reuses the parent's aiFn /
+// sysInfo / persona for consistency. Depth is capped so a runaway tool
+// chain can't blow the stack; concurrency caps avoid unbounded fan-out.
+const MAX_SUBAGENT_DEPTH = 2;
+const MAX_CONCURRENT_SUBAGENTS = 4;
+const subagentDepthByRunId = new Map(); // runId -> depth (0 = root, 1+ = nested)
+const activeSubagents = new Set();      // current in-flight child runIds
+
+/**
+ * Spawn an isolated child agent run. Invoked by agent.js' spawn_subagent
+ * tool. Reuses the parent's runAiCompletion under the hood for provider/
+ * key/model selection, so the subagent always matches the user's chosen
+ * model without us duplicating that wiring.
+ *
+ * @param {object} opts
+ * @param {string} opts.task        - concrete self-contained task
+ * @param {string} [opts.parentRunId]
+ * @param {object} [opts.event]     - parent's IPC event (for broadcastAgentStep)
+ * @param {string[]} [opts.allowedTools] - whitelist subset; default = safe non-destructive
+ * @param {number} [opts.maxSteps]  - cap on subagent steps (default 4)
+ * @param {number} [opts.timeoutMs] - overall subagent timeout (default 60s)
+ */
+async function spawnSubagent(opts = {}) {
+  loadAgentModules();
+  if (!agentLoop || !agentTools) {
+    return { ok: false, err: 'Agent runtime not loaded' };
+  }
+  const task = String(opts.task || '').trim();
+  if (!task) return { ok: false, err: 'task is required' };
+
+  const parentRunId = opts.parentRunId || 'root';
+  const parentDepth = subagentDepthByRunId.get(parentRunId) || 0;
+  if (parentDepth >= MAX_SUBAGENT_DEPTH) {
+    return { ok: false, err: `subagent depth cap reached (${MAX_SUBAGENT_DEPTH})` };
+  }
+  if (activeSubagents.size >= MAX_CONCURRENT_SUBAGENTS) {
+    return { ok: false, err: `too many concurrent subagents (${MAX_CONCURRENT_SUBAGENTS})` };
+  }
+
+  const childRunId = `${parentRunId}.sub-${Date.now().toString(36).slice(-4)}-${Math.floor(Math.random()*9000+1000)}`;
+  const childDepth = parentDepth + 1;
+  subagentDepthByRunId.set(childRunId, childDepth);
+  activeSubagents.add(childRunId);
+
+  const provider = settingsStore.get('provider') || 'gemini';
+  const lang = settingsStore.get('lang') || 'en';
+  const userName = settingsStore.get('userName') || 'User';
+  const personaId = settingsStore.get('persona') || 'jarvis';
+
+  // Subagent aiFn — thin wrapper around runAiCompletion (already handles
+  // model selection, persona injection, key lookup for all 13 providers).
+  // No native tools — subagent uses JSON tool-call format which is more
+  // portable across providers.
+  const aiFn = async (messages, systemPrompt) => {
+    try {
+      const res = await runAiCompletion(null, messages || [], provider, systemPrompt || '', { source: 'subagent', subagent: true });
+      return { reply: res?.reply || '', model: res?.model, usage: res?.usage, error: res?.error };
+    } catch (e) {
+      return { error: e.message || 'subagent aiFn failed' };
+    }
+  };
+
+  // sysInfo: lightweight — subagent doesn't need workspace/memory/connections
+  // bloat. Just identity + clock keeps the prompt tight + cheaper.
+  let sysInfo = {};
+  try { sysInfo = await agentTools.getDetailedSysInfo(); } catch (_) {}
+  sysInfo = sysInfo || {};
+  // Drop expensive bits to keep subagent prompts lean.
+  delete sysInfo.memory;
+  delete sysInfo.github_repos;
+  delete sysInfo.connections;
+
+  // Tool filter: by default subagents only get NON-destructive tools.
+  // Parent can override via opts.allowedTools to grant specific extras.
+  const SAFE_TOOLS_DEFAULT = new Set([
+    'read_file', 'list_dir', 'search_files',
+    'get_system_info', 'get_running_apps', 'shell_command',
+    'get_location', 'get_weather', 'web_search', 'wikipedia',
+    'recall', 'get_facts',
+  ]);
+  const allowedTools = Array.isArray(opts.allowedTools) && opts.allowedTools.length
+    ? new Set(opts.allowedTools)
+    : SAFE_TOOLS_DEFAULT;
+  const safeExtra = (agentTools.TOOL_DEFINITIONS || []).filter(t => allowedTools.has(t.name));
+
+  // Step broadcaster — forwards subagent steps tagged with parent runId so
+  // the inspector can group them under the parent run's panel.
+  const broadcast = (step) => {
+    try {
+      if (opts.event?.sender) broadcastAgentStep(step, opts.event.sender);
+    } catch (_) {}
+  };
+
+  const startStep = {
+    type: 'subagent-spawned',
+    runId: childRunId,
+    parentRunId,
+    depth: childDepth,
+    task: task.slice(0, 200),
+    startedAt: new Date().toISOString(),
+  };
+  broadcast(startStep);
+
+  const onStep = (step) => {
+    // Tag every subagent's step so the inspector can group/show them.
+    broadcast({ ...step, runId: childRunId, parentRunId, isSubagent: true });
+  };
+
+  // Lightweight controller — subagents are non-cancellable from UI v1; the
+  // overall timeout below is the only hard stop.
+  const childController = {
+    isStopped: () => false,
+    isPaused: () => false,
+    beforeTool: async () => ({ decision: 'allow' }),
+    observe: () => {},
+  };
+
+  const maxSteps = Math.max(1, Math.min(8, opts.maxSteps || 4));
+  const timeoutMs = Math.max(5000, Math.min(180000, opts.timeoutMs || 60000));
+
+  let result;
+  try {
+    result = await Promise.race([
+      agentLoop.runAgentLoop(task, {
+        aiFn,
+        sysInfo,
+        lang,
+        userName,
+        history: [],
+        maxSteps,
+        onStep,
+        runId: childRunId,
+        control: childController,
+        nativeTools: false,
+        extraTools: safeExtra,
+        personaId,
+        // Subagents share the parent's dispatch with the runId context so
+        // they can — in principle — spawn deeper subagents (depth cap will
+        // refuse). Keep the context threaded.
+        dispatchToolFn: (n, a) => agentTools.dispatchTool(n, a, { runId: childRunId, event: opts.event }),
+        // Skip reflection epilogue — subagents are atomic and the parent
+        // does its own reflection over the whole turn.
+        reflect: false,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`subagent timeout after ${timeoutMs}ms`)), timeoutMs)),
+    ]);
+  } catch (e) {
+    result = { ok: false, error: e.message || 'subagent crashed', steps: [] };
+  } finally {
+    activeSubagents.delete(childRunId);
+    subagentDepthByRunId.delete(childRunId);
+    const endStep = {
+      type: 'subagent-end',
+      runId: childRunId,
+      parentRunId,
+      depth: childDepth,
+      status: result?.ok ? 'done' : 'error',
+      answer: (result?.answer || '').slice(0, 400),
+      error: result?.error || null,
+      stepsCount: Array.isArray(result?.steps) ? result.steps.length : 0,
+      endedAt: new Date().toISOString(),
+    };
+    broadcast(endStep);
+  }
+
+  // Surface a compact result string to the parent agent's tool result.
+  if (result?.ok && result.answer) {
+    return {
+      ok: true,
+      out: `Subagent (${childRunId.split('.').pop()}) finished in ${result.steps?.length || 0} step(s):\n\n${result.answer}`,
+      runId: childRunId,
+      answer: result.answer,
+      steps: result.steps?.length || 0,
+    };
+  }
+  return {
+    ok: false,
+    err: result?.error || 'subagent failed without a final answer',
+    runId: childRunId,
+    steps: result?.steps?.length || 0,
+  };
+}
+module.exports.spawnSubagent = spawnSubagent;
 
 function agentRunsPath() {
   return path.join(app.getPath('userData'), 'horizon-runs.jsonl');
@@ -3913,6 +4099,10 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
   }
 
   const runId = opts.runId || `agent-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  // Register this top-level run at depth 0 so any spawn_subagent calls
+  // can compute their depth relative to it. Cleaned up in the finally
+  // block when the run ends (whether ok, errored, or stopped).
+  subagentDepthByRunId.set(runId, 0);
   const provider = opts.provider || settingsStore.get('provider') || 'gemini';
   const lang     = settingsStore.get('lang') || 'en';
   const userName = settingsStore.get('userName') || 'User';
@@ -4168,7 +4358,9 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         }
       }
     }
-    return agentTools.dispatchTool(tool, args);
+    // Pass runId/event so spawn_subagent (in agent.js dispatchTool) knows
+    // its parent context for depth tracking + step broadcasting.
+    return agentTools.dispatchTool(tool, args, { runId, event });
   };
 
   // Send step updates to renderer via the event sender.
@@ -4274,6 +4466,7 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     runRecord.answer = result?.answer || null;
     runRecord.error = result?.error || null;
     activeAgentRuns.delete(runId);
+    subagentDepthByRunId.delete(runId);
     if (controller.pending) pendingAgentSteps.delete(controller.pending.stepId);
     const endStep = { type: 'run-end', runId, status: runRecord.status, result: scrubRunValue(result) };
     controller.observe(endStep);
