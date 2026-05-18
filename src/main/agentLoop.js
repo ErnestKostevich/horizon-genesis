@@ -195,6 +195,13 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
   if (typeof options.skillsBlock === 'string' && options.skillsBlock.trim()) {
     skillsBlock = `\n\n## Skills loaded for this turn\n\n${options.skillsBlock.trim()}\n`;
   }
+  // PHASE 8/8 — Workspace memory (.horizon/memory.json committed to git).
+  // Comes pre-rendered from main.js via sysInfo.workspaceMemoryBlock.
+  // Injected right after project rules so team conventions ride alongside
+  // .horizon/rules.md.
+  const workspaceMemoryBlock = (typeof sysInfo?.workspaceMemoryBlock === 'string' && sysInfo.workspaceMemoryBlock.trim())
+    ? sysInfo.workspaceMemoryBlock
+    : '';
 
   if (nativeTools) {
     return `
@@ -204,7 +211,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}` : ''}
-${projectRulesBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
+${projectRulesBlock || ''}${workspaceMemoryBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 ${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}
@@ -223,7 +230,7 @@ After tools finish, answer normally and concisely. If a tool fails twice, explai
 ${sysInfo?.active_window ? `Активное окно: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Местоположение: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Персона / стиль\n${personaBlock}\n` : ''}
-${projectRulesBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
+${projectRulesBlock || ''}${workspaceMemoryBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Контекст памяти\n${memoryBlock}\n` : ''}
 ${githubBlock ? `\n## Подключенные GitHub-репозитории\n${githubBlock}\n` : ''}
 ${connectionsBlock ? `\n## Активные подключения\n${connectionsBlock}\n` : ''}
@@ -262,7 +269,7 @@ System: ${sysInfo?.platform} | CPU: ${sysInfo?.cpu} | RAM: ${sysInfo?.ram_total}
 ${sysInfo?.active_window ? `Active window: ${sysInfo.active_window}` : ''}
 ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}\n` : ''}
-${projectRulesBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
+${projectRulesBlock || ''}${workspaceMemoryBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 ${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}

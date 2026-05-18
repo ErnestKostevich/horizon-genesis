@@ -1485,6 +1485,12 @@ body:not(.settings-scroll) .ps-toc { display: none !important; }
 .mem-btn:hover{border-color:rgba(108,140,255,.4);color:var(--acc)}
 .mem-btn-danger:hover{border-color:rgba(248,113,113,.3);color:var(--red,#f87171)}
 
+/* Persona badges on memory rows (PHASE 7/8). Shows which persona(s) have
+   re-asserted this memory — recall gives a ×1.2 boost when the active
+   persona matches. */
+.mem-personas{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.mem-persona{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:4px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);color:#c084fc}
+
 /* User Profile (Big Five + communication style) editor. Sliders inline-look. */
 .mem-bf-group{margin-bottom:10px;padding:8px 10px;border:1px solid var(--b1);border-radius:8px;background:rgba(255,255,255,.015)}
 .mem-bf-h{font-size:10px;color:var(--t2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;font-weight:600}
