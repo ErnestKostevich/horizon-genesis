@@ -47,8 +47,10 @@ ${fmt.bold('Usage')}
   horizon <command> [args...]
 
 ${fmt.bold('Commands')}
+  ${fmt.cyan('setup')}                Interactive first-time wizard (provider, key, persona, lang)
   ${fmt.cyan('agent')}   "task"      Full agent loop with tool use + reflection
-  ${fmt.cyan('chat')}    "msg"       Single-turn chat reply
+  ${fmt.cyan('chat')}    "msg"       Single-turn chat reply (streaming + markdown by default)
+  ${fmt.cyan('cost')}                 Show token + dollar spend (--days N --json --provider X)
   ${fmt.cyan('skill')}   subcommand  list | show <id> | new <id> | run <id> "task" | enable | disable
   ${fmt.cyan('mem')}     subcommand  search "q" | dump | profile | forget | stats
   ${fmt.cyan('model')}   [provider]  Read or set active provider/model. --list to see all.
@@ -60,7 +62,7 @@ ${fmt.bold('Commands')}
 
 ${fmt.bold('Common flags')}
   --json / --human / --quiet     output format
-  --provider X                   override AI provider (claude|openai|gemini|...)
+  --provider X | auto            override AI provider (claude|openai|gemini|...|auto)
   --model X                      override model for this call
   --persona X                    override active persona for this call
   --workspace path               override .horizon/ lookup root
@@ -120,7 +122,8 @@ async function dispatch(argv) {
   // Known subcommands first; otherwise treat the whole positional list as
   // a shorthand `horizon agent "..."` task.
   const KNOWN = ['agent', 'chat', 'skill', 'mem', 'connect', 'model',
-                 'persona', 'version', 'serve', 'tui', 'help'];
+                 'persona', 'version', 'serve', 'tui', 'help',
+                 'setup', 'cost'];
 
   if (cmd === 'help') { printHelp(); return 0; }
   if (cmd === 'tui') {
