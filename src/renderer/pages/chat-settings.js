@@ -494,6 +494,7 @@ async function loadTokenConnections(){
       for (const c of r.connections || []) _setConnStatus(c.id, !!c.connected);
     }
   } catch (_) {}
+  loadTelegramAllowedUsers().catch(()=>{});
   refreshTelegramRuntimeStatus().catch(()=>{});
 }
 async function saveTokenConnection(id){
@@ -546,6 +547,48 @@ function _setConnStatus(svc, connected){
   } catch(_){}
 }
 
+function _parseTelegramAllowedUsers(value) {
+  return [...new Set(String(value || '')
+    .split(/[,\s]+/)
+    .map(v => v.trim())
+    .filter(v => /^\d+$/.test(v)))];
+}
+
+async function loadTelegramAllowedUsers() {
+  const inp = document.getElementById('pi-telegram-owner-ids');
+  const st = document.getElementById('telegram-owner-status');
+  let ids = [];
+  try {
+    const raw = await H.get?.('connection.telegram_bot.allowed_user_ids');
+    ids = Array.isArray(raw) ? raw.map(v => String(v || '').trim()).filter(Boolean) : _parseTelegramAllowedUsers(raw);
+  } catch (_) {}
+  if (inp) inp.value = ids.join(', ');
+  if (st) {
+    st.textContent = ids.length
+      ? `Owner lock active: ${ids.length} Telegram user ID${ids.length === 1 ? '' : 's'} allowed.`
+      : 'Locked: no Telegram user IDs are allowed yet. Start the bot, send /start, then copy your blocked user ID from the runtime log.';
+    st.classList.toggle('ok', ids.length > 0);
+    st.classList.toggle('bad', ids.length === 0);
+  }
+  return ids;
+}
+
+async function saveTelegramAllowedUsers() {
+  const inp = document.getElementById('pi-telegram-owner-ids');
+  const st = document.getElementById('telegram-owner-status');
+  const ids = _parseTelegramAllowedUsers(inp?.value || '');
+  try {
+    await H.set?.('connection.telegram_bot.allowed_user_ids', ids);
+    await loadTelegramAllowedUsers();
+    await refreshTelegramRuntimeStatus();
+  } catch(e) {
+    if (st) {
+      st.textContent = e?.message || 'Could not save Telegram user IDs.';
+      st.classList.add('bad');
+    }
+  }
+}
+
 function _renderTelegramRuntimeStatus(status) {
   const st = document.getElementById('telegram-live-status');
   const btn = document.getElementById('telegram-live-toggle');
@@ -554,9 +597,11 @@ function _renderTelegramRuntimeStatus(status) {
   if (st) {
     const parts = [];
     if (!status?.connected) parts.push('Token is not saved.');
-    else if (status?.running) parts.push('Live bot is online. Telegram messages will receive Horizon replies.');
+    else if (status?.running && status?.locked) parts.push('Live bot is online but locked. It will only log blocked Telegram user IDs and will not call AI.');
+    else if (status?.running) parts.push(`Live bot is online. Replies are limited to ${status?.allowedUserIds?.length || 0} allowed Telegram user ID(s).`);
     else if (status?.enabled) parts.push('Live bot is enabled but not running. Check token/model keys and press Refresh.');
     else parts.push('Live bot is off. Start it to make Telegram messages wake Horizon and receive replies.');
+    if (status?.connected && status?.locked) parts.push('Add your Telegram user ID above before expecting replies.');
     if (status?.lastError) parts.push('Last error: ' + status.lastError);
     if (status?.lastEventAt) parts.push('Last event: ' + new Date(status.lastEventAt).toLocaleString());
     st.textContent = parts.join(' ');
@@ -595,6 +640,9 @@ async function toggleTelegramLive(){
     if (st) st.textContent = e?.message || 'Could not change Telegram live bot state.';
   }
 }
+
+window.saveTelegramAllowedUsers = saveTelegramAllowedUsers;
+window.loadTelegramAllowedUsers = loadTelegramAllowedUsers;
 
 try {
   H.onConnectionsUpdated?.((payload) => {

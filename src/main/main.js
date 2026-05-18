@@ -170,7 +170,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'settingsTab',
   'openrouter.modelsCache', 'openrouter.modelsCacheAt',
   'mcp.enabled', 'mcp.servers', 'mcp.toolsCache', 'mcp.toolsCacheAt',
-  'connection.telegram_bot.live',
+  'connection.telegram_bot.live', 'connection.telegram_bot.allowed_user_ids',
   'codeWorkspace', 'codeOpenFiles', 'codeActiveTabIdx', 'wsListIgnore',
   'inspectorActive', 'chatSidebarCollapsed', 'chatSidebarWidth',
   'customPersonas',

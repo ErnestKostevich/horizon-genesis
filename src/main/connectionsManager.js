@@ -187,6 +187,21 @@ class ConnectionsManager {
     return this.settingsStore?.get?.('connection.telegram_bot.live') === true;
   }
 
+  telegramAllowedUserIds() {
+    const raw = this.settingsStore?.get?.('connection.telegram_bot.allowed_user_ids');
+    const list = Array.isArray(raw)
+      ? raw
+      : String(raw || '').split(/[,\s]+/);
+    return [...new Set(list
+      .map(v => String(v || '').trim())
+      .filter(v => /^\d+$/.test(v)))];
+  }
+
+  telegramUserAllowed(userId) {
+    const allowed = this.telegramAllowedUserIds();
+    return allowed.length > 0 && allowed.includes(String(userId || '').trim());
+  }
+
   _emitConnectionsUpdated() {
     try { this.eventBridge?.('connectionsUpdated', { connections: this.list() }); } catch (_) {}
   }
@@ -204,11 +219,14 @@ class ConnectionsManager {
   }
 
   telegramStatus() {
+    const allowedUserIds = this.telegramAllowedUserIds();
     return {
       ok: true,
       enabled: this.telegramLiveEnabled(),
       running: this.telegramRunning,
       connected: this.has('telegram_bot'),
+      locked: allowedUserIds.length === 0,
+      allowedUserIds,
       lastError: this.telegramLastError,
       lastEventAt: this.telegramLastEventAt,
       offset: this.settingsStore?.get?.('connection.telegram_bot.offset') || 0,
@@ -235,7 +253,13 @@ class ConnectionsManager {
     this.telegramPollAbort = new AbortController();
     this.telegramRunning = true;
     this.telegramLastError = '';
-    this.telegramLog('Telegram live replies started.', 'run');
+    const allowedUserIds = this.telegramAllowedUserIds();
+    this.telegramLog(
+      allowedUserIds.length
+        ? `Telegram live replies started. Owner lock allows ${allowedUserIds.length} Telegram user ID(s).`
+        : 'Telegram live replies started in locked mode. Add allowed Telegram user IDs before replies are sent.',
+      'run'
+    );
     this.telegramLoopPromise = this.telegramLoop(this.telegramPollAbort.signal)
       .catch(e => {
         if (!this.telegramPollAbort?.signal?.aborted) {
@@ -385,9 +409,18 @@ class ConnectionsManager {
     const msg = update?.message || update?.edited_message;
     const text = String(msg?.text || '').trim();
     const chatId = msg?.chat?.id;
-    if (!text || !chatId || msg?.from?.is_bot) return;
-    this.telegramLog(`Incoming message from ${chatId}: ${text.slice(0, 120)}`, 'message');
+    const userId = msg?.from?.id;
+    if (!text || !chatId || !userId || msg?.from?.is_bot) return;
     const user = msg?.from?.username || [msg?.from?.first_name, msg?.from?.last_name].filter(Boolean).join(' ') || 'Telegram user';
+    const userLabel = msg?.from?.username ? `@${msg.from.username}` : user;
+    if (!this.telegramUserAllowed(userId)) {
+      this.telegramLog(
+        `Blocked Telegram user ${userId}${userLabel ? ` (${userLabel})` : ''} in chat ${chatId}. Add this user ID in Settings > Connections > Telegram to enable replies.`,
+        'blocked'
+      );
+      return;
+    }
+    this.telegramLog(`Incoming message from user ${userId} in chat ${chatId}: ${text.slice(0, 120)}`, 'message');
     const chatTitle = msg?.chat?.title || msg?.chat?.username || [msg?.chat?.first_name, msg?.chat?.last_name].filter(Boolean).join(' ') || `chat ${chatId}`;
     const now = new Date().toISOString();
 
@@ -395,7 +428,7 @@ class ConnectionsManager {
     // we hit /start, /status, or the AI reply fails.
     const userEntry = { role: 'user', content: text, at: now, name: user };
     const histAfterUser = this._tgWriteHistory(chatId, [...this._tgReadHistory(chatId), userEntry]);
-    this._tgUpdateChatMeta(chatId, { title: chatTitle, user, lastMsg: text.slice(0, 160), lastMsgAt: now, count: histAfterUser.length });
+    this._tgUpdateChatMeta(chatId, { title: chatTitle, user, userId: String(userId), lastMsg: text.slice(0, 160), lastMsgAt: now, count: histAfterUser.length });
     try { this.eventBridge?.('telegram:message', { chatId, entry: userEntry }); } catch (_) {}
 
     if (/^\/start(?:\s|$)/i.test(text)) {
@@ -414,7 +447,7 @@ class ConnectionsManager {
     const messages = recent.map(({ role, content }) => ({ role, content }));
     const system = [
       'You are Horizon AI replying inside Telegram.',
-      `Telegram user: ${user}. Chat id: ${chatId}.`,
+      `Telegram user: ${user}. Telegram user id: ${userId}. Chat id: ${chatId}.`,
       'Keep replies concise, useful, and plain text. Do not mention implementation details unless asked.',
       'If the user asks for desktop actions, explain that Telegram can chat and send connection tools, while destructive desktop actions require Horizon app approval.',
     ].join('\n');
