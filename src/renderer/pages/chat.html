@@ -221,6 +221,30 @@
         <option value="deep">🧠 Deep (Reasoning)</option>
       </select></div>
       <div class="local-status" id="thinking-hint" style="margin-top:6px;font-size:10.5px">Deep mode uses provider-native reasoning/thinking only when the selected model supports it.</div></div>
+
+      <!-- Subagent model — used by spawn_subagent for parallel-friendly
+           research / multi-source lookups. Defaults to "same as main",
+           but you typically want a cheaper/faster model here (e.g. Gemini
+           Flash for subagents while Claude Opus drives the main loop). -->
+      <div class="pf"><label>Subagent provider <small style="color:var(--t3);font-weight:400">used by <code>spawn_subagent</code></small></label><div class="pr"><select class="pi ms-sel" id="ms-subagent-provider" onchange="saveSubagentProvider(this.value)">
+        <option value="">Same as main agent</option>
+        <option value="claude">Claude (Anthropic)</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Gemini (Google)</option>
+        <option value="groq">Groq</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="grok">Grok (xAI)</option>
+        <option value="mistral">Mistral</option>
+        <option value="qwen">Qwen</option>
+        <option value="perplexity">Perplexity</option>
+        <option value="cohere">Cohere</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="ollama">Ollama (local)</option>
+        <option value="lmstudio">LM Studio (local)</option>
+      </select></div>
+      <div class="local-status" style="margin-top:6px;font-size:10.5px">Picking a cheaper/faster model here keeps parallel subagent work affordable when the main agent runs a flagship model.</div></div>
+      <div class="pf"><label>Subagent model</label><div class="pr"><input class="pi" id="ms-subagent-model" type="text" placeholder="Leave empty to use the provider's default" oninput="saveSubagentModel(this.value)"/></div>
+      <div class="local-status" style="margin-top:6px;font-size:10.5px">Exact model id (e.g. <code>gemini-2.5-flash</code>, <code>gpt-5.4-mini</code>, <code>claude-haiku-4-5</code>). Empty = whichever model is selected for that provider in the rows below.</div></div>
       <div class="pf"><label>Image generation (BYOK)</label><div class="pr"><select class="pi ms-sel" id="ms-image-provider" onchange="saveImageGenerationSetting('provider', this.value)">
         <option value="auto">Auto from active provider/key</option>
         <option value="gemini">Gemini image</option>
@@ -502,6 +526,10 @@
         <div class="trow" style="padding:6px 0">
           <div class="tinfo">Confirm beep<small>Short tone after wake fires.</small></div>
           <button class="sw" id="sw-wake-beep" onclick="toggleWakeBeep()"></button>
+        </div>
+        <div class="trow" style="padding:6px 0">
+          <div class="tinfo">Talk Mode<small>After the bot replies, keep listening for your next message without saying "Horizon" again. Stop speaking for 8s to return to wake-word mode.</small></div>
+          <button class="sw" id="sw-wake-talk" onclick="toggleWakeTalkMode()"></button>
         </div>
         <div style="margin-top:8px">
           <label style="font-size:10px;color:var(--t2);display:flex;justify-content:space-between;margin-bottom:4px">
@@ -1080,12 +1108,13 @@
 <div class="inspector-pane" id="inspector-pane">
   <div class="insp-head">
     <div class="insp-tabs">
-      <button class="insp-tab on" data-tab="context" onclick="setInspectorTab('context')">Context</button>
-      <button class="insp-tab"    data-tab="tools"   onclick="setInspectorTab('tools')">Tools</button>
-      <button class="insp-tab"    data-tab="skills"  onclick="setInspectorTab('skills')">Skills</button>
-      <button class="insp-tab"    data-tab="learned" onclick="setInspectorTab('learned')">Learned</button>
-      <button class="insp-tab"    data-tab="cost"    onclick="setInspectorTab('cost')">Cost</button>
-      <button class="insp-tab"    data-tab="log"     onclick="setInspectorTab('log')">Log</button>
+      <button class="insp-tab on" data-tab="context"   onclick="setInspectorTab('context')">Context</button>
+      <button class="insp-tab"    data-tab="tools"     onclick="setInspectorTab('tools')">Tools</button>
+      <button class="insp-tab"    data-tab="skills"    onclick="setInspectorTab('skills')">Skills</button>
+      <button class="insp-tab"    data-tab="subagents" onclick="setInspectorTab('subagents')">Subagents</button>
+      <button class="insp-tab"    data-tab="learned"   onclick="setInspectorTab('learned')">Learned</button>
+      <button class="insp-tab"    data-tab="cost"      onclick="setInspectorTab('cost')">Cost</button>
+      <button class="insp-tab"    data-tab="log"       onclick="setInspectorTab('log')">Log</button>
     </div>
     <button class="insp-close" onclick="toggleInspectorMode()" title="Close inspector">&times;</button>
   </div>
@@ -1125,6 +1154,15 @@
     <div class="insp-section">
       <div class="insp-h">Skills loaded for the last turn</div>
       <div class="insp-empty">No skills resolved yet. Send a message and any matching SKILL.md will appear here with its score breakdown.</div>
+    </div>
+  </div>
+  <!-- Subagents tab — populated by chat-inspector.js from subagent-spawned /
+       subagent-end / subagent-step events broadcast by spawnSubagent in
+       main.js. Tree view: parent run → its subagents → their step counts. -->
+  <div class="insp-body" id="insp-body-subagents" style="display:none">
+    <div class="insp-section">
+      <div class="insp-h">Subagent runs</div>
+      <div id="insp-subagent-tree" class="insp-empty">No subagents spawned yet. The agent calls <code>spawn_subagent</code> for parallel-friendly research / multi-source lookups (max depth 2, max 4 concurrent).</div>
     </div>
   </div>
   <!-- Learned tab — facts + memories AgentMemory accumulated. Snapshots via
@@ -2502,6 +2540,11 @@ function toggleWakeBeep(){
   setWakeCfg('confirmBeep', !cur);
   document.getElementById('sw-wake-beep').classList.toggle('on', !cur);
 }
+function toggleWakeTalkMode(){
+  const cur = wakeCfg('talkMode', false);
+  setWakeCfg('talkMode', !cur);
+  document.getElementById('sw-wake-talk').classList.toggle('on', !cur);
+}
 function setWakeSens(v){
   const n = Math.max(5, Math.min(50, +v || 18));
   setWakeCfg('volumeThreshold', n);
@@ -2512,9 +2555,11 @@ function initWakeCalibrationUI(){
   // Reflect persisted settings on the toggles + slider when the panel opens.
   const strict = wakeCfg('strictMode', true);
   const beep   = wakeCfg('confirmBeep', false);
+  const talk   = wakeCfg('talkMode', false);
   const vol    = wakeCfg('volumeThreshold', 10);
   document.getElementById('sw-wake-strict')?.classList.toggle('on', strict);
   document.getElementById('sw-wake-beep')?.classList.toggle('on', beep);
+  document.getElementById('sw-wake-talk')?.classList.toggle('on', talk);
   const slider = document.getElementById('wake-sens');
   const lbl    = document.getElementById('wake-sens-val');
   if (slider) slider.value = vol;

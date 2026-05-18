@@ -228,6 +228,18 @@ async function loadPanel(){
     setSelect('ms-image-openai', imageOpenAI);
     setSelect('ms-image-gemini', imageGemini);
   } catch(_) {}
+  // Hydrate the Subagent provider/model pickers from persisted settings so
+  // the user sees what's currently in effect. Empty subagentProvider →
+  // "Same as main agent" (the default option).
+  try {
+    const subProv = (await H.get('subagentProvider')) || '';
+    const provSel = document.getElementById('ms-subagent-provider');
+    if (provSel) provSel.value = subProv;
+    const modelInput = document.getElementById('ms-subagent-model');
+    if (modelInput) {
+      modelInput.value = subProv ? ((await H.get(`subagentModel.${subProv}`)) || '') : '';
+    }
+  } catch(_) {}
   await loadSettingsHealth();
 }
 
@@ -730,6 +742,37 @@ async function saveModelSetting(provider, model){
     // anything → user thought "models can't be selected".
     try { updateThinkingHint(); updateStatusBar(); renderCodeContext(); updateShellChrome(); } catch(_){}
   } catch(e) { console.warn('saveModelSetting failed:', e?.message); }
+}
+
+async function saveSubagentProvider(value) {
+  // Empty string = "same as main agent"; non-empty = override. Backend
+  // (spawnSubagent in main.js) falls back to the main provider when this
+  // setting is empty, so an empty value is a valid saved state.
+  try {
+    const safeValue = String(value || '').trim();
+    await H.set('subagentProvider', safeValue);
+    // Pre-fill the model textbox with whatever's already saved for that
+    // provider's main model so the user can see/edit it as a starting point.
+    try {
+      const modelInput = document.getElementById('ms-subagent-model');
+      if (modelInput && safeValue) {
+        const existing = await H.get(`subagentModel.${safeValue}`).catch(() => '');
+        modelInput.value = existing || '';
+      }
+    } catch (_) {}
+  } catch (e) { console.warn('saveSubagentProvider failed:', e?.message); }
+}
+
+async function saveSubagentModel(value) {
+  // Saved as `subagentModel.<provider>` so each provider can have its own
+  // preferred subagent model. If the user hasn't picked a subagent
+  // provider yet, this is a no-op (key would be invalid).
+  try {
+    const provider = String((await H.get('subagentProvider').catch(() => '')) || '').trim();
+    if (!provider) return; // No-op until provider is chosen
+    const safeValue = String(value || '').trim();
+    await H.set(`subagentModel.${provider}`, safeValue);
+  } catch (e) { console.warn('saveSubagentModel failed:', e?.message); }
 }
 
 async function saveImageGenerationSetting(key, value){

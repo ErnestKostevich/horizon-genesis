@@ -100,7 +100,7 @@ function toggleInspectorMode(){
 function setInspectorTab(name){
   inspectorTab = name;
   document.querySelectorAll('.insp-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
-  ['context','tools','skills','learned','cost','log'].forEach(t => {
+  ['context','tools','skills','subagents','learned','cost','log'].forEach(t => {
     const el = document.getElementById('insp-body-' + t);
     if (el) el.style.display = (t === name) ? 'block' : 'none';
   });
@@ -132,11 +132,12 @@ function refreshInspector(){
     document.getElementById('insp-voice').textContent = voiceProvider || '—';
   } catch(_) {}
 
-  if (inspectorTab === 'tools')   refreshInspectorTools();
-  if (inspectorTab === 'skills')  refreshInspectorSkills();
-  if (inspectorTab === 'learned') refreshInspectorLearned();
-  if (inspectorTab === 'cost')    refreshInspectorCost();
-  if (inspectorTab === 'log')     refreshInspectorLog();
+  if (inspectorTab === 'tools')     refreshInspectorTools();
+  if (inspectorTab === 'skills')    refreshInspectorSkills();
+  if (inspectorTab === 'subagents') refreshInspectorSubagents();
+  if (inspectorTab === 'learned')   refreshInspectorLearned();
+  if (inspectorTab === 'cost')      refreshInspectorCost();
+  if (inspectorTab === 'log')       refreshInspectorLog();
   // Connections row updates lazily
   refreshInspectorConnections();
 }
@@ -332,6 +333,68 @@ function renderStepRail(){
 // users can flip away and back without losing the data.
 var lastReflection = null;
 
+// Subagent registry — keyed by child runId. Updated live from
+// subagent-spawned / subagent-step / subagent-end agent-step events.
+// Capped to last 60 entries to avoid bloat from long sessions.
+var subagentRegistry = new Map();
+var SUBAGENT_REGISTRY_CAP = 60;
+function _pruneSubagentRegistry() {
+  if (subagentRegistry.size <= SUBAGENT_REGISTRY_CAP) return;
+  const drop = subagentRegistry.size - SUBAGENT_REGISTRY_CAP;
+  const it = subagentRegistry.keys();
+  for (let i = 0; i < drop; i++) { const k = it.next().value; subagentRegistry.delete(k); }
+}
+
+function refreshInspectorSubagents() {
+  const host = document.getElementById('insp-subagent-tree');
+  if (!host) return;
+  if (!subagentRegistry.size) {
+    host.classList.add('insp-empty');
+    host.innerHTML = 'No subagents spawned yet. The agent calls <code>spawn_subagent</code> for parallel-friendly research / multi-source lookups (max depth 2, max 4 concurrent).';
+    return;
+  }
+  host.classList.remove('insp-empty');
+  // Group by parentRunId, newest parent first.
+  const byParent = new Map();
+  for (const [, sub] of subagentRegistry) {
+    if (!byParent.has(sub.parentRunId)) byParent.set(sub.parentRunId, []);
+    byParent.get(sub.parentRunId).push(sub);
+  }
+  const parents = Array.from(byParent.entries()).reverse();
+  const html = parents.map(([parentId, subs]) => {
+    const rows = subs.slice().reverse().map(s => {
+      const statusClass = s.status === 'done' ? 'sub-status-done'
+        : s.status === 'error' ? 'sub-status-error'
+        : 'sub-status-running';
+      const statusLabel = s.status === 'done' ? '✓ done'
+        : s.status === 'error' ? '✗ error'
+        : '◌ running';
+      const out = s.status === 'done' && s.answer
+        ? `<div class="sub-card-out">${esc(String(s.answer).slice(0,200))}</div>`
+        : s.status === 'error' && s.error
+        ? `<div class="sub-card-err">${esc(String(s.error).slice(0,200))}</div>`
+        : '';
+      return `
+        <div class="sub-card">
+          <div class="sub-card-head">
+            <span class="sub-card-task">${esc(String(s.task).slice(0,80))}</span>
+            <span class="sub-card-status ${statusClass}">${statusLabel}</span>
+          </div>
+          <div class="sub-card-meta">depth ${s.depth} · ${s.stepsCount || 0} step${s.stepsCount === 1 ? '' : 's'} · <code>${esc(s.runId.split('.').pop() || s.runId.slice(-8))}</code></div>
+          ${out}
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="sub-parent-group">
+        <div class="sub-parent-head">parent <code>${esc(String(parentId).slice(-12))}</code> · ${subs.length} subagent${subs.length === 1 ? '' : 's'}</div>
+        ${rows}
+      </div>
+    `;
+  }).join('');
+  host.innerHTML = html;
+}
+
 async function refreshInspectorLearned(){
   // Reflection block — always render even if memSnapshot fails (offline-safe).
   const refl = document.getElementById('insp-reflection');
@@ -367,7 +430,7 @@ async function refreshInspectorLearned(){
             embedRow = `
               <div class="insp-row"><span class="k">Semantic index</span><span class="v">${status} · ${esc(e.provider || '?')} · ${e.dim}d</span></div>
               ${errLine}
-              <div class="insp-row" style="justify-content:flex-end;padding-top:4px"><button class="hub-btn" onclick="window._inspReindex?.()" title="Recompute embeddings for any memories that don't have one yet">Reindex now</button></div>
+              <div class="insp-row" style="justify-content:flex-end;padding-top:4px"><button class="hub-btn" onclick="window._inspReindex?.(this)" title="Recompute embeddings for any memories that don't have one yet">Reindex now</button></div>
             `;
           } else {
             embedRow = `<div class="insp-row" style="display:block;font-size:10px;color:var(--t3);line-height:1.5">Semantic recall is off — add an OpenAI or Gemini key in Settings → AI Providers and the memory index will populate automatically.</div>`;
@@ -450,19 +513,45 @@ function refreshInspectorSkills(){
 // Manual reindex hook + live progress updates from the embeddings backfill.
 // Wiring lives here (not in chat.html) so all the inspector-state ownership
 // stays in one file.
-window._inspReindex = async function _inspReindex() {
+window._inspReindex = async function _inspReindex(btn) {
+  // Visible feedback BEFORE the IPC fires so user sees the click registered
+  // even if the backend hangs or fails. Old version relied on the global
+  // `event` object which is unreliable in modern Chromium — that's why
+  // "nothing happens" was the user's perception.
+  if (btn && btn instanceof HTMLElement) {
+    btn.disabled = true;
+    btn.dataset._origText = btn.dataset._origText || btn.textContent;
+    btn.textContent = 'Indexing…';
+  }
   try {
-    const btn = event?.currentTarget;
-    if (btn) { btn.disabled = true; btn.textContent = 'Indexing…'; }
+    addMsg?.('bot', '🧠 Reindexing memories — this can take 5-30s depending on memory count and provider.');
     const r = await H.memEmbedReindex?.();
-    if (btn) { btn.disabled = false; btn.textContent = 'Reindex now'; }
-    if (r?.ok) {
-      H.notify?.('Memory', `Embeddings ready — ${r.indexed} indexed${r.failed ? `, ${r.failed} failed` : ''}`);
-      if (inspectorTab === 'learned') refreshInspectorLearned();
-    } else {
-      H.notify?.('Memory', r?.error || 'Reindex failed');
+    if (!r) {
+      addMsg?.('bot', '⚠️ Reindex returned no response — embeddings IPC may not be loaded yet.');
+      return;
     }
-  } catch (e) { H.notify?.('Memory', e.message); }
+    if (inspectorTab === 'learned') refreshInspectorLearned();
+    if (r.indexed > 0) {
+      addMsg?.('bot', `✓ Reindexed **${r.indexed}** memor${r.indexed === 1 ? 'y' : 'ies'}${r.failed ? ` (${r.failed} failed: ${esc(String(r.error || 'unknown')).slice(0, 200)})` : ''}.`);
+    } else if (r.failed > 0) {
+      // Surface the actual error in the chat — user can see what went wrong.
+      addMsg?.('bot', `❌ Reindex failed: ${esc(String(r.error || 'no error message'))}\n\nFix hints:\n• Gemini key may not have embedding-API access — try another key or add an OpenAI key (text-embedding-3-small is cheap).\n• Check console for the raw HTTP error.`);
+    } else if (r.skipped > 0) {
+      addMsg?.('bot', `✓ All ${r.skipped} memories already indexed — nothing to do.`);
+    } else if (r.error) {
+      addMsg?.('bot', `❌ ${esc(String(r.error))}`);
+    } else {
+      addMsg?.('bot', '⚠️ Reindex returned no results.');
+    }
+  } catch (e) {
+    addMsg?.('bot', `❌ Reindex exception: ${esc(e.message)}`);
+    console.error('[reindex] exception:', e);
+  } finally {
+    if (btn && btn instanceof HTMLElement) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._origText || 'Reindex now';
+    }
+  }
 };
 try {
   H.onMemoryEmbeddingProgress?.((p) => {
@@ -497,6 +586,37 @@ try {
       if (step?.type === 'reflection') {
         lastReflection = step;
         if (inspectorActive && inspectorTab === 'learned') refreshInspectorLearned();
+      }
+      // Subagent lifecycle events from spawnSubagent in main.js.
+      if (step?.type === 'subagent-spawned' && step.runId) {
+        subagentRegistry.set(step.runId, {
+          runId: step.runId,
+          parentRunId: step.parentRunId || 'root',
+          depth: step.depth || 1,
+          task: step.task || '',
+          startedAt: step.startedAt,
+          status: 'running',
+          stepsCount: 0,
+        });
+        _pruneSubagentRegistry();
+        if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
+      }
+      if (step?.type === 'subagent-end' && step.runId) {
+        const existing = subagentRegistry.get(step.runId);
+        if (existing) {
+          existing.status = step.status || (step.error ? 'error' : 'done');
+          existing.stepsCount = step.stepsCount || existing.stepsCount;
+          existing.answer = step.answer;
+          existing.error = step.error;
+          existing.endedAt = step.endedAt;
+        }
+        if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
+      }
+      // Increment stepsCount when subagent tools fire (any step tagged isSubagent).
+      if (step?.isSubagent && step.runId && (step.type === 'result' || step.type === 'executing')) {
+        const existing = subagentRegistry.get(step.runId);
+        if (existing && step.type === 'result') existing.stepsCount = (existing.stepsCount || 0) + 1;
+        if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
       }
       // Inspector log + cost auto-refresh on activity
       if (inspectorActive) {
