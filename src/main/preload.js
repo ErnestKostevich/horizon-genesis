@@ -169,6 +169,12 @@ contextBridge.exposeInMainWorld('H', {
   memFtsStats: ()              => ipcRenderer.invoke('memFtsStats'),
   workspaceMemoryGet: ()       => ipcRenderer.invoke('workspaceMemoryGet'),
   workspaceMemoryWrite: (p)    => ipcRenderer.invoke('workspaceMemoryWrite', p),
+  executorStatus: ()           => ipcRenderer.invoke('executorStatus'),
+  onSkillSuggestion: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('skill:suggestion', handler);
+    return () => ipcRenderer.removeListener('skill:suggestion', handler);
+  },
   memEmbedStatus: ()           => ipcRenderer.invoke('memEmbedStatus'),
   memEmbedReindex: ()          => ipcRenderer.invoke('memEmbedReindex'),
   onMemoryEmbeddingProgress: (cb) => {

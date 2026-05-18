@@ -245,6 +245,20 @@
       <div class="local-status" style="margin-top:6px;font-size:10.5px">Picking a cheaper/faster model here keeps parallel subagent work affordable when the main agent runs a flagship model.</div></div>
       <div class="pf"><label>Subagent model</label><div class="pr"><input class="pi" id="ms-subagent-model" type="text" placeholder="Leave empty to use the provider's default" oninput="saveSubagentModel(this.value)"/></div>
       <div class="local-status" style="margin-top:6px;font-size:10.5px">Exact model id (e.g. <code>gemini-2.5-flash</code>, <code>gpt-5.4-mini</code>, <code>claude-haiku-4-5</code>). Empty = whichever model is selected for that provider in the rows below.</div></div>
+
+      <!-- Execution sandbox — host (fast) vs Docker (isolated). Used by
+           run_code / run_shell / run_powershell. -->
+      <div class="pf"><label>Code execution mode <small style="color:var(--t3);font-weight:400">used by <code>run_code</code></small></label><div class="pr"><select class="pi ms-sel" id="ms-execution-mode" onchange="saveExecutionMode(this.value)">
+        <option value="host">Host (direct, fast)</option>
+        <option value="docker">Docker (sandboxed, slower)</option>
+      </select></div>
+      <div class="local-status" id="ms-executor-status" style="margin-top:6px;font-size:10.5px">Loading…</div></div>
+      <div class="pf"><label>Docker workspace mount</label><div class="pr"><select class="pi ms-sel" id="ms-docker-mount" onchange="saveDockerWorkspaceMount(this.value)">
+        <option value="none">None (no workspace access)</option>
+        <option value="read-only">Read-only (safe default)</option>
+        <option value="read-write">Read-write (let code edit files)</option>
+      </select></div>
+      <div class="local-status" style="margin-top:6px;font-size:10.5px">When Docker mode is active, the current workspace is mounted at <code>/workspace</code> with the chosen permission. Containers run with <code>--network=none --memory=512m --cpus=1</code> by default.</div></div>
       <div class="pf"><label>Image generation (BYOK)</label><div class="pr"><select class="pi ms-sel" id="ms-image-provider" onchange="saveImageGenerationSetting('provider', this.value)">
         <option value="auto">Auto from active provider/key</option>
         <option value="gemini">Gemini image</option>

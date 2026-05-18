@@ -109,6 +109,42 @@ const CONNECTIONS = [
         params: { chatId: 'string or number', text: 'string' }
       }
     ]
+  },
+  // Discord adapter — send-only via REST in v1. Bot needs MESSAGE_CONTENT
+  // intent enabled in the Developer Portal to read messages. Full bidirectional
+  // runtime (Gateway WebSocket + chat viewer) is roadmapped separately.
+  {
+    id: 'discord',
+    keyId: 'discord_bot',
+    name: 'Discord Bot',
+    envHint: 'MTI...x.Yz...',
+    tools: [
+      {
+        name: 'conn_discord_list_guilds',
+        desc: '[Connection: Discord] List servers (guilds) the bot is a member of.',
+        params: { limit: 'number optional' }
+      },
+      {
+        name: 'conn_discord_list_channels',
+        desc: '[Connection: Discord] List text channels in a guild (server). Use list_guilds first to get the guildId.',
+        params: { guildId: 'string guild/server id' }
+      },
+      {
+        name: 'conn_discord_find_channel',
+        desc: '[Connection: Discord] Find a text channel by name across all guilds the bot is in.',
+        params: { query: 'string channel name or partial name', limit: 'number optional' }
+      },
+      {
+        name: 'conn_discord_read_messages',
+        desc: '[Connection: Discord] Read recent messages from a channel id.',
+        params: { channelId: 'string text channel id', limit: 'number optional (default 25)' }
+      },
+      {
+        name: 'conn_discord_send_message',
+        desc: '[Connection: Discord] Send a message to a Discord channel id. Requires permission approval.',
+        params: { channelId: 'string channel id', content: 'string up to 2000 chars' }
+      }
+    ]
   }
 ];
 
@@ -180,6 +216,7 @@ class ConnectionsManager {
     if (id === 'notion') return this.notionSearch('', 1);
     if (id === 'linear') return this.linearGraphql('{ viewer { id name } }');
     if (id === 'telegram_bot') return this.telegramApi('getMe', {});
+    if (id === 'discord') return this.discordApi('/users/@me');
     return { ok: false, error: `Unknown connection: ${id}` };
   }
 
@@ -512,9 +549,111 @@ class ConnectionsManager {
         return this.telegramGetUpdates(args.limit, args.offset);
       case 'conn_telegram_send_message':
         return this.telegramSendMessage(args.chatId, args.text);
+      case 'conn_discord_list_guilds':
+        return this.discordListGuilds(args.limit);
+      case 'conn_discord_list_channels':
+        return this.discordListChannels(args.guildId);
+      case 'conn_discord_find_channel':
+        return this.discordFindChannel(args.query, args.limit);
+      case 'conn_discord_read_messages':
+        return this.discordReadMessages(args.channelId, args.limit);
+      case 'conn_discord_send_message':
+        return this.discordSendMessage(args.channelId, args.content || args.text);
       default:
         return null;
     }
+  }
+
+  // ── Discord (REST-only adapter) ────────────────────────────────────────
+  async discordApi(method, body) {
+    const token = this.token('discord_bot');
+    if (!token) return { ok: false, err: 'Discord bot token not configured (Settings → Connections).' };
+    const url = method.startsWith('http') ? method : `https://discord.com/api/v10${method}`;
+    const init = {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        Authorization: `Bot ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Horizon-Genesis (https://horizonaai.dev, 1.0)',
+      },
+    };
+    if (body) init.body = JSON.stringify(body);
+    const res = await fetch(url, init);
+    const data = await readJson(res);
+    if (!res.ok) return { ok: false, err: data?.message || `Discord HTTP ${res.status}`, data };
+    return { ok: true, data };
+  }
+
+  async discordListGuilds(limit = 50) {
+    const lim = Math.max(1, Math.min(200, Number(limit) || 50));
+    const r = await this.discordApi(`/users/@me/guilds?limit=${lim}`);
+    if (!r.ok) return r;
+    const guilds = (Array.isArray(r.data) ? r.data : []).map(g => ({
+      id: g.id, name: g.name, owner: !!g.owner, icon: g.icon || null,
+    }));
+    return { ok: true, out: jsonOut(guilds), guilds };
+  }
+
+  async discordListChannels(guildId) {
+    const id = asText(guildId, 40);
+    if (!id) return { ok: false, err: 'guildId required' };
+    const r = await this.discordApi(`/guilds/${encodeURIComponent(id)}/channels`);
+    if (!r.ok) return r;
+    // Filter to text-like channel types (0=GUILD_TEXT, 5=ANNOUNCEMENT,
+    // 15=FORUM). Skip voice/stage/category.
+    const TEXT_TYPES = new Set([0, 5, 11, 12, 15]);
+    const channels = (Array.isArray(r.data) ? r.data : [])
+      .filter(c => TEXT_TYPES.has(c.type))
+      .map(c => ({ id: c.id, name: c.name, type: c.type, position: c.position }));
+    return { ok: true, out: jsonOut(channels), channels };
+  }
+
+  async discordFindChannel(query, limit = 5) {
+    const q = asText(query, 120).toLowerCase().trim();
+    if (!q) return { ok: false, err: 'query required' };
+    const guildsRes = await this.discordListGuilds(100);
+    if (!guildsRes.ok) return guildsRes;
+    const guilds = guildsRes.guilds || [];
+    const hits = [];
+    const lim = Math.max(1, Math.min(20, Number(limit) || 5));
+    for (const g of guilds) {
+      const cr = await this.discordListChannels(g.id);
+      if (!cr.ok) continue;
+      for (const c of cr.channels || []) {
+        if (c.name.toLowerCase().includes(q)) {
+          hits.push({ ...c, guildId: g.id, guildName: g.name });
+          if (hits.length >= lim) break;
+        }
+      }
+      if (hits.length >= lim) break;
+    }
+    return { ok: true, out: jsonOut(hits), channels: hits };
+  }
+
+  async discordReadMessages(channelId, limit = 25) {
+    const id = asText(channelId, 40);
+    if (!id) return { ok: false, err: 'channelId required' };
+    const lim = Math.max(1, Math.min(100, Number(limit) || 25));
+    const r = await this.discordApi(`/channels/${encodeURIComponent(id)}/messages?limit=${lim}`);
+    if (!r.ok) return r;
+    const messages = (Array.isArray(r.data) ? r.data : []).map(m => ({
+      id: m.id,
+      author: m.author?.username || m.author?.global_name || 'unknown',
+      bot: !!m.author?.bot,
+      content: m.content || '',
+      timestamp: m.timestamp,
+    }));
+    return { ok: true, out: jsonOut(messages), messages };
+  }
+
+  async discordSendMessage(channelId, content) {
+    const id = asText(channelId, 40);
+    const text = asText(content, 2000);
+    if (!id) return { ok: false, err: 'channelId required' };
+    if (!text) return { ok: false, err: 'content required' };
+    const r = await this.discordApi(`/channels/${encodeURIComponent(id)}/messages`, { content: text });
+    if (!r.ok) return r;
+    return { ok: true, out: `Sent to channel ${id}: ${text.slice(0, 120)}`, message: r.data };
   }
 
   async slackApi(method, body) {
