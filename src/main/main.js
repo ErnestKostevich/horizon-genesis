@@ -153,6 +153,11 @@ const ALLOWED_KEY_IDS = new Set([
   'claude', 'openai', 'tavily', 'elevenlabs', 'deepgram', 'localai',
   'perplexity', 'cohere', 'openrouter', 'github', 'google_client_secret',
   'slack', 'notion', 'linear', 'telegram_bot', 'discord_bot',
+  // Phase 9 — additional providers
+  'together', 'fireworks', 'deepinfra', 'cerebras', 'sambanova',
+  'moonshot', 'zai', 'nebius', 'azure', 'custom',
+  // Phase 15 — channel + executor BYOK credentials
+  'twilio_sid', 'twilio_token',
 ]);
 const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
   'claude', 'openai', 'gemini', 'groq', 'deepseek',
@@ -162,6 +167,15 @@ const ALLOWED_MODEL_SETTING_PROVIDERS = new Set([
 const ALLOWED_SETTING_KEYS = new Set([
   'userName', 'lang', 'provider', 'geminiModel', 'voiceProvider', 'subagentProvider',
   'executionMode', 'dockerWorkspaceMount',
+  // Phase 15 — BYOK remote executor backends. Set from Settings → Models
+  // when executionMode = ssh/modal/daytona.
+  'ssh.host', 'ssh.port', 'ssh.keyPath', 'ssh.workdir',
+  'modal.tokenId', 'modal.tokenSecret', 'modal.appName', 'modal.endpoint',
+  'daytona.serverUrl', 'daytona.apiKey', 'daytona.workspaceId',
+  // Phase 15 — multi-field channel adapters
+  'whatsapp.from', 'whatsapp.enabled',
+  'signal.url', 'signal.number', 'signal.enabled',
+  'imessage.enabled',
   'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
   'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
   'mode', 'searchOn', 'responseProfile',

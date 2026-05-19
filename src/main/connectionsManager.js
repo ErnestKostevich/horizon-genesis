@@ -145,6 +145,53 @@ const CONNECTIONS = [
         params: { channelId: 'string channel id', content: 'string up to 2000 chars' }
       }
     ]
+  },
+  // ── Phase 15 ──────────────────────────────────────────────────────────
+  // WhatsApp via Twilio. The "key" here is the Twilio token, but we
+  // actually need an SID + From number too — those live in settingsStore.
+  // has() checks token presence; configured() does the full triple-check.
+  {
+    id: 'whatsapp',
+    keyId: 'twilio_token',
+    name: 'WhatsApp (Twilio)',
+    envHint: 'twilio AC... + AuthToken + whatsapp:+N',
+    tools: [
+      {
+        name: 'conn_whatsapp_send',
+        desc: '[Connection: WhatsApp] Send a WhatsApp message via the user\'s Twilio account. Requires permission approval.',
+        params: { to: 'string recipient as whatsapp:+1234567890', text: 'string message body', mediaUrl: 'string optional media attachment URL' }
+      }
+    ]
+  },
+  // Signal via signal-cli-rest-api bridge. "Key" is a flag-only marker —
+  // real config lives in settingsStore (signal.url, signal.number).
+  // Connected() returns true when both are set.
+  {
+    id: 'signal',
+    keyId: null, // no API key — config is multi-field
+    name: 'Signal',
+    envHint: 'signal-cli bridge URL + number',
+    tools: [
+      {
+        name: 'conn_signal_send',
+        desc: '[Connection: Signal] Send a Signal message via the user\'s self-hosted signal-cli bridge. Requires permission approval.',
+        params: { to: 'string +1234567890 or group id (one or more comma-separated)', text: 'string message body' }
+      }
+    ]
+  },
+  // iMessage via macOS osascript. No key, no URL; just a per-OS toggle.
+  {
+    id: 'imessage',
+    keyId: null,
+    name: 'iMessage (macOS)',
+    envHint: 'macOS Messages.app',
+    tools: [
+      {
+        name: 'conn_imessage_send',
+        desc: '[Connection: iMessage] Send an iMessage via macOS Messages.app. Requires permission approval. Mac-only.',
+        params: { to: 'string +1234567890 or name@icloud.com', text: 'string message body' }
+      }
+    ]
   }
 ];
 
@@ -195,6 +242,25 @@ class ConnectionsManager {
   }
 
   has(id) {
+    // Phase 15 — multi-field channels report "configured" based on the
+    // settingsStore flag set by the Settings UI, not on key presence.
+    if (id === 'whatsapp') {
+      return Boolean(
+        this.token('twilio_token')
+        && this.settingsStore?.get?.('whatsapp.enabled')
+        && this.settingsStore?.get?.('whatsapp.from')
+      );
+    }
+    if (id === 'signal') {
+      return Boolean(
+        this.settingsStore?.get?.('signal.enabled')
+        && this.settingsStore?.get?.('signal.url')
+        && this.settingsStore?.get?.('signal.number')
+      );
+    }
+    if (id === 'imessage') {
+      return Boolean(this.settingsStore?.get?.('imessage.enabled')) && process.platform === 'darwin';
+    }
     return Boolean(this.token(id));
   }
 
@@ -205,7 +271,7 @@ class ConnectionsManager {
       return {
         id: c.id,
         name: c.name,
-        connected: this.has(c.keyId),
+        connected: this.has(c.keyId || c.id),
         envHint: c.envHint,
         toolCount: c.tools.length,
         liveSupported: isTelegram || isDiscord,
@@ -219,7 +285,9 @@ class ConnectionsManager {
 
   toolsForAgent() {
     return CONNECTIONS
-      .filter(c => this.has(c.keyId))
+      // Phase 15 — multi-field channels have keyId=null and use has(id)
+      // for their own configured check. Old channels use has(keyId).
+      .filter(c => this.has(c.keyId || c.id))
       .flatMap(c => c.tools.map(t => ({ ...t, connectionId: c.id })));
   }
 
@@ -796,9 +864,44 @@ class ConnectionsManager {
         return this.discordReadMessages(args.channelId, args.limit);
       case 'conn_discord_send_message':
         return this.discordSendMessage(args.channelId, args.content || args.text);
+
+      // ── Phase 15: WhatsApp / Signal / iMessage send ─────────────────
+      case 'conn_whatsapp_send':
+        return this.whatsappSend(args);
+      case 'conn_signal_send':
+        return this.signalSend(args);
+      case 'conn_imessage_send':
+        return this.imessageSend(args);
+
       default:
         return null;
     }
+  }
+
+  // ── Phase 15 channel send helpers ──────────────────────────────────────
+  async whatsappSend(args) {
+    const wa = require('./channels/whatsapp');
+    const cfg = {
+      accountSid: this.token('twilio_sid'),
+      authToken:  this.token('twilio_token'),
+      from:       this.settingsStore?.get?.('whatsapp.from') || '',
+    };
+    return wa.sendMessage(cfg, args || {});
+  }
+  async signalSend(args) {
+    const sg = require('./channels/signal');
+    const cfg = {
+      url:    this.settingsStore?.get?.('signal.url') || '',
+      number: this.settingsStore?.get?.('signal.number') || '',
+    };
+    return sg.sendMessage(cfg, args || {});
+  }
+  async imessageSend(args) {
+    const im = require('./channels/imessage');
+    if (!im.isMacOS()) {
+      return { ok: false, error: 'iMessage adapter requires macOS' };
+    }
+    return im.sendMessage(args || {});
   }
 
   // ── Discord (REST-only adapter) ────────────────────────────────────────
