@@ -181,7 +181,12 @@
 #panel .pf .psv,
 #panel .ps .psv {
   height: 36px;
-  padding: 0 16px;
+  /* PHASE 28.1 — was 0 16px; on narrow Settings widths the input next to
+     the button was squishing the button down to ~32px wide and chopping
+     the label. min-width + flex-shrink keep it readable. */
+  padding: 0 18px;
+  min-width: 88px;
+  flex: 0 0 auto;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.10);

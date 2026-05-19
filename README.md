@@ -144,7 +144,7 @@ horizon serve --port 18789 --token mysecret
 | Setup wizard              | ✅ | ✅ | 🔸 |
 | BYOK encrypted storage    | ✅ AES-256-GCM | ✅ | ✅ |
 | Local-first (Ollama)      | ✅ | ✅ | ✅ |
-| **Memory storage**        | JSON + InvertedIndex + embeddings | SQLite + FTS5 | JSON |
+| **Memory storage**        | JSON + SQLite + FTS5 + embeddings (hybrid) | SQLite + FTS5 | JSON |
 | 8-type memory model       | ✅ | 🔸 4 types | 🔸 |
 | Workspace-bound memory    | ✅ `.horizon/memory.json` | ❌ | ❌ |
 | Semantic recall           | ✅ 256-dim | ✅ | 🔸 |
@@ -239,7 +239,7 @@ shell, expose to mobile via `horizon serve`.
 | **Episodic memories** | `horizon_memory.json` | Time-stamped events ("user said Yerba mate tastes like grass on 2026-04-12") |
 | **Conversations** | `horizon_memory.json` | Last N user/assistant turns, FTS-indexed |
 | **Semantic embeddings** | `horizon_embeddings.json` | 256-dim vectors (OpenAI 3-small or Gemini), cosine recall |
-| **FTS index** | in-memory (pure JS InvertedIndex) | Token-level keyword recall, TF-IDF + positional |
+| **FTS index** | in-memory (pure JS InvertedIndex) + `memory.sqlite` mirror (FTS5) | Token-level keyword recall, TF-IDF + positional. SQLite mirror rebuilt automatically on boot — gives you phrase/prefix/proximity queries on top of the in-memory index. |
 | **User Profile** | `horizon_memory.json → userProfile` | Big-Five trait model + communication style, auto-updated |
 | **Persona memory** | `horizon_memory.json → personaMemory.<id>` | Per-persona note buffer |
 | **Workspace memory** | `<repo>/.horizon/memory.json` | Conventions, glossary, decisions, do-not list — commit in git |
