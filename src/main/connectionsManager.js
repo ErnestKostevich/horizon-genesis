@@ -8,6 +8,12 @@ const CONNECTIONS = [
     keyId: 'slack',
     name: 'Slack',
     envHint: 'xoxb-...',
+    // Phase 21 — Slack now also supports a second token (xapp-) for
+    // Socket Mode inbound listening. Stored under keyId `slack_app`,
+    // surfaced in Settings → Connections separately.
+    extraKeys: [
+      { id: 'slack_app', label: 'App-level token (xapp-)', envHint: 'xapp-...', help: 'Required for inbound Socket Mode. Create at api.slack.com/apps → Basic Information → App-Level Tokens with connections:write scope.' },
+    ],
     tools: [
       {
         name: 'conn_slack_list_channels',
@@ -227,6 +233,13 @@ class ConnectionsManager {
     this.discordRunning = false;
     this.discordLastError = '';
     this.discordLastEventAt = '';
+    // Slack Socket Mode runtime — Phase 21. Listens via WebSocket
+    // (slack.com initiates), so no public endpoint needed. Requires a
+    // second token `slack_app` (xapp- token with connections:write).
+    this.slackSocket = null;
+    this.slackRunning = false;
+    this.slackLastError = '';
+    this.slackLastEventAt = '';
   }
 
   setReplyFn(fn) {
@@ -642,6 +655,174 @@ class ConnectionsManager {
     this._dcUpdateChatMeta(channelId, { lastMsg: reply.slice(0, 160), lastMsgAt: replyAt, count: histAfter.length });
     try { this.eventBridge?.('discord:message', { channelId, entry: assistantEntry }); } catch (_) {}
     this.discordLog(`Replied to #${msg.channelName || channelId} via ${res?.provider}/${res?.model}`, 'reply');
+  }
+
+  // ── Slack runtime (Phase 21 — Socket Mode WebSocket) ──────────────────
+  slackLog(message, type = 'info') {
+    const line = { time: new Date().toISOString(), type, message: asText(message, 1000) };
+    const logs = Array.isArray(this.settingsStore?.get?.('connection.slack.logs'))
+      ? this.settingsStore.get('connection.slack.logs')
+      : [];
+    logs.push(line);
+    this.settingsStore?.set?.('connection.slack.logs', logs.slice(-120));
+    if (type === 'error') this.slackLastError = line.message;
+    this.slackLastEventAt = line.time;
+    this._emitConnectionsUpdated();
+  }
+
+  slackStatus() {
+    return {
+      ok: true,
+      enabled: this.slackLiveEnabled(),
+      running: this.slackRunning,
+      connected: this.has('slack') && this.has('slack_app'),
+      lastError: this.slackLastError,
+      lastEventAt: this.slackLastEventAt,
+      logs: (this.settingsStore?.get?.('connection.slack.logs') || []).slice(-50),
+    };
+  }
+
+  slackLiveEnabled() {
+    return Boolean(this.settingsStore?.get?.('connection.slack.live'));
+  }
+
+  async setSlackLive(enabled) {
+    this.settingsStore?.set?.('connection.slack.live', !!enabled);
+    if (enabled) return this.startSlackRuntime();
+    await this.stopSlackRuntime();
+    return this.slackStatus();
+  }
+
+  async startSlackRuntime() {
+    if (!this.has('slack')) {
+      this.settingsStore?.set?.('connection.slack.live', false);
+      return { ok: false, error: 'Slack bot token (xoxb-) is not configured.' };
+    }
+    if (!this.has('slack_app')) {
+      this.settingsStore?.set?.('connection.slack.live', false);
+      return { ok: false, error: 'Slack app-level token (xapp-) is not configured. Add it in Settings → Connections.' };
+    }
+    if (!this.replyFn) return { ok: false, error: 'AI reply function is not wired.' };
+    if (this.slackRunning) return this.slackStatus();
+
+    try {
+      const { SlackSocketMode } = require('./slackSocketMode');
+      this.slackSocket = new SlackSocketMode({
+        appToken: this.token('slack_app'),
+        botToken: this.token('slack'),
+      });
+    } catch (e) {
+      this.slackLog('Failed to load Slack Socket Mode: ' + e.message, 'error');
+      return { ok: false, error: e.message };
+    }
+
+    this.slackSocket.on('open',  () => this.slackLog('Slack WS connection opened', 'run'));
+    this.slackSocket.on('ready', (info) => {
+      this.slackRunning = true;
+      this.slackLog(`Slack ready · team ${info.team || '?'}`, 'run');
+    });
+    this.slackSocket.on('close', ({ code, reason }) => {
+      this.slackRunning = false;
+      this.slackLog(`Slack WS closed (${code}) ${reason}`.trim(), 'info');
+    });
+    this.slackSocket.on('error', (err) => {
+      this.slackLog('Slack error: ' + (err?.message || err), 'error');
+    });
+    this.slackSocket.on('message', (msg) => {
+      this.handleSlackMessage(msg).catch(e => this.slackLog('handleSlackMessage failed: ' + e.message, 'error'));
+    });
+
+    const ok = await this.slackSocket.connect();
+    if (!ok) {
+      this.slackRunning = false;
+      return { ok: false, error: this.slackSocket.lastError || 'Failed to connect to Slack Socket Mode' };
+    }
+    this.slackRunning = true;
+    this._emitConnectionsUpdated();
+    return this.slackStatus();
+  }
+
+  async stopSlackRuntime() {
+    if (this.slackSocket) {
+      try { this.slackSocket.disconnect(); } catch (_) {}
+      this.slackSocket = null;
+    }
+    this.slackRunning = false;
+    this.slackLog('Slack runtime stopped.', 'run');
+    this._emitConnectionsUpdated();
+    return this.slackStatus();
+  }
+
+  // Chat memory keys mirror Discord:
+  //   connection.slack.chats          → [{channelId, channelName, teamId, lastMsg, lastMsgAt, count}]
+  //   connection.slack.history.<chId> → [{role, content, at, user?}] cap 400
+  SL_HISTORY_CAP = 400;
+  SL_CTX_FOR_MODEL = 16;
+  _slHistoryKey(channelId) { return `connection.slack.history.${channelId}`; }
+  _slReadHistory(channelId) {
+    const raw = this.settingsStore?.get?.(this._slHistoryKey(channelId));
+    return Array.isArray(raw) ? raw : [];
+  }
+  _slWriteHistory(channelId, history) {
+    const capped = history.slice(-this.SL_HISTORY_CAP);
+    this.settingsStore?.set?.(this._slHistoryKey(channelId), capped);
+    return capped;
+  }
+  _slUpdateChatMeta(channelId, patch) {
+    const list = Array.isArray(this.settingsStore?.get?.('connection.slack.chats'))
+      ? this.settingsStore.get('connection.slack.chats').slice() : [];
+    const idx = list.findIndex(c => String(c.channelId) === String(channelId));
+    const prev = idx >= 0 ? list[idx] : { channelId, count: 0 };
+    const next = { ...prev, ...patch, channelId };
+    if (idx >= 0) list[idx] = next; else list.push(next);
+    list.sort((a, b) => (new Date(b.lastMsgAt || 0).getTime()) - (new Date(a.lastMsgAt || 0).getTime()));
+    this.settingsStore?.set?.('connection.slack.chats', list.slice(0, 200));
+    return next;
+  }
+
+  async handleSlackMessage(msg) {
+    const channelId = msg.channelId;
+    const text = (msg.text || '').trim();
+    if (!channelId || !text) return;
+    this.slackLog(`Incoming from ${msg.channelName || channelId}: ${text.slice(0, 120)}`, 'message');
+
+    const now = new Date().toISOString();
+    const userEntry = { role: 'user', content: text, at: now, user: msg.user };
+    const histAfterUser = this._slWriteHistory(channelId, [...this._slReadHistory(channelId), userEntry]);
+    this._slUpdateChatMeta(channelId, {
+      channelName: msg.channelName || `#${channelId}`,
+      teamId: msg.teamId || '',
+      lastMsg: text.slice(0, 160),
+      lastMsgAt: now,
+      count: histAfterUser.length,
+    });
+    try { this.eventBridge?.('slack:message', { channelId, entry: userEntry }); } catch (_) {}
+
+    if (/^!horizon\s+status\b/i.test(text)) {
+      await this.slackPostMessage(channelId, `Horizon Slack runtime: ${this.slackRunning ? 'online' : 'offline'}`);
+      return;
+    }
+
+    const recent = this._slReadHistory(channelId).slice(-this.SL_CTX_FOR_MODEL);
+    const messages = recent.map(({ role, content }) => ({ role, content }));
+    const system = [
+      'You are Horizon AI replying inside a Slack channel.',
+      `Slack user: ${msg.user || 'unknown'}. Channel: ${msg.channelName || channelId}.`,
+      'Keep replies concise. Slack mrkdwn is supported (single asterisks for bold, backticks for code).',
+      'For destructive actions, explain that Horizon permission gates require desktop approval.',
+    ].join('\n');
+    const res = await this.replyFn({ messages, system, source: 'slack', chatId: channelId });
+    const reply = asText(res?.reply || res?.text || res?.error || 'No response', 3500);
+    const sendResult = await this.slackPostMessage(channelId, reply || 'No response');
+    const replyAt = new Date().toISOString();
+    const assistantEntry = {
+      role: 'assistant', content: reply, at: replyAt,
+      source: 'slack-runtime', provider: res?.provider, model: res?.model, ok: !!sendResult?.ok,
+    };
+    const histAfter = this._slWriteHistory(channelId, [...this._slReadHistory(channelId), assistantEntry]);
+    this._slUpdateChatMeta(channelId, { lastMsg: reply.slice(0, 160), lastMsgAt: replyAt, count: histAfter.length });
+    try { this.eventBridge?.('slack:message', { channelId, entry: assistantEntry }); } catch (_) {}
+    this.slackLog(`Replied to ${msg.channelName || channelId} via ${res?.provider}/${res?.model}`, 'reply');
   }
 
   async telegramLoop(signal) {
