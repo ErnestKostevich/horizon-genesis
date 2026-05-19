@@ -22,17 +22,20 @@
   <a href="#install">Install</a> ·
   <a href="#what-it-does">Features</a> ·
   <a href="#vs-hermes-vs-openclaw">Comparison</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="https://horizonaai.dev/docs">Docs</a> ·
-  <a href="#roadmap">Roadmap</a>
+  <a href="https://github.com/ErnestKostevich/Horizon-Agent-Docs">User Docs</a> ·
+  <a href="https://horizonaai.dev/docs">Hosted Docs</a>
 </p>
 
 ---
 
-> Bring your own model (Claude / GPT / Gemini / Groq / DeepSeek / Mistral / 8 more,
+> Bring your own model (Claude / GPT / Gemini / Groq / DeepSeek / Mistral / 19 more,
 > or fully local with Ollama). Bring your own ethics — every shell command, file
 > write, and message send goes through a permission gate. Bring your own data —
 > memory and keys never leave your machine.
+
+<p align="center">
+  <em>Want to use Horizon? Start at the <a href="https://github.com/ErnestKostevich/Horizon-Agent-Docs">User Docs</a> or <a href="https://github.com/ErnestKostevich/horizon-genesis/releases/latest">download the latest release</a>. This README is the source-code overview.</em>
+</p>
 
 ## What it does
 
@@ -367,20 +370,28 @@ Business Source License 1.1 with a scheduled conversion to AGPL-3.0.
 Reach out to Ernest at the address in [`SECURITY.md`](SECURITY.md) for
 commercial questions.
 
-## Repo layout
+<details>
+<summary><strong>Repo layout</strong> (click to expand — for contributors and curious readers)</summary>
 
 ```
 src/main/              Electron main process — IPC, plugin runtime, providers
 src/main/runtime/      Headless runtime (shared by CLI/TUI/serve)
+src/main/channels/     Messaging adapters (telegram/discord/whatsapp/signal/imessage)
 src/renderer/          Electron chat UI, settings, voice
 bin/                   CLI + TUI + HTTP serve entry points
 bin/lib/               argv parser, ANSI helpers, banner, markdown, commands
 builtin-skills/        SKILL.md bundles that ship with the app
 builtin-plugins/       Plugins that ship with the app
-docs/                  Markdown reference (cli.md, deploy.md, …)
-scripts/               install-cli.{sh,ps1}, stamp-build-info, icon
-.github/workflows/     CI: release.yml (Electron) + release-cli.yml (CLI binaries)
+mobile/                PWA companion (served by horizon-serve)
+test/                  node --test unit + integration tests
+docs/                  Technical / contributor docs (CLI ref, deploy guide, …)
+scripts/               install-cli.{sh,ps1}, icon generator
+.github/workflows/     CI workflows
 ```
+
+User-facing documentation lives in a separate repo: [Horizon-Agent-Docs](https://github.com/ErnestKostevich/Horizon-Agent-Docs).
+
+</details>
 
 ## Contributing
 
