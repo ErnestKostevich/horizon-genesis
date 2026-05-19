@@ -128,4 +128,71 @@ function typeOut(text, delayMs = 12) {
   });
 }
 
-module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut };
+/**
+ * Phase 18 — first-launch welcome reveal. Used by the TUI on its
+ * first start (when no chats exist yet) to give a memorable splash.
+ *
+ * Sequence:
+ *   1. Fast clear-screen
+ *   2. Banner appears line-by-line with 90ms gaps (gradient lines
+ *      reveal one at a time so the eye tracks the colour flow)
+ *   3. Tagline types out (12ms/char)
+ *   4. Three quick-start hints fade in
+ *   5. Bell ping (\\x07) — terminal owners often have it muted but
+ *      those who don't get a "ready" cue
+ *
+ * Honours HORIZON_FAST=1 (cron-friendly) — skips animation, prints
+ * the banner + tagline in one shot.
+ */
+async function welcomeReveal({ provider, persona, lang } = {}) {
+  if (!process.stdout.isTTY) {
+    // Non-TTY (piped) — print the banner once and bail
+    process.stdout.write(bannerBig() + '\n\n');
+    return;
+  }
+  const fast = process.env.HORIZON_FAST === '1';
+  // Clear screen + hide cursor during reveal
+  process.stdout.write('\x1b[2J\x1b[H');
+  if (!fast) process.stdout.write('\x1b[?25l');
+
+  const lines = bannerBig().split('\n');
+  for (const line of lines) {
+    process.stdout.write(line + '\n');
+    if (!fast) await new Promise(r => setTimeout(r, 90));
+  }
+  process.stdout.write('\n');
+
+  const tagline = 'Personal AI agent — bring your own keys · your data stays local';
+  if (fast) {
+    process.stdout.write('  ' + tagline + '\n');
+  } else {
+    process.stdout.write('  ');
+    await typeOut(tagline, 14);
+    process.stdout.write('\n');
+  }
+
+  if (!fast) await new Promise(r => setTimeout(r, 200));
+
+  const hints = [
+    [fmt.dim('Provider:'), fmt.cyan(provider || 'gemini'), '   ',
+     fmt.dim('Persona:'),  fmt.cyan(persona  || 'jarvis'), '   ',
+     fmt.dim('Lang:'),     fmt.cyan(lang     || 'en')].join(''),
+    '',
+    fmt.dim('  /help') + '   show every slash command',
+    fmt.dim('  /agent') + ' <task>     full agent loop with tools',
+    fmt.dim('  /chat')  + ' <message>  single-turn chat',
+    fmt.dim('  /quit')  + '   exit',
+    '',
+  ];
+  for (const h of hints) {
+    process.stdout.write('  ' + h + '\n');
+    if (!fast && h) await new Promise(r => setTimeout(r, 60));
+  }
+
+  if (!fast) {
+    process.stdout.write('\x1b[?25h');     // show cursor
+    process.stdout.write('\x07');           // gentle bell — most terminals mute this
+  }
+}
+
+module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal };

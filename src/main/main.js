@@ -176,6 +176,9 @@ const ALLOWED_SETTING_KEYS = new Set([
   'whatsapp.from', 'whatsapp.enabled',
   'signal.url', 'signal.number', 'signal.enabled',
   'imessage.enabled', 'imessage.lastRowid',
+  // Phase 18 — TUI welcome flag (set once on first launch so the
+  // animated reveal only plays for new users)
+  'tui.welcomedAt',
   'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
   'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
   'mode', 'searchOn', 'responseProfile',
