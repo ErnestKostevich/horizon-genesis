@@ -34,8 +34,24 @@
 
 const http = require('http');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { URL } = require('url');
 const { fmt } = require('./lib/tty');
+
+// Where the PWA assets live relative to this file. Resolves both in
+// repo-clone mode (./mobile) and bundled mode (snapshot via pkg).
+const PWA_DIR = path.resolve(__dirname, '..', 'mobile');
+const PWA_MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.png':  'image/png',
+  '.svg':  'image/svg+xml',
+  '.ico':  'image/x-icon',
+};
 
 async function main({ flags } = {}) {
   const port = Number(flags?.port || process.env.HORIZON_PORT || 18789);
@@ -72,6 +88,11 @@ async function main({ flags } = {}) {
       );
     }
     process.stderr.write(fmt.dim(`workspace: ${runtime.workspaceDir}`) + '\n');
+    if (fs.existsSync(PWA_DIR)) {
+      const pwaUrl = `http://${host}:${port}/?url=http%3A%2F%2F${host}%3A${port}&token=${encodeURIComponent(token)}`;
+      process.stderr.write(fmt.dim(`mobile PWA: ${pwaUrl}`) + '\n');
+      process.stderr.write(fmt.dim('  open on your phone (same network) to install · token auto-prefilled') + '\n');
+    }
   });
 
   // Graceful shutdown
@@ -104,6 +125,12 @@ async function handle(req, res, runtime, expectedToken) {
       res.end(JSON.stringify({ error: 'unauthorized' }));
       return;
     }
+  } else if (req.method === 'GET') {
+    // Serve PWA static files. Token is NOT required for the app shell
+    // itself — it's a tiny SPA that asks the user for the token at
+    // startup. Once they enter it, /api/* calls carry the Bearer.
+    const served = await tryServePwa(pathname, res);
+    if (served) return;
   }
 
   try {
@@ -132,6 +159,55 @@ async function handle(req, res, runtime, expectedToken) {
 function json(res, code, payload) {
   res.writeHead(code, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(payload));
+}
+
+/**
+ * Serve the PWA shell (mobile/index.html, app.js, app.css, etc).
+ * Returns true if the request was handled, false to let the regular
+ * /api/* routing take over.
+ *
+ * Path traversal guard: only paths that resolve INSIDE PWA_DIR are
+ * served. Bare `/` → index.html.
+ */
+async function tryServePwa(pathname, res) {
+  if (!fs.existsSync(PWA_DIR)) return false; // PWA bundle missing (dev install?)
+  let rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  // `pwa/` prefix is supported for backward-compat
+  if (rel.startsWith('pwa/')) rel = rel.slice(4);
+  const target = path.resolve(PWA_DIR, rel);
+  if (!target.startsWith(PWA_DIR)) return false; // path-traversal attempt
+  if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
+    // For SPA-style routes (deep links) fall back to index.html so the
+    // client-side router can pick them up — but only if it looks like
+    // a real navigation (not a missing JS / CSS).
+    if (pathname.startsWith('/api/')) return false;
+    const ext = path.extname(rel);
+    if (ext && ext !== '.html') return false;
+    const indexFile = path.join(PWA_DIR, 'index.html');
+    if (!fs.existsSync(indexFile)) return false;
+    return serveFile(indexFile, res);
+  }
+  return serveFile(target, res);
+}
+
+function serveFile(file, res) {
+  return new Promise((resolve) => {
+    const ext = path.extname(file).toLowerCase();
+    const mime = PWA_MIME[ext] || 'application/octet-stream';
+    fs.readFile(file, (err, buf) => {
+      if (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('read error');
+        return resolve(true);
+      }
+      res.writeHead(200, {
+        'Content-Type': mime,
+        'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300',
+      });
+      res.end(buf);
+      resolve(true);
+    });
+  });
 }
 
 function readJson(req) {
