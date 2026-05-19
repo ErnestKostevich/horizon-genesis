@@ -1,103 +1,392 @@
-# Horizon Genesis
+<p align="center">
+  <img src="assets/icon.png" width="128" alt="Horizon AI logo" />
+</p>
 
-> Desktop AI agent with personas, plugins, workflows, and computer use.
-> Local-first. Bring-your-own-keys. BUSL-1.1 (transitions to AGPL-3.0).
+<h1 align="center">Horizon AI</h1>
 
-Horizon Genesis is an Electron-based AI agent that runs on your machine. You choose the model, you choose the provider, you keep the keys. It drives your browser, your files, and any plugin you install — but only with the permissions you grant.
+<p align="center">
+  <strong>The personal AI agent that runs on <em>your</em> machine.</strong><br/>
+  <sub>Desktop app · Terminal CLI · Headless HTTP API · Mobile (soon)</sub>
+</p>
 
-- **Website:** https://horizonaai.dev
-- **Marketplace:** https://horizonaai.dev/browse
-- **Download:** https://horizonaai.dev/#download
-- **Docs:** https://horizonaai.dev/docs
+<p align="center">
+  <a href="https://github.com/ErnestKostevich/horizon-genesis/releases/latest"><img src="https://img.shields.io/github/v/release/ErnestKostevich/horizon-genesis?style=flat-square&color=8b5cf6&label=Release" alt="Latest release"/></a>
+  <a href="https://github.com/ErnestKostevich/horizon-genesis/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/ErnestKostevich/horizon-genesis/release.yml?style=flat-square&label=Build" alt="Build status"/></a>
+  <a href="https://github.com/ErnestKostevich/horizon-genesis/releases"><img src="https://img.shields.io/github/downloads/ErnestKostevich/horizon-genesis/total?style=flat-square&color=06b6d4&label=Downloads" alt="Downloads"/></a>
+  <a href="https://github.com/ErnestKostevich/horizon-genesis/stargazers"><img src="https://img.shields.io/github/stars/ErnestKostevich/horizon-genesis?style=flat-square&color=facc15&label=Stars" alt="Stars"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BUSL--1.1-blue?style=flat-square" alt="License"/></a>
+  <a href="https://horizonaai.dev"><img src="https://img.shields.io/badge/web-horizonaai.dev-ec4899?style=flat-square" alt="Website"/></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="#vs-hermes-vs-openclaw">Comparison</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="https://horizonaai.dev/docs">Docs</a> ·
+  <a href="#roadmap">Roadmap</a>
+</p>
 
 ---
 
-## ⚠️ Read this first — source is for review only
+> Bring your own model (Claude / GPT / Gemini / Groq / DeepSeek / Mistral / 8 more,
+> or fully local with Ollama). Bring your own ethics — every shell command, file
+> write, and message send goes through a permission gate. Bring your own data —
+> memory and keys never leave your machine.
 
-This repository is a **source preview**. The code here is source-available under BUSL-1.1 so you can audit it, learn from it, and contribute — but **cloning and running it won't launch a working app**. When started from a source clone, the app opens a notice window pointing you to the official installer.
+## What it does
 
-**The only runnable builds ship from [GitHub Releases](https://github.com/ErnestKostevich/horizon-genesis/releases/latest).** Those are produced by this repo's CI from this exact source — same code, just stamped with an official build marker during the CI workflow.
+- **Desktop GUI** with real-time chat, persona switching, plugin marketplace,
+  computer-use vision (the agent can see your screen, click, type, take
+  screenshots), wake word, continuous talk mode, and an inspector that
+  shows every step the agent plans + executes.
+- **Terminal CLI + TUI** that share the same memory, skills, and persona as
+  the desktop app. Streaming chat, markdown rendering, gradient spinner,
+  slash commands, full agent loop with live step rail.
+- **Headless HTTP API** so cron jobs, mobile clients, and remote machines
+  can drive the same agent over JSON + Server-Sent Events.
+- **8-type memory** — facts, episodic memories, conversations, semantic
+  recall (256-dim embeddings), FTS index, user profile (Big-Five model),
+  persona memory, and per-workspace `.horizon/memory.json` that you commit
+  alongside the code it describes.
+- **Skills system** with three scopes (workspace / user / builtin) — same
+  SKILL.md format Anthropic uses. Auto-pickup based on the user's query.
+- **Plugin SDK** in TypeScript with a CLI scaffolder
+  ([`horizon-plugin-sdk`](https://github.com/ErnestKostevich/horizon-plugin-sdk)) +
+  a real **marketplace** with crypto payouts to authors via NOWPayments.
 
-**Why this split?**
-- Code is transparent (you can read every line before installing anything)
-- Official releases have an integrity marker — you know what you're running came from CI, not from some modified fork
-- Prevents drive-by "clone-and-run" impersonation of the real app
+## Install
 
-If you're a contributor who needs to run locally, see [CONTRIBUTING.md](CONTRIBUTING.md).
+### Desktop app (Electron — Windows / macOS / Linux)
 
----
+Grab the official installer from
+[the latest release](https://github.com/ErnestKostevich/horizon-genesis/releases/latest):
 
-## Features
+| Platform | File |
+|---|---|
+| Windows x64 (installer) | `Horizon-AI-Setup-x.y.z.exe` |
+| Windows x64 (portable)  | `Horizon-AI-Portable-x.y.z.exe` |
+| macOS (Intel + Apple Silicon) | `Horizon-AI-x.y.z.dmg` |
+| Linux x64 (AppImage)    | `Horizon-AI-x.y.z.AppImage` |
+| Linux x64 (Debian/Ubuntu) | `horizon-ai_x.y.z_amd64.deb` |
 
-- Personas (swap prompt, tools, provider on the fly)
-- No-code workflows
-- Plugin system with permission manifests (Built-in, Demo, Community tiers)
-- Computer use (see screen, click, type — scoped and pause-able)
-- MCP server support
-- Google / Spotify / browser automation out of the box
+### Terminal CLI (standalone — no Node.js required)
 
-## Install (official builds)
+```bash
+# macOS / Linux
+curl -L https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-linux-x64 -o /usr/local/bin/horizon
+chmod +x /usr/local/bin/horizon
+horizon setup
+```
 
-Grab the installer from [the latest release](https://github.com/ErnestKostevich/horizon-genesis/releases/latest):
+```powershell
+# Windows
+iwr https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-win-x64.exe -OutFile horizon.exe
+.\horizon.exe setup
+```
 
-- **Windows:** `Horizon-AI-Setup-x.y.z.exe` (NSIS, x64)
-- **macOS:** `Horizon-AI-x.y.z.dmg` (Intel + Apple Silicon, unsigned — right-click → Open)
-- **Linux:** `Horizon-AI-x.y.z.AppImage` (portable, x64) or `horizon-ai_x.y.z_amd64.deb` (Debian / Ubuntu)
+### CLI from source (if you have Node 22+)
 
-Or install marketplace plugins via `horizon://` deep links from the site.
+```bash
+curl -fsSL https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scripts/install-cli.sh | bash      # Linux/macOS
+iwr https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scripts/install-cli.ps1 | iex             # Windows
+```
 
-## How the build gate works
+## Quick taste
 
-The app checks for `src/main/build-info.json` at startup. This file is **only created by [the release workflow](.github/workflows/release.yml)** — it's gitignored, never committed, never produced by a local `npm run build:*`. Its absence is the signal: "this isn't an official build, show the preview and exit."
+```bash
+# First-time setup — interactive wizard picks provider, key, persona, lang
+horizon setup
 
-The workflow stamps the file with the tag, commit SHA, build timestamp, and runner — so you can trace any installer back to its exact source commit.
+# One-shot tasks
+horizon "find every TODO in this repo and group them by file"
+horizon chat "summarise this article" --quiet < article.txt
+horizon agent "draft a PR description for the last 3 commits" --auto-approve
 
-## Configuration
+# Smart routing — pick the cheapest usable provider per call
+horizon chat "what's 2+2?" --provider auto       # → Gemini-Flash (free tier)
+horizon agent "do something hard" --provider auto # → bigger model if needed
 
-Official builds run without any env vars. To point at a self-hosted marketplace instead of the default, configure in-app (Settings → Marketplace) or set:
+# See what you've spent
+horizon cost                                      # last 30 days
+horizon cost --days 7 --json                      # weekly breakdown
 
-| Var | Default | Purpose |
-|---|---|---|
-| `HORIZON_MARKETPLACE_URL` | `https://api.horizonaai.dev` | Marketplace REST API base |
-| `HORIZON_MARKETPLACE_WEB_URL` | auto-derived (strips `api.`) | Web URL for "open dashboard" links |
+# Launch the polished TUI
+horizon
 
-Model provider keys are stored locally, encrypted via the OS keychain (safeStorage). Nothing is sent to a Horizon server — the app only talks to the marketplace when you install or publish plugins.
+# Headless server (for PWA / cron / VPS)
+horizon serve --port 18789 --token mysecret
+```
+
+## vs Hermes vs OpenClaw
+
+|  | **Horizon AI** | Hermes Agent | OpenClaw |
+|---|:---:|:---:|:---:|
+| **License** | BUSL-1.1 → AGPL | MIT | MIT |
+| Desktop GUI app           | ✅ Full Electron | ❌ | 🔸 Web Control UI |
+| Terminal CLI              | ✅ | ✅ | ✅ |
+| Polished TUI              | ✅ gradient banner | ✅ | 🔸 |
+| Token-streaming output    | ✅ | ✅ | ✅ |
+| Markdown render in TUI    | ✅ | 🔸 | 🔸 |
+| Headless HTTP + SSE       | ✅ | 🔸 | ✅ |
+| Mobile companion          | 🔸 PWA Q3 | ❌ | ✅ iOS + Android |
+| **AI providers**          | **14** | 200+ wrapper | wrapper |
+| Smart auto routing        | ✅ `--provider auto` | ❌ | ❌ |
+| Cost tracking + budget    | ✅ `horizon cost` | ❌ | ❌ |
+| Setup wizard              | ✅ | ✅ | 🔸 |
+| BYOK encrypted storage    | ✅ AES-256-GCM | ✅ | ✅ |
+| Local-first (Ollama)      | ✅ | ✅ | ✅ |
+| **Memory storage**        | JSON + InvertedIndex + embeddings | SQLite + FTS5 | JSON |
+| 8-type memory model       | ✅ | 🔸 4 types | 🔸 |
+| Workspace-bound memory    | ✅ `.horizon/memory.json` | ❌ | ❌ |
+| Semantic recall           | ✅ 256-dim | ✅ | 🔸 |
+| User Profile (Big-Five)   | ✅ | 🔸 | ❌ |
+| **Skills system**         | ✅ 3 scopes | ✅ | ✅ |
+| SKILL.md format           | ✅ Anthropic-compat | ✅ agentskills.io | own |
+| Auto skill suggestion     | ✅ | ✅ | ❌ |
+| **Personas**              | ✅ 5 built-in + custom | ❌ | ❌ |
+| **Tools**                 | 50+ | 70+ | ~20 |
+| MCP server support        | ✅ | ❌ | ❌ |
+| Subagents (parallel)      | ✅ `spawn_subagent` | ✅ | ❌ |
+| **Sandbox backends**      | host + docker | host/docker/SSH/Daytona/Singularity/Modal | host + docker |
+| Computer use (vision)     | ✅ wake/click/screenshot | ❌ | 🔸 |
+| Wake word                 | ✅ Deepgram + Groq | ❌ | ✅ |
+| Continuous talk mode      | ✅ | ❌ | ✅ |
+| **Channels**              | 5 (TG / Discord / Slack / Notion / Linear) | 20+ | 10+ (WhatsApp/iMessage/Signal/Teams/...) |
+| Telegram bot runtime      | ✅ | ✅ | ✅ |
+| Discord Gateway WS        | ✅ | ✅ | ✅ |
+| Cron-driven workflows     | ✅ `workflowEngine` | ✅ | ❌ |
+| **Plugin SDK**            | ✅ TypeScript + CLI | 🔸 | 🔸 |
+| **Marketplace**           | ✅ Stripe + NOWPayments | 🔸 Skills Hub (free) | 🔸 ClawHub (free) |
+| Crypto payouts to authors | ✅ | ❌ | ❌ |
+| Standalone CLI binaries   | ✅ 4 platforms | ✅ | ✅ |
+
+> Legend: ✅ first-class · 🔸 partial / planned · ❌ not present
 
 ## Architecture
 
-```
-┌────────────────────┐   ┌───────────────────┐   ┌──────────────────┐
-│ Horizon Desktop    │   │ Plugins           │   │ Marketplace      │
-│ (this repo)        │◄──┤ manifest+handler  │◄──┤ (separate repo)  │
-│ Electron · JS      │   │ permission-gated  │   │ FastAPI+React    │
-│ your machine       │   │ local install     │   │ public catalog   │
-└────────────────────┘   └───────────────────┘   └──────────────────┘
+```mermaid
+graph TB
+    subgraph "Clients"
+        Desktop["🖥️ Electron app"]
+        CLI["💻 CLI / TUI"]
+        Mobile["📱 PWA / mobile"]
+        Cron["⏰ cron / API"]
+    end
+
+    subgraph "Headless runtime (shared)"
+        Agent["Agent loop<br/>plan → act → reflect"]
+        Memory["8-type memory<br/>facts · episodic · semantic<br/>FTS · profile · workspace"]
+        Skills["Skills manager<br/>workspace / user / builtin"]
+        Executor["Executor<br/>host or docker"]
+        AI["AI client<br/>14 providers + auto routing"]
+    end
+
+    subgraph "Channels"
+        TG["Telegram bot"]
+        Discord["Discord Gateway"]
+        Slack["Slack"]
+        Notion["Notion"]
+        Linear["Linear"]
+    end
+
+    subgraph "Providers"
+        Cloud["☁️ Claude · OpenAI · Gemini<br/>Groq · DeepSeek · Mistral · 8 more"]
+        Local["🏠 Ollama · LM Studio · LocalAI"]
+    end
+
+    Desktop --> Agent
+    CLI --> Agent
+    Mobile -.HTTP+SSE.-> Agent
+    Cron -.HTTP.-> Agent
+
+    Agent --> Memory
+    Agent --> Skills
+    Agent --> Executor
+    Agent --> AI
+
+    Agent <--> TG
+    Agent <--> Discord
+    Agent <--> Slack
+    Agent <--> Notion
+    Agent <--> Linear
+
+    AI --> Cloud
+    AI --> Local
 ```
 
-The marketplace is a separate, private service. Zero agent traffic flows through it — it only handles plugin discovery, install, and publishing.
+One headless runtime drives every client. Memory and keys live on your
+machine — the desktop app, CLI, and HTTP API all read/write the same
+`%APPDATA%/horizon-ai/` (or `~/Library/Application Support/horizon-ai/`,
+or `~/.config/horizon-ai/`). Set up once in the GUI, use the CLI from any
+shell, expose to mobile via `horizon serve`.
+
+## Memory model
+
+8 layers of context across short-, mid-, and long-term:
+
+| Layer | Where | What |
+|---|---|---|
+| **Facts** | `horizon_memory.json` | Stable key/value preferences (name, location, project conventions) |
+| **Episodic memories** | `horizon_memory.json` | Time-stamped events ("user said Yerba mate tastes like grass on 2026-04-12") |
+| **Conversations** | `horizon_memory.json` | Last N user/assistant turns, FTS-indexed |
+| **Semantic embeddings** | `horizon_embeddings.json` | 256-dim vectors (OpenAI 3-small or Gemini), cosine recall |
+| **FTS index** | in-memory (pure JS InvertedIndex) | Token-level keyword recall, TF-IDF + positional |
+| **User Profile** | `horizon_memory.json → userProfile` | Big-Five trait model + communication style, auto-updated |
+| **Persona memory** | `horizon_memory.json → personaMemory.<id>` | Per-persona note buffer |
+| **Workspace memory** | `<repo>/.horizon/memory.json` | Conventions, glossary, decisions, do-not list — commit in git |
+
+The agent's reasoning prompt receives a relevance-scored slice of all 8
+on every turn. Total context budget ~12 KB per call, automatically
+trimmed to fit smaller models.
+
+## Skills
+
+SKILL.md bundles in three scopes, picked up by relevance score:
+
+```
+workspace      <repo>/.horizon/skills/<id>/SKILL.md         ← per-project, commit in git
+user           <userData>/skills/<id>/SKILL.md              ← global to you
+builtin        builtin-skills/<id>/SKILL.md                 ← ships with Horizon
+```
+
+Each is a YAML-frontmatter markdown file:
+
+```markdown
+---
+name: refactor-react
+description: Migrate React class components to function components with hooks
+version: 0.2.0
+tags: [react, refactor, hooks]
+triggers: [class component, componentDidMount, setState in class]
+---
+
+# Refactor React class → function with hooks
+
+Step 1: ...
+Step 2: ...
+```
+
+The agent auto-includes the most relevant skills in its system prompt
+based on the user's query. Browse, install, edit, or publish via the
+marketplace or `horizon skill list` / `horizon skill new <id>`.
+
+## Plugins
+
+TypeScript SDK with a CLI scaffolder — see
+[`horizon-plugin-sdk`](https://github.com/ErnestKostevich/horizon-plugin-sdk).
+
+```bash
+npx hz-plugin init my-plugin
+cd my-plugin
+npm run dev
+npx hz-plugin publish
+```
+
+Manifest declares permissions; the user approves on install. Plugins
+get their own tools that the agent can call.
+
+## Documentation
+
+| | |
+|---|---|
+| [Getting Started](docs/getting-started.md) | User-facing intro for the desktop app + CLI |
+| [CLI / TUI / serve reference](docs/cli.md) | Every subcommand, flag, output format |
+| [VPS deployment](docs/deploy.md) | systemd + nginx + TLS + cron |
+| Hosted docs site | https://horizonaai.dev/docs |
+| Plugin SDK | https://github.com/ErnestKostevich/horizon-plugin-sdk |
+
+## Roadmap
+
+- [x] Electron desktop app (Windows / macOS / Linux installers)
+- [x] 8-type memory + semantic recall
+- [x] Skills system with 3 scopes + Anthropic-compatible SKILL.md
+- [x] Plugin SDK + Stripe/NOWPayments marketplace
+- [x] Bidirectional Telegram + Discord bots
+- [x] Docker executor backend
+- [x] Subagents (`spawn_subagent` tool)
+- [x] Computer use (vision + click + screenshot + wake word)
+- [x] Continuous Talk Mode
+- [x] CLI + TUI with streaming, markdown, gradient spinner
+- [x] Headless HTTP API with SSE
+- [x] Standalone binaries for win/mac/linux
+- [x] `horizon setup` onboarding wizard
+- [x] `horizon cost` token tracking + `--provider auto` routing
+- [ ] Mobile PWA companion app (Q3 2026)
+- [ ] MCP servers spawnable from CLI
+- [ ] WhatsApp / Signal / iMessage adapters
+- [ ] More sandbox backends (SSH / Modal)
+- [ ] BSL → AGPL conversion (after the change date)
+- [ ] Plugin SDK v2 with Rust support
+
+See [`docs/cli-plan.md`](docs/cli-plan.md) for the detailed phase-by-phase
+design that drives the CLI tracks.
+
+## File locations
+
+| File | What it stores |
+|---|---|
+| `<userData>/horizon-settings.json` | provider, model, persona, lang, prefs |
+| `<userData>/horizon-keys.json` | API keys (AES-256-GCM, machine-id bound) |
+| `<userData>/horizon_memory.json` | 8-type memory (everything except embeddings) |
+| `<userData>/horizon_embeddings.json` | semantic embedding sidecar |
+| `<userData>/horizon-cost.jsonl` | per-call cost log |
+| `<userData>/skills/<id>/` | user-installed skills |
+| `<userData>/plugins/<id>/` | installed plugins |
+| `<workspace>/.horizon/memory.json` | workspace-bound memory (commit in git) |
+| `<workspace>/.horizon/skills/<id>/` | workspace-scoped skills (commit in git) |
+| `<workspace>/.horizon/rules.md` | per-project rules injected into every prompt |
+
+`<userData>` resolves to:
+
+- Windows: `%APPDATA%\horizon-ai\`
+- macOS:   `~/Library/Application Support/horizon-ai/`
+- Linux:   `~/.config/horizon-ai/`
+
+## Why BUSL-1.1?
+
+Hermes and OpenClaw ship under MIT. Horizon ships under
+Business Source License 1.1 with a scheduled conversion to AGPL-3.0.
+
+- **Free for evaluation, personal use, and contributing back.** Run
+  it on your own machine, audit the source, send PRs.
+- **Commercial deployments require a license** until the change date —
+  after that, the same source is AGPL-3.0 forever.
+- Same pattern Cassandra, CockroachDB, MariaDB MaxScale, and Sentry use.
+
+Reach out to Ernest at the address in [`SECURITY.md`](SECURITY.md) for
+commercial questions.
 
 ## Repo layout
 
 ```
-src/main/          Electron main process, IPC, plugin runtime, providers
-src/renderer/      Chat UI, setup, source-preview page (plain HTML)
-builtin-plugins/   Ships-with-the-app plugins (e.g. spotify-control)
-assets/            Icons for installers
-.github/workflows/ CI: release build for Windows, macOS, Linux
+src/main/              Electron main process — IPC, plugin runtime, providers
+src/main/runtime/      Headless runtime (shared by CLI/TUI/serve)
+src/renderer/          Electron chat UI, settings, voice
+bin/                   CLI + TUI + HTTP serve entry points
+bin/lib/               argv parser, ANSI helpers, banner, markdown, commands
+builtin-skills/        SKILL.md bundles that ship with the app
+builtin-plugins/       Plugins that ship with the app
+docs/                  Markdown reference (cli.md, deploy.md, …)
+scripts/               install-cli.{sh,ps1}, stamp-build-info, icon
+.github/workflows/     CI: release.yml (Electron) + release-cli.yml (CLI binaries)
 ```
 
 ## Contributing
 
-Small fixes welcome. Open an issue first for anything non-trivial. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Small fixes welcome. Open an issue first for anything non-trivial.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
 
-Found a vulnerability? Please don't open a public issue. See [SECURITY.md](SECURITY.md).
-
-## License
-
-Business Source License 1.1 — see [LICENSE](LICENSE). Non-commercial evaluation use is allowed; commercial use requires permission until the change date, then it converts to AGPL-3.0.
+Found a vulnerability? Please don't open a public issue.
+See [SECURITY.md](SECURITY.md).
 
 ## Author
 
-Built by [Ernest Kostevich](https://github.com/ErnestKostevich).
+Built by [Ernest Kostevich](https://github.com/ErnestKostevich) ·
+[horizonaai.dev](https://horizonaai.dev) ·
+ernest2011kostevich@gmail.com
+
+If you find Horizon useful, the easiest support is a ⭐ on this repo and
+a follow on the marketplace.
