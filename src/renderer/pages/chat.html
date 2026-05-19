@@ -3437,15 +3437,27 @@ ${fileContext}`}];
   let sysCtx='';
   if(mode==='agent'||mode==='vision'){const info=await H.sysInfo();sysCtx=`\nSystem: ${info.platform}, user=${info.user}, CPU=${info.cpu}, RAM=${info.ram}(free ${info.freeRam}), time=${info.time}`;}
 
-  // CRITICAL: No matter which AI — Horizon always knows it's Horizon
-  // Inject persona personality
+  // PHASE 28.3 — chat language detection independent of the UI menu.
+  // We scan the last 5 user messages for Cyrillic and pick the
+  // matching persona prompt + identity. The UI dropdown stays English-
+  // only (labels, buttons) but the conversation itself follows
+  // whatever the user actually typed.
+  const detectedLang = (() => {
+    try {
+      const recent = (chatHistory || []).filter(m => m.role === 'user').slice(-5);
+      const text = recent.map(m => String(m.content || '')).join(' ');
+      return /[А-Яа-яЁё]/.test(text) ? 'ru' : 'en';
+    } catch (_) { return 'en'; }
+  })();
+
+  // Inject persona personality in the detected language.
   let personaExtra = '';
   try {
-    const pp = await H.getPersonaPrompt(currentPersona, lang);
+    const pp = await H.getPersonaPrompt(currentPersona, detectedLang);
     if (pp) personaExtra = '\n\n' + pp;
   } catch(_) {}
-  
-  const identity=lang==='ru'
+
+  const identity=detectedLang==='ru'
     ?`Ты — Хорайзон (Horizon AI), продвинутый персональный AI-агент для ПК. Тебя создал Эрнест Костевич (Ernest Kostevich). Ты НЕ являешься Claude, ChatGPT, Gemini, Groq, DeepSeek, Mistral или любым другим AI — ты ХОРАЙЗОН. Ты можешь управлять ПК, видеть экран. Пользователь: ${userName}. Время: ${new Date().toLocaleString()}.${sysCtx}\n\nОтвечай на русском. Используй Markdown.${personaExtra}${screenContextB64?' [У тебя есть актуальный скриншот экрана пользователя в контексте]':''}`
     :`You are Horizon AI — an advanced personal desktop agent created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, Groq, DeepSeek, Mistral, or any other AI. You ARE HORIZON — intelligent, friendly. You can control the PC and see the screen. User: ${userName}. Time: ${new Date().toLocaleString()}.${sysCtx}\n\nUse Markdown.${personaExtra}`;
   let sys=modeSys?`${identity}\n\n${modeSys}`:identity;
