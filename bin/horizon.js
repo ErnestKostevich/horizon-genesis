@@ -53,9 +53,13 @@ ${fmt.bold('Commands')}
   ${fmt.cyan('cost')}                 Show token + dollar spend (--days N --json --provider X)
   ${fmt.cyan('skill')}   subcommand  list | show <id> | new <id> | run <id> "task" | enable | disable
   ${fmt.cyan('mem')}     subcommand  search "q" | dump | profile | forget | stats
-  ${fmt.cyan('model')}   [provider]  Read or set active provider/model. --list to see all.
+  ${fmt.cyan('model')}   [provider]  Read or set active provider/model. --list to see all 25 options.
   ${fmt.cyan('persona')} [id]        Read or set active persona. --list to see options.
   ${fmt.cyan('connect')} subcommand  list | test <id> | telegram|discord|slack|notion|linear --token X
+  ${fmt.cyan('doctor')}  [--fix]     Health check + auto-fix (like hermes doctor)
+  ${fmt.cyan('profile')} subcommand  list | use <name> | create <name> | show | delete | rename | path
+  ${fmt.cyan('completion')} <shell>  Emit bash/zsh/fish/pwsh tab-completion script
+  ${fmt.cyan('update')}  [--check]   Self-update from GitHub Releases (binary or source)
   ${fmt.cyan('serve')}                Start the headless HTTP API server (PWA / cron / mobile)
   ${fmt.cyan('tui')}                  Launch the interactive shell
   ${fmt.cyan('version')}              Print version + key health summary
@@ -89,10 +93,33 @@ ${fmt.bold('Examples')}
   process.stdout.write(help);
 }
 
+function resolveProfileUserDataDir(baseUserDataDir, explicitProfile) {
+  // Precedence: --profile flag > HORIZON_PROFILE env > active-profile.txt
+  // > "default" (uses baseUserDataDir as-is).
+  const fs = require('fs');
+  const path = require('path');
+  let name = explicitProfile || process.env.HORIZON_PROFILE;
+  if (!name) {
+    try {
+      const f = path.join(baseUserDataDir, 'active-profile.txt');
+      if (fs.existsSync(f)) {
+        name = fs.readFileSync(f, 'utf8').trim();
+      }
+    } catch (_) {}
+  }
+  if (!name || name === 'default') return baseUserDataDir;
+  // Validate to avoid path traversal
+  if (!/^[a-z0-9][a-z0-9-_]{0,30}$/i.test(name)) return baseUserDataDir;
+  return path.join(baseUserDataDir, 'profiles', name);
+}
+
 async function loadRuntime(flags) {
   const { createHorizonRuntime } = require('../src/main/runtime/headless');
+  const { defaultUserDataDir } = require('../src/main/runtime/store-shim');
+  const baseDir = flags['user-data-dir'] || defaultUserDataDir();
+  const effectiveDir = resolveProfileUserDataDir(baseDir, flags.profile);
   return createHorizonRuntime({
-    userDataDir: flags['user-data-dir'],
+    userDataDir: effectiveDir,
     workspaceDir: flags.workspace || process.cwd(),
     verbose: !!flags.verbose,
   });
@@ -123,7 +150,7 @@ async function dispatch(argv) {
   // a shorthand `horizon agent "..."` task.
   const KNOWN = ['agent', 'chat', 'skill', 'mem', 'connect', 'model',
                  'persona', 'version', 'serve', 'tui', 'help',
-                 'setup', 'cost'];
+                 'setup', 'cost', 'doctor', 'profile', 'completion', 'update'];
 
   if (cmd === 'help') { printHelp(); return 0; }
   if (cmd === 'tui') {
