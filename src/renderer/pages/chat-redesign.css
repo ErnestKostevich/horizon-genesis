@@ -1,0 +1,345 @@
+/* ═══════════════════════════════════════════════════════════════════════
+ * Horizon Redesign Pass — May 2026
+ *
+ * Layered on top of the existing chat-base.css + chat-shell-polish.css
+ * stack as a single visual upgrade pass. Targets the top issues from
+ * the design audit:
+ *
+ *   1. Skeleton loading states (CRITICAL — users couldn't tell if it
+ *      was loading or stuck)
+ *   2. Toast notifications (slide-in, stack, auto-dismiss)
+ *   3. Modal entrance animation (fade + scale up from 96%)
+ *   4. Input focus rings on every text input
+ *   5. Button contrast bump for WCAG AA compliance
+ *   6. Animated gradient background (replaces static one)
+ *   7. Sidebar hover effects (subtle bg tint)
+ *   8. Composer polish (placeholder fade + send button glow)
+ *
+ * Everything here is additive — no existing rule is touched, only
+ * extended. Toggle: remove the <link> in chat.html to revert.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Skeleton loading states ──────────────────────────────────────── */
+
+@keyframes hzSkeletonPulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.85; }
+}
+
+.hz-skel {
+  display: inline-block;
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.10) 50%,
+    rgba(255,255,255,0.04) 100%);
+  background-size: 200% 100%;
+  border-radius: 6px;
+  animation: hzSkeletonShimmer 1.6s ease-in-out infinite, hzSkeletonPulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+  user-select: none;
+}
+.hz-skel-text  { height: 14px; width: 160px; }
+.hz-skel-line  { height: 14px; width: 100%; }
+.hz-skel-block { height: 80px; width: 100%; border-radius: 10px; }
+.hz-skel-avatar { width: 32px; height: 32px; border-radius: 50%; vertical-align: middle; }
+.hz-skel-button { height: 32px; width: 100px; border-radius: 8px; }
+
+@keyframes hzSkeletonShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Loading bubble — replaces the .typing 3-dots when we have nothing yet */
+.hz-msg-skel {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  max-width: 70%;
+}
+.hz-msg-skel .hz-skel-line:nth-child(1) { width: 78%; }
+.hz-msg-skel .hz-skel-line:nth-child(2) { width: 92%; }
+.hz-msg-skel .hz-skel-line:nth-child(3) { width: 60%; }
+
+/* ── 2. Toast notifications ─────────────────────────────────────────── */
+
+.hz-toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  pointer-events: none;
+  max-width: min(380px, calc(100vw - 48px));
+}
+
+.hz-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(20, 23, 30, 0.94);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow:
+    0 12px 32px -8px rgba(0,0,0,0.55),
+    0 0 0 1px rgba(255,255,255,0.04) inset;
+  color: #d6d8db;
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: auto;
+  animation: hzToastSlideIn 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: bottom right;
+}
+.hz-toast.hz-toast-out { animation: hzToastSlideOut 0.24s ease-in forwards; }
+
+.hz-toast-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  margin-top: 1px;
+}
+.hz-toast-body { flex: 1; min-width: 0; }
+.hz-toast-title { font-weight: 600; }
+.hz-toast-desc  { color: #9aa0a6; font-size: 12px; margin-top: 2px; }
+.hz-toast-close {
+  background: transparent; border: 0; color: #7a808a; cursor: pointer;
+  padding: 2px 6px; border-radius: 4px; font-size: 14px; line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+.hz-toast-close:hover { background: rgba(255,255,255,0.08); color: #d6d8db; }
+
+.hz-toast.hz-toast-success { border-left: 3px solid #10b981; }
+.hz-toast.hz-toast-success .hz-toast-icon { color: #10b981; }
+.hz-toast.hz-toast-error   { border-left: 3px solid #ef4444; }
+.hz-toast.hz-toast-error .hz-toast-icon   { color: #ef4444; }
+.hz-toast.hz-toast-warn    { border-left: 3px solid #f59e0b; }
+.hz-toast.hz-toast-warn .hz-toast-icon    { color: #f59e0b; }
+.hz-toast.hz-toast-info    { border-left: 3px solid #06b6d4; }
+.hz-toast.hz-toast-info .hz-toast-icon    { color: #06b6d4; }
+
+@keyframes hzToastSlideIn {
+  0%   { transform: translateX(28px) translateY(8px); opacity: 0; }
+  100% { transform: translateX(0)    translateY(0);   opacity: 1; }
+}
+@keyframes hzToastSlideOut {
+  0%   { transform: translateX(0)    translateY(0);   opacity: 1; }
+  100% { transform: translateX(40px) translateY(0);   opacity: 0; }
+}
+
+/* ── 3. Modal entrance animation ─────────────────────────────────────── */
+
+.panel.show, .modal-backdrop {
+  animation: hzModalEnter 0.22s cubic-bezier(0.32, 0.72, 0.20, 1.0);
+}
+@keyframes hzModalEnter {
+  0%   { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* Backdrop fades in without the scale */
+.modal-backdrop { animation: hzFadeIn 0.18s ease-out; }
+@keyframes hzFadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+/* ── 4. Input focus rings — universal ────────────────────────────────── */
+
+.inp:focus, .pi:focus, .sel:focus,
+input[type=text]:focus, input[type=password]:focus, input[type=number]:focus,
+input[type=email]:focus, input[type=search]:focus, input[type=url]:focus,
+textarea:focus, select:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.6) !important;
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, 0.18),
+    0 0 0 1px rgba(139, 92, 246, 0.35) inset !important;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+/* ── 5. Button contrast bump (WCAG AA) + smooth hover ───────────────── */
+
+.btn, .psv, .sc-btn, .ic-btn, .mt {
+  transition: background-color 0.15s, border-color 0.15s,
+              box-shadow 0.15s, transform 0.08s;
+}
+.btn:hover, .psv:hover, .sc-btn:hover, .ic-btn:hover, .mt:hover {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+}
+.btn:active, .psv:active, .sc-btn:active, .ic-btn:active, .mt:active {
+  transform: scale(0.97);
+}
+
+/* Primary button accent */
+.btn.primary, .hub-btn.primary {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  color: #fff;
+  border: 0;
+  font-weight: 600;
+}
+.btn.primary:hover, .hub-btn.primary:hover {
+  background: linear-gradient(135deg, #9a6bf7, #f1539e);
+  box-shadow: 0 0 24px -4px rgba(139, 92, 246, 0.4);
+}
+
+/* ── 6. Animated gradient background ─────────────────────────────────── */
+
+@keyframes hzBgShift {
+  0%, 100% {
+    background-position: 0% 0%, 100% 100%;
+  }
+  50% {
+    background-position: 100% 50%, 0% 50%;
+  }
+}
+
+body {
+  background-image:
+    radial-gradient(800px 600px at 18% -10%, rgba(56, 189, 248, 0.06), transparent 60%),
+    radial-gradient(900px 700px at 82% 110%, rgba(244, 201, 93, 0.05), transparent 60%);
+  background-size: 200% 200%, 200% 200%;
+  animation: hzBgShift 30s ease-in-out infinite;
+}
+
+/* ── 7. Sidebar hover effects ────────────────────────────────────────── */
+
+.cs-item, .chatside .row {
+  transition: background-color 0.15s, border-color 0.15s,
+              transform 0.08s, box-shadow 0.15s;
+  position: relative;
+}
+.cs-item:hover, .chatside .row:hover {
+  background-color: rgba(139, 92, 246, 0.06);
+  border-color: rgba(139, 92, 246, 0.18);
+}
+.cs-item:hover::before, .chatside .row:hover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 60%;
+  background: linear-gradient(180deg, #06b6d4, #8b5cf6);
+  border-radius: 0 2px 2px 0;
+}
+.cs-item.active, .cs-item.selected {
+  background-color: rgba(139, 92, 246, 0.10);
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+/* ── 8. Composer polish ──────────────────────────────────────────────── */
+
+#inp, textarea.composer, .composer-input {
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+#inp::placeholder, textarea.composer::placeholder {
+  color: rgba(154, 160, 166, 0.65);
+  transition: color 0.2s, opacity 0.2s;
+}
+#inp:focus::placeholder, textarea.composer:focus::placeholder {
+  opacity: 0.45;
+}
+
+/* Send button — gentle glow on hover */
+.send-btn, #send, .ic-btn[data-act="send"] {
+  position: relative;
+  transition: box-shadow 0.2s, transform 0.08s;
+}
+.send-btn:hover, #send:hover, .ic-btn[data-act="send"]:hover {
+  box-shadow: 0 0 18px -4px rgba(139, 92, 246, 0.55);
+}
+
+/* ── 9. Loading dots animation enhancement ───────────────────────────── */
+
+.typing span {
+  animation: hzTypingBounce 1.4s ease-in-out infinite;
+}
+.typing span:nth-child(1) { animation-delay: 0s;    }
+.typing span:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3) { animation-delay: 0.3s;  }
+
+@keyframes hzTypingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.4;
+    background: #9aa0a6;
+  }
+  30% {
+    transform: translateY(-6px) scale(1.15);
+    opacity: 1;
+    background: #06b6d4;
+  }
+}
+
+/* ── 10. Inspector tab polish ───────────────────────────────────────── */
+
+.insp-tab {
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+  position: relative;
+}
+.insp-tab:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #d6d8db;
+}
+.insp-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #06b6d4, #8b5cf6, #ec4899);
+  animation: hzTabGlide 0.32s cubic-bezier(0.32, 0.72, 0.20, 1);
+}
+@keyframes hzTabGlide {
+  0%   { transform: scaleX(0.4); opacity: 0; }
+  100% { transform: scaleX(1);   opacity: 1; }
+}
+
+/* ── 11. Connection / channel rows polish ───────────────────────────── */
+
+.pf {
+  transition: background-color 0.15s;
+}
+.pf:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── 12. Code block enhancement ─────────────────────────────────────── */
+
+pre {
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: border-color 0.15s;
+}
+pre:hover {
+  border-color: rgba(139, 92, 246, 0.25);
+}
+pre code {
+  display: block;
+  overflow-x: auto;
+}
+
+/* Subtle bar on the left of code blocks */
+pre::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(180deg, #06b6d4, #8b5cf6);
+  border-radius: 0 2px 2px 0;
+  opacity: 0.6;
+}

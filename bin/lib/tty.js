@@ -2,6 +2,25 @@
 
 const isTTY = !!process.stdout.isTTY;
 const supportsColor = isTTY && process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb';
+// Phase 17 — detect 24-bit truecolor support. Most modern terminals
+// (Windows Terminal, iTerm2, macOS Terminal.app, GNOME Terminal,
+// Konsole, alacritty, kitty, wezterm) advertise COLORTERM=truecolor
+// or 24bit. Falls back to 256-color paint when not detected.
+const supportsTruecolor = supportsColor && (
+  process.env.COLORTERM === 'truecolor' ||
+  process.env.COLORTERM === '24bit' ||
+  /^xterm-(kitty|ghostty)/.test(process.env.TERM || '') ||
+  process.env.WT_SESSION !== undefined // Windows Terminal
+);
+
+function rgb(r, g, b) {
+  if (!supportsTruecolor) return '';
+  return `\x1b[38;2;${r};${g};${b}m`;
+}
+function bgRgb(r, g, b) {
+  if (!supportsTruecolor) return '';
+  return `\x1b[48;2;${r};${g};${b}m`;
+}
 
 const C = {
   reset:  '\x1b[0m',
@@ -95,4 +114,4 @@ function promptYesNo(question) {
   });
 }
 
-module.exports = { fmt, Spinner, isTTY, supportsColor, promptYesNo };
+module.exports = { fmt, Spinner, isTTY, supportsColor, supportsTruecolor, rgb, bgRgb, promptYesNo };

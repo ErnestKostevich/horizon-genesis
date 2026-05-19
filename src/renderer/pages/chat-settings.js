@@ -491,18 +491,26 @@ async function connectGoogleFromConnections(){
     const cid = (await H.get('googleClientId')) || '';
     const cs  = (await H.getKey('google_client_secret')) || '';
     if (!cid || !cs) {
-      alert(lang==='ru'
+      const msg = lang==='ru'
         ? 'Сначала добавь Client ID и Client Secret для Google в секции Google Workspace ниже на странице.'
-        : 'Add the Google Client ID + Secret in the Google Workspace section below first.');
+        : 'Add the Google Client ID + Secret in the Google Workspace section below first.';
+      if (window.toast) window.toast.warn(lang==='ru'?'Google не настроен':'Google not configured', msg);
+      else alert(msg);
       return;
     }
     const r = await H.googleAuth(cid, cs);
     if (r?.ok) {
       _setConnStatus('google', true);
+      if (window.toast) window.toast.success(lang==='ru'?'Google подключён':'Google connected');
     } else {
-      alert((r && r.error) || (lang==='ru'?'Не удалось подключить Google':'Google sign-in failed'));
+      const msg = (r && r.error) || (lang==='ru'?'Не удалось подключить Google':'Google sign-in failed');
+      if (window.toast) window.toast.error(lang==='ru'?'Ошибка Google':'Google error', msg);
+      else alert(msg);
     }
-  } catch(e) { console.warn('connectGoogle:', e?.message); }
+  } catch(e) {
+    console.warn('connectGoogle:', e?.message);
+    if (window.toast) window.toast.error(lang==='ru'?'Ошибка Google':'Google error', e?.message);
+  }
 }
 async function disconnectGoogle(){
   try {
@@ -580,6 +588,7 @@ async function saveWhatsAppConnection() {
     document.getElementById('pi-twilio-sid-conn').value = '';
     document.getElementById('pi-twilio-token-conn').value = '';
     if (st) { st.textContent = 'WhatsApp configured. Webhook URL to set in Twilio Console: /api/whatsapp/webhook'; st.classList.add('ok'); }
+    if (window.toast) window.toast.success('WhatsApp connected', 'Configure webhook in Twilio Console to enable inbound replies.');
   } catch (e) {
     if (st) st.textContent = e?.message || 'Could not save WhatsApp.';
   }
@@ -598,6 +607,7 @@ async function saveSignalConnection() {
     await H.set('signal.number', number);
     await H.set('signal.enabled', true);
     if (st) { st.textContent = `Signal configured · ${number} via ${url}`; st.classList.add('ok'); }
+    if (window.toast) window.toast.success('Signal connected', `${number} via ${url}`);
   } catch (e) {
     if (st) st.textContent = e?.message || 'Could not save Signal.';
   }
