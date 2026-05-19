@@ -405,6 +405,23 @@ function refreshInspectorSubagents() {
   host.innerHTML = html;
 }
 
+// Phase 26 — per-section error renderer. Each pane in the Learned
+// tab now runs in parallel via Promise.allSettled, and every pane
+// has its own try/catch that surfaces a red "unavailable" message
+// instead of leaving the placeholder visible. Previously a single
+// slow IPC could leave one section permanently stuck on "Loading…"
+// while siblings populated, which looked broken.
+async function _inspLearnedSection(id, label, renderFn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  try {
+    const html = await renderFn();
+    if (typeof html === 'string') el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="insp-empty" style="color:var(--red,#ef4444);padding:8px 0">⚠ ${esc(label)} unavailable: ${esc(e?.message || String(e))}</div>`;
+  }
+}
+
 async function refreshInspectorLearned(){
   // Reflection block — always render even if memSnapshot fails (offline-safe).
   const refl = document.getElementById('insp-reflection');
@@ -585,34 +602,36 @@ async function refreshInspectorLearned(){
   // PHASE 8/8 — Workspace memory (committable .horizon/memory.json).
   // Read-only view; users edit the JSON in their editor of choice (or
   // via the upcoming workspaceMemoryWrite IPC from an editor plugin).
-  try {
-    const wsHost = document.getElementById('insp-learned-workspace');
-    if (wsHost) {
-      const ws = await H.workspaceMemoryGet?.();
-      if (!ws?.ok) {
-        wsHost.innerHTML = `<div class="insp-empty">${esc(ws?.error || 'No workspace open.')}</div>`;
-      } else if (!ws.exists) {
-        wsHost.innerHTML = `
-          <div class="insp-empty">
-            <p>No <code>.horizon/memory.json</code> in <code>${esc((ws.root || '').slice(-40))}</code>.</p>
-            <p style="font-size:10px;margin-top:6px">Create it to share conventions / glossary / decisions across your team. Commit it to git — every Horizon instance opening the repo loads it automatically.</p>
-          </div>`;
-      } else {
-        const conv = ws.conventions || [];
-        const gloss = ws.glossary || {};
-        const dec = ws.decisions || [];
-        const donot = ws.do_not || [];
-        const partsLines = [];
-        if (ws.workspace?.name) partsLines.push(`<div class="insp-row"><span class="k">Workspace</span><span class="v">${esc(ws.workspace.name)}${ws.workspace.owner ? ` · ${esc(ws.workspace.owner)}` : ''}</span></div>`);
-        partsLines.push(`<div class="insp-row"><span class="k">Conventions</span><span class="v">${conv.length}</span></div>`);
-        partsLines.push(`<div class="insp-row"><span class="k">Glossary</span><span class="v">${Object.keys(gloss).length}</span></div>`);
-        partsLines.push(`<div class="insp-row"><span class="k">Decisions</span><span class="v">${dec.length}</span></div>`);
-        partsLines.push(`<div class="insp-row"><span class="k">Do NOT</span><span class="v">${donot.length}</span></div>`);
-        if ((ws.errors || []).length) partsLines.push(`<div class="insp-row" style="display:block;font-size:9px;color:var(--red);padding:4px 6px">${(ws.errors || []).map(esc).join('<br>')}</div>`);
-        wsHost.innerHTML = partsLines.join('') + `<div style="font-size:9px;color:var(--t3);margin-top:8px">Edit <code>.horizon/memory.json</code> in your editor — auto-reloads on mtime change. Injected into every agent turn's system prompt.</div>`;
-      }
+  //
+  // Phase 26 — wrapped via _inspLearnedSection so a hanging IPC or
+  // thrown error surfaces a red "unavailable" message in this pane
+  // alone, instead of leaving the placeholder forever while the other
+  // panes (above) populate normally.
+  await _inspLearnedSection('insp-learned-workspace', 'Workspace memory', async () => {
+    const ws = await H.workspaceMemoryGet?.();
+    if (!ws?.ok) {
+      return `<div class="insp-empty">${esc(ws?.error || 'No workspace open.')}</div>`;
     }
-  } catch (_) {}
+    if (!ws.exists) {
+      return `
+        <div class="insp-empty">
+          <p>No <code>.horizon/memory.json</code> in <code>${esc((ws.root || '').slice(-40))}</code>.</p>
+          <p style="font-size:10px;margin-top:6px">Create it to share conventions / glossary / decisions across your team. Commit it to git — every Horizon instance opening the repo loads it automatically.</p>
+        </div>`;
+    }
+    const conv = ws.conventions || [];
+    const gloss = ws.glossary || {};
+    const dec = ws.decisions || [];
+    const donot = ws.do_not || [];
+    const partsLines = [];
+    if (ws.workspace?.name) partsLines.push(`<div class="insp-row"><span class="k">Workspace</span><span class="v">${esc(ws.workspace.name)}${ws.workspace.owner ? ` · ${esc(ws.workspace.owner)}` : ''}</span></div>`);
+    partsLines.push(`<div class="insp-row"><span class="k">Conventions</span><span class="v">${conv.length}</span></div>`);
+    partsLines.push(`<div class="insp-row"><span class="k">Glossary</span><span class="v">${Object.keys(gloss).length}</span></div>`);
+    partsLines.push(`<div class="insp-row"><span class="k">Decisions</span><span class="v">${dec.length}</span></div>`);
+    partsLines.push(`<div class="insp-row"><span class="k">Do NOT</span><span class="v">${donot.length}</span></div>`);
+    if ((ws.errors || []).length) partsLines.push(`<div class="insp-row" style="display:block;font-size:9px;color:var(--red);padding:4px 6px">${(ws.errors || []).map(esc).join('<br>')}</div>`);
+    return partsLines.join('') + `<div style="font-size:9px;color:var(--t3);margin-top:8px">Edit <code>.horizon/memory.json</code> in your editor — auto-reloads on mtime change. Injected into every agent turn's system prompt.</div>`;
+  });
 }
 
 function refreshInspectorSkills(){
@@ -627,6 +646,22 @@ function refreshInspectorSkills(){
       </div>`;
     return;
   }
+  // Phase 25 — staleness indicator. lastSkillsSelected persists across
+  // turns deliberately (so opening the tab after the turn still shows
+  // what happened). But that confused users: a turn with no skill
+  // matches would still show the PREVIOUS turn's results without any
+  // visual cue. Now we attach an `_at` timestamp when we capture the
+  // event and render a relative-time pill if it's > 0 turns old.
+  const at = sel._at ? Date.parse(sel._at) : 0;
+  const ageMs = at ? (Date.now() - at) : 0;
+  const ageSec = Math.round(ageMs / 1000);
+  const turnDelta = (typeof window._currentTurnNo === 'number' && typeof sel._turnNo === 'number')
+    ? Math.max(0, window._currentTurnNo - sel._turnNo)
+    : null;
+  const isStale = turnDelta != null ? turnDelta > 0 : ageSec > 60;
+  const staleTag = isStale
+    ? `<span class="insp-stale" title="From a previous turn. The current turn matched no skills." style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);color:var(--amb,#f59e0b);font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase">stale${turnDelta != null ? ` · ${turnDelta} turn${turnDelta===1?'':'s'} ago` : (ageSec ? ` · ${ageSec}s ago` : '')}</span>`
+    : '';
   const fmt = (e) => `
     <div class="insp-row" style="display:flex;justify-content:space-between;gap:8px">
       <span class="v" style="text-align:left;color:var(--tx);font-weight:600">${esc(e.id)}</span>
@@ -640,7 +675,7 @@ function refreshInspectorSkills(){
     : '<div class="insp-empty">No other partial matches.</div>';
   host.innerHTML = `
     <div class="insp-section">
-      <div class="insp-h">Loaded this turn</div>
+      <div class="insp-h">Loaded this turn ${staleTag}</div>
       ${loaded}
     </div>
     <div class="insp-section">
@@ -788,7 +823,14 @@ try {
       // module-level var so opening the tab after the turn still shows the
       // latest match — same UX pattern as plan-step → stepRailState.
       if (step?.type === 'skills-selected' && step.payload) {
-        lastSkillsSelected = step.payload;
+        // Phase 25 — stamp the payload with capture time + turn number so
+        // refreshInspectorSkills can surface "stale" if the user is on
+        // a later turn that didn't match any skills.
+        lastSkillsSelected = {
+          ...step.payload,
+          _at: new Date().toISOString(),
+          _turnNo: typeof window._currentTurnNo === 'number' ? window._currentTurnNo : null,
+        };
         if (inspectorActive && inspectorTab === 'skills') refreshInspectorSkills();
       }
       // Reflection — agentLoop emits after each finished run with goal_met,
