@@ -166,6 +166,15 @@
          the top-right ×  is hidden behind Windows native overlay. -->
     <button class="ph-back" onclick="closePanel()" title="Back to chat (Esc)">← Back</button>
     <h2>◈ Settings — Horizon AI</h2>
+    <!-- Phase 20.3 — search bar filters .pf rows by label text across all
+         panes. Empty input = no filter. -->
+    <div class="ps-search-wrap">
+      <svg class="ps-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path>
+      </svg>
+      <input id="ps-search" class="ps-search-input" type="search" placeholder="Search settings…" oninput="filterSettings(this.value)" autocomplete="off"/>
+      <button class="ps-search-clear" type="button" onclick="document.getElementById('ps-search').value='';filterSettings('')" title="Clear">×</button>
+    </div>
     <button class="ph-x" onclick="closePanel()" title="Close (Esc)">×</button>
   </div>
   <div class="pbody-tabbed">
@@ -2588,6 +2597,63 @@ async function openPanel(tab){
 function closePanel(){
   document.getElementById('panel').classList.remove('show');
   if (isSurfaceActive('settings') || isSurfaceActive('personas')) closeActiveSurface();
+}
+
+// Phase 20.3 — settings search filter. Walks every .pf row and every .ps
+// card, dim/hide those whose visible text doesn't match the query.
+// When the query is empty all rows reappear.
+function filterSettings(rawQuery){
+  const q = (rawQuery || '').trim().toLowerCase();
+  const panel = document.getElementById('panel');
+  if (!panel) return;
+  const rows = panel.querySelectorAll('.pf');
+  let matchCount = 0;
+  rows.forEach(row => {
+    if (!q) { row.style.display = ''; row.classList.remove('ps-no-match'); return; }
+    const txt = (row.textContent || '').toLowerCase();
+    if (txt.includes(q)) {
+      row.style.display = '';
+      row.classList.remove('ps-no-match');
+      matchCount++;
+    } else {
+      row.style.display = 'none';
+      row.classList.add('ps-no-match');
+    }
+  });
+  // Hide entire .ps card if all its .pf children are filtered out
+  panel.querySelectorAll('.ps').forEach(card => {
+    if (!q) { card.style.display = ''; return; }
+    const visible = Array.from(card.querySelectorAll('.pf')).some(r => r.style.display !== 'none');
+    card.style.display = visible ? '' : 'none';
+  });
+  // Hide whole section heading if no card visible
+  panel.querySelectorAll('section[data-pane]').forEach(sec => {
+    if (!q) { sec.style.display = ''; return; }
+    const anyVisible = Array.from(sec.querySelectorAll('.ps')).some(c => c.style.display !== 'none');
+    sec.style.display = anyVisible ? '' : 'none';
+  });
+  // Highlight TOC entries — dim tabs whose section has no matches
+  panel.querySelectorAll('.ps-toc-link').forEach(link => {
+    const target = link.getAttribute('data-target');
+    const sec = panel.querySelector('section[data-pane="' + target + '"]');
+    if (!sec) return;
+    if (!q) { link.classList.remove('ps-toc-empty'); return; }
+    if (sec.style.display === 'none') link.classList.add('ps-toc-empty');
+    else link.classList.remove('ps-toc-empty');
+  });
+  // Show a "no results" hint
+  let hint = panel.querySelector('.ps-search-empty');
+  if (q && matchCount === 0) {
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'ps-search-empty';
+      hint.textContent = 'No settings match this search.';
+      const view = panel.querySelector('#psview');
+      if (view) view.appendChild(hint);
+    }
+  } else if (hint) {
+    hint.remove();
+  }
 }
 
 // PR-FIX-OVERLAP — auto-inject a "← Back" button into every .fph
