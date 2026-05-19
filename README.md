@@ -130,7 +130,7 @@ horizon serve --port 18789 --token mysecret
 
 |  | **Horizon AI** | Hermes Agent | OpenClaw |
 |---|:---:|:---:|:---:|
-| **License** | BUSL-1.1 → AGPL | MIT | MIT |
+| **License** | BUSL-1.1 (source-visible) | MIT | MIT |
 | Desktop GUI app           | ✅ Full Electron | ❌ | 🔸 Web Control UI |
 | Terminal CLI              | ✅ | ✅ | ✅ |
 | Polished TUI              | ✅ gradient banner | ✅ | 🔸 |
@@ -329,7 +329,6 @@ get their own tools that the agent can call.
 - [ ] Mobile PWA companion app
 - [ ] MCP servers spawnable from CLI (config exists, process spawn next)
 - [ ] WhatsApp / Signal / iMessage adapters
-- [ ] BSL → AGPL automatic conversion after change date
 - [ ] Plugin SDK v2 with Rust/WASM support
 
 See [`docs/cli-plan.md`](docs/cli-plan.md) for the detailed phase-by-phase
@@ -359,13 +358,18 @@ design that drives the CLI tracks.
 ## Why BUSL-1.1?
 
 Hermes and OpenClaw ship under MIT. Horizon ships under
-Business Source License 1.1 with a scheduled conversion to AGPL-3.0.
+Business Source License 1.1 — source-visible, free for personal /
+educational / internal-evaluation use; commercial deployments need a
+written licence agreement with the author.
 
 - **Free for evaluation, personal use, and contributing back.** Run
   it on your own machine, audit the source, send PRs.
-- **Commercial deployments require a license** until the change date —
-  after that, the same source is AGPL-3.0 forever.
-- Same pattern Cassandra, CockroachDB, MariaDB MaxScale, and Sentry use.
+- **Commercial resale of Horizon itself** (hosted service, paid
+  redistribution) requires a licence. Building plugins / workflows
+  on top of Horizon and selling them through the marketplace is
+  fully supported and does not require a separate licence.
+- Same pattern HashiCorp's Terraform Enterprise, Sentry, and
+  Mattermost use.
 
 Reach out to Ernest at the address in [`SECURITY.md`](SECURITY.md) for
 commercial questions.
