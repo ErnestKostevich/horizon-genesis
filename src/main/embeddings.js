@@ -208,33 +208,56 @@ class EmbeddingService {
   async _embedGemini(texts) {
     const key = this._key('gemini');
     if (!key) throw new Error('no gemini key');
-    // Use the BATCH endpoint — text-embedding-004:batchEmbedContents takes
-    // an array of {content, outputDimensionality} in a single request. The
-    // sequential one-call-per-text path was the cause of "reindex hangs":
-    // 159 memories × ~400ms per request = 60+ seconds with no visible
-    // progress until each batch finished. batchEmbedContents collapses
-    // this to one network round-trip per batch.
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key=${encodeURIComponent(key)}`;
-    const body = {
-      requests: texts.map(text => ({
-        model: 'models/text-embedding-004',
-        content: { parts: [{ text }] },
-        outputDimensionality: this.dim,
-      })),
+    // PHASE 28.1 — text-embedding-004 was deprecated from v1beta in mid-2026
+    // and now 404s. The current GA model is gemini-embedding-001 (still
+    // served on v1beta, just under a new name). We try it first and fall
+    // back to the old name only if the new one also 404s — that keeps the
+    // old keys working while we cut over.
+    //
+    // BATCH endpoint takes an array of {content, outputDimensionality} in a
+    // single request. The sequential per-text path used to hang reindex
+    // for 60+ seconds on 159 memories; batchEmbedContents collapses this
+    // to one network round-trip per batch of 32.
+    const tryModel = async (modelId) => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:batchEmbedContents?key=${encodeURIComponent(key)}`;
+      const body = {
+        requests: texts.map(text => ({
+          model: `models/${modelId}`,
+          content: { parts: [{ text }] },
+          outputDimensionality: this.dim,
+        })),
+      };
+      const res = await this._fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return res;
     };
-    const res = await this._fetchWithTimeout(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`Gemini embeddings HTTP ${res.status}: ${errText.slice(0, 300)}`);
+
+    const MODEL_CHAIN = ['gemini-embedding-001', 'text-embedding-004'];
+    let res = null;
+    let lastErr = '';
+    for (const m of MODEL_CHAIN) {
+      try {
+        res = await tryModel(m);
+        if (res.ok) break;
+        if (res.status === 404) {
+          lastErr = `${m} → 404`;
+          continue; // try next model in the chain
+        }
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Gemini embeddings HTTP ${res.status} (${m}): ${errText.slice(0, 300)}`);
+      } catch (e) {
+        if (/404/.test(e.message)) { lastErr = e.message; continue; }
+        throw e;
+      }
+    }
+    if (!res || !res.ok) {
+      throw new Error(`Gemini embeddings: all models 404'd. Last error: ${lastErr || 'unknown'}. Hint: your Gemini key may not have embedding-API access — try an OpenAI key (text-embedding-3-small is cheap) or check console.cloud.google.com → enabled APIs.`);
     }
     const data = await res.json();
     if (!Array.isArray(data?.embeddings)) {
-      // Some Gemini API tiers / wrong-model errors return a wrapped error
-      // object instead of an HTTP failure. Make the message visible.
       throw new Error(`Gemini embeddings: malformed response (${JSON.stringify(data).slice(0, 200)})`);
     }
     return data.embeddings.map(e => {
