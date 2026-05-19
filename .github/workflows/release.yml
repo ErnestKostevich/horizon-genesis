@@ -192,3 +192,41 @@ jobs:
             Auto-generated release notes below.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-discord:
+    name: Notify Discord
+    needs: release
+    runs-on: ubuntu-latest
+    # Only fire when a real release just got published, never on
+    # workflow_dispatch test runs that skipped the `release` job.
+    if: ${{ always() && needs.release.result == 'success' }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+    steps:
+      - name: Post embed to #announcements
+        # Curl-based POST instead of a third-party action so we don't
+        # depend on its release cycle / breaking changes. Falls back to
+        # exit 0 if the secret isn't set so external forks don't fail.
+        run: |
+          if [ -z "${DISCORD_RELEASE_WEBHOOK}" ]; then
+            echo "DISCORD_RELEASE_WEBHOOK not set; skipping notification"
+            exit 0
+          fi
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${RELEASE_TAG}"
+          # 0xF4C95D — Horizon amber
+          curl -sS -H "Content-Type: application/json" \
+            -X POST "${DISCORD_RELEASE_WEBHOOK}" \
+            -d @- <<JSON
+          {
+            "embeds": [{
+              "title": "🚀 Horizon Desktop ${RELEASE_TAG}",
+              "description": "A new desktop release just shipped.\\nDownload, install, and auto-update will pick it up next launch.",
+              "url": "${RELEASE_URL}",
+              "color": 16040029,
+              "thumbnail": {"url": "https://horizonaai.dev/og-default.png"},
+              "footer": {"text": "horizonaai.dev"}
+            }]
+          }
+          JSON
+        env:
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
