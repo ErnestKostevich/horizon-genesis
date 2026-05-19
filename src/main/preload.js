@@ -182,6 +182,17 @@ contextBridge.exposeInMainWorld('H', {
     ipcRenderer.on('memory:embeddingProgress', handler);
     return () => ipcRenderer.removeListener('memory:embeddingProgress', handler);
   },
+
+  // Live Canvas (Phase 26 MVP) — bidirectional shared surface.
+  canvasGet:   ()        => ipcRenderer.invoke('canvas:get'),
+  canvasSet:   (content) => ipcRenderer.invoke('canvas:set', content),
+  canvasWrite: (payload) => ipcRenderer.invoke('canvas:write', payload),
+  canvasClear: ()        => ipcRenderer.invoke('canvas:clear'),
+  onCanvasChanged: (cb) => {
+    const handler = (_, snap) => cb(snap);
+    ipcRenderer.on('canvas:changed', handler);
+    return () => ipcRenderer.removeListener('canvas:changed', handler);
+  },
   memSaveConversation: (u, a)  => ipcRenderer.invoke('memSaveConversation', u, a),
   memSearchConversations: (q, l) => ipcRenderer.invoke('memSearchConversations', q, l),
   githubAttachRepo: (repo)     => ipcRenderer.invoke('githubAttachRepo', repo),
