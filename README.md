@@ -45,6 +45,11 @@
   slash commands, full agent loop with live step rail.
 - **Headless HTTP API** so cron jobs, mobile clients, and remote machines
   can drive the same agent over JSON + Server-Sent Events.
+- **25 AI providers + 300+ models via OpenRouter** — Claude, OpenAI,
+  Gemini, Groq, DeepSeek, Mistral, Qwen, Perplexity, Cohere, Grok,
+  Together AI, Fireworks, DeepInfra, Cerebras, SambaNova, Moonshot Kimi,
+  Z.AI/GLM, Nebius, OpenRouter aggregator, Azure OpenAI, custom
+  OpenAI-compatible endpoint, plus local Ollama / LM Studio / LocalAI.
 - **8-type memory** — facts, episodic memories, conversations, semantic
   recall (256-dim embeddings), FTS index, user profile (Big-Five model),
   persona memory, and per-workspace `.horizon/memory.json` that you commit
@@ -130,8 +135,8 @@ horizon serve --port 18789 --token mysecret
 | Markdown render in TUI    | ✅ | 🔸 | 🔸 |
 | Headless HTTP + SSE       | ✅ | 🔸 | ✅ |
 | Mobile companion          | 🔸 PWA Q3 | ❌ | ✅ iOS + Android |
-| **AI providers**          | **14** | 200+ wrapper | wrapper |
-| Smart auto routing        | ✅ `--provider auto` | ❌ | ❌ |
+| **AI providers**          | **25** direct + OpenRouter (300+) | 200+ via wrapper | 50+ via wrapper |
+| Smart auto routing        | ✅ `--provider auto` (free/local first) | ❌ | ❌ |
 | Cost tracking + budget    | ✅ `horizon cost` | ❌ | ❌ |
 | Setup wizard              | ✅ | ✅ | 🔸 |
 | BYOK encrypted storage    | ✅ AES-256-GCM | ✅ | ✅ |
