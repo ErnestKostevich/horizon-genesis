@@ -69,6 +69,33 @@ ${fmt.bold('Commands')}
   ${fmt.cyan('logs')}    [type]      Typed log views: cost | agent | errors | cron | all
   ${fmt.cyan('hooks')}   subcommand  Life-cycle hooks: list | add <event> "<cmd>" | test | remove
   ${fmt.cyan('agents')}  subcommand  List/stop concurrent runs (needs horizon serve up)
+
+${fmt.bold('AI helpers')}
+  ${fmt.cyan('ask')}     "..."        Quick one-liner question (terse, plain output)
+  ${fmt.cyan('explain')} <file|->    Explain code or text in plain language
+  ${fmt.cyan('summarize')} <file|->  Bullet-point summary
+  ${fmt.cyan('translate')} <file|->  Translate (--to <lang>, default Russian)
+  ${fmt.cyan('review')}  <file>      Code review (bugs, security, maintainability)
+  ${fmt.cyan('refactor')} <file>     Suggest refactoring (read-only output)
+  ${fmt.cyan('test')}    <file>      Generate unit-test scaffold
+  ${fmt.cyan('diff')}    <file|->    Explain a unified diff
+  ${fmt.cyan('search')}  "query"     Semantic search across memory
+  ${fmt.cyan('brief')}                Morning briefing from memory + cron + cost
+
+${fmt.bold('Management')}
+  ${fmt.cyan('mcp')}     subcommand  MCP servers: list | add | remove | enable | disable | tools
+  ${fmt.cyan('plugins')} subcommand  Installed plugins: list | show | enable | disable
+  ${fmt.cyan('rules')}   subcommand  .horizon/rules.md: show | edit | add "rule" | clear
+  ${fmt.cyan('ws')}      subcommand  .horizon/: show | init | path | memory show|edit
+
+${fmt.bold('Utilities')}
+  ${fmt.cyan('notes')}   subcommand  Quick notes: list | add "..." | show | rm
+  ${fmt.cyan('timer')}   <minutes>   Pomodoro timer with progress bar + bell
+  ${fmt.cyan('stats')}                Global usage stats (memory + skills + cost)
+  ${fmt.cyan('clip')}    [show|len]  Read clipboard, analyse with AI by default
+  ${fmt.cyan('env')}     subcommand  Per-install env vars: list | set K=V | unset K
+  ${fmt.cyan('open')}    <url|path>  OS-native opener
+
   ${fmt.cyan('serve')}                Start the headless HTTP API server (PWA / cron / mobile)
   ${fmt.cyan('tui')}                  Launch the interactive shell
   ${fmt.cyan('version')}              Print version + key health summary
@@ -162,7 +189,17 @@ async function dispatch(argv) {
                  'setup', 'cost', 'doctor', 'profile', 'completion', 'update',
                  // Phase 10 additions
                  'cron', 'sessions', 'backup', 'status', 'insights',
-                 'logs', 'checkpoints', 'hooks', 'agents'];
+                 'logs', 'checkpoints', 'hooks', 'agents',
+                 // Phase 12 management
+                 'mcp', 'plugins', 'rules', 'ws', 'workspace'];
+
+  // Phase 12 — AI-helper + utility verbs bundled in two shared files.
+  // Dispatch routes them to the right module + passes the subcommand
+  // name as _subcommand so the module can pick the right handler.
+  const AI_HELPERS = ['ask', 'explain', 'summarize', 'summarise',
+                      'translate', 'review', 'refactor', 'test', 'diff',
+                      'search', 'brief'];
+  const UTILITIES = ['notes', 'timer', 'stats', 'clip', 'env', 'open'];
 
   if (cmd === 'help') { printHelp(); return 0; }
   if (cmd === 'tui') {
@@ -178,8 +215,25 @@ async function dispatch(argv) {
   const runtime = await loadRuntime(flags);
 
   if (KNOWN.includes(cmd)) {
-    const handler = require(`./lib/commands/${cmd}`);
+    // Some Phase 12 commands map to different files than their name:
+    //   ws / workspace → workspace.js
+    //   summarise → summarize handler in ai-helpers
+    let file = cmd;
+    if (cmd === 'ws') file = 'workspace';
+    const handler = require(`./lib/commands/${file}`);
     return handler.run({ runtime, args: positional.slice(1), flags });
+  }
+
+  // Phase 12 — AI helpers shared file
+  if (AI_HELPERS.includes(cmd)) {
+    const handler = require('./lib/commands/ai-helpers');
+    const sub = cmd === 'summarise' ? 'summarize' : cmd;
+    return handler.run({ runtime, args: positional.slice(1), flags, _subcommand: sub });
+  }
+  // Phase 12 — utility shared file
+  if (UTILITIES.includes(cmd)) {
+    const handler = require('./lib/commands/utility');
+    return handler.run({ runtime, args: positional.slice(1), flags, _subcommand: cmd });
   }
 
   // Shorthand: horizon "task" → horizon agent "task"
