@@ -338,6 +338,15 @@
   flex: 1;
   max-width: 360px;
   margin-left: 16px;
+  /* The parent .ph carries -webkit-app-region: drag for window
+   * dragging; without this opt-out the input would swallow clicks
+   * as drag-initiations instead of focusing. */
+  -webkit-app-region: no-drag;
+}
+.ps-search-input,
+.ps-search-clear,
+.ps-search-icon {
+  -webkit-app-region: no-drag;
 }
 .ps-search-icon {
   position: absolute;

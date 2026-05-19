@@ -533,9 +533,19 @@ function scheduleNextChunk(){
 // the user in command-prep limbo. If user stays silent, listenForCommand's
 // own 8s silenceTimer + "no audio" early-return falls back to the regular
 // wake-word loop — that's how you exit Talk Mode (just stop talking).
+// Phase 21 — true continuous Talk Mode.
+//
+// This was already chaining ("as long as you keep speaking we re-open
+// the mic without a wake word"), but the MAX_WAIT was 8s — multi-
+// paragraph TTS replies could overshoot it and the follow-up listener
+// would open mid-TTS, picking up the bot's own audio. Bumped to 30s
+// so long replies finish playing before the mic re-opens.
+//
+// Exit is still natural: stay silent during the 8s command-listen
+// window → no transcript → no follow-up → fall back to wake-word.
 function scheduleTalkModeFollowup() {
   const start = Date.now();
-  const MAX_WAIT = 8000;
+  const MAX_WAIT = 30000;
   const tick = () => {
     if (!wakeActive) { wakePhase='idle'; setWakeBar('idle'); return; }
     const elapsed = Date.now() - start;
@@ -545,8 +555,12 @@ function scheduleTalkModeFollowup() {
       wakePhase = 'command';
       setWakeBar('command');
       try {
+        const bar = document.getElementById('wake-bar');
+        if (bar) bar.classList.add('talk-mode');
         const txt = document.getElementById('wb-txt');
-        if (txt) txt.textContent = lang === 'ru' ? '◈ Talk mode — говори дальше…' : '◈ Talk mode — keep going…';
+        if (txt) txt.textContent = lang === 'ru'
+          ? '◉ Talk mode — продолжай, без «Горизонт»'
+          : '◉ Talk mode — keep going, no wake word';
       } catch (_) {}
       listenForCommand();
       return;

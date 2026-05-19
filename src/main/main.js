@@ -3004,6 +3004,7 @@ let googleAuth = null;
 let personas = null;
 let workflowEngine = null;
 let screenRecorder = null;
+let cronRunner = null;
 let githubConnector = null;
 let mcpRegistry = null;
 let connectionsManager = null;
@@ -3864,6 +3865,49 @@ function loadAgentModules() {
       console.log('✓ Workflow Engine loaded');
     } catch(e) {
       console.error('Workflow Engine failed:', e.message);
+    }
+  }
+
+  // Phase 22 — Electron also runs the full crontab scheduler (the CLI
+  // already had this via `horizon serve --enable-cron` / `horizon cron
+  // daemon`, but desktop users couldn't use 5-field cron expressions —
+  // only the simpler workflowEngine `schedule:HH:MM`). Wire CronRunner
+  // up with a minimal runtime that delegates back to the Electron
+  // agent loop.
+  if (!cronRunner) {
+    try {
+      const { CronRunner } = require('./runtime/cron-runner');
+      cronRunner = new CronRunner({
+        settingsStore,
+        runtime: {
+          runChat: async (task) => {
+            try {
+              const messages = [{ role: 'user', content: task }];
+              const res = await aiFn(messages, 'You are a scheduled task. Reply concisely.');
+              return { ok: true, reply: res?.text || res?.reply || '' };
+            } catch (e) { return { ok: false, error: e.message }; }
+          },
+          runAgent: async (task, opts = {}) => {
+            try {
+              const { runAgentLoop } = require('./agent');
+              const result = await runAgentLoop({
+                userMessage: task,
+                history: [],
+                aiFn,
+                maxSteps: opts.maxSteps || 8,
+                reflect: opts.reflect !== false,
+                permissionAsk: opts.askPermission || (async () => true),
+                source: 'cron',
+              });
+              return { ok: true, answer: result?.answer || '', steps: result?.steps || [] };
+            } catch (e) { return { ok: false, error: e.message }; }
+          },
+        },
+      });
+      cronRunner.start();
+      console.log('✓ Cron Runner started — scheduled tasks will fire on schedule');
+    } catch (e) {
+      console.error('Cron Runner failed:', e.message);
     }
   }
   if (!screenRecorder) {
