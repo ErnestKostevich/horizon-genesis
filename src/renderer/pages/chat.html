@@ -2877,16 +2877,39 @@ async function runAgent(text) {
   try {
     setStatus(lang === 'ru' ? 'Агент думает...' : 'Agent thinking...', true);
     const agentTimeoutMs = 60000;
+    // PHASE 11 — Agent mode = real AI with PC access. Pass unlockAllTools
+    // so the main process bypasses the per-persona tool filter. The user
+    // is in agent mode by explicit choice (#m-agent button or /agent slash
+    // command), so persona-style restrictions (which exist mainly to keep
+    // chat mode polite) shouldn't block the agent from seeing the screen,
+    // moving the mouse, or running shell commands. Each destructive call
+    // still goes through the per-call withPermission() gate.
     const agentOpts = consumeQueuedSkillsForRequest({
         provider: currentProvider,
         model: currentModel,
         history: chatHistory.slice(-8),
         maxSteps: 8,
+        unlockAllTools: true,
         // /skill <name> sets window.forceSkillsNextTurn — one-shot, cleared
         // after the turn so the same query without /skill goes back to
         // pure relevance matching.
         forcedSkillIds: []
       });
+    // Optional auto-screenshot: if the user's task mentions the screen,
+    // window, UI, button, etc., snap one BEFORE the first turn so the
+    // model sees it without needing a second round-trip through
+    // screenshot+vision. Set window.HORIZON_AUTO_SCREENSHOT=false in
+    // DevTools to opt out for a session.
+    try {
+      const SCREEN_HINTS = /\b(screen|screenshot|экран|окн[аое]|window|ui|button|кнопк|click|кликн|открой|открыт|press|нажм|тапни|tap|find on screen)\b/i;
+      const wantsScreenshot = window.HORIZON_AUTO_SCREENSHOT !== false && SCREEN_HINTS.test(text);
+      if (wantsScreenshot && typeof H.pcScreenshot === 'function') {
+        const shot = await H.pcScreenshot().catch(() => null);
+        if (shot?.ok && shot.dataUrl) {
+          agentOpts.attachedImages = [{ kind: 'screenshot', dataUrl: shot.dataUrl, at: Date.now() }];
+        }
+      }
+    } catch (_) { /* auto-screenshot is best-effort */ }
     const result = await Promise.race([
       H.agentRun(text, agentOpts),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Agent timed out')), agentTimeoutMs))
@@ -3802,6 +3825,11 @@ H.onMarketAuthenticated?.(async (user) => {
      system-prompt editor, allowed-tools toggles, long-term memories.
      Used inside Settings → Personas tab. -->
 <script src="chat-personas.js"></script>
+<!-- Phase 11 — Agent Mode boost. Shows a first-time consent modal
+     when the user switches to mode=agent and renders a sticky
+     "AGENT IN CONTROL" banner above the composer while it's active.
+     Patches global setMode() to layer this on. -->
+<script src="chat-agent-mode.js"></script>
 <!-- PR-V Phase 3.3 — Settings Panel (was inline lines 3889-4497).
      ~600 LOC: tab switcher, loadPanel, saveSetting/readSetting,
      saveModelSetting, saveLocalProvider, testLocalProvider, save*
