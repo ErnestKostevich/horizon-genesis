@@ -4406,7 +4406,18 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       if (Array.isArray(personaFull?.allowedTools)) allowedToolGroups = personaFull.allowedTools;
     }
   } catch (_) {}
+  // PHASE 11 — "Real AI with PC access" mode. When the renderer sends
+  // opts.unlockAllTools (set when the user explicitly switches to Agent
+  // mode via #m-agent), the persona's allowedTools filter is bypassed so
+  // computer-use (mouse_click, keyboard_type, screenshot, smart_click,
+  // run_code, write_file, etc.) becomes available to the agent loop
+  // regardless of which persona is currently active. The user already
+  // consented to this by toggling Agent mode + (first-time) the consent
+  // modal in chat-agent-mode.js, plus every destructive call still goes
+  // through withPermission() per-invocation.
+  const fullAccessMode = !!opts.unlockAllTools;
   const personaAllowsTool = (toolName) => {
+    if (fullAccessMode) return true;
     if (!agentLoop?.toolAllowedByPersona) return true;
     return agentLoop.toolAllowedByPersona(toolName, allowedToolGroups);
   };
