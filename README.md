@@ -162,8 +162,8 @@ horizon serve --port 18789 --token mysecret
 | Discord Gateway WS        | ✅ | ✅ | ✅ |
 | Cron-driven workflows     | ✅ `workflowEngine` | ✅ | ❌ |
 | **Plugin SDK**            | ✅ TypeScript + CLI | 🔸 | 🔸 |
-| **Marketplace**           | ✅ Stripe + NOWPayments | 🔸 Skills Hub (free) | 🔸 ClawHub (free) |
-| Crypto payouts to authors | ✅ | ❌ | ❌ |
+| **Marketplace**           | ✅ NOWPayments (crypto-only by design) | 🔸 Skills Hub (free) | 🔸 ClawHub (free) |
+| Crypto payouts to authors | ✅ USDT TRC20/BSC/TON/SOL · 70/30 split | ❌ | ❌ |
 | Standalone CLI binaries   | ✅ 4 platforms | ✅ | ✅ |
 
 > Legend: ✅ first-class · 🔸 partial / planned · ❌ not present
@@ -298,6 +298,7 @@ get their own tools that the agent can call.
 | [Getting Started](docs/getting-started.md) | User-facing intro for the desktop app + CLI |
 | [CLI / TUI / serve reference](docs/cli.md) | Every subcommand, flag, output format |
 | [VPS deployment](docs/deploy.md) | systemd + nginx + TLS + cron |
+| [Competitive analysis](docs/competitive-analysis.md) | Honest by-feature comparison vs Hermes Agent |
 | Hosted docs site | https://horizonaai.dev/docs |
 | Plugin SDK | https://github.com/ErnestKostevich/horizon-plugin-sdk |
 
@@ -306,7 +307,7 @@ get their own tools that the agent can call.
 - [x] Electron desktop app (Windows / macOS / Linux installers)
 - [x] 8-type memory + semantic recall
 - [x] Skills system with 3 scopes + Anthropic-compatible SKILL.md
-- [x] Plugin SDK + Stripe/NOWPayments marketplace
+- [x] Plugin SDK + NOWPayments crypto-only marketplace (USDT TRC20/BSC/TON/SOL)
 - [x] Bidirectional Telegram + Discord bots
 - [x] Docker executor backend
 - [x] Subagents (`spawn_subagent` tool)
@@ -317,12 +318,16 @@ get their own tools that the agent can call.
 - [x] Standalone binaries for win/mac/linux
 - [x] `horizon setup` onboarding wizard
 - [x] `horizon cost` token tracking + `--provider auto` routing
-- [ ] Mobile PWA companion app (Q3 2026)
-- [ ] MCP servers spawnable from CLI
+- [x] TUI v2 — multi-line composer, in-chat search, scrollback, mouse
+- [x] Vision-on-turn-1 — auto-screenshot when task mentions the screen
+- [x] SSH + Modal + Daytona executors (BYOK)
+- [x] Agent Mode boost — visible "AGENT IN CONTROL" banner + consent gate
+- [x] 50+ CLI subcommands across 5 groups
+- [ ] Mobile PWA companion app
+- [ ] MCP servers spawnable from CLI (config exists, process spawn next)
 - [ ] WhatsApp / Signal / iMessage adapters
-- [ ] More sandbox backends (SSH / Modal)
-- [ ] BSL → AGPL conversion (after the change date)
-- [ ] Plugin SDK v2 with Rust support
+- [ ] BSL → AGPL automatic conversion after change date
+- [ ] Plugin SDK v2 with Rust/WASM support
 
 See [`docs/cli-plan.md`](docs/cli-plan.md) for the detailed phase-by-phase
 design that drives the CLI tracks.
