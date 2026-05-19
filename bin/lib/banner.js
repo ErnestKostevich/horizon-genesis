@@ -6,14 +6,41 @@
 //
 // All ANSI codes degrade to empty strings on non-color terminals.
 
-const { fmt, supportsColor } = require('./tty');
+const { fmt, supportsColor, supportsTruecolor, rgb } = require('./tty');
 
-// Cyan→magenta→yellow→green gradient for the spinner.
-const GRADIENT = ['\x1b[38;5;51m','\x1b[38;5;87m','\x1b[38;5;123m','\x1b[38;5;159m',
+// 256-color fallback gradient (used when terminal doesn't advertise truecolor)
+const GRADIENT_256 = ['\x1b[38;5;51m','\x1b[38;5;87m','\x1b[38;5;123m','\x1b[38;5;159m',
                   '\x1b[38;5;195m','\x1b[38;5;225m','\x1b[38;5;213m','\x1b[38;5;177m',
                   '\x1b[38;5;141m','\x1b[38;5;105m','\x1b[38;5;69m','\x1b[38;5;33m'];
 
+// Truecolor anchor stops — interpolated smoothly across N characters.
+// Cyan #06b6d4 → indigo #6366f1 → purple #8b5cf6 → pink #ec4899 →
+// amber #f59e0b → cyan (loop) — matches our brand colour palette.
+const TRUECOLOR_STOPS = [
+  [6, 182, 212],   // cyan-500
+  [99, 102, 241],  // indigo-500
+  [139, 92, 246],  // violet-500
+  [236, 72, 153],  // pink-500
+  [245, 158, 11],  // amber-500
+];
+
+function lerp(a, b, t) { return Math.round(a + (b - a) * t); }
+function gradientColor(t) {
+  // t in [0, 1) — pick segment, interpolate between two anchor stops
+  const segs = TRUECOLOR_STOPS.length;
+  const f = t * segs;
+  const i = Math.floor(f) % segs;
+  const j = (i + 1) % segs;
+  const k = f - Math.floor(f);
+  const a = TRUECOLOR_STOPS[i], b = TRUECOLOR_STOPS[j];
+  return rgb(lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k));
+}
+
 const RESET = supportsColor ? '\x1b[0m' : '';
+// Active gradient — truecolor stops if supported, 256-color stops otherwise
+const GRADIENT = supportsTruecolor
+  ? new Array(48).fill(0).map((_, i) => gradientColor(i / 48))
+  : GRADIENT_256;
 
 function paintEach(text, colors) {
   if (!supportsColor) return text;

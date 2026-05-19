@@ -8,7 +8,6 @@ Five files. Pick the one that matches what you need:
 | **[cli.md](cli.md)** | CLI users | Every subcommand + flag + output format |
 | **[deploy.md](deploy.md)** | Server admins | Run Horizon on a VPS — systemd + nginx + TLS + cron |
 | **[competitive-analysis.md](competitive-analysis.md)** | Curious readers | Honest by-feature comparison vs Hermes Agent |
-| **[ultrareview-2026-05.md](ultrareview-2026-05.md)** | The maintainer + designers | Current design-redesign roadmap (Electron + CLI + site) |
 
 User-facing documentation — full Table of Contents, screenshots,
 tutorials — lives in the dedicated repository:
