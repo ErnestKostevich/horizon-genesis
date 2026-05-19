@@ -112,7 +112,10 @@ function costUsd(model, usage) {
   if (!usage) return null;
   const p = priceOf(model);
   if (!p) return null;
-  const cost = (usage.prompt * p.in + usage.completion * p.out) / 1_000_000;
+  // Coerce missing fields to 0 so {} still returns 0 instead of NaN.
+  const prompt = Number(usage.prompt) || 0;
+  const completion = Number(usage.completion) || 0;
+  const cost = (prompt * p.in + completion * p.out) / 1_000_000;
   return Math.round(cost * 1_000_000) / 1_000_000; // 6 decimals
 }
 
