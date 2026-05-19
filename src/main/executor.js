@@ -103,7 +103,7 @@ class Executor {
 
   _settingMode() {
     const v = this.settingsStore?.get?.('executionMode');
-    return v === 'docker' || v === 'ssh' || v === 'ask' ? v : 'host';
+    return ['docker','ssh','modal','daytona','ask'].includes(v) ? v : 'host';
   }
 
   _settingMount() {
@@ -121,6 +121,8 @@ class Executor {
       supportedLanguages: Object.keys(DOCKER_IMAGES).filter(k => DOCKER_IMAGES[k]),
       sshHost: this.settingsStore?.get?.('ssh.host') || null,
       sshConfigured: !!this.settingsStore?.get?.('ssh.host'),
+      modalConfigured: !!(this.settingsStore?.get?.('modal.tokenId') && this.settingsStore?.get?.('modal.tokenSecret')),
+      daytonaConfigured: !!(this.settingsStore?.get?.('daytona.serverUrl') && this.settingsStore?.get?.('daytona.apiKey') && this.settingsStore?.get?.('daytona.workspaceId')),
     };
   }
 
@@ -133,9 +135,9 @@ class Executor {
     const lang = String(language || 'shell').toLowerCase();
     const requestedMode = opts.executionMode || this._settingMode();
 
-    if (requestedMode === 'ssh') {
-      return this._runSsh(code, lang, opts);
-    }
+    if (requestedMode === 'ssh')     return this._runSsh(code, lang, opts);
+    if (requestedMode === 'modal')   return this._runModal(code, lang, opts);
+    if (requestedMode === 'daytona') return this._runDaytona(code, lang, opts);
 
     const wantDocker = requestedMode === 'docker' && this.dockerAvailable() && DOCKER_IMAGES[lang];
     if (wantDocker) {
@@ -148,6 +150,136 @@ class Executor {
       return { ...r, fallback: 'host', reason: 'docker not available — install Docker to enable sandboxed execution' };
     }
     return this._runHost(code, lang, opts);
+  }
+
+  /**
+   * Modal (modal.com) — BYOK serverless executor.
+   *
+   * User provides:
+   *   - modal.tokenId       (from `modal token new`)
+   *   - modal.tokenSecret
+   *   - modal.endpoint      (optional, defaults to https://api.modal.com)
+   *   - modal.appName       (optional; we use a default `horizon-exec`)
+   *
+   * Modal's REST API runs a pre-deployed function. Horizon ships a tiny
+   * Python function template the user deploys once with `modal deploy`
+   * (template printed by `horizon connect modal --help`). The function
+   * accepts {language, code} and returns {stdout, stderr, exitCode}.
+   *
+   * Falls back gracefully when not configured: a clear error instead
+   * of host-mode silent fallback so the user notices and configures.
+   */
+  async _runModal(code, language, opts) {
+    const tokenId     = this.settingsStore?.get?.('modal.tokenId');
+    const tokenSecret = this.settingsStore?.get?.('modal.tokenSecret');
+    const endpoint    = this.settingsStore?.get?.('modal.endpoint') || 'https://api.modal.com';
+    const appName     = this.settingsStore?.get?.('modal.appName') || 'horizon-exec';
+    if (!tokenId || !tokenSecret) {
+      return {
+        ok: false, mode: 'modal',
+        err: 'Modal not configured. Run `horizon connect modal --token-id X --token-secret Y` (signup: modal.com).',
+      };
+    }
+    const timeoutMs = Math.max(2000, Math.min(120_000, Number(opts?.timeout) || DEFAULT_TIMEOUT_MS));
+    const fetch = typeof globalThis.fetch === 'function' ? globalThis.fetch : require('node-fetch');
+    try {
+      const r = await Promise.race([
+        fetch(`${endpoint}/api/v1/apps/${encodeURIComponent(appName)}/run`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Modal-Token-Id': tokenId,
+            'Modal-Token-Secret': tokenSecret,
+          },
+          body: JSON.stringify({ language, code, timeout: Math.floor(timeoutMs / 1000) }),
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('modal request timeout')), timeoutMs + 5000)),
+      ]);
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '');
+        return { ok: false, mode: 'modal', err: `modal HTTP ${r.status}: ${txt.slice(0, 200)}` };
+      }
+      const d = await r.json();
+      return {
+        ok: d.exitCode === 0 || d.exit_code === 0,
+        out: String(d.stdout || d.out || '').trim(),
+        err: String(d.stderr || d.err || '').trim(),
+        exitCode: d.exitCode ?? d.exit_code ?? null,
+        mode: 'modal',
+        appName,
+      };
+    } catch (e) {
+      return { ok: false, mode: 'modal', err: 'modal call failed: ' + (e.message || String(e)) };
+    }
+  }
+
+  /**
+   * Daytona (daytona.io) — BYOK workspace executor.
+   *
+   * User provides:
+   *   - daytona.serverUrl   (their self-hosted or managed URL)
+   *   - daytona.apiKey
+   *   - daytona.workspaceId (created beforehand)
+   *
+   * Hits Daytona's `/workspaces/<id>/exec` endpoint. Same {language,
+   * code} shape; Daytona returns {output, exitCode}.
+   */
+  async _runDaytona(code, language, opts) {
+    const serverUrl   = this.settingsStore?.get?.('daytona.serverUrl');
+    const apiKey      = this.settingsStore?.get?.('daytona.apiKey');
+    const workspaceId = this.settingsStore?.get?.('daytona.workspaceId');
+    if (!serverUrl || !apiKey || !workspaceId) {
+      return {
+        ok: false, mode: 'daytona',
+        err: 'Daytona not configured. Run `horizon connect daytona --server X --key Y --workspace Z` (docs: daytona.io).',
+      };
+    }
+    const timeoutMs = Math.max(2000, Math.min(120_000, Number(opts?.timeout) || DEFAULT_TIMEOUT_MS));
+    const fetch = typeof globalThis.fetch === 'function' ? globalThis.fetch : require('node-fetch');
+    // Pick a shell command for the language; Daytona runs whatever shell
+    // string we pass in the target workspace.
+    const wrappers = {
+      python: `python3 -c ${JSON.stringify(code)}`,
+      python3: `python3 -c ${JSON.stringify(code)}`,
+      js: `node -e ${JSON.stringify(code)}`,
+      javascript: `node -e ${JSON.stringify(code)}`,
+      node: `node -e ${JSON.stringify(code)}`,
+      shell: code,
+      sh: code,
+      bash: code,
+    };
+    const command = wrappers[language];
+    if (!command) {
+      return { ok: false, mode: 'daytona', err: `daytona: unsupported language "${language}"` };
+    }
+    try {
+      const r = await Promise.race([
+        fetch(`${serverUrl.replace(/\/$/, '')}/workspaces/${encodeURIComponent(workspaceId)}/exec`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({ command, timeout: Math.floor(timeoutMs / 1000) }),
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('daytona request timeout')), timeoutMs + 5000)),
+      ]);
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '');
+        return { ok: false, mode: 'daytona', err: `daytona HTTP ${r.status}: ${txt.slice(0, 200)}` };
+      }
+      const d = await r.json();
+      return {
+        ok: (d.exitCode ?? d.exit_code ?? 0) === 0,
+        out: String(d.output || d.stdout || '').trim(),
+        err: String(d.stderr || '').trim(),
+        exitCode: d.exitCode ?? d.exit_code ?? null,
+        mode: 'daytona',
+        workspaceId,
+      };
+    } catch (e) {
+      return { ok: false, mode: 'daytona', err: 'daytona call failed: ' + (e.message || String(e)) };
+    }
   }
 
   /**
