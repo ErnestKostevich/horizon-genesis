@@ -29,6 +29,7 @@
 const path = require('path');
 const { parseArgv } = require(path.join(__dirname, 'lib', 'argv'));
 const { fmt } = require(path.join(__dirname, 'lib', 'tty'));
+const { helpTable, bannerCompact } = require(path.join(__dirname, 'lib', 'banner'));
 
 const SPEC = {
   aliases: { h: 'help', v: 'version', j: 'json', q: 'quiet', m: 'model', p: 'persona' },
@@ -39,103 +40,116 @@ const SPEC = {
 };
 
 function printHelp() {
-  const help = `${fmt.bold('Horizon AI CLI')}
+  // Phase 20.3 — column-aligned help table. Each section is a list of
+  // [command, args, description] rows; helpTable() pads command + args
+  // columns so the description text lines up across every row.
+  const c = (s) => fmt.cyan(s);
 
-${fmt.bold('Usage')}
-  horizon                          launch the TUI
-  horizon "task"                   shorthand for 'horizon agent "task"'
-  horizon <command> [args...]
+  const head = [
+    bannerCompact(),
+    '',
+    fmt.bold('Usage'),
+    '  horizon                          launch the TUI',
+    '  horizon "task"                   shorthand for \'horizon agent "task"\'',
+    '  horizon <command> [args...]',
+  ].join('\n');
 
-${fmt.bold('Commands')}
-  ${fmt.cyan('setup')}                Interactive first-time wizard (provider, key, persona, lang)
-  ${fmt.cyan('agent')}   "task"      Full agent loop with tool use + reflection
-  ${fmt.cyan('chat')}    "msg"       Single-turn chat reply (streaming + markdown by default)
-  ${fmt.cyan('cost')}                 Show token + dollar spend (--days N --json --provider X)
-  ${fmt.cyan('skill')}   subcommand  list | show <id> | new <id> | run <id> "task" | enable | disable
-  ${fmt.cyan('mem')}     subcommand  search "q" | dump | profile | forget | stats
-  ${fmt.cyan('model')}   [provider]  Read or set active provider/model. --list to see all 25 options.
-  ${fmt.cyan('persona')} [id]        Read or set active persona. --list to see options.
-  ${fmt.cyan('connect')} subcommand  list | test <id> | telegram|discord|slack|notion|linear --token X
-  ${fmt.cyan('doctor')}  [--fix]     Health check + auto-fix (like hermes doctor)
-  ${fmt.cyan('profile')} subcommand  list | use <name> | create <name> | show | delete | rename | path
-  ${fmt.cyan('completion')} <shell>  Emit bash/zsh/fish/pwsh tab-completion script
-  ${fmt.cyan('update')}  [--check]   Self-update from GitHub Releases (binary or source)
-  ${fmt.cyan('cron')}    subcommand  Scheduled tasks: list | create "<expr>" "<task>" | run | pause | resume | daemon
-  ${fmt.cyan('sessions')} subcommand Multi-chat history: list | new | show | export | delete | rename | stats
-  ${fmt.cyan('checkpoints')} subcmd  Memory savepoints: save | list | restore | remove
-  ${fmt.cyan('backup')}  subcommand  Full userData snapshots: snapshot | list | restore | prune
-  ${fmt.cyan('status')}  [--deep]    Compact runtime status (--deep adds latency probes)
-  ${fmt.cyan('insights')} [--days N] Usage analytics: models, hours, personas, success rate
-  ${fmt.cyan('logs')}    [type]      Typed log views: cost | agent | errors | cron | all
-  ${fmt.cyan('hooks')}   subcommand  Life-cycle hooks: list | add <event> "<cmd>" | test | remove
-  ${fmt.cyan('agents')}  subcommand  List/stop concurrent runs (needs horizon serve up)
+  const tables = {
+    'Commands': [
+      [c('setup'),      '',           'Interactive first-time wizard (provider, key, persona, lang)'],
+      [c('agent'),      '"task"',     'Full agent loop with tool use + reflection'],
+      [c('chat'),       '"msg"',      'Single-turn chat (streaming + markdown by default)'],
+      [c('cost'),       '',           'Token + dollar spend (--days N --json --provider X)'],
+      [c('skill'),      'subcommand', 'list | show <id> | new <id> | run <id> "task" | enable | disable'],
+      [c('mem'),        'subcommand', 'search "q" | dump | profile | forget | stats'],
+      [c('model'),      '[provider]', 'Read/set provider. --list shows all 25 options'],
+      [c('persona'),    '[id]',       'Read/set active persona. --list shows options'],
+      [c('connect'),    'subcommand', 'list | test <id> | telegram|discord|slack|notion|linear --token X'],
+      [c('doctor'),     '[--fix]',    'Health check + auto-fix'],
+      [c('profile'),    'subcommand', 'list | use | create | show | delete | rename | path'],
+      [c('completion'), '<shell>',    'Emit bash/zsh/fish/pwsh tab-completion script'],
+      [c('update'),     '[--check]',  'Self-update from GitHub Releases'],
+      [c('cron'),       'subcommand', 'Scheduled tasks: list | create "<expr>" "<task>" | run | pause | daemon'],
+      [c('sessions'),   'subcommand', 'Multi-chat history: list | new | show | export | delete | rename'],
+      [c('checkpoints'),'subcommand', 'Memory savepoints: save | list | restore | remove'],
+      [c('backup'),     'subcommand', 'Full userData snapshots: snapshot | list | restore | prune'],
+      [c('status'),     '[--deep]',   'Compact runtime status (+ latency probes)'],
+      [c('insights'),   '[--days N]', 'Usage analytics: models, hours, personas, success rate'],
+      [c('logs'),       '[type]',     'Typed log views: cost | agent | errors | cron | all'],
+      [c('hooks'),      'subcommand', 'Life-cycle hooks: list | add <event> "<cmd>" | test | remove'],
+      [c('agents'),     'subcommand', 'List/stop concurrent runs (needs horizon serve up)'],
+    ],
+    'AI helpers': [
+      [c('ask'),        '"..."',      'Quick one-liner question (terse, plain output)'],
+      [c('explain'),    '<file|->',   'Explain code or text in plain language'],
+      [c('summarize'),  '<file|->',   'Bullet-point summary'],
+      [c('translate'),  '<file|->',   'Translate (--to <lang>, default Russian)'],
+      [c('review'),     '<file>',     'Code review (bugs, security, maintainability)'],
+      [c('refactor'),   '<file>',     'Suggest refactoring (read-only output)'],
+      [c('test'),       '<file>',     'Generate unit-test scaffold'],
+      [c('diff'),       '<file|->',   'Explain a unified diff'],
+      [c('search'),     '"query"',    'Semantic search across memory'],
+      [c('brief'),      '',           'Morning briefing from memory + cron + cost'],
+    ],
+    'Management': [
+      [c('mcp'),        'subcommand', 'MCP servers: list | add | remove | enable | disable | tools'],
+      [c('plugins'),    'subcommand', 'Installed plugins: list | show | enable | disable'],
+      [c('rules'),      'subcommand', '.horizon/rules.md: show | edit | add "rule" | clear'],
+      [c('ws'),         'subcommand', '.horizon/: show | init | path | memory show|edit'],
+    ],
+    'Utilities': [
+      [c('notes'),      'subcommand', 'Quick notes: list | add "..." | show | rm'],
+      [c('todo'),       'subcommand', 'TODO with completion: list | add | done | rm | clear-done'],
+      [c('timer'),      '<minutes>',  'Pomodoro timer with progress bar + bell'],
+      [c('stats'),      '',           'Global usage stats (memory + skills + cost)'],
+      [c('clip'),       '[show|len]', 'Read clipboard, analyse with AI by default'],
+      [c('env'),        'subcommand', 'Per-install env vars: list | set K=V | unset K'],
+      [c('open'),       '<url|path>', 'OS-native opener'],
+    ],
+    'Dev helpers': [
+      [c('git'),        'subcommand', 'AI git: commit | review [target] | log [query] | blame <file>'],
+      [c('shell'),      '"what to do"', 'Get a shell command suggestion (--run to execute)'],
+      [c('web'),        '"query"',    'Web search via Tavily / Perplexity'],
+      [c('image'),      '"prompt"',   'Generate image (DALL-E / Imagen) → --out file.png'],
+      [c('screen'),     'subcommand', 'capture | describe (vision-AI describes screen)'],
+      [c('explain-error'),'<log|->',  'Explain a stack trace or error log'],
+      [c('serve'),      '',           'Start the headless HTTP API server (PWA / cron / mobile)'],
+      [c('tui'),        '',           'Launch the interactive shell'],
+      [c('version'),    '',           'Print version + key health summary'],
+    ],
+    'Common flags': [
+      ['--json / --human / --quiet', '', 'Output format'],
+      ['--provider X | auto',        '', 'Override AI provider (claude|openai|gemini|...|auto)'],
+      ['--model X',                  '', 'Override model for this call'],
+      ['--persona X',                '', 'Override active persona for this call'],
+      ['--workspace path',           '', 'Override .horizon/ lookup root'],
+      ['--max-steps N',              '', 'Cap agent loop steps (default 8)'],
+      ['--no-reflect',               '', 'Disable reflection epilogue'],
+      ['--auto-approve',             '', 'Auto-approve every tool call (cron mode)'],
+      ['--never-approve',            '', 'Reject every tool call (read-only)'],
+      ['--verbose',                  '', 'Log boot diagnostics to stderr'],
+    ],
+  };
 
-${fmt.bold('AI helpers')}
-  ${fmt.cyan('ask')}     "..."        Quick one-liner question (terse, plain output)
-  ${fmt.cyan('explain')} <file|->    Explain code or text in plain language
-  ${fmt.cyan('summarize')} <file|->  Bullet-point summary
-  ${fmt.cyan('translate')} <file|->  Translate (--to <lang>, default Russian)
-  ${fmt.cyan('review')}  <file>      Code review (bugs, security, maintainability)
-  ${fmt.cyan('refactor')} <file>     Suggest refactoring (read-only output)
-  ${fmt.cyan('test')}    <file>      Generate unit-test scaffold
-  ${fmt.cyan('diff')}    <file|->    Explain a unified diff
-  ${fmt.cyan('search')}  "query"     Semantic search across memory
-  ${fmt.cyan('brief')}                Morning briefing from memory + cron + cost
+  const examples = [
+    '',
+    fmt.bold('Examples'),
+    '  horizon ' + fmt.dim('"найди все TODO в проекте и сгруппируй"'),
+    '  horizon chat ' + fmt.dim('"what\'s the capital of Lithuania?"'),
+    '  horizon skill list ' + fmt.dim('--scope user'),
+    '  horizon mem search ' + fmt.dim('"yerba mate" --limit 5'),
+    '  horizon mem dump ' + fmt.dim('--type facts > facts.jsonl'),
+    '  horizon model ' + fmt.dim('claude --model claude-sonnet-4-6'),
+    '  horizon persona ' + fmt.dim('alfred'),
+    '  horizon connect ' + fmt.dim('telegram --token <bot-token>'),
+    '  horizon serve ' + fmt.dim('--port 18789 --token mysecret'),
+    '',
+    fmt.dim('  Reads keys/settings from the same files as the Electron app'),
+    fmt.dim('  (' + require('../src/main/runtime/store-shim').defaultUserDataDir() + ').'),
+    '',
+  ].join('\n');
 
-${fmt.bold('Management')}
-  ${fmt.cyan('mcp')}     subcommand  MCP servers: list | add | remove | enable | disable | tools
-  ${fmt.cyan('plugins')} subcommand  Installed plugins: list | show | enable | disable
-  ${fmt.cyan('rules')}   subcommand  .horizon/rules.md: show | edit | add "rule" | clear
-  ${fmt.cyan('ws')}      subcommand  .horizon/: show | init | path | memory show|edit
-
-${fmt.bold('Utilities')}
-  ${fmt.cyan('notes')}   subcommand  Quick notes: list | add "..." | show | rm
-  ${fmt.cyan('todo')}    subcommand  TODO with completion: list | add | done | rm | clear-done
-  ${fmt.cyan('timer')}   <minutes>   Pomodoro timer with progress bar + bell
-  ${fmt.cyan('stats')}                Global usage stats (memory + skills + cost)
-  ${fmt.cyan('clip')}    [show|len]  Read clipboard, analyse with AI by default
-  ${fmt.cyan('env')}     subcommand  Per-install env vars: list | set K=V | unset K
-  ${fmt.cyan('open')}    <url|path>  OS-native opener
-
-${fmt.bold('Dev helpers')}
-  ${fmt.cyan('git')}     subcommand  AI git: commit | review [target] | log [query] | blame <file>
-  ${fmt.cyan('shell')}   "what to do" Get a shell command suggestion (--run to execute)
-  ${fmt.cyan('web')}     "query"      Web search via Tavily / Perplexity
-  ${fmt.cyan('image')}   "prompt"     Generate image (DALL-E / Gemini Imagen) → --out file.png
-  ${fmt.cyan('screen')}  subcommand  capture | describe (vision-AI describes screen)
-  ${fmt.cyan('explain-error')} <log|-> Explain a stack trace or error log
-
-  ${fmt.cyan('serve')}                Start the headless HTTP API server (PWA / cron / mobile)
-  ${fmt.cyan('tui')}                  Launch the interactive shell
-  ${fmt.cyan('version')}              Print version + key health summary
-
-${fmt.bold('Common flags')}
-  --json / --human / --quiet     output format
-  --provider X | auto            override AI provider (claude|openai|gemini|...|auto)
-  --model X                      override model for this call
-  --persona X                    override active persona for this call
-  --workspace path               override .horizon/ lookup root
-  --max-steps N                  cap agent loop steps (default 8)
-  --no-reflect                   disable reflection epilogue
-  --auto-approve                 auto-approve every tool call (cron mode)
-  --never-approve                reject every tool call (read-only)
-  --verbose                      log boot diagnostics to stderr
-
-${fmt.bold('Examples')}
-  horizon "найди все TODO в проекте и сгруппируй"
-  horizon chat "what's the capital of Lithuania?"
-  horizon skill list --scope user
-  horizon mem search "yerba mate" --limit 5
-  horizon mem dump --type facts > facts.jsonl
-  horizon model claude --model claude-sonnet-4-6
-  horizon persona alfred
-  horizon connect telegram --token <bot-token>
-  horizon serve --port 18789 --token mysecret
-
-  Reads keys/settings from the same files as the Electron app
-  (${require('../src/main/runtime/store-shim').defaultUserDataDir()}).
-`;
-  process.stdout.write(help);
+  process.stdout.write(head + '\n' + helpTable(tables) + examples);
 }
 
 function resolveProfileUserDataDir(baseUserDataDir, explicitProfile) {

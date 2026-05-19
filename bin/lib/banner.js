@@ -195,4 +195,109 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
   }
 }
 
-module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal };
+/**
+ * Phase 20.3 — column-aligned help-table renderer.
+ *
+ * Given groups of [command, args, description] tuples, returns a string
+ * with each column padded so the description text aligns vertically
+ * regardless of how long the command/args part is. ANSI escape codes
+ * are accounted for via stripAnsi() so colour codes don't break
+ * alignment.
+ *
+ * Usage:
+ *   helpTable({
+ *     "Commands": [
+ *       ["setup",   "",         "First-time wizard"],
+ *       ["agent",   '"task"',   "Full agent loop"],
+ *     ],
+ *     "Flags": [...],
+ *   })
+ */
+function stripAnsi(s) { return String(s).replace(/\x1b\[[0-9;]*m/g, ''); }
+function visibleLen(s) { return stripAnsi(s).length; }
+function padVisible(s, width) {
+  const pad = Math.max(0, width - visibleLen(s));
+  return s + ' '.repeat(pad);
+}
+
+function helpTable(groups, opts = {}) {
+  const cmdGap   = opts.cmdGap   ?? 2;
+  const argsGap  = opts.argsGap  ?? 2;
+  const indent   = opts.indent   ?? '  ';
+  const out = [];
+  for (const [heading, rows] of Object.entries(groups)) {
+    if (!rows || rows.length === 0) continue;
+    const cmdW  = Math.max(...rows.map((r) => visibleLen(r[0] || '')));
+    const argsW = Math.max(...rows.map((r) => visibleLen(r[1] || '')));
+    out.push('');
+    out.push(fmt.bold(heading));
+    for (const [cmd, args, desc] of rows) {
+      const cmdCol  = padVisible(cmd  || '', cmdW);
+      const argsCol = padVisible(args || '', argsW);
+      out.push(`${indent}${cmdCol}${' '.repeat(cmdGap)}${argsCol}${argsGap ? ' '.repeat(argsGap) : ''}${desc ? fmt.dim(desc) : ''}`);
+    }
+  }
+  return out.join('\n') + '\n';
+}
+
+/**
+ * Phase 20.3 — interactive first-launch persona picker.
+ *
+ * After the welcome reveal, if the user hasn't picked a persona yet, this
+ * runs a tiny TTY menu (J-arvis / F-riday / A-lfred / S-age / P-ixel)
+ * and writes the choice back to settingsStore. Single-keypress, non-
+ * blocking. Honours HORIZON_FAST=1 (skips picker entirely).
+ *
+ * Returns the persona id chosen (or the existing value when skipped).
+ */
+async function personaPickerInteractive(currentPersona) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY || process.env.HORIZON_FAST === '1') {
+    return currentPersona || 'jarvis';
+  }
+  const personas = [
+    { key: '1', id: 'jarvis', label: 'JARVIS',  blurb: 'formal · witty · says "sir"' },
+    { key: '2', id: 'friday', label: 'Friday',  blurb: 'casual · energetic · modern slang' },
+    { key: '3', id: 'alfred', label: 'Alfred',  blurb: 'calm · dignified · butler-like' },
+    { key: '4', id: 'sage',   label: 'Sage',    blurb: 'patient · thoughtful · teacher' },
+    { key: '5', id: 'pixel',  label: 'Pixel',   blurb: 'playful · creative · designer' },
+  ];
+
+  process.stdout.write('\n  ' + fmt.bold('Pick a persona') + fmt.dim(' (press 1-5, Enter to skip)') + '\n\n');
+  for (const p of personas) {
+    const active = currentPersona === p.id ? fmt.green(' ●') : '  ';
+    process.stdout.write(`  ${fmt.dim('[' + p.key + ']')} ${fmt.cyan(p.label.padEnd(8))} ${fmt.dim('—')} ${p.blurb}${active}\n`);
+  }
+  process.stdout.write('\n  ' + fmt.dim('> '));
+
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    try { stdin.setRawMode(true); } catch (_) {}
+    stdin.resume();
+    stdin.setEncoding('utf8');
+
+    const onData = (key) => {
+      // Esc / Ctrl+C / Enter / q → skip
+      if (key === '\x1b' || key === '\x03' || key === '\r' || key === '\n' || key === 'q') {
+        cleanup();
+        process.stdout.write(fmt.dim('skipped') + '\n');
+        return resolve(currentPersona || 'jarvis');
+      }
+      const match = personas.find((p) => p.key === key);
+      if (!match) return; // ignore other keys
+      cleanup();
+      process.stdout.write(fmt.cyan(match.label) + fmt.dim(' (' + match.id + ')') + '\n\n');
+      resolve(match.id);
+    };
+
+    function cleanup() {
+      stdin.removeListener('data', onData);
+      try { stdin.setRawMode(wasRaw); } catch (_) {}
+      stdin.pause();
+    }
+
+    stdin.on('data', onData);
+  });
+}
+
+module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen };
