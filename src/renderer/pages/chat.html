@@ -252,11 +252,15 @@
       <div class="pf"><label>Subagent model</label><div class="pr"><input class="pi" id="ms-subagent-model" type="text" placeholder="Leave empty to use the provider's default" oninput="saveSubagentModel(this.value)"/></div>
       <div class="local-status" style="margin-top:6px;font-size:10.5px">Exact model id (e.g. <code>gemini-2.5-flash</code>, <code>gpt-5.4-mini</code>, <code>claude-haiku-4-5</code>). Empty = whichever model is selected for that provider in the rows below.</div></div>
 
-      <!-- Execution sandbox — host (fast) vs Docker (isolated). Used by
+      <!-- Execution sandbox — host (fast) vs Docker (isolated) vs remote
+           backends (SSH/Modal/Daytona, BYOK). Used by
            run_code / run_shell / run_powershell. -->
       <div class="pf"><label>Code execution mode <small style="color:var(--t3);font-weight:400">used by <code>run_code</code></small></label><div class="pr"><select class="pi ms-sel" id="ms-execution-mode" onchange="saveExecutionMode(this.value)">
         <option value="host">Host (direct, fast)</option>
         <option value="docker">Docker (sandboxed, slower)</option>
+        <option value="ssh">SSH (run on a remote machine)</option>
+        <option value="modal">Modal (serverless, BYOK)</option>
+        <option value="daytona">Daytona (dev workspaces, BYOK)</option>
       </select></div>
       <div class="local-status" id="ms-executor-status" style="margin-top:6px;font-size:10.5px">Loading…</div></div>
       <div class="pf"><label>Docker workspace mount</label><div class="pr"><select class="pi ms-sel" id="ms-docker-mount" onchange="saveDockerWorkspaceMount(this.value)">
@@ -265,6 +269,55 @@
         <option value="read-write">Read-write (let code edit files)</option>
       </select></div>
       <div class="local-status" style="margin-top:6px;font-size:10.5px">When Docker mode is active, the current workspace is mounted at <code>/workspace</code> with the chosen permission. Containers run with <code>--network=none --memory=512m --cpus=1</code> by default.</div></div>
+
+      <!-- SSH executor fields — visible only when executionMode = ssh -->
+      <div class="pf ms-ssh-only" style="display:none">
+        <label>SSH host <small style="color:var(--t3);font-weight:400">user@host or IP</small></label>
+        <div class="pr"><input class="pi" id="ms-ssh-host" placeholder="user@example.com" onchange="saveExecBackendField('ssh.host', this.value)"></div>
+      </div>
+      <div class="pf ms-ssh-only" style="display:none">
+        <label>SSH port <small style="color:var(--t3);font-weight:400">default 22</small></label>
+        <div class="pr"><input class="pi" id="ms-ssh-port" placeholder="22" onchange="saveExecBackendField('ssh.port', this.value)"></div>
+      </div>
+      <div class="pf ms-ssh-only" style="display:none">
+        <label>SSH private key path <small style="color:var(--t3);font-weight:400">optional — uses ssh-agent if blank</small></label>
+        <div class="pr"><input class="pi" id="ms-ssh-key" placeholder="~/.ssh/id_ed25519" onchange="saveExecBackendField('ssh.keyPath', this.value)"></div>
+      </div>
+      <div class="pf ms-ssh-only" style="display:none">
+        <label>SSH remote working dir <small style="color:var(--t3);font-weight:400">optional — runs in $HOME otherwise</small></label>
+        <div class="pr"><input class="pi" id="ms-ssh-workdir" placeholder="/home/user/work" onchange="saveExecBackendField('ssh.workdir', this.value)"></div>
+        <div class="local-status" style="margin-top:6px;font-size:10.5px">Uses your OS's <code>ssh</code> client. Code is piped over stdin to <code>python3 -</code> / <code>node -</code> / <code>sh -</code> on the remote host. No new deps.</div>
+      </div>
+
+      <!-- Modal executor fields — visible only when executionMode = modal -->
+      <div class="pf ms-modal-only" style="display:none">
+        <label>Modal token id <small style="color:var(--t3);font-weight:400">starts with ak-</small></label>
+        <div class="pr"><input class="pi" id="ms-modal-token-id" placeholder="ak-..." onchange="saveExecBackendField('modal.tokenId', this.value)"></div>
+      </div>
+      <div class="pf ms-modal-only" style="display:none">
+        <label>Modal token secret</label>
+        <div class="pr"><input class="pi" id="ms-modal-token-secret" type="password" placeholder="as-..." onchange="saveExecBackendField('modal.tokenSecret', this.value)"></div>
+      </div>
+      <div class="pf ms-modal-only" style="display:none">
+        <label>Modal app name <small style="color:var(--t3);font-weight:400">default: horizon-exec</small></label>
+        <div class="pr"><input class="pi" id="ms-modal-app-name" placeholder="horizon-exec" onchange="saveExecBackendField('modal.appName', this.value)"></div>
+        <div class="local-status" style="margin-top:6px;font-size:10.5px">Sign up at <strong>modal.com</strong> (~$30/mo credit free), run <code>modal token new</code> locally to get the credentials, then deploy the Horizon runner function (see <code>docs/deploy-modal.md</code>).</div>
+      </div>
+
+      <!-- Daytona executor fields — visible only when executionMode = daytona -->
+      <div class="pf ms-daytona-only" style="display:none">
+        <label>Daytona server URL</label>
+        <div class="pr"><input class="pi" id="ms-daytona-server" placeholder="https://daytona.example.com" onchange="saveExecBackendField('daytona.serverUrl', this.value)"></div>
+      </div>
+      <div class="pf ms-daytona-only" style="display:none">
+        <label>Daytona API key</label>
+        <div class="pr"><input class="pi" id="ms-daytona-key" type="password" placeholder="dt_..." onchange="saveExecBackendField('daytona.apiKey', this.value)"></div>
+      </div>
+      <div class="pf ms-daytona-only" style="display:none">
+        <label>Daytona workspace id</label>
+        <div class="pr"><input class="pi" id="ms-daytona-workspace" placeholder="my-workspace" onchange="saveExecBackendField('daytona.workspaceId', this.value)"></div>
+        <div class="local-status" style="margin-top:6px;font-size:10.5px">Self-host Daytona or use their managed cloud (<strong>daytona.io</strong>), create a workspace, generate an API key.</div>
+      </div>
       <div class="pf"><label>Image generation (BYOK)</label><div class="pr"><select class="pi ms-sel" id="ms-image-provider" onchange="saveImageGenerationSetting('provider', this.value)">
         <option value="auto">Auto from active provider/key</option>
         <option value="gemini">Gemini image</option>
@@ -434,6 +487,30 @@
           <div class="pf"><label><span class="d2" id="pd-linear-conn"></span>Linear API Key <span style="color:var(--t3);font-size:10px">issues + create issue</span></label>
             <div class="pr"><input class="pi" type="password" id="pi-linear-conn" placeholder="lin_api_..." /><button class="psv" onclick="saveTokenConnection('linear')">Save</button><button class="psv" onclick="testTokenConnection('linear')">Test</button></div>
             <div class="local-status" id="conn-linear-status">Not saved.</div>
+          </div>
+          <!-- Phase 15: WhatsApp via Twilio (BYOK) -->
+          <div class="pf"><label><span class="d2" id="pd-whatsapp-conn"></span>WhatsApp via Twilio <span style="color:var(--t3);font-size:10px">free sandbox at twilio.com</span></label>
+            <div class="pr"><input class="pi" type="text" id="pi-twilio-sid-conn" placeholder="AccountSID (AC...)" />
+              <button class="psv" onclick="saveWhatsAppConnection()">Save</button>
+              <button class="psv" onclick="testTokenConnection('whatsapp')">Test</button></div>
+            <div class="pr" style="margin-top:6px"><input class="pi" type="password" id="pi-twilio-token-conn" placeholder="AuthToken" /></div>
+            <div class="pr" style="margin-top:6px"><input class="pi" type="text" id="pi-twilio-from-conn" placeholder="whatsapp:+14155238886" /></div>
+            <div class="local-status" id="conn-whatsapp-status">Not saved. Signup → twilio.com → Messaging → Try WhatsApp (5 min sandbox setup).</div>
+          </div>
+          <!-- Phase 15: Signal via signal-cli-rest-api (BYOK self-hosted bridge) -->
+          <div class="pf"><label><span class="d2" id="pd-signal-conn"></span>Signal via signal-cli bridge <span style="color:var(--t3);font-size:10px">self-hosted Docker container</span></label>
+            <div class="pr"><input class="pi" type="text" id="pi-signal-url-conn" placeholder="http://localhost:8080" />
+              <button class="psv" onclick="saveSignalConnection()">Save</button>
+              <button class="psv" onclick="testTokenConnection('signal')">Test</button></div>
+            <div class="pr" style="margin-top:6px"><input class="pi" type="text" id="pi-signal-number-conn" placeholder="+1234567890 (registered Signal number)" /></div>
+            <div class="local-status" id="conn-signal-status">Not saved. Setup: docker run -d -p 8080:8080 bbernhard/signal-cli-rest-api, then register your number.</div>
+          </div>
+          <!-- Phase 15: iMessage via osascript (macOS only) -->
+          <div class="pf"><label><span class="d2" id="pd-imessage-conn"></span>iMessage <span style="color:var(--t3);font-size:10px">macOS only — uses Messages.app</span></label>
+            <div class="pr"><button class="psv" onclick="saveImessageConnection(true)">Enable</button>
+              <button class="psv" onclick="saveImessageConnection(false)">Disable</button>
+              <button class="psv" onclick="testTokenConnection('imessage')">Test</button></div>
+            <div class="local-status" id="conn-imessage-status">Available on macOS. Grant Terminal automation access to Messages.app in System Settings → Privacy & Security → Automation.</div>
           </div>
           <div class="pf"><label><span class="d2" id="pd-telegram_bot-conn"></span>Telegram Bot Token <span style="color:var(--t3);font-size:10px">live replies + agent tools</span></label>
             <div class="pr"><input class="pi" type="password" id="pi-telegram_bot-conn" placeholder="123456:ABC..." /><button class="psv" onclick="saveTokenConnection('telegram_bot')">Save</button><button class="psv" onclick="testTokenConnection('telegram_bot')">Test</button></div>

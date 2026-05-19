@@ -249,6 +249,29 @@ async function loadPanel(){
     const mm = document.getElementById('ms-docker-mount');
     if (em) em.value = execMode;
     if (mm) mm.value = mount;
+    // Phase 15 — populate SSH/Modal/Daytona fields and show only the
+    // group matching the active mode.
+    const fields = {
+      'ms-ssh-host': 'ssh.host',
+      'ms-ssh-port': 'ssh.port',
+      'ms-ssh-key': 'ssh.keyPath',
+      'ms-ssh-workdir': 'ssh.workdir',
+      'ms-modal-token-id': 'modal.tokenId',
+      'ms-modal-token-secret': 'modal.tokenSecret',
+      'ms-modal-app-name': 'modal.appName',
+      'ms-daytona-server': 'daytona.serverUrl',
+      'ms-daytona-key': 'daytona.apiKey',
+      'ms-daytona-workspace': 'daytona.workspaceId',
+    };
+    for (const [elId, settingKey] of Object.entries(fields)) {
+      const el = document.getElementById(elId);
+      if (!el) continue;
+      try {
+        const v = await H.get(settingKey);
+        if (v != null) el.value = v;
+      } catch (_) {}
+    }
+    if (typeof toggleExecBackendFields === 'function') toggleExecBackendFields(execMode);
     await refreshExecutorStatus();
   } catch(_) {}
   await loadSettingsHealth();
@@ -534,6 +557,70 @@ async function saveTokenConnection(id){
     if (st) st.textContent = e?.message || ('Could not save ' + _connectionLabel(id));
   }
 }
+
+// ── Phase 15: multi-field channel adapters ─────────────────────────────
+// Each saves its own bundle of fields (token + URL + sender ID) and
+// toggles a *.enabled flag so the runtime knows to spin up live polling.
+
+async function saveWhatsAppConnection() {
+  const st = document.getElementById('conn-whatsapp-status');
+  try {
+    const sid   = document.getElementById('pi-twilio-sid-conn')?.value.trim();
+    const token = document.getElementById('pi-twilio-token-conn')?.value.trim();
+    const from  = document.getElementById('pi-twilio-from-conn')?.value.trim();
+    if (!sid || !token || !from) {
+      if (st) st.textContent = 'Need SID + AuthToken + From (whatsapp:+1...).';
+      return;
+    }
+    await H.saveKey('twilio_sid', sid);
+    await H.saveKey('twilio_token', token);
+    await H.set('whatsapp.from', from.startsWith('whatsapp:') ? from : 'whatsapp:' + from);
+    await H.set('whatsapp.enabled', true);
+    // Clear inputs (keys saved encrypted)
+    document.getElementById('pi-twilio-sid-conn').value = '';
+    document.getElementById('pi-twilio-token-conn').value = '';
+    if (st) { st.textContent = 'WhatsApp configured. Webhook URL to set in Twilio Console: /api/whatsapp/webhook'; st.classList.add('ok'); }
+  } catch (e) {
+    if (st) st.textContent = e?.message || 'Could not save WhatsApp.';
+  }
+}
+
+async function saveSignalConnection() {
+  const st = document.getElementById('conn-signal-status');
+  try {
+    const url    = document.getElementById('pi-signal-url-conn')?.value.trim();
+    const number = document.getElementById('pi-signal-number-conn')?.value.trim();
+    if (!url || !number) {
+      if (st) st.textContent = 'Need server URL + your registered Signal number.';
+      return;
+    }
+    await H.set('signal.url', url);
+    await H.set('signal.number', number);
+    await H.set('signal.enabled', true);
+    if (st) { st.textContent = `Signal configured · ${number} via ${url}`; st.classList.add('ok'); }
+  } catch (e) {
+    if (st) st.textContent = e?.message || 'Could not save Signal.';
+  }
+}
+
+async function saveImessageConnection(enabled) {
+  const st = document.getElementById('conn-imessage-status');
+  try {
+    if (enabled && navigator.platform && !/Mac/i.test(navigator.platform)) {
+      if (st) st.textContent = 'iMessage adapter only works on macOS.';
+      return;
+    }
+    await H.set('imessage.enabled', !!enabled);
+    if (st) {
+      st.textContent = enabled
+        ? 'iMessage enabled. Grant Terminal automation access in System Settings → Privacy & Security → Automation.'
+        : 'iMessage disabled.';
+      st.classList.toggle('ok', !!enabled);
+    }
+  } catch (e) {
+    if (st) st.textContent = e?.message || 'Could not toggle iMessage.';
+  }
+}
 async function testTokenConnection(id){
   const st = document.getElementById('conn-' + id + '-status');
   if (st) st.textContent = 'Testing ' + _connectionLabel(id) + '...';
@@ -788,10 +875,40 @@ async function saveSubagentModel(value) {
 
 async function saveExecutionMode(value) {
   try {
-    const safe = (value === 'docker' || value === 'ask') ? value : 'host';
+    // Phase 15 — accept the 3 new BYOK remote backends in addition to
+    // host/docker/ask. main.js still validates against the same
+    // allow-list before persisting, so a stray value here is a no-op.
+    const ALLOWED = new Set(['host', 'docker', 'ssh', 'modal', 'daytona', 'ask']);
+    const safe = ALLOWED.has(value) ? value : 'host';
     await H.set('executionMode', safe);
+    toggleExecBackendFields(safe);
     await refreshExecutorStatus();
   } catch (e) { console.warn('saveExecutionMode failed:', e?.message); }
+}
+
+/**
+ * Phase 15 — hide SSH / Modal / Daytona credential rows when not active
+ * so the panel stays tidy. Called from saveExecutionMode + from the
+ * panel-init loader.
+ */
+function toggleExecBackendFields(mode) {
+  for (const cls of ['ms-ssh-only', 'ms-modal-only', 'ms-daytona-only']) {
+    const want = (cls === 'ms-' + mode + '-only');
+    document.querySelectorAll('.' + cls).forEach(el => {
+      el.style.display = want ? '' : 'none';
+    });
+  }
+}
+
+/**
+ * Generic setter for ssh.* / modal.* / daytona.* nested keys.
+ * Empty strings clear the setting so partial configs don't persist.
+ */
+async function saveExecBackendField(key, value) {
+  try {
+    const trimmed = String(value || '').trim();
+    await H.set(key, trimmed || null);
+  } catch (e) { console.warn('saveExecBackendField', key, 'failed:', e?.message); }
 }
 
 async function saveDockerWorkspaceMount(value) {
