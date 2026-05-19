@@ -66,6 +66,7 @@ var SLASH_COMMANDS = [
   { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                        exec: () => { try { openCmdPalette?.(); } catch(_){} } },
   { id: 'telegram', label: '/telegram',       hint: 'Open Telegram chat viewer',                        exec: () => { try { openTelegramHub?.(); } catch(_){} } },
   { id: 'discord',  label: '/discord',        hint: 'Open Discord chat viewer',                         exec: () => { try { window._handleSlashCommand?.('/discord'); } catch(_){} } },
+  { id: 'canvas',   label: '/canvas',         hint: 'Open Live Canvas — shared editable surface with the agent (Phase 26 MVP)', exec: () => { try { window.toggleCanvas?.(); } catch(_){} } },
 
   // ── Skills ──────────────────────────────────────────────────────────
   { id: 'skills',   label: '/skills',         hint: 'Open Skill Hub (browse / edit / toggle SKILL.md)', exec: () => { try { openSkillHub?.(); } catch(_){} } },

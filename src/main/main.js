@@ -3005,6 +3005,7 @@ let personas = null;
 let workflowEngine = null;
 let screenRecorder = null;
 let cronRunner = null;
+let canvasManager = null;
 let githubConnector = null;
 let mcpRegistry = null;
 let connectionsManager = null;
@@ -3211,6 +3212,9 @@ async function spawnSubagent(opts = {}) {
   };
 }
 module.exports.spawnSubagent = spawnSubagent;
+// Lazy accessor for agent.js' canvas_read / canvas_write tools.
+// Returns null until main.js init has constructed CanvasManager.
+module.exports.getCanvasManager = () => canvasManager;
 
 function agentRunsPath() {
   return path.join(app.getPath('userData'), 'horizon-runs.jsonl');
@@ -3908,6 +3912,32 @@ function loadAgentModules() {
       console.log('✓ Cron Runner started — scheduled tasks will fire on schedule');
     } catch (e) {
       console.error('Cron Runner failed:', e.message);
+    }
+  }
+
+  // Phase 26 — Live Canvas. Shared editable surface between the user
+  // and the agent. canvas_read / canvas_write tools live in agent.js
+  // and dispatch through this manager. Renderer hooks via the
+  // `canvas:get`/`canvas:set`/`canvas:write` IPCs registered below.
+  if (!canvasManager) {
+    try {
+      const { CanvasManager } = require('./canvasManager');
+      canvasManager = new CanvasManager(app.getPath('userData'));
+      // Forward every change to every BrowserWindow so the renderer can
+      // re-paint when the agent (or another window) writes.
+      canvasManager.subscribe((snap) => {
+        try {
+          const { BrowserWindow } = require('electron');
+          for (const w of BrowserWindow.getAllWindows()) {
+            if (w && !w.isDestroyed() && w.webContents) {
+              w.webContents.send('canvas:changed', snap);
+            }
+          }
+        } catch (_) {}
+      });
+      console.log('✓ Live Canvas ready (' + (canvasManager.get().content.length) + ' chars on disk)');
+    } catch (e) {
+      console.error('Live Canvas init failed:', e.message);
     }
   }
   if (!screenRecorder) {
@@ -4835,6 +4865,35 @@ ipcMain.handle('memGetFacts', () => {
   loadAgentModules();
   if (!agentMemory) return {};
   return agentMemory.getAllFacts();
+});
+
+// ── Live Canvas (Phase 26 MVP) ─────────────────────────────────────────
+// Renderer → main: read current canvas state.
+ipcMain.handle('canvas:get', () => {
+  if (!canvasManager) return { content: '', version: 0, updatedAt: null, editLogTail: [] };
+  return canvasManager.get();
+});
+// Renderer → main: user-driven write (debounced from the textarea).
+// Source is forced to `user` regardless of what the renderer sent, so
+// a malicious skin can't pretend an edit came from the agent.
+ipcMain.handle('canvas:set', (_, content) => {
+  if (!canvasManager) return { ok: false, error: 'Canvas not initialised' };
+  const snap = canvasManager.setContent(typeof content === 'string' ? content : '', 'user');
+  return { ok: true, ...snap };
+});
+// Renderer → main: append (used by quick-action buttons).
+ipcMain.handle('canvas:write', (_, payload = {}) => {
+  if (!canvasManager) return { ok: false, error: 'Canvas not initialised' };
+  const snap = canvasManager.write({
+    mode: payload.mode || 'append',
+    content: String(payload.content || ''),
+    source: 'user',
+  });
+  return { ok: true, ...snap };
+});
+ipcMain.handle('canvas:clear', () => {
+  if (!canvasManager) return { ok: false };
+  return { ok: true, ...canvasManager.clear('user') };
 });
 
 ipcMain.handle('memGetRecent', (_, limit) => {
