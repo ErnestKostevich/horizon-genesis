@@ -1,0 +1,319 @@
+/* ═══════════════════════════════════════════════════════════════════════
+ * Settings UI Redesign — Phase 19
+ *
+ * Layered last after chat-redesign.css. Targets the messiest part of
+ * the Electron app per the design audit — Settings tab.
+ *
+ * The HTML structure can't be safely rewritten in one pass (~600 lines,
+ * many handlers wired to specific IDs). Instead this stylesheet
+ * REFRAMES the existing structure as a card grid via CSS:
+ *
+ *   - .ps (each "section" in Settings) becomes a card
+ *   - .psl (section label) becomes the card header
+ *   - .pf (each field group) becomes a body row
+ *   - Inputs get consistent height + focus rings + spacing
+ *   - Buttons inside Settings (.psv) get a unified look
+ *
+ * All rules scoped under #panel (the Settings panel root) so they only
+ * apply to Settings, not to chat/plugins/other surfaces.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Settings panel container ─────────────────────────────────────────── */
+#panel.show {
+  padding: 28px 32px;
+}
+
+#panel.show > div,
+#panel.show > section {
+  max-width: 980px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── Section card (.ps) ───────────────────────────────────────────────── */
+#panel .ps {
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.025) 0%,
+    rgba(255, 255, 255, 0.008) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  position: relative;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.08s;
+}
+
+#panel .ps:hover {
+  border-color: rgba(139, 92, 246, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.05) inset,
+    0 12px 32px -16px rgba(0, 0, 0, 0.4);
+}
+
+/* Subtle accent stripe on the left of every section card */
+#panel .ps::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22px;
+  bottom: 22px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg,
+    rgba(6, 182, 212, 0.0) 0%,
+    rgba(139, 92, 246, 0.55) 50%,
+    rgba(236, 72, 153, 0.0) 100%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+#panel .ps:hover::before { opacity: 1; }
+
+/* ── Section label (.psl) — becomes card header ───────────────────────── */
+#panel .psl {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--tx, #d6d8db);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+}
+
+#panel .psl::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 32px;
+  height: 2px;
+  background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+  border-radius: 1px;
+}
+
+/* ── Field row (.pf) — body row inside the card ──────────────────────── */
+#panel .pf {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: padding-left 0.15s;
+}
+
+#panel .pf:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+#panel .pf:first-child {
+  padding-top: 0;
+}
+
+#panel .pf:hover {
+  padding-left: 4px;
+}
+
+#panel .pf > label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t2, #9aa0a6);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#panel .pf > label small {
+  font-weight: 400;
+  color: var(--t3, #7a808a);
+  font-size: 11px;
+}
+
+/* ── Row (input + button) layout ──────────────────────────────────────── */
+#panel .pf .pr {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#panel .pf .pr input,
+#panel .pf .pr select,
+#panel .pf .pr textarea,
+#panel .pf .pi {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--tx, #d6d8db);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+
+#panel .pf .pi[type="password"],
+#panel .pf .pi[type="text"]:not([readonly]) {
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+}
+
+#panel .pf .pi:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.55);
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+
+#panel .pf .pi::placeholder {
+  color: rgba(154, 160, 166, 0.45);
+}
+
+#panel .pf textarea.pi {
+  height: auto;
+  min-height: 64px;
+  padding: 10px 12px;
+  line-height: 1.4;
+}
+
+/* ── Buttons inside Settings (.psv) ──────────────────────────────────── */
+#panel .pf .psv,
+#panel .ps .psv {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--tx, #d6d8db);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s,
+              transform 0.08s, box-shadow 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+#panel .pf .psv:hover,
+#panel .ps .psv:hover {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.35);
+}
+
+#panel .pf .psv:active,
+#panel .ps .psv:active {
+  transform: scale(0.96);
+}
+
+#panel .pf .psv.primary,
+#panel .ps .psv.primary {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  border-color: transparent;
+  color: #fff;
+}
+
+#panel .pf .psv.primary:hover,
+#panel .ps .psv.primary:hover {
+  background: linear-gradient(135deg, #9a6bf7, #f1539e);
+  box-shadow: 0 0 20px -4px rgba(139, 92, 246, 0.45);
+}
+
+/* ── Status / help line under fields ─────────────────────────────────── */
+#panel .local-status {
+  font-size: 11px;
+  color: var(--t3, #7a808a);
+  line-height: 1.45;
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+#panel .local-status.ok {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+  color: #6ee7b7;
+}
+#panel .local-status.bad {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+  color: #fca5a5;
+}
+
+/* ── Connection-row "dot" (.d2) — make it a proper status indicator ── */
+#panel .d2 {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(154, 160, 166, 0.3);
+  margin-right: 8px;
+  vertical-align: middle;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+#panel .d2.on {
+  background: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
+/* ── Subsection header (psview-sub) — secondary description ─────────── */
+#panel .psview-sub {
+  font-size: 12px;
+  color: var(--t2, #9aa0a6);
+  line-height: 1.5;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: 8px;
+  border-left: 3px solid rgba(139, 92, 246, 0.4);
+}
+
+#panel .psview-sub code {
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  background: rgba(139, 92, 246, 0.12);
+  border-radius: 4px;
+  color: #c4b5fd;
+}
+
+/* ── Settings sidebar (the right-hand nav) ───────────────────────────── */
+#panel .settings-nav,
+#panel [class*="settings-tab"] {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── Settings title at top of panel ──────────────────────────────────── */
+#panel h2,
+#panel .panel-title {
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #06b6d4, #8b5cf6, #ec4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+/* ── Form spacing inside the executor-backend sub-fields ─────────────── */
+#panel .ms-ssh-only,
+#panel .ms-modal-only,
+#panel .ms-daytona-only {
+  padding-left: 14px;
+  border-left: 2px solid rgba(139, 92, 246, 0.25);
+  margin-left: 8px;
+  background: linear-gradient(90deg,
+    rgba(139, 92, 246, 0.04),
+    transparent 60%);
+  border-radius: 0 8px 8px 0;
+}
