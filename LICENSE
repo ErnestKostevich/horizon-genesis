@@ -2,20 +2,45 @@ Business Source License 1.1
 
 Parameters
 
-Licensor: Ernest Kostevich
-Licensed Work: Horizon Genesis (this repository)
-Additional Use Grant: You may copy, modify, and run this software for personal, educational, and internal evaluation use. Offering the Licensed Work (or a derivative) to third parties as a hosted service, paid product, or commercial offering requires prior written permission from the Licensor.
-Change Date: 2030-01-01
-Change License: GNU Affero General Public License v3.0 only
+Licensor:               Ernest Kostevich
+Licensed Work:          Horizon Genesis (this repository)
+Additional Use Grant:   You may copy, modify, and run this software for
+                        personal, educational, internal evaluation, and
+                        non-commercial production use. Offering the
+                        Licensed Work (or a derivative of it) to third
+                        parties as a hosted service, paid product,
+                        rebranded redistribution, or commercial
+                        offering requires prior written permission
+                        from the Licensor.
+
+                        Building plugins and workflows on top of
+                        Horizon and distributing them through the
+                        official Horizon marketplace is fully
+                        supported and does NOT require a separate
+                        commercial licence.
+
+Change Date:            None — the Licensor does not currently intend
+                        to convert this Work to a different licence.
+
+Change License:         Not applicable.
 
 Terms
 
-The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant, above, permitting limited production use.
+The Licensor hereby grants you the right to copy, modify, create
+derivative works, redistribute, and make non-production use of the
+Licensed Work. The Licensor may make an Additional Use Grant, above,
+permitting limited production use.
 
-Effective on the Change Date, or the fourth anniversary of the first public distribution of this version of the Licensed Work, whichever comes first, the Licensor hereby grants you rights under the terms of the Change License, and the rights granted in the paragraph above terminate.
+If your use of the Licensed Work does not comply with the requirements
+currently in effect as described in this License, you must purchase a
+commercial license from the Licensor (commercial@horizonaai.dev), or
+stop using the Licensed Work.
 
-If your use of the Licensed Work does not comply with the requirements currently in effect as described in this License, you must purchase a commercial license from the Licensor, or stop using the Licensed Work.
+This License does not grant you any right in any trademark or logo of
+the Licensor.
 
-This License does not grant you any right in any trademark or logo of the Licensor.
-
-TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED ON AN "AS IS" BASIS. LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS
+PROVIDED ON AN "AS IS" BASIS. LICENSOR HEREBY DISCLAIMS ALL WARRANTIES
+AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION)
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+NON-INFRINGEMENT, AND TITLE.
