@@ -19,7 +19,7 @@ const path = require('path');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
 const { fmt, isTTY } = require('./lib/tty');
 const { renderMarkdown } = require('./lib/markdown');
-const { bannerBig, GradientSpinner } = require('./lib/banner');
+const { bannerBig, GradientSpinner, welcomeReveal } = require('./lib/banner');
 const { TuiEngine } = require('./lib/tui-engine');
 
 const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill-show',
@@ -149,9 +149,24 @@ async function main({ flags } = {}) {
 
   if (!isTTY) process.stderr.write(fmt.warn('TUI works best in an interactive terminal') + '\n');
 
+  // Phase 18 — first-launch reveal: if there's no conversation history
+  // yet (first time the TUI ever boots), play the animated welcome.
+  // Subsequent launches print the compact banner header immediately.
+  const FIRST_LAUNCH_FLAG = 'tui.welcomedAt';
+  const isFirstLaunch = !runtime.settingsStore.get(FIRST_LAUNCH_FLAG)
+                     && !(runtime.agentMemory?._data?.conversations?.length);
+  if (isFirstLaunch && isTTY) {
+    await welcomeReveal({
+      provider: runtime.settingsStore.get('provider'),
+      persona: runtime.settingsStore.get('persona'),
+      lang: runtime.settingsStore.get('lang'),
+    });
+    try { runtime.settingsStore.set(FIRST_LAUNCH_FLAG, new Date().toISOString()); } catch (_) {}
+  }
+
   // Print initial banner — write directly so it's part of the transcript too.
   const banner = bannerHeader(runtime);
-  process.stdout.write('\x1b[2J\x1b[H' + banner);
+  process.stdout.write((isFirstLaunch ? '' : '\x1b[2J\x1b[H') + banner);
 
   const state = {
     history: [],
