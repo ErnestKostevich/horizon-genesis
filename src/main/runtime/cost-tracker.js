@@ -68,6 +68,35 @@ const PRICES = {
   // Local providers — always free
   'llama3.1':                { in: 0, out: 0 },
   'local-model':             { in: 0, out: 0 },
+  // ── Phase 9 hosting platforms ────────────────────────────────────────
+  // Together AI
+  'meta-llama/Llama-3.3-70B-Instruct-Turbo': { in: 0.88, out: 0.88 },
+  'meta-llama/Llama-3.1-8B-Instruct-Turbo':  { in: 0.18, out: 0.18 },
+  'mistralai/Mixtral-8x7B-Instruct-v0.1':    { in: 0.60, out: 0.60 },
+  'Qwen/Qwen2.5-72B-Instruct-Turbo':         { in: 1.20, out: 1.20 },
+  // Fireworks AI
+  'accounts/fireworks/models/llama-v3p3-70b-instruct': { in: 0.90, out: 0.90 },
+  'accounts/fireworks/models/llama-v3p1-8b-instruct':  { in: 0.20, out: 0.20 },
+  'accounts/fireworks/models/mixtral-8x7b-instruct':   { in: 0.50, out: 0.50 },
+  // DeepInfra (cheapest)
+  'meta-llama/Llama-3.3-70B-Instruct':       { in: 0.23, out: 0.40 },
+  'Qwen/Qwen2.5-72B-Instruct':               { in: 0.35, out: 0.40 },
+  // Cerebras (fastest)
+  'llama-3.3-70b':                           { in: 0.85, out: 1.20 },
+  'llama3.1-8b':                             { in: 0.10, out: 0.10 },
+  // SambaNova
+  'Meta-Llama-3.3-70B-Instruct':             { in: 0.60, out: 1.20 },
+  'Meta-Llama-3.1-405B-Instruct':            { in: 5.00, out: 10.00 },
+  // Moonshot Kimi
+  'kimi-k2-0905-preview':                    { in: 0.60, out: 2.50 },
+  'moonshot-v1-8k':                          { in: 1.50, out: 1.50 },
+  // Z.AI (GLM)
+  'glm-4-plus':                              { in: 0.70, out: 0.70 },
+  'glm-4-air':                               { in: 0.10, out: 0.10 },
+  // Nebius
+  'meta-llama/Meta-Llama-3.1-70B-Instruct':  { in: 0.20, out: 0.60 },
+  'meta-llama/Meta-Llama-3.1-405B-Instruct': { in: 1.00, out: 3.00 },
+  // Azure / Custom — price unknown without user-supplied table
 };
 
 function priceOf(model) {

@@ -38,10 +38,21 @@ const { CostTracker } = require('./cost-tracker');
 
 // Provider preference order for `--provider auto`. Picks the first one
 // that has a key configured (or is a local provider). Order = "cheap +
-// reliable first". Local Ollama beats hosted Gemini Flash because users
-// who installed Ollama explicitly want it.
-const AUTO_ORDER = ['ollama', 'lmstudio', 'localai', 'gemini', 'groq',
-                    'deepseek', 'mistral', 'openrouter', 'claude', 'openai'];
+// reliable first". Local providers come first; then platforms with free
+// tiers; then cheap paid; then premium.
+const AUTO_ORDER = [
+  // Free / local
+  'ollama', 'lmstudio', 'localai',
+  // Free-tier capable
+  'gemini', 'groq', 'cerebras',
+  // Cheap paid
+  'deepinfra', 'deepseek', 'fireworks', 'together', 'sambanova', 'nebius',
+  'moonshot', 'mistral', 'zai',
+  // Aggregators
+  'openrouter',
+  // Premium
+  'claude', 'openai',
+];
 
 function safeRequire(modulePath) {
   try { return require(modulePath); } catch (e) { return { __error: e.message }; }

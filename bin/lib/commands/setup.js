@@ -20,16 +20,38 @@ const { bannerCompact, GradientSpinner } = require('../banner');
 
 // Provider catalog — order = recommended first. Cost notes are
 // approximate as of mid-2026; users override anytime via `horizon model`.
+// Each entry: { id, key, label, cost, signup }. `key=null` means no
+// API key required (local provider).
 const PROVIDERS = [
-  { id: 'gemini',   key: 'k_gemini',   label: 'Google Gemini',      cost: 'free tier (1500 req/day) · best for getting started', url: 'https://aistudio.google.com/apikey', signup: 'Free at aistudio.google.com → "Get API key"' },
-  { id: 'groq',     key: 'k_groq',     label: 'Groq',               cost: 'free tier (very fast inference)', url: 'https://console.groq.com/keys', signup: 'Free at console.groq.com → API Keys' },
-  { id: 'openrouter', key: 'k_openrouter', label: 'OpenRouter',     cost: 'pay-as-you-go · 100+ models', url: 'https://openrouter.ai/keys', signup: 'openrouter.ai → Keys ($5 credit on signup)' },
-  { id: 'claude',   key: 'k_claude',   label: 'Anthropic Claude',   cost: '$3/M input, $15/M output (Sonnet)', url: 'https://console.anthropic.com/settings/keys', signup: 'console.anthropic.com → API Keys' },
-  { id: 'openai',   key: 'k_openai',   label: 'OpenAI',             cost: '$1.25/M input, $10/M output (gpt-5.4)', url: 'https://platform.openai.com/api-keys', signup: 'platform.openai.com → API Keys' },
-  { id: 'deepseek', key: 'k_deepseek', label: 'DeepSeek',           cost: '$0.14/M input · cheapest non-local', url: 'https://platform.deepseek.com/api_keys', signup: 'platform.deepseek.com → API Keys' },
-  { id: 'mistral',  key: 'k_mistral',  label: 'Mistral',            cost: '$2/M input, $6/M output', url: 'https://console.mistral.ai/api-keys/', signup: 'console.mistral.ai → API Keys' },
-  { id: 'ollama',   key: null,         label: 'Ollama (local)',     cost: 'free, runs on your machine', url: 'https://ollama.com', signup: 'Install Ollama from ollama.com, run "ollama pull llama3.1"' },
-  { id: 'lmstudio', key: null,         label: 'LM Studio (local)',  cost: 'free, runs on your machine', url: 'https://lmstudio.ai', signup: 'Install LM Studio from lmstudio.ai, start a model' },
+  // ── Free tier / local first ────────────────────────────────────────
+  { id: 'gemini',   key: 'k_gemini',   label: 'Google Gemini',      cost: 'free tier (1500 req/day) · best for getting started', signup: 'aistudio.google.com → "Get API key"' },
+  { id: 'groq',     key: 'k_groq',     label: 'Groq',               cost: 'free tier, very fast inference',   signup: 'console.groq.com → API Keys' },
+  { id: 'cerebras', key: 'k_cerebras', label: 'Cerebras',           cost: 'free tier, fastest inference',     signup: 'cloud.cerebras.ai → API Keys' },
+  { id: 'ollama',   key: null,         label: 'Ollama (local)',     cost: 'free, runs on your machine',       signup: 'ollama.com → install + ollama pull llama3.1' },
+  { id: 'lmstudio', key: null,         label: 'LM Studio (local)',  cost: 'free, GUI for local models',       signup: 'lmstudio.ai → install + start a model' },
+  // ── Hosting platforms (cheap paid) ─────────────────────────────────
+  { id: 'deepinfra', key: 'k_deepinfra', label: 'DeepInfra',        cost: '$0.23/M Llama 70B · cheapest hosting', signup: 'deepinfra.com → Settings → API Keys' },
+  { id: 'deepseek', key: 'k_deepseek', label: 'DeepSeek',           cost: '$0.14/M input · cheapest non-local',   signup: 'platform.deepseek.com → API Keys' },
+  { id: 'fireworks', key: 'k_fireworks', label: 'Fireworks AI',     cost: '$0.20-0.90/M · fast open models',      signup: 'fireworks.ai → Settings → API Keys' },
+  { id: 'together', key: 'k_together', label: 'Together AI',        cost: '$0.20-1.20/M · 100+ open models',      signup: 'api.together.ai → Settings → API Keys' },
+  { id: 'sambanova', key: 'k_sambanova', label: 'SambaNova',        cost: 'fast Llama/Qwen hosting',              signup: 'cloud.sambanova.ai → API Keys' },
+  { id: 'nebius',   key: 'k_nebius',   label: 'Nebius AI Studio',   cost: '$0.20/M Llama 70B',                    signup: 'studio.nebius.ai → API Keys' },
+  // ── Aggregators ────────────────────────────────────────────────────
+  { id: 'openrouter', key: 'k_openrouter', label: 'OpenRouter',     cost: 'pay-as-you-go · 300+ models in one API', signup: 'openrouter.ai → Keys ($5 credit on signup)' },
+  // ── Specialised hosts ──────────────────────────────────────────────
+  { id: 'mistral',  key: 'k_mistral',  label: 'Mistral',            cost: '$2/M input, $6/M output',          signup: 'console.mistral.ai → API Keys' },
+  { id: 'qwen',     key: 'k_qwen',     label: 'Alibaba Qwen',       cost: '$0.40-1.60/M',                     signup: 'dashscope.console.aliyun.com → API Keys' },
+  { id: 'moonshot', key: 'k_moonshot', label: 'Moonshot (Kimi)',    cost: '$0.60/M Kimi K2 · long-context',   signup: 'platform.moonshot.ai → API Keys' },
+  { id: 'zai',      key: 'k_zai',      label: 'Z.AI (GLM)',         cost: '$0.10-0.70/M',                     signup: 'open.bigmodel.cn → API Keys' },
+  { id: 'perplexity', key: 'k_perplexity', label: 'Perplexity',     cost: '$1-3/M · web-aware',               signup: 'perplexity.ai → Settings → API' },
+  { id: 'cohere',   key: 'k_cohere',   label: 'Cohere',             cost: '$2.50/M · Command A',              signup: 'dashboard.cohere.com → API Keys' },
+  { id: 'grok',     key: 'k_grok',     label: 'xAI Grok',           cost: '$0.20-5/M · Grok 4',               signup: 'console.x.ai → API Keys' },
+  // ── Premium ────────────────────────────────────────────────────────
+  { id: 'claude',   key: 'k_claude',   label: 'Anthropic Claude',   cost: '$3/M input, $15/M output (Sonnet)',signup: 'console.anthropic.com → API Keys' },
+  { id: 'openai',   key: 'k_openai',   label: 'OpenAI',             cost: '$1.25/M input, $10/M output',      signup: 'platform.openai.com → API Keys' },
+  // ── Enterprise / custom ────────────────────────────────────────────
+  { id: 'azure',    key: 'k_azure',    label: 'Azure OpenAI',       cost: 'per Azure pricing · enterprise',   signup: 'portal.azure.com → OpenAI deployment' },
+  { id: 'custom',   key: 'k_custom',   label: 'Custom endpoint',    cost: 'any OpenAI-compatible URL',        signup: 'self-hosted vLLM, TGI, or commercial proxy' },
 ];
 
 const PERSONAS = [

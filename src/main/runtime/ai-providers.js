@@ -20,6 +20,7 @@
 // Default models intentionally match main.js DEFAULT_PROVIDER_MODELS.
 
 const DEFAULT_PROVIDER_MODELS = {
+  // Original 14
   claude: 'claude-sonnet-4-6',
   openai: 'gpt-5.4',
   gemini: 'gemini-2.5-flash',
@@ -34,9 +35,21 @@ const DEFAULT_PROVIDER_MODELS = {
   ollama: 'llama3.1',
   lmstudio: 'local-model',
   localai: 'local-model',
+  // Phase 9 additions — open-model hosting & specialised hosts
+  together: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  fireworks: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+  deepinfra: 'meta-llama/Llama-3.3-70B-Instruct',
+  cerebras: 'llama-3.3-70b',
+  sambanova: 'Meta-Llama-3.3-70B-Instruct',
+  moonshot: 'kimi-k2-0905-preview',
+  zai: 'glm-4-plus',
+  nebius: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+  azure: 'gpt-5.4',            // points to the user's Azure deployment name
+  custom: 'gpt-4o-mini',       // generic OpenAI-compat — user fills URL + model
 };
 
 const OPENAI_COMPAT_ENDPOINTS = {
+  // Original 8
   openai: 'https://api.openai.com/v1/chat/completions',
   groq: 'https://api.groq.com/openai/v1/chat/completions',
   deepseek: 'https://api.deepseek.com/v1/chat/completions',
@@ -45,6 +58,18 @@ const OPENAI_COMPAT_ENDPOINTS = {
   qwen: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
   perplexity: 'https://api.perplexity.ai/chat/completions',
   openrouter: 'https://openrouter.ai/api/v1/chat/completions',
+  // Phase 9 — hosting platforms with OpenAI-compatible chat completions
+  together:  'https://api.together.xyz/v1/chat/completions',
+  fireworks: 'https://api.fireworks.ai/inference/v1/chat/completions',
+  deepinfra: 'https://api.deepinfra.com/v1/openai/chat/completions',
+  cerebras:  'https://api.cerebras.ai/v1/chat/completions',
+  sambanova: 'https://api.sambanova.ai/v1/chat/completions',
+  moonshot:  'https://api.moonshot.ai/v1/chat/completions',
+  zai:       'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+  nebius:    'https://api.studio.nebius.ai/v1/chat/completions',
+  // Azure and custom resolve their endpoint dynamically from settingsStore
+  // because each Azure deployment has its own URL + the user picks the
+  // base URL for "custom".
 };
 
 const KEY_NAMES = {
@@ -59,7 +84,21 @@ const KEY_NAMES = {
   perplexity: 'k_perplexity',
   cohere: 'k_cohere',
   openrouter: 'k_openrouter',
+  // Phase 9
+  together: 'k_together',
+  fireworks: 'k_fireworks',
+  deepinfra: 'k_deepinfra',
+  cerebras: 'k_cerebras',
+  sambanova: 'k_sambanova',
+  moonshot: 'k_moonshot',
+  zai: 'k_zai',
+  nebius: 'k_nebius',
+  azure: 'k_azure',
+  custom: 'k_custom',
 };
+
+// Providers that don't require an API key (local / proxied).
+const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'localai']);
 
 function normalizeUsage(d, provider) {
   try {
@@ -233,6 +272,53 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
         return { reply: d.choices?.[0]?.message?.content || '', model, usage: normalizeUsage(d, provider) };
       }
 
+      // Azure OpenAI — endpoint is per-deployment, set by user.
+      // Auth header is `api-key`, not Bearer.
+      if (provider === 'azure') {
+        const base = settingsStore.get('azureEndpoint'); // e.g. https://my-resource.openai.azure.com
+        const deployment = settingsStore.get('azureDeployment') || model;
+        const apiVersion = settingsStore.get('azureApiVersion') || '2024-10-21';
+        if (!base) return { error: 'Azure endpoint not set (settings: azureEndpoint)' };
+        const k = keysStore.get('k_azure');
+        if (!k) return { error: 'Azure key not set' };
+        const url = `${base.replace(/\/$/, '')}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${apiVersion}`;
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'api-key': k },
+          body: JSON.stringify({
+            messages: [{ role: 'system', content: system }, ...messages],
+            max_tokens: 4096,
+          }),
+        });
+        const d = await r.json();
+        if (d.error) return { error: d.error.message || String(d.error) };
+        return { reply: d.choices?.[0]?.message?.content || '', model: deployment, usage: normalizeUsage(d, 'azure') };
+      }
+
+      // Custom OpenAI-compatible — user picks the URL.
+      if (provider === 'custom') {
+        const base = settingsStore.get('customUrl');
+        if (!base) return { error: 'Custom URL not set (settings: customUrl)' };
+        const k = keysStore.get('k_custom') || '';
+        const url = base.endsWith('/v1/chat/completions') ? base
+                  : base.replace(/\/$/, '') + '/v1/chat/completions';
+        const customModel = settingsStore.get('customModel') || model;
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(k ? { 'Authorization': `Bearer ${k}` } : {}),
+          },
+          body: JSON.stringify({
+            model: customModel, max_tokens: 4096,
+            messages: [{ role: 'system', content: system }, ...messages],
+          }),
+        });
+        const d = await r.json();
+        if (d.error) return { error: d.error.message || String(d.error) };
+        return { reply: d.choices?.[0]?.message?.content || '', model: customModel, usage: normalizeUsage(d, 'custom') };
+      }
+
       // OpenAI-compatible providers.
       const endpoint = OPENAI_COMPAT_ENDPOINTS[provider];
       if (!endpoint) return { error: `Unknown provider: ${provider}` };
@@ -337,12 +423,31 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
         return readSseGemini(r, onToken, model);
       }
 
-      // OpenAI-compatible (openai/groq/deepseek/grok/mistral/qwen/perplexity/
-      // openrouter/ollama/lmstudio/localai) — share the same SSE format.
-      const isLocal = ['ollama', 'lmstudio', 'localai'].includes(provider);
+      // OpenAI-compatible providers (openai/groq/deepseek/grok/mistral/qwen/
+      // perplexity/openrouter/together/fireworks/deepinfra/cerebras/sambanova/
+      // moonshot/zai/nebius/ollama/lmstudio/localai/azure/custom) — share
+      // the same SSE format. Azure + custom resolve URL dynamically.
+      const isLocal = LOCAL_PROVIDERS.has(provider);
       let endpoint = OPENAI_COMPAT_ENDPOINTS[provider];
       let headers = { 'Content-Type': 'application/json' };
-      if (!isLocal) {
+
+      if (provider === 'azure') {
+        const base = settingsStore.get('azureEndpoint');
+        const deployment = settingsStore.get('azureDeployment') || model;
+        const apiVersion = settingsStore.get('azureApiVersion') || '2024-10-21';
+        if (!base) return { error: 'Azure endpoint not set' };
+        const k = keysStore.get('k_azure');
+        if (!k) return { error: 'Azure key not set' };
+        endpoint = `${base.replace(/\/$/, '')}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${apiVersion}`;
+        headers['api-key'] = k;
+      } else if (provider === 'custom') {
+        const base = settingsStore.get('customUrl');
+        if (!base) return { error: 'Custom URL not set' };
+        const k = keysStore.get('k_custom') || '';
+        endpoint = base.endsWith('/v1/chat/completions') ? base
+                 : base.replace(/\/$/, '') + '/v1/chat/completions';
+        if (k) headers['Authorization'] = `Bearer ${k}`;
+      } else if (!isLocal) {
         const k = keysStore.get(KEY_NAMES[provider]);
         if (!k) return { error: `${provider} key not set` };
         headers['Authorization'] = `Bearer ${k}`;
@@ -356,8 +461,14 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
         endpoint = `${base}/v1/chat/completions`;
       }
       if (!endpoint) return { error: `streaming not supported for ${provider}` };
+
+      const effectiveModel = provider === 'azure'
+        ? (settingsStore.get('azureDeployment') || model)
+        : provider === 'custom'
+          ? (settingsStore.get('customModel') || model)
+          : model;
       const body = {
-        model, max_tokens: 4096, stream: true,
+        model: effectiveModel, max_tokens: 4096, stream: true,
         messages: [{ role: 'system', content: system }, ...messages],
       };
       if (provider === 'openai') {
