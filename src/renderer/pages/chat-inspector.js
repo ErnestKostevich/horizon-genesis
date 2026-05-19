@@ -202,8 +202,18 @@ function refreshInspectorCost(){
   // splits as 7% system, 83% history, 8% files, 2% tools (a rough pattern
   // that matches typical chat sessions). Real per-segment tracking is a
   // follow-up. This gets the bar visible and updating as tokens grow.
+  //
+  // Phase 25 fix — budget was hardcoded 200000. Now reads model context
+  // window from settings (`token.budget` override or `model.contextWindow`
+  // from the active provider's model card). Falls back to 200k for safety
+  // when nothing is configured.
   const total = sessionTokens || 0;
-  const budget = 200000;
+  let budget = 200000;
+  try {
+    const override = Number(window.localStorage?.getItem?.('horizon.tokenBudget'));
+    if (Number.isFinite(override) && override > 0) budget = override;
+    else if (window._activeModelContext && window._activeModelContext > 0) budget = window._activeModelContext;
+  } catch (_) {}
   const segs = {
     system:  Math.round(total * 0.07),
     history: Math.round(total * 0.83),
@@ -414,7 +424,19 @@ async function refreshInspectorLearned(){
   // Pull snapshot from main (facts + memories + learning stats in one shot).
   try {
     const snap = await H.memSnapshot?.({ factLimit: 40, memLimit: 30 });
-    if (!snap?.ok) return;
+    // Phase 25 fix — previously this returned silently when IPC failed
+    // and the "Loading…" placeholder stayed forever. Now surface the
+    // failure to every section that depends on snap so users know
+    // something's wrong instead of staring at a frozen spinner.
+    if (!snap?.ok) {
+      const err = snap?.error || 'memory snapshot unavailable';
+      const failHtml = `<div class="insp-empty" style="color:var(--red,#ef4444);padding:8px 0">⚠ ${esc(err)}</div>`;
+      for (const id of ['insp-learned-stats','insp-learned-facts','insp-learned-mems','insp-learned-profile','insp-learned-workspace','insp-learned-reflection']) {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = failHtml;
+      }
+      return;
+    }
     const statsHost = document.getElementById('insp-learned-stats');
     if (statsHost) {
       let embedRow = '';
@@ -790,14 +812,29 @@ try {
         if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
       }
       if (step?.type === 'subagent-end' && step.runId) {
-        const existing = subagentRegistry.get(step.runId);
-        if (existing) {
-          existing.status = step.status || (step.error ? 'error' : 'done');
-          existing.stepsCount = step.stepsCount || existing.stepsCount;
-          existing.answer = step.answer;
-          existing.error = step.error;
-          existing.endedAt = step.endedAt;
+        let existing = subagentRegistry.get(step.runId);
+        // Phase 25 fix — if `subagent-end` arrives before `subagent-spawned`
+        // (event order isn't guaranteed under high load), the old code
+        // dropped the end event silently and the row never terminated.
+        // Now we synthesize a minimal record so the row appears with a
+        // terminated state instead of disappearing forever.
+        if (!existing) {
+          existing = {
+            runId: step.runId,
+            parentRunId: step.parentRunId || null,
+            depth: step.depth || 1,
+            task: step.task || '(no task captured)',
+            startedAt: step.startedAt || step.endedAt,
+            stepsCount: 0,
+          };
+          subagentRegistry.set(step.runId, existing);
         }
+        existing.status = step.status || (step.error ? 'error' : 'done');
+        existing.stepsCount = step.stepsCount || existing.stepsCount;
+        existing.answer = step.answer;
+        existing.error = step.error;
+        existing.endedAt = step.endedAt;
+        _pruneSubagentRegistry();
         if (inspectorActive && inspectorTab === 'subagents') refreshInspectorSubagents();
       }
       // Increment stepsCount when subagent tools fire (any step tagged isSubagent).
