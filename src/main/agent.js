@@ -1285,7 +1285,14 @@ const TOOL_DEFINITIONS = [
   { name: 'smart_click', desc: 'Click on a UI element by visual description (uses AI vision)', params: { target: 'string describing what to click' } },
   { name: 'open_site', desc: 'Open a website: google, youtube, gmail, github, etc', params: { name: 'string' } },
   { name: 'skill_run_helper', desc: 'Run a helper script bundled with a loaded skill. Use when a SKILL.md tells you to invoke one of its helpers.', params: { skill: 'string skill id', helper: 'string helper path (e.g. helpers/find-stale.js)', args: 'object passed as JSON on stdin', timeoutMs: 'number (default 30000)' } },
-  { name: 'spawn_subagent', desc: 'Delegate a self-contained sub-task to an isolated sub-agent that runs in parallel-friendly mode (its own history, own steps, max 4 turns). Use for research / multi-source lookups / independent fact-finding before composing the final answer. Returns { ok, answer, steps }. Subagents cannot themselves spawn deeper subagents (depth cap = 2).', params: { task: 'string — concrete self-contained goal (e.g. "list 3 GitHub repos matching React testing")', tools: 'string[] optional — restrict the subagent to specific tool names', maxSteps: 'number optional (default 4)', timeoutMs: 'number optional (default 60000)' } }
+  { name: 'spawn_subagent', desc: 'Delegate a self-contained sub-task to an isolated sub-agent that runs in parallel-friendly mode (its own history, own steps, max 4 turns). Use for research / multi-source lookups / independent fact-finding before composing the final answer. Returns { ok, answer, steps }. Subagents cannot themselves spawn deeper subagents (depth cap = 2).', params: { task: 'string — concrete self-contained goal (e.g. "list 3 GitHub repos matching React testing")', tools: 'string[] optional — restrict the subagent to specific tool names', maxSteps: 'number optional (default 4)', timeoutMs: 'number optional (default 60000)' } },
+  // ── Live Canvas (Phase 26 MVP) ─────────────────────────────────────
+  // A shared editable surface the user and the agent both work on.
+  // Read the current state, write append / prepend / replace updates.
+  // Persisted at <userData>/horizon-canvas.json; user can also edit
+  // through the /canvas surface in the renderer.
+  { name: 'canvas_read',  desc: 'Read the current Live Canvas content. Returns { ok, content, version, updatedAt }. Use this before writing so you can patch around existing content rather than overwriting.', params: {} },
+  { name: 'canvas_write', desc: 'Write to the Live Canvas (shared surface with the user). Modes: append (default, adds to end), prepend (top), replace (overwrite). The user sees your write live and can edit on top. Don\'t use replace unless the user asked to start over.', params: { content: 'string — what to write', mode: 'string optional — append | prepend | replace (default append)' } }
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1409,6 +1416,33 @@ async function dispatchTool(name, args = {}, ctx = {}) {
         });
       } catch (e) {
         return { ok: false, err: 'spawn_subagent failed: ' + e.message };
+      }
+    }
+    case 'canvas_read': {
+      // Lazy lookup of canvasManager via main.js — same pattern as
+      // spawn_subagent — so agent.js stays standalone for tests.
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const mgr = mainMod?.exports?.getCanvasManager?.();
+        if (!mgr) return { ok: false, err: 'canvas not initialised' };
+        const snap = mgr.get();
+        return { ok: true, content: snap.content, version: snap.version, updatedAt: snap.updatedAt };
+      } catch (e) {
+        return { ok: false, err: 'canvas_read failed: ' + e.message };
+      }
+    }
+    case 'canvas_write': {
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const mgr = mainMod?.exports?.getCanvasManager?.();
+        if (!mgr) return { ok: false, err: 'canvas not initialised' };
+        const content = String(args.content || '');
+        if (!content) return { ok: false, err: 'canvas_write needs non-empty content' };
+        const mode = ['append', 'prepend', 'replace'].includes(args.mode) ? args.mode : 'append';
+        const snap = mgr.write({ mode, content, source: 'agent' });
+        return { ok: true, mode, version: snap.version, bytesWritten: content.length };
+      } catch (e) {
+        return { ok: false, err: 'canvas_write failed: ' + e.message };
       }
     }
     default:
