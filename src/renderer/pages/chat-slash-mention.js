@@ -32,30 +32,56 @@
 // is { id, label, hint, exec(arg) }. Designed to mirror Claude Code /
 // Cursor / ChatGPT-codex slash conventions.
 var SLASH_COMMANDS = [
+  // ── Core conversation control ───────────────────────────────────────
   { id: 'help',     label: '/help',           hint: 'Show all slash commands',                           exec: () => slashShowHelp() },
-  { id: 'clear',    label: '/clear',          hint: 'Clear current chat history',                       exec: () => { try { clearHist?.(); } catch(_){} } },
   { id: 'new',      label: '/new',            hint: 'Start a new chat',                                 exec: () => { try { createNewChat?.(); } catch(_){} } },
+  { id: 'clear',    label: '/clear',          hint: 'Clear current chat history (memory retained)',     exec: () => { try { clearHist?.(); } catch(_){} } },
+  { id: 'reset',    label: '/reset',          hint: 'Reset transcript (alias of /clear)',               exec: () => { try { clearHist?.(); } catch(_){} } },
+  { id: 'export',   label: '/export',         hint: 'Export current chat to .md / .json',               exec: () => { try { window._handleSlashCommand?.('/export'); } catch(_){} } },
+  { id: 'find',     label: '/find <query>',   hint: 'Find text in transcript (also Ctrl+F)',            exec: (arg) => { try { window._handleSlashCommand?.('/find ' + (arg || '')); } catch(_){} } },
+
+  // ── Provider / persona / mode ───────────────────────────────────────
   { id: 'persona',  label: '/persona <id>',   hint: 'Switch persona (jarvis|friday|alfred|sage|pixel)', exec: (arg) => { try { setPersona?.(arg || 'jarvis'); } catch(_){} } },
   { id: 'model',    label: '/model <name>',   hint: 'Switch active provider model',                     exec: (arg) => { try { saveModelSetting?.(prov, arg); } catch(_){} } },
+  { id: 'provider', label: '/provider <id>',  hint: 'Switch AI provider (claude|openai|gemini|...)',    exec: (arg) => { try { window._handleSlashCommand?.('/provider ' + (arg || '')); } catch(_){} } },
+  { id: 'lang',     label: '/lang <id>',      hint: 'Switch language (en|ru)',                          exec: (arg) => { try { window._handleSlashCommand?.('/lang ' + (arg || '')); } catch(_){} } },
   { id: 'mode',     label: '/mode <name>',    hint: 'Switch chat mode (chat|code|agent|vision|...)',    exec: (arg) => { try { setMode?.(arg || 'chat'); } catch(_){} } },
-  { id: 'code',     label: '/code',           hint: 'Open Code Mode IDE',                               exec: () => { try { toggleCodeMode?.(); } catch(_){} } },
+  { id: 'chat',     label: '/chat',           hint: 'Switch to plain chat mode',                        exec: () => { try { setMode?.('chat'); } catch(_){} } },
   { id: 'agent',    label: '/agent',          hint: 'Switch to Agent mode',                             exec: () => { try { setMode?.('agent'); } catch(_){} } },
-  { id: 'settings', label: '/settings [tab]', hint: 'Open settings panel (account|models|providers|…)', exec: (arg) => { try { openPanel?.(arg || ''); } catch(_){} } },
+  { id: 'code',     label: '/code',           hint: 'Open Code Mode IDE',                               exec: () => { try { toggleCodeMode?.(); } catch(_){} } },
+  { id: 'vision',   label: '/vision',         hint: 'Switch to Vision mode (screen analysis)',          exec: () => { try { setMode?.('vision'); } catch(_){} } },
+
+  // ── Toggles ─────────────────────────────────────────────────────────
   { id: 'voice',    label: '/voice',          hint: 'Toggle voice (TTS) on/off',                        exec: () => { try { togSw?.('tts','sw-tts'); } catch(_){} } },
   { id: 'wake',     label: '/wake',           hint: 'Toggle wake-word on/off',                          exec: () => { try { document.getElementById('tc-wake')?.click(); } catch(_){} } },
+  { id: 'talk',     label: '/talk',           hint: 'Toggle continuous Talk Mode on/off',               exec: () => { try { window._handleSlashCommand?.('/talk'); } catch(_){} } },
   { id: 'eye',      label: '/eye',            hint: 'Toggle screen-watcher on/off',                     exec: () => { try { togSw?.('screenWatcher','sw-eye'); } catch(_){} } },
+  { id: 'theme',    label: '/theme <id>',     hint: 'Switch theme (dark|light|auto)',                   exec: (arg) => { try { window._handleSlashCommand?.('/theme ' + (arg || '')); } catch(_){} } },
+
+  // ── Panels & hubs ───────────────────────────────────────────────────
+  { id: 'settings', label: '/settings [tab]', hint: 'Open settings panel (account|models|providers|…)', exec: (arg) => { try { openPanel?.(arg || ''); } catch(_){} } },
   { id: 'workflows',label: '/workflows',      hint: 'Open Workflows panel',                             exec: () => { try { openWorkflows?.(); } catch(_){} } },
   { id: 'plugins',  label: '/plugins',        hint: 'Open Plugin Hub',                                  exec: () => { try { openHub?.(); } catch(_){} } },
   { id: 'store',    label: '/store',          hint: 'Open Marketplace',                                 exec: () => { try { openStore?.(); } catch(_){} } },
-  { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                    exec: () => { try { openCmdPalette?.(); } catch(_){} } },
-  // Skills system (Phase 2 — Claude Code-style SKILL.md bundles).
-  { id: 'skills',   label: '/skills',         hint: 'Open Skill Hub (browse / edit / toggle SKILL.md)', exec: () => { try { openSkillHub?.(); } catch(_){} } },
-  { id: 'skill',    label: '/skill <id> [message]', hint: 'Force-load a skill on the next turn',     exec: (arg) => { try { window._handleSlashCommand?.('/skill ' + (arg || '')); } catch(_){} } },
-  // Subagents (parallel-friendly research / multi-source lookups).
-  { id: 'spawn_subagent', label: '/spawn_subagent <task>', hint: 'Fire a one-off subagent — bypasses the AI loop. Test mode for debugging.', exec: (arg) => { try { window._handleSlashCommand?.('/spawn_subagent ' + (arg || '')); } catch(_){} } },
-  { id: 'subagent', label: '/subagent <task>', hint: 'Alias for /spawn_subagent — see Subagents inspector tab.', exec: (arg) => { try { window._handleSlashCommand?.('/subagent ' + (arg || '')); } catch(_){} } },
-  // Telegram chats (Phase Telegram chat viewer).
+  { id: 'palette',  label: '/palette',        hint: 'Open command palette (⌘K)',                        exec: () => { try { openCmdPalette?.(); } catch(_){} } },
   { id: 'telegram', label: '/telegram',       hint: 'Open Telegram chat viewer',                        exec: () => { try { openTelegramHub?.(); } catch(_){} } },
+  { id: 'discord',  label: '/discord',        hint: 'Open Discord chat viewer',                         exec: () => { try { window._handleSlashCommand?.('/discord'); } catch(_){} } },
+
+  // ── Skills ──────────────────────────────────────────────────────────
+  { id: 'skills',   label: '/skills',         hint: 'Open Skill Hub (browse / edit / toggle SKILL.md)', exec: () => { try { openSkillHub?.(); } catch(_){} } },
+  { id: 'skill',    label: '/skill <id> [message]', hint: 'Force-load a skill on the next turn',       exec: (arg) => { try { window._handleSlashCommand?.('/skill ' + (arg || '')); } catch(_){} } },
+
+  // ── Subagents (parallel-friendly research / multi-source lookups) ──
+  { id: 'spawn_subagent', label: '/spawn_subagent <task>', hint: 'Fire a one-off subagent — bypasses the AI loop. Test mode.', exec: (arg) => { try { window._handleSlashCommand?.('/spawn_subagent ' + (arg || '')); } catch(_){} } },
+  { id: 'subagent', label: '/subagent <task>', hint: 'Alias for /spawn_subagent — see Subagents inspector tab.',          exec: (arg) => { try { window._handleSlashCommand?.('/subagent ' + (arg || '')); } catch(_){} } },
+
+  // ── Memory + tools ──────────────────────────────────────────────────
+  { id: 'mem',      label: '/mem <query>',    hint: 'Semantic memory search',                           exec: (arg) => { try { window._handleSlashCommand?.('/mem ' + (arg || '')); } catch(_){} } },
+  { id: 'cron',     label: '/cron <expr> <task>', hint: 'Create a scheduled task',                      exec: (arg) => { try { window._handleSlashCommand?.('/cron ' + (arg || '')); } catch(_){} } },
+  { id: 'docs',     label: '/docs',           hint: 'Open the docs in your browser',                    exec: () => { try { window.H?.openExternal?.('https://horizonaai.dev/docs/quick-start'); } catch(_){} } },
+  { id: 'doctor',   label: '/doctor',         hint: 'Run health check + auto-fix',                      exec: () => { try { window._handleSlashCommand?.('/doctor'); } catch(_){} } },
+  { id: 'reload',   label: '/reload',         hint: 'Reload the renderer (Ctrl+R alternative)',         exec: () => { try { window.location.reload(); } catch(_){} } },
+  { id: 'quit',     label: '/quit',           hint: 'Quit Horizon',                                     exec: () => { try { window.H?.quit?.(); } catch(_){} } },
 ];
 var _slashState = null; // { items, activeIdx, inputEl, query } when open
 
@@ -69,9 +95,16 @@ function slashMaybeOpen(inputEl) {
     return;
   }
   const query = m[1].toLowerCase();
-  const items = SLASH_COMMANDS.filter(c =>
-    !query || c.id.startsWith(query) || c.label.toLowerCase().includes('/' + query)
-  ).slice(0, 12);
+  // Show every match — cap at 30 so the dropdown stays reasonable on
+  // small viewports but no longer hides commands at /h with no query.
+  // Match either prefix on id, or substring on label / hint so users
+  // typing /find can also see /find-text or /search-mem-style aliases.
+  const items = SLASH_COMMANDS.filter((c) => {
+    if (!query) return true;
+    return c.id.startsWith(query)
+      || c.label.toLowerCase().includes('/' + query)
+      || (c.hint || '').toLowerCase().includes(query);
+  }).slice(0, 30);
   if (!items.length) {
     if (_slashState) slashClose();
     return;

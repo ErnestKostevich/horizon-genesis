@@ -106,6 +106,7 @@
       "category": "public.app-category.productivity",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
+      "identity": null,
       "target": [
         {
           "target": "dmg",
@@ -116,6 +117,10 @@
         }
       ]
     },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "afterSign": "build/mac-ad-hoc-sign.js",
     "linux": {
       "icon": "assets/icon.png",
       "category": "Utility",
