@@ -19,15 +19,14 @@
  * ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Settings panel container ─────────────────────────────────────────── */
+/* Phase 20.5 — do NOT clamp the panel's direct children to 980px any
+ * more. That collided with the existing `body.settings-scroll` layout
+ * (which centers each <section> at 760px with a sticky-right TOC), so
+ * panel content + TOC overlapped each other and large empty bands
+ * appeared on either side. Let chat-base.css drive the section width
+ * and only style the panel + interior cards here. */
 #panel.show {
-  padding: 28px 32px;
-}
-
-#panel.show > div,
-#panel.show > section {
-  max-width: 980px;
-  margin-left: auto;
-  margin-right: auto;
+  padding: 0;
 }
 
 /* ── Section card (.ps) ───────────────────────────────────────────────── */
@@ -513,4 +512,39 @@
 @media (max-width: 720px) {
   #panel .ph { flex-wrap: wrap; }
   .ps-search-wrap { order: 99; flex-basis: 100%; max-width: none; margin-left: 0; margin-top: 8px; }
+}
+
+/* ── Phase 20.5 — fix Settings layout overlap ─────────────────────────
+ * The original CSS centers each section at 760px (so reading width is
+ * comfortable) AND puts a sticky TOC at top:22px right:24px. With my
+ * earlier 980px panel clamp + a wider viewport, the TOC ended up
+ * overlapping content as a floating opaque card instead of sitting in
+ * an actual right column.
+ *
+ * Fix: widen sections to use full panel width with sensible side
+ * padding, lighten the TOC backdrop so it reads as a subtle sidebar
+ * rather than a popup, and reserve real space for it on wide screens
+ * via padding-right on .psview.
+ * ─────────────────────────────────────────────────────────────────── */
+body.settings-scroll .psview {
+  padding: 22px 32px 80px 32px !important;
+  padding-right: 230px !important; /* reserve room for the sticky TOC */
+}
+body.settings-scroll .psview > section {
+  max-width: 880px !important;
+  margin: 0 auto !important;
+}
+body.settings-scroll .ps-toc {
+  width: 200px !important;
+  top: 16px !important;
+  right: 16px !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.3);
+}
+@media (max-width: 1180px) {
+  body.settings-scroll .psview { padding-right: 32px !important; }
+  body.settings-scroll .ps-toc { display: none !important; }
 }
