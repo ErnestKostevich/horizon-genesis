@@ -348,17 +348,46 @@ class EmbeddingService {
   /**
    * Fill in missing embeddings for a list of {key, text} items in batches.
    * Reports progress via onProgress({done, total, failed, lastError}).
-   * Returns {ok, indexed, failed, skipped}.
+   * Returns {ok, indexed, alreadyIndexed, bad, failed, skipped}.
+   *
+   * `alreadyIndexed` — items the caller asked us to index that already
+   * have a vector in this.index. These are NOT failures.
+   *
+   * `bad` — items rejected because they were missing `key` or `text`.
+   * Surfacing this separately so the UI can distinguish "159 vectors
+   * already cached" from "159 records had no key field" — the old
+   * `skipped` lumped both together which made the inspector report
+   * 0/N indexed even though the chat said "all indexed".
    */
   async backfill(items, opts = {}) {
-    const work = (items || []).filter(i => i && i.key && i.text && !this.index.has(i.key));
     const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
+    const total = (items || []).length;
+    const good = (items || []).filter(i => i && i.key && i.text);
+    const bad = total - good.length;
+    const work = good.filter(i => !this.index.has(i.key));
+    const alreadyIndexed = good.length - work.length;
     if (!work.length) {
       this.saveSidecar();
-      return { ok: true, indexed: 0, failed: 0, skipped: items?.length || 0 };
+      return {
+        ok: true,
+        indexed: 0,
+        alreadyIndexed,
+        bad,
+        failed: 0,
+        // `skipped` kept for back-compat — equals everything we didn't write.
+        skipped: alreadyIndexed + bad,
+      };
     }
     if (!this.isAvailable()) {
-      return { ok: false, indexed: 0, failed: 0, skipped: work.length, error: 'no embedding key' };
+      return {
+        ok: false,
+        indexed: 0,
+        alreadyIndexed,
+        bad,
+        failed: 0,
+        skipped: work.length + alreadyIndexed + bad,
+        error: 'no embedding key',
+      };
     }
     let indexed = 0;
     let failed = 0;
@@ -394,8 +423,10 @@ class EmbeddingService {
     return {
       ok: indexed > 0 && failed === 0,
       indexed,
+      alreadyIndexed,
+      bad,
       failed,
-      skipped: items.length - work.length,
+      skipped: alreadyIndexed + bad + (work.length - indexed - failed),
       error: failed > 0 ? this.lastError : '',
     };
   }
