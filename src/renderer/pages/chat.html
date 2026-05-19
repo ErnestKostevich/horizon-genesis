@@ -1340,16 +1340,38 @@
       <div class="insp-h">Workspace memory · .horizon/memory.json</div>
       <div id="insp-learned-workspace"><div class="insp-empty">Open a workspace to see committable team memory (conventions / glossary / decisions).</div></div>
     </div>
-    <!-- PHASE 28.1 — storage backend. Hybrid is now the default for
-         every user: JSON file is the readable source of truth, SQLite +
-         FTS5 mirror is rebuilt automatically on boot whenever the JSON
-         changes. Embeddings live in a separate sidecar JSON. -->
+    <!-- PHASE 28.2 — Hybrid Storage v2 (matches the architecture
+         diagram). SQLite handles searchable + structured data, JSON
+         sidecars hold things you edit in an editor or commit to git. -->
     <div class="insp-section">
-      <div class="insp-h">Storage backend</div>
+      <div class="insp-h">Storage backend · hybrid</div>
       <div id="insp-learned-storage" class="insp-empty" style="line-height:1.6;padding:8px 0">
-        <div><strong>Hybrid</strong> — JSON file (human-readable) + <strong>SQLite + FTS5</strong> mirror (auto-rebuilt on boot) + <strong>embeddings sidecar</strong>.</div>
-        <div style="font-size:10px;color:var(--t3);margin-top:6px">
-          The JSON file stays the source of truth — edit it in any editor and the SQLite mirror picks up your changes next launch. Use the buttons below to peek at the mirror or force-rebuild it now.
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:11px">
+          <div>
+            <div style="color:var(--accent,#7ec8e3);font-weight:600;margin-bottom:4px">SQLite (.db)</div>
+            <div style="color:var(--t2);line-height:1.5">
+              · FTS5 keyword index<br>
+              · Memory metadata<br>
+              · Conversation history<br>
+              · Facts (KV table)<br>
+              · SQL WHERE filters<br>
+              · ACID transactions
+            </div>
+          </div>
+          <div>
+            <div style="color:var(--amb,#facc15);font-weight:600;margin-bottom:4px">JSON (.json)</div>
+            <div style="color:var(--t2);line-height:1.5">
+              · Vector embeddings (sidecar)<br>
+              · Skills (per-skill folder)<br>
+              · Settings + preferences<br>
+              · Workflow definitions<br>
+              · Plugin manifests<br>
+              · Rules.md (per-workspace)
+            </div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--t3);margin-top:8px">
+          Rule: SQLite for things you'd <em>search/filter/join</em>; JSON for things you'd <em>read by eye / diff in git / back up to a folder</em>.
         </div>
         <div class="insp-row" style="justify-content:flex-end;padding-top:8px;gap:6px">
           <button class="hub-btn" onclick="window._inspMemoryDbStatus?.(this)" title="Show row counts in the SQLite mirror">Status</button>
