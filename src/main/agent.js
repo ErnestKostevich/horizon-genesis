@@ -245,6 +245,16 @@ class AgentMemory {
 
   _ensureShape() {
     this._data.memories = Array.isArray(this._data.memories) ? this._data.memories : [];
+    // PHASE 28 — heal memories that were saved before the `key` field
+    // existed. Without a key, EmbeddingService.backfill() rejected them
+    // in the "bad" bucket and the inspector reported 0/N indexed even
+    // though the chat claimed everything was up to date. Regenerate the
+    // key from content + category on load — idempotent.
+    for (const m of this._data.memories) {
+      if (m && !m.key && m.content) {
+        m.key = this._memoryKey(this._normalizeText(m.content), m.category || 'general');
+      }
+    }
     this._data.facts = this._data.facts && typeof this._data.facts === 'object' ? this._data.facts : {};
     this._data.meals = Array.isArray(this._data.meals) ? this._data.meals : [];
     this._data.conversations = Array.isArray(this._data.conversations) ? this._data.conversations : [];

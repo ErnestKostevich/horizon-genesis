@@ -177,6 +177,9 @@ contextBridge.exposeInMainWorld('H', {
   },
   memEmbedStatus: ()           => ipcRenderer.invoke('memEmbedStatus'),
   memEmbedReindex: ()          => ipcRenderer.invoke('memEmbedReindex'),
+  // PHASE 28 — opt-in SQLite + FTS5 mirror of the JSON memory file.
+  memoryDbStatus: ()           => ipcRenderer.invoke('memoryDbStatus'),
+  memoryDbMigrate: ()          => ipcRenderer.invoke('memoryDbMigrate'),
   onMemoryEmbeddingProgress: (cb) => {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('memory:embeddingProgress', handler);
