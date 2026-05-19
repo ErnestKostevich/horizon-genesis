@@ -103,7 +103,7 @@ class Executor {
 
   _settingMode() {
     const v = this.settingsStore?.get?.('executionMode');
-    return v === 'docker' || v === 'ask' ? v : 'host';
+    return v === 'docker' || v === 'ssh' || v === 'ask' ? v : 'host';
   }
 
   _settingMount() {
@@ -119,6 +119,8 @@ class Executor {
       dockerLastError: this.dockerLastError,
       dockerCheckedAt: this.dockerCheckedAt ? new Date(this.dockerCheckedAt).toISOString() : null,
       supportedLanguages: Object.keys(DOCKER_IMAGES).filter(k => DOCKER_IMAGES[k]),
+      sshHost: this.settingsStore?.get?.('ssh.host') || null,
+      sshConfigured: !!this.settingsStore?.get?.('ssh.host'),
     };
   }
 
@@ -130,6 +132,11 @@ class Executor {
   async run(code, language, opts = {}) {
     const lang = String(language || 'shell').toLowerCase();
     const requestedMode = opts.executionMode || this._settingMode();
+
+    if (requestedMode === 'ssh') {
+      return this._runSsh(code, lang, opts);
+    }
+
     const wantDocker = requestedMode === 'docker' && this.dockerAvailable() && DOCKER_IMAGES[lang];
     if (wantDocker) {
       return this._runDocker(code, lang, opts);
@@ -141,6 +148,123 @@ class Executor {
       return { ...r, fallback: 'host', reason: 'docker not available — install Docker to enable sandboxed execution' };
     }
     return this._runHost(code, lang, opts);
+  }
+
+  /**
+   * Execute on a remote machine over SSH. Reuses ssh + scp from PATH so
+   * we don't need any new native deps. The user's existing ssh-agent or
+   * key file handles auth. Use cases:
+   *   - run heavy GPU/Docker workloads on a beefy box from your laptop
+   *   - put the executor "outside" your laptop's blast radius
+   *   - run on a remote VPS while keeping memory/state local
+   *
+   * Settings reads (all optional, but ssh.host is required):
+   *   ssh.host         — user@host or just host
+   *   ssh.port         — default 22
+   *   ssh.keyPath      — path to private key (else relies on ssh-agent)
+   *   ssh.workdir      — remote dir to cd into before running (default $HOME)
+   *
+   * The remote host needs python3 / node / sh / pwsh available for the
+   * matching language. No image pulling, no sandbox — trust your SSH
+   * target the same way you'd trust the host shell.
+   */
+  _runSsh(code, language, opts) {
+    const sshHost = this.settingsStore?.get?.('ssh.host') || '';
+    if (!sshHost) {
+      return Promise.resolve({
+        ok: false, mode: 'ssh',
+        err: 'SSH host not configured (settings: ssh.host = "user@example.com")',
+      });
+    }
+    const sshPort = this.settingsStore?.get?.('ssh.port');
+    const keyPath = this.settingsStore?.get?.('ssh.keyPath');
+    const workdir = this.settingsStore?.get?.('ssh.workdir') || '';
+    const timeoutMs = Math.max(2000, Math.min(180_000, Number(opts?.timeout) || DEFAULT_TIMEOUT_MS));
+
+    // Map language to remote runner invocation read-from-stdin.
+    const runners = {
+      python: 'python3 -',
+      python3: 'python3 -',
+      py: 'python3 -',
+      javascript: 'node -',
+      js: 'node -',
+      node: 'node -',
+      shell: 'sh -',
+      sh: 'sh -',
+      bash: 'bash -',
+      powershell: 'pwsh -c -',
+    };
+    const remoteCmd = runners[language];
+    if (!remoteCmd) {
+      return Promise.resolve({ ok: false, mode: 'ssh', err: `ssh: unsupported language "${language}"` });
+    }
+
+    // Build the ssh command: ssh [-p PORT] [-i KEY] -o BatchMode=yes -o ConnectTimeout=8 USER@HOST 'cd $workdir && <runner>'
+    const args = [];
+    if (sshPort) args.push('-p', String(sshPort));
+    if (keyPath) args.push('-i', keyPath);
+    args.push('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', '-o', 'StrictHostKeyChecking=accept-new');
+    args.push(sshHost);
+    const remoteWrapped = workdir
+      ? `cd ${JSON.stringify(workdir)} && ${remoteCmd}`
+      : remoteCmd;
+    args.push(remoteWrapped);
+
+    return new Promise(resolve => {
+      const child = spawn('ssh', args, { windowsHide: true });
+      let stdout = '';
+      let stderr = '';
+      let killed = false;
+      const killTimer = setTimeout(() => {
+        killed = true;
+        try { child.kill('SIGKILL'); } catch (_) {}
+      }, timeoutMs);
+      child.stdout.on('data', d => {
+        stdout += d.toString();
+        if (stdout.length > MAX_OUTPUT_BYTES) {
+          stdout = stdout.slice(0, MAX_OUTPUT_BYTES) + '\n[stdout truncated]';
+          try { child.kill('SIGKILL'); } catch (_) {}
+        }
+      });
+      child.stderr.on('data', d => {
+        stderr += d.toString();
+        if (stderr.length > MAX_OUTPUT_BYTES) {
+          stderr = stderr.slice(0, MAX_OUTPUT_BYTES) + '\n[stderr truncated]';
+        }
+      });
+      child.on('error', e => {
+        clearTimeout(killTimer);
+        const msg = e.code === 'ENOENT'
+          ? 'ssh not found on PATH — install OpenSSH client or set up Git Bash'
+          : 'ssh spawn failed: ' + e.message;
+        resolve({ ok: false, err: msg, mode: 'ssh' });
+      });
+      child.on('exit', (code) => {
+        clearTimeout(killTimer);
+        if (killed) {
+          return resolve({
+            ok: false, mode: 'ssh',
+            err: `ssh exec timed out after ${timeoutMs}ms`,
+            out: stdout.trim(), stderr: stderr.trim(),
+          });
+        }
+        const ok = code === 0;
+        resolve({
+          ok,
+          out: stdout.trim(),
+          err: ok ? '' : (stderr.trim() || `ssh exit ${code}`),
+          stderr: stderr.trim(),
+          exitCode: code,
+          mode: 'ssh',
+          host: sshHost,
+        });
+      });
+      try { child.stdin.write(String(code || '')); child.stdin.end(); }
+      catch (e) {
+        clearTimeout(killTimer);
+        resolve({ ok: false, mode: 'ssh', err: 'failed to write to ssh stdin: ' + e.message });
+      }
+    });
   }
 
   _runHost(code, language, opts) {

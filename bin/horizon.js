@@ -60,6 +60,15 @@ ${fmt.bold('Commands')}
   ${fmt.cyan('profile')} subcommand  list | use <name> | create <name> | show | delete | rename | path
   ${fmt.cyan('completion')} <shell>  Emit bash/zsh/fish/pwsh tab-completion script
   ${fmt.cyan('update')}  [--check]   Self-update from GitHub Releases (binary or source)
+  ${fmt.cyan('cron')}    subcommand  Scheduled tasks: list | create "<expr>" "<task>" | run | pause | resume | daemon
+  ${fmt.cyan('sessions')} subcommand Multi-chat history: list | new | show | export | delete | rename | stats
+  ${fmt.cyan('checkpoints')} subcmd  Memory savepoints: save | list | restore | remove
+  ${fmt.cyan('backup')}  subcommand  Full userData snapshots: snapshot | list | restore | prune
+  ${fmt.cyan('status')}  [--deep]    Compact runtime status (--deep adds latency probes)
+  ${fmt.cyan('insights')} [--days N] Usage analytics: models, hours, personas, success rate
+  ${fmt.cyan('logs')}    [type]      Typed log views: cost | agent | errors | cron | all
+  ${fmt.cyan('hooks')}   subcommand  Life-cycle hooks: list | add <event> "<cmd>" | test | remove
+  ${fmt.cyan('agents')}  subcommand  List/stop concurrent runs (needs horizon serve up)
   ${fmt.cyan('serve')}                Start the headless HTTP API server (PWA / cron / mobile)
   ${fmt.cyan('tui')}                  Launch the interactive shell
   ${fmt.cyan('version')}              Print version + key health summary
@@ -150,7 +159,10 @@ async function dispatch(argv) {
   // a shorthand `horizon agent "..."` task.
   const KNOWN = ['agent', 'chat', 'skill', 'mem', 'connect', 'model',
                  'persona', 'version', 'serve', 'tui', 'help',
-                 'setup', 'cost', 'doctor', 'profile', 'completion', 'update'];
+                 'setup', 'cost', 'doctor', 'profile', 'completion', 'update',
+                 // Phase 10 additions
+                 'cron', 'sessions', 'backup', 'status', 'insights',
+                 'logs', 'checkpoints', 'hooks', 'agents'];
 
   if (cmd === 'help') { printHelp(); return 0; }
   if (cmd === 'tui') {
