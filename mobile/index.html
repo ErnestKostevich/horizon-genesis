@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#0f1115" />
+<title>Horizon AI</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/png" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <!-- Pairing view: shown until token + URL are stored in localStorage -->
+  <section id="pair-view" class="view">
+    <div class="hero">
+      <div class="logo-pulse"></div>
+      <h1>Horizon AI</h1>
+      <p class="tagline">Personal AI agent — on your phone</p>
+    </div>
+    <div class="pair-card">
+      <h2>Connect to your Horizon server</h2>
+      <p class="muted">Run <code>horizon serve --port 18789 --token YOUR_TOKEN</code> on your computer, then enter the URL and token below — or scan a QR with your camera if your server printed one.</p>
+      <label>Server URL
+        <input id="pair-url" type="url" placeholder="https://horizon.example.com or http://192.168.1.10:18789" />
+      </label>
+      <label>Bearer token
+        <input id="pair-token" type="password" placeholder="paste your HORIZON_TOKEN" />
+      </label>
+      <button id="pair-connect" class="btn-primary">Connect</button>
+      <p id="pair-error" class="error hidden"></p>
+      <p class="hint">Token is stored in this device only. No traffic goes through anyone's server.</p>
+    </div>
+  </section>
+
+  <!-- Main app shell: chat + composer + drawer -->
+  <section id="app-view" class="view hidden">
+    <header class="appbar">
+      <button id="open-menu" class="iconbtn" aria-label="Menu">☰</button>
+      <div class="appbar-title">
+        <strong id="hdr-title">Horizon</strong>
+        <small id="hdr-status">connecting…</small>
+      </div>
+      <button id="mode-toggle" class="mode-pill" aria-label="Toggle mode" data-mode="chat">chat</button>
+    </header>
+
+    <main id="thread" class="thread"></main>
+
+    <footer class="composer">
+      <textarea id="composer" rows="1" placeholder="Message Horizon…" autocomplete="off"></textarea>
+      <button id="send" class="iconbtn send" aria-label="Send">↑</button>
+    </footer>
+  </section>
+
+  <!-- Drawer for settings + profile -->
+  <aside id="drawer" class="drawer hidden">
+    <button id="close-drawer" class="iconbtn close">✕</button>
+    <h3>Settings</h3>
+    <div class="setting">
+      <label>Persona</label>
+      <select id="set-persona"></select>
+    </div>
+    <div class="setting">
+      <label>Provider</label>
+      <select id="set-provider"></select>
+    </div>
+    <div class="setting setting-actions">
+      <button id="reset-pair" class="btn-ghost">Disconnect server</button>
+    </div>
+    <div class="setting muted">
+      <small>Server: <span id="info-url">—</span></small><br/>
+      <small>Memories: <span id="info-mem">—</span></small><br/>
+      <small>Skills: <span id="info-skills">—</span></small>
+    </div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>

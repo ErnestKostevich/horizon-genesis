@@ -23,6 +23,10 @@ const KEY_NAMES = {
 // keysStore. Handled separately because each one needs different fields.
 const EXECUTOR_BACKENDS = new Set(['ssh', 'modal', 'daytona']);
 
+// Phase 14 — multi-field channel adapters (separate from KEY_NAMES
+// because they need more than just a single token).
+const MULTI_FIELD_CHANNELS = new Set(['whatsapp', 'signal', 'imessage']);
+
 async function run({ runtime, args, flags }) {
   const sub = args[0];
   const rest = args.slice(1);
@@ -30,9 +34,63 @@ async function run({ runtime, args, flags }) {
   if (sub === 'test') return test(runtime, rest, flags);
   if (KEY_NAMES[sub]) return saveToken(runtime, sub, flags);
   if (EXECUTOR_BACKENDS.has(sub)) return saveExecutorBackend(runtime, sub, flags);
+  if (MULTI_FIELD_CHANNELS.has(sub)) return saveMultiFieldChannel(runtime, sub, flags);
 
   process.stderr.write(fmt.err('Unknown channel: ' + sub) + '\n');
-  process.stderr.write(fmt.dim('try: list | test | telegram | discord | slack | notion | linear | github | ssh | modal | daytona\n'));
+  process.stderr.write(fmt.dim('try: list | test | telegram | discord | slack | notion | linear | github\n'));
+  process.stderr.write(fmt.dim('     | whatsapp | signal | imessage\n'));
+  process.stderr.write(fmt.dim('     | ssh | modal | daytona\n'));
+  return 2;
+}
+
+/**
+ * Multi-field channel adapters (whatsapp/signal/imessage). Each has
+ * its own field set, kept in settingsStore (not keysStore) because
+ * they're URLs / IDs alongside the token.
+ */
+function saveMultiFieldChannel(runtime, channel, flags) {
+  const ss = runtime.settingsStore;
+  const ks = runtime.keysStore;
+
+  if (channel === 'whatsapp') {
+    if (!flags['twilio-sid'] || !flags['twilio-token'] || !flags.from) {
+      process.stderr.write(fmt.err('Usage: horizon connect whatsapp --twilio-sid AC... --twilio-token X --from whatsapp:+14155238886') + '\n');
+      process.stderr.write(fmt.dim('Signup: twilio.com → Messaging → Try WhatsApp (free sandbox in 5 min).') + '\n');
+      return 2;
+    }
+    ks.set('k_twilio_sid',   flags['twilio-sid']);
+    ks.set('k_twilio_token', flags['twilio-token']);
+    ss.set('whatsapp.from',  flags.from.startsWith('whatsapp:') ? flags.from : 'whatsapp:' + flags.from);
+    ss.set('whatsapp.enabled', true);
+    process.stdout.write(fmt.ok(`whatsapp configured · from ${flags.from}`) + '\n');
+    process.stdout.write(fmt.dim('  webhook URL to set in Twilio Console: https://your-horizon-host/api/whatsapp/webhook') + '\n');
+    return 0;
+  }
+
+  if (channel === 'signal') {
+    if (!flags.url || !flags.number) {
+      process.stderr.write(fmt.err('Usage: horizon connect signal --url http://localhost:8080 --number +1234567890') + '\n');
+      process.stderr.write(fmt.dim('Setup: docker run -d -p 8080:8080 bbernhard/signal-cli-rest-api') + '\n');
+      process.stderr.write(fmt.dim('Then: curl -X POST <url>/v1/register/<number>') + '\n');
+      return 2;
+    }
+    ss.set('signal.url',    flags.url);
+    ss.set('signal.number', flags.number);
+    ss.set('signal.enabled', true);
+    process.stdout.write(fmt.ok(`signal configured · ${flags.number} via ${flags.url}`) + '\n');
+    return 0;
+  }
+
+  if (channel === 'imessage') {
+    if (process.platform !== 'darwin') {
+      process.stderr.write(fmt.err('iMessage adapter requires macOS — current platform: ' + process.platform) + '\n');
+      return 1;
+    }
+    ss.set('imessage.enabled', true);
+    process.stdout.write(fmt.ok('imessage adapter enabled (macOS Messages.app via osascript)') + '\n');
+    process.stdout.write(fmt.dim('  Grant Terminal automation access to Messages in System Settings → Privacy.') + '\n');
+    return 0;
+  }
   return 2;
 }
 
