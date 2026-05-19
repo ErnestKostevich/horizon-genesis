@@ -19,8 +19,9 @@ const path = require('path');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
 const { fmt, isTTY } = require('./lib/tty');
 const { renderMarkdown } = require('./lib/markdown');
-const { bannerBig, GradientSpinner, welcomeReveal } = require('./lib/banner');
+const { bannerBig, GradientSpinner, welcomeReveal, personaPickerInteractive } = require('./lib/banner');
 const { TuiEngine } = require('./lib/tui-engine');
+const { interactiveMenu } = require('./lib/menu');
 
 const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill-show',
                     '/persona','/persona-list','/model','/model-list','/mem','/agent',
@@ -161,6 +162,13 @@ async function main({ flags } = {}) {
       persona: runtime.settingsStore.get('persona'),
       lang: runtime.settingsStore.get('lang'),
     });
+    // Phase 20.3 — interactive persona picker after the reveal. Lets a
+    // first-time user pick from 5 personas with a single keypress.
+    try {
+      const current = runtime.settingsStore.get('persona') || 'jarvis';
+      const picked = await personaPickerInteractive(current);
+      if (picked && picked !== current) runtime.settingsStore.set('persona', picked);
+    } catch (_) {}
     try { runtime.settingsStore.set(FIRST_LAUNCH_FLAG, new Date().toISOString()); } catch (_) {}
   }
 
@@ -243,9 +251,26 @@ async function handleSlash(raw, state, runtime, engine) {
     return;
   }
   if (head === '/skills') {
-    for (const s of (runtime.skillsManager?.list() || [])) {
-      engine.print(`  ${fmt.cyan(s.id.padEnd(20))} ${fmt.dim('· ' + (s.description || ''))}`);
-    }
+    // Phase 20.3 — interactive picker. Highlighted row uses reverse-video
+    // bg ("hover" effect), arrow keys / mouse wheel move the cursor,
+    // Enter shows the picked skill, Esc cancels.
+    const list = runtime.skillsManager?.list() || [];
+    if (!list.length) { engine.print(fmt.dim('no skills installed')); return; }
+    const picked = await interactiveMenu({
+      engine,
+      title: `Skills (${list.length})`,
+      items: list.map((s) => ({
+        label: s.id,
+        sublabel: fmt.dim(s.description || s.scope || ''),
+        value: s,
+      })),
+      footer: '↑/↓ move · Enter show SKILL.md · Esc cancel',
+    });
+    if (!picked) { engine.print(fmt.dim('cancelled')); return; }
+    const src = runtime.skillsManager?.readSource(picked.id);
+    if (!src) { engine.print(fmt.err('not found')); return; }
+    engine.print(fmt.cyan(`── ${picked.id} ──`));
+    engine.print(state.markdown ? renderMarkdown(src) : src);
     return;
   }
   if (head === '/skill-show') {
@@ -286,10 +311,21 @@ async function handleSlash(raw, state, runtime, engine) {
   if (head === '/persona-list') {
     const list = runtime.personas?.getAllPersonas?.() || [];
     const active = runtime.settingsStore.get('persona') || 'jarvis';
-    for (const p of list) {
-      const star = p.id === active ? fmt.green('●') : ' ';
-      engine.print(`  ${star} ${fmt.cyan(p.id.padEnd(14))} ${fmt.dim(p.tagline || p.description || '')}`);
-    }
+    if (!list.length) { engine.print(fmt.dim('no personas')); return; }
+    const picked = await interactiveMenu({
+      engine,
+      title: 'Pick a persona',
+      initial: Math.max(0, list.findIndex((p) => p.id === active)),
+      items: list.map((p) => ({
+        label: p.id + (p.id === active ? '  (active)' : ''),
+        sublabel: fmt.dim(p.tagline || p.description || ''),
+        value: p,
+      })),
+      footer: '↑/↓ move · Enter activate · Esc cancel',
+    });
+    if (!picked) { engine.print(fmt.dim('cancelled')); return; }
+    runtime.settingsStore.set('persona', picked.id);
+    engine.print(fmt.ok('persona → ' + fmt.cyan(picked.id)));
     return;
   }
   if (head === '/model') {
@@ -306,11 +342,27 @@ async function handleSlash(raw, state, runtime, engine) {
   }
   if (head === '/model-list') {
     const { DEFAULT_PROVIDER_MODELS } = require('../src/main/runtime/ai-providers');
-    for (const [p, m] of Object.entries(DEFAULT_PROVIDER_MODELS)) {
-      const has = ['ollama','lmstudio','localai'].includes(p)
-        ? '—' : (runtime.keysStore.get('k_' + p) ? fmt.green('✓') : fmt.dim('·'));
-      engine.print(`  ${has}  ${fmt.cyan(p.padEnd(13))} ${fmt.dim(m)}`);
-    }
+    const active = runtime.settingsStore.get('provider') || 'gemini';
+    const entries = Object.entries(DEFAULT_PROVIDER_MODELS);
+    const items = entries.map(([p, m]) => {
+      const isLocal = ['ollama','lmstudio','localai'].includes(p);
+      const has = isLocal ? '—' : (runtime.keysStore.get('k_' + p) ? '✓' : '·');
+      return {
+        label: `${has}  ${p}${p === active ? '  (active)' : ''}`,
+        sublabel: fmt.dim(m),
+        value: { id: p, model: m },
+      };
+    });
+    const picked = await interactiveMenu({
+      engine,
+      title: `Providers (${entries.length})`,
+      initial: Math.max(0, entries.findIndex(([p]) => p === active)),
+      items,
+      footer: '↑/↓ move · Enter switch · Esc cancel · ✓ = key set',
+    });
+    if (!picked) { engine.print(fmt.dim('cancelled')); return; }
+    runtime.settingsStore.set('provider', picked.id);
+    engine.print(fmt.ok('provider → ' + fmt.cyan(picked.id) + fmt.dim(' (' + picked.model + ')')));
     return;
   }
   if (head === '/mem') {
