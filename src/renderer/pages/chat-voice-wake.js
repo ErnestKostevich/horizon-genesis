@@ -630,13 +630,23 @@ async function fireWake(){
     } catch (_) { /* don't let beep failure break wake flow */ }
   }
 
+  // PHASE 28.2 — wake greeting language follows the user's recent
+  // message language, not the UI lock. Cyrillic in the last 5 user
+  // messages → answer in Russian; otherwise English.
+  const detectedLang = (() => {
+    try {
+      const recent = (chatHistory || []).filter(m => m.role === 'user').slice(-5);
+      const text = recent.map(m => m.content || '').join(' ');
+      return /[А-Яа-яЁё]/.test(text) ? 'ru' : 'en';
+    } catch (_) { return 'en'; }
+  })();
   let reply;
   try {
-    reply = await H.getWakeResponse(currentPersona, lang);
+    reply = await H.getWakeResponse(currentPersona, detectedLang);
   } catch(_) {
     const replies_ru=['К вашим услугам, Сэр.','Слушаю, Сэр.','Да, Сэр?','Готов, Сэр.'];
     const replies_en=['At your service, Sir.','Listening, Sir.','Yes, Sir?','Ready, Sir.'];
-    const replies = lang==='ru' ? replies_ru : replies_en;
+    const replies = detectedLang==='ru' ? replies_ru : replies_en;
     reply = replies[Math.floor(Math.random()*replies.length)];
   }
 

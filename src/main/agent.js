@@ -195,6 +195,21 @@ class AgentMemory {
     this.embeddings = null;
     this._embedDebounce = null;
     this._pendingEmbedKeys = new Set();
+
+    // PHASE 28.2 — SQLite + FTS5 backend wired in by main.js after boot.
+    // When set, ftsSearch() uses SQLite bm25 and writes mirror through on
+    // each remember/forget/setFact for live sync (vs the old boot-only
+    // mirror). JSON stays the human-editable source of truth — never
+    // overwritten by SQLite, only kept in lockstep.
+    this.memoryDb = null;
+  }
+
+  /** PHASE 28.2 — Inject the SQLite + FTS5 MemoryDb wrapper (created
+   *  in main.js after the boot-time mirror finishes). Once set, FTS
+   *  queries route through SQLite bm25 and live writes mirror through
+   *  so the DB stays in sync without waiting for the next boot. */
+  setMemoryDb(db) {
+    this.memoryDb = db || null;
   }
 
   /** Inject the EmbeddingService instance (created in main.js so it shares
@@ -405,6 +420,22 @@ class AgentMemory {
     this._save();
     // Index in FTS (sync, in-memory — cheap) + embedding (async, network).
     try { this.fts.add(item.key, item.content, { type: 'memory', personaId: item.personaId, kind: item.category }); } catch (_) {}
+    // PHASE 28.2 — also mirror into SQLite for queryable bm25 + ACID
+    // durability. Best-effort: if the DB is locked or the binding is
+    // missing we still have the JSON write above.
+    if (this.memoryDb && this.memoryDb.db) {
+      try {
+        this.memoryDb.addMemory({
+          id: item.key,
+          content: item.content,
+          category: item.category,
+          importance: item.importance,
+          source: item.source,
+          personaId: item.personaId,
+          createdAt: item.created,
+        });
+      } catch (e) { console.warn('[memory] SQLite addMemory mirror failed:', e.message); }
+    }
     this._queueEmbedding(item.key);
     return item;
   }
@@ -433,6 +464,11 @@ class AgentMemory {
     // PHASE 6/8 — keep FTS in sync with facts so a query like "yerba mate"
     // can surface the fact alongside any memories.
     try { this.fts.add('fact:' + safeKey, `${safeKey} ${safeValue}`, { type: 'fact', kind: safeKey }); } catch (_) {}
+    // PHASE 28.2 — SQLite mirror.
+    if (this.memoryDb && this.memoryDb.db) {
+      try { this.memoryDb.setFact(safeKey, safeValue, tag); }
+      catch (e) { console.warn('[memory] SQLite setFact mirror failed:', e.message); }
+    }
     return true;
   }
 
@@ -444,6 +480,11 @@ class AgentMemory {
     if (!safeKey || !(safeKey in this._data.facts)) return false;
     delete this._data.facts[safeKey];
     try { this.fts.remove('fact:' + safeKey); } catch (_) {}
+    // PHASE 28.2 — SQLite mirror cleanup.
+    if (this.memoryDb && this.memoryDb.db) {
+      try { this.memoryDb.db.prepare('DELETE FROM facts WHERE key = ?').run(safeKey); }
+      catch (e) { console.warn('[memory] SQLite forgetFact mirror failed:', e.message); }
+    }
     this._save();
     return true;
   }
@@ -466,6 +507,12 @@ class AgentMemory {
         } catch (_) {}
       }
       try { for (const m of dropping) this.fts.remove(m.key); } catch (_) {}
+      // PHASE 28.2 — SQLite mirror cleanup.
+      if (this.memoryDb && this.memoryDb.db) {
+        try {
+          for (const m of dropping) this.memoryDb.removeMemory(m.key);
+        } catch (e) { console.warn('[memory] SQLite forgetMemory mirror failed:', e.message); }
+      }
     }
     this._save();
     return removed > 0;
@@ -607,8 +654,34 @@ class AgentMemory {
   /** Pure FTS search across memories + facts + conversations. Returns
    *  flat results with `{id, score, meta}`. Used by Inspector + advanced
    *  search; semanticRecall blends a small share of this signal into its
-   *  ranking. */
+   *  ranking.
+   *
+   *  PHASE 28.2 — when MemoryDb is wired, query SQLite bm25 first
+   *  (phrase / prefix / proximity capable) and reshape the rows into
+   *  the same {id, score, meta} shape callers expect. Falls back to
+   *  the pure-JS InvertedIndex on any error or when MemoryDb wasn't
+   *  set up (e.g. better-sqlite3 didn't compile).
+   */
   ftsSearch(query, limit = 20) {
+    if (this.memoryDb && this.memoryDb.db) {
+      try {
+        const hits = this.memoryDb.searchAll(query, limit);
+        if (hits && hits.length) {
+          // bm25 returns negative scores — closer to 0 is better. Convert
+          // to a positive 0..1-ish score so blending in semanticRecall
+          // stays meaningful.
+          const minScore = Math.min(...hits.map(h => h.score || 0));
+          const norm = (s) => (minScore < 0 ? (1 - (s / minScore)) : 0);
+          return hits.slice(0, limit).map(h => ({
+            id: h.id || ('row-' + h.rowid),
+            score: Number(norm(h.score || 0).toFixed(4)),
+            meta: { type: h._type, kind: h.category || h.key || h.source || null, personaId: h.persona_id || null },
+          }));
+        }
+      } catch (e) {
+        console.warn('[memory] SQLite FTS failed, falling back to InvertedIndex:', e.message);
+      }
+    }
     return this.fts.search(query, limit);
   }
 
