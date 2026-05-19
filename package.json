@@ -29,7 +29,7 @@
     "cli": "node bin/horizon.js",
     "tui": "node bin/horizon-tui.js",
     "serve": "node bin/horizon-serve.js",
-    "test": "node --test test/unit/argv.test.js test/unit/cron-runner.test.js test/unit/markdown.test.js test/unit/cost-tracker.test.js test/unit/store-shim.test.js test/unit/memory-fts.test.js",
+    "test": "node --test test/unit/argv.test.js test/unit/cron-runner.test.js test/unit/markdown.test.js test/unit/cost-tracker.test.js test/unit/store-shim.test.js test/unit/memory-fts.test.js test/unit/memory-db.test.js",
     "test:integration": "node --test --test-timeout=60000 test/integration/cli-smoke.test.js test/integration/serve-api.test.js",
     "test:all": "npm test && npm run test:integration",
     "cli:pkg": "pkg bin/horizon.js --config package.json --out-path dist-cli",
@@ -46,6 +46,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@xterm/xterm": "^6.0.0",
+    "better-sqlite3": "^12.10.0",
     "conf": "^10.2.0",
     "electron-store": "^8.1.0",
     "form-data": "^4.0.0",
@@ -170,6 +171,7 @@
       "src/main/discordGateway.js",
       "src/main/workspaceMemory.js",
       "src/main/memoryFts.js",
+      "src/main/memoryDb.js",
       "src/main/skillSuggester.js"
     ],
     "assets": [
