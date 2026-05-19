@@ -39,6 +39,11 @@ Thumbs.db
 *.swo
 *~
 
+# Claude Code harness state — local-only, never committed
+.claude/
+.commit-msg
+.commit-msg-*
+
 # Electron runtime data
 .cache/
 electron-builder-cache/
