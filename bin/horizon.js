@@ -90,11 +90,20 @@ ${fmt.bold('Management')}
 
 ${fmt.bold('Utilities')}
   ${fmt.cyan('notes')}   subcommand  Quick notes: list | add "..." | show | rm
+  ${fmt.cyan('todo')}    subcommand  TODO with completion: list | add | done | rm | clear-done
   ${fmt.cyan('timer')}   <minutes>   Pomodoro timer with progress bar + bell
   ${fmt.cyan('stats')}                Global usage stats (memory + skills + cost)
   ${fmt.cyan('clip')}    [show|len]  Read clipboard, analyse with AI by default
   ${fmt.cyan('env')}     subcommand  Per-install env vars: list | set K=V | unset K
   ${fmt.cyan('open')}    <url|path>  OS-native opener
+
+${fmt.bold('Dev helpers')}
+  ${fmt.cyan('git')}     subcommand  AI git: commit | review [target] | log [query] | blame <file>
+  ${fmt.cyan('shell')}   "what to do" Get a shell command suggestion (--run to execute)
+  ${fmt.cyan('web')}     "query"      Web search via Tavily / Perplexity
+  ${fmt.cyan('image')}   "prompt"     Generate image (DALL-E / Gemini Imagen) → --out file.png
+  ${fmt.cyan('screen')}  subcommand  capture | describe (vision-AI describes screen)
+  ${fmt.cyan('explain-error')} <log|-> Explain a stack trace or error log
 
   ${fmt.cyan('serve')}                Start the headless HTTP API server (PWA / cron / mobile)
   ${fmt.cyan('tui')}                  Launch the interactive shell
@@ -200,6 +209,9 @@ async function dispatch(argv) {
                       'translate', 'review', 'refactor', 'test', 'diff',
                       'search', 'brief'];
   const UTILITIES = ['notes', 'timer', 'stats', 'clip', 'env', 'open'];
+  // Phase 13 — dev-flavoured verbs (git/shell/web/image/screen/todo/explain-error)
+  const DEV_HELPERS = ['git', 'shell', 'web', 'image', 'screen',
+                       'todo', 'explain-error'];
 
   if (cmd === 'help') { printHelp(); return 0; }
   if (cmd === 'tui') {
@@ -233,6 +245,11 @@ async function dispatch(argv) {
   // Phase 12 — utility shared file
   if (UTILITIES.includes(cmd)) {
     const handler = require('./lib/commands/utility');
+    return handler.run({ runtime, args: positional.slice(1), flags, _subcommand: cmd });
+  }
+  // Phase 13 — dev helpers shared file
+  if (DEV_HELPERS.includes(cmd)) {
+    const handler = require('./lib/commands/dev-helpers');
     return handler.run({ runtime, args: positional.slice(1), flags, _subcommand: cmd });
   }
 
