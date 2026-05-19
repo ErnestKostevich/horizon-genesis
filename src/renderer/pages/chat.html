@@ -13,6 +13,10 @@
 <link rel="stylesheet" href="chat-cursor-v2.css"/>
 <link rel="stylesheet" href="chat-cursor-v3.css"/>
 <link rel="stylesheet" href="chat-emergency-dock.css"/>
+<!-- Phase 17 redesign pass — skeleton loaders, toasts, modal animation,
+     input focus rings, animated bg, sidebar hover. Layered last so it
+     wins specificity ties. -->
+<link rel="stylesheet" href="chat-redesign.css"/>
 </head>
 <body>
 <canvas id="fractalBg" aria-hidden="true"></canvas>
@@ -3912,6 +3916,9 @@ H.onMarketAuthenticated?.(async (user) => {
      "AGENT IN CONTROL" banner above the composer while it's active.
      Patches global setMode() to layer this on. -->
 <script src="chat-agent-mode.js"></script>
+<!-- Phase 17 redesign — global toast notification helper.
+     Use window.toast.success/error/warn/info(title, desc?). -->
+<script src="chat-toast.js"></script>
 <!-- PR-V Phase 3.3 — Settings Panel (was inline lines 3889-4497).
      ~600 LOC: tab switcher, loadPanel, saveSetting/readSetting,
      saveModelSetting, saveLocalProvider, testLocalProvider, save*
