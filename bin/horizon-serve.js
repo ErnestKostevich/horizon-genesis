@@ -78,6 +78,16 @@ async function main({ flags } = {}) {
     } catch (e) { process.stderr.write(fmt.err('discord start: ' + e.message) + '\n'); }
   }
 
+  // Phase 15 — Signal long-poll loop. iMessage and WhatsApp have no
+  // pull-based receive on our end (WhatsApp is webhook-driven, see the
+  // /api/whatsapp/webhook handler below; iMessage doesn't expose
+  // inbound via osascript at all).
+  let signalLoopStop = null;
+  if (flags?.['enable-signal']) {
+    signalLoopStop = startSignalLoop(runtime);
+    process.stderr.write(fmt.dim('signal runtime: started (5s long-poll)') + '\n');
+  }
+
   const server = http.createServer((req, res) => handle(req, res, runtime, token));
   server.listen(port, host, () => {
     process.stderr.write(fmt.ok(`Horizon serve  http://${host}:${port}`) + '\n');
@@ -115,6 +125,13 @@ async function handle(req, res, runtime, expectedToken) {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
+
+  // Phase 15 — Twilio WhatsApp webhook uses its own X-Twilio-Signature
+  // auth (HMAC-SHA1), so it bypasses the Bearer-token gate. Verified
+  // inside handleWhatsAppWebhook itself.
+  if (pathname === '/api/whatsapp/webhook') {
+    return handleWhatsAppWebhook(req, res, runtime);
+  }
 
   // Auth — bearer token required on /api/*
   if (pathname.startsWith('/api/')) {
@@ -351,13 +368,124 @@ function personaEndpoint(res, runtime, body) {
   json(res, 200, { ok: true, persona: body.id });
 }
 
+// ── Phase 15 channel live-runtime helpers ──────────────────────────────
+
+/**
+ * Start a 5s long-poll loop that pulls pending Signal messages, feeds
+ * each one through the AI agent, and posts the reply back via the same
+ * signal bridge. Returns a stop() function.
+ *
+ * Mirrors the structure of connectionsManager.startTelegramRuntime but
+ * lives here in serve.js because the desktop GUI version of the
+ * runtime hasn't been wired (Signal is a "headless-only" channel for
+ * now — users running it are usually on a server anyway).
+ */
+function startSignalLoop(runtime) {
+  const signal = require('../src/main/channels/signal');
+  let cancelled = false;
+  const cfg = () => ({
+    url:    runtime.settingsStore.get('signal.url'),
+    number: runtime.settingsStore.get('signal.number'),
+  });
+  async function tick() {
+    if (cancelled) return;
+    try {
+      const c = cfg();
+      if (!c.url || !c.number) {
+        // Not configured yet — back off
+        return setTimeout(tick, 30_000);
+      }
+      const r = await signal.receiveMessages(c, { timeoutMs: 10_000 });
+      if (r.ok && r.messages?.length) {
+        for (const m of r.messages) {
+          // Feed into the AI agent, then reply
+          try {
+            const reply = await runtime.runChat(m.text, {
+              source: 'signal',
+              skipLearn: false,
+            });
+            if (reply.reply) {
+              await signal.sendMessage(c, {
+                to: m.groupId || m.user.id,
+                text: reply.reply.slice(0, 2000),
+              });
+            }
+          } catch (e) {
+            process.stderr.write(`signal handler error: ${e.message}\n`);
+          }
+        }
+      }
+    } catch (e) {
+      process.stderr.write(`signal loop error: ${e.message}\n`);
+    }
+    if (!cancelled) setTimeout(tick, 5_000);
+  }
+  setTimeout(tick, 1_000);
+  return () => { cancelled = true; };
+}
+
+/**
+ * Handle inbound Twilio WhatsApp webhook. Twilio POSTs form-urlencoded
+ * data with X-Twilio-Signature header. We verify the signature, parse
+ * the form, run the agent, return TwiML so the user sees the reply
+ * inside their WhatsApp app.
+ *
+ * Wired into handle() before the auth gate because Twilio doesn't send
+ * a Bearer token — it sends its own signature instead.
+ */
+async function handleWhatsAppWebhook(req, res, runtime) {
+  if (req.method !== 'POST') {
+    res.writeHead(405); res.end('method not allowed'); return;
+  }
+  const whatsapp = require('../src/main/channels/whatsapp');
+  const authToken = runtime.keysStore.get('k_twilio_token');
+  if (!authToken) {
+    res.writeHead(503, { 'Content-Type': 'text/plain' });
+    res.end('whatsapp not configured');
+    return;
+  }
+  // Read raw body
+  let body = '';
+  await new Promise((resolve, reject) => {
+    req.on('data', chunk => { body += chunk; if (body.length > 1024 * 1024) reject(new Error('body too large')); });
+    req.on('end', resolve);
+    req.on('error', reject);
+  });
+  // Parse form
+  const params = {};
+  for (const pair of body.split('&')) {
+    const [k, v] = pair.split('=');
+    if (k) params[decodeURIComponent(k)] = decodeURIComponent((v || '').replace(/\+/g, ' '));
+  }
+  // Verify signature
+  const sig = req.headers['x-twilio-signature'] || '';
+  const fullUrl = `https://${req.headers.host}${req.url}`;
+  if (sig && !whatsapp.verifyWebhookSignature({ authToken, url: fullUrl, params, signature: sig })) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('bad signature');
+    return;
+  }
+  // Parse event + run agent
+  const ev = whatsapp.parseInboundWebhook(params);
+  let replyText = '';
+  try {
+    const r = await runtime.runChat(ev.text || '(empty message)', { source: 'whatsapp' });
+    replyText = r.reply || r.error || '';
+  } catch (e) {
+    replyText = 'Error: ' + e.message;
+  }
+  res.writeHead(200, { 'Content-Type': 'text/xml' });
+  res.end(whatsapp.buildTwimlResponse(replyText.slice(0, 1500)));
+}
+
 module.exports = { main };
 
 if (require.main === module) {
   const { parseArgv } = require('./lib/argv');
   const flags = parseArgv(process.argv.slice(2), {
     aliases: { p: 'port', t: 'token', h: 'host' },
-    booleans: ['verbose', 'enable-tg', 'enable-discord'],
+    booleans: ['verbose', 'enable-tg', 'enable-discord', 'enable-signal',
+               'enable-whatsapp'],
   });
   main({ flags }).catch(e => {
     process.stderr.write(fmt.err(e.stack || e.message) + '\n');
