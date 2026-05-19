@@ -175,7 +175,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   // Phase 15 — multi-field channel adapters
   'whatsapp.from', 'whatsapp.enabled',
   'signal.url', 'signal.number', 'signal.enabled',
-  'imessage.enabled',
+  'imessage.enabled', 'imessage.lastRowid',
   'ttsProvider', 'elevenLabsVoice', 'openaiTtsVoice', 'tts',
   'screenWatcher', 'wakeOn', 'ambientOn', 'notificationsOn',
   'mode', 'searchOn', 'responseProfile',

@@ -1,0 +1,38 @@
+Horizon AI (Horizon Genesis)
+Copyright © 2024-2026 Ernest Kostevich
+https://github.com/ErnestKostevich/horizon-genesis
+https://horizonaai.dev
+
+This software is distributed under the Business Source License 1.1.
+After the Change Date specified in LICENSE, the same source converts
+to the GNU Affero General Public License version 3.0.
+
+When redistributing this software, you must preserve this NOTICE file
+together with the LICENSE and ATTRIBUTION.md files. See ATTRIBUTION.md
+for additional requirements that apply to forks, derivative works,
+and hosted deployments.
+
+---
+
+The following first-party components are part of Horizon and share
+its license:
+
+  Horizon Desktop app    src/main/, src/renderer/, assets/
+  Horizon CLI / TUI      bin/, bin/lib/
+  Horizon Headless API   bin/horizon-serve.js
+  Horizon Mobile PWA     mobile/
+  Horizon Built-in skills    builtin-skills/
+  Horizon Built-in plugins   builtin-plugins/
+  Horizon Channel adapters   src/main/channels/
+
+The following companion repositories are published separately:
+
+  horizon-plugin-sdk       MIT — third-party plugin development
+  Horizon-Agent-Docs       CC BY-SA 4.0 — user documentation
+  HorizonWebMarketplace    Proprietary — marketplace service (private)
+
+---
+
+Third-party software bundled or required at runtime is listed under
+the respective package licenses in node_modules/<pkg>/LICENSE files.
+A summary appears in docs/third-party-licenses.md when generated.
