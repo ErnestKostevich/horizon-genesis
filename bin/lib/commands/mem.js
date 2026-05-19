@@ -7,6 +7,8 @@
 //   horizon mem forget --memory <id>       — delete one memory
 //   horizon mem forget --fact <key>        — delete one fact
 //   horizon mem stats                      — summary counts + embedding state
+//   horizon mem migrate                    — mirror JSON memory to SQLite+FTS5
+//   horizon mem sqlite-status              — show row counts in the SQLite mirror
 
 const { fmt } = require('../tty');
 
@@ -17,10 +19,12 @@ async function run({ runtime, args, flags }) {
   if (sub === 'dump')    return dump(runtime, flags);
   if (sub === 'profile') return profile(runtime, flags);
   if (sub === 'forget')  return forget(runtime, flags);
+  if (sub === 'migrate') return migrate(runtime, flags);
+  if (sub === 'sqlite-status') return sqliteStatus(runtime, flags);
   if (sub === 'stats' || !sub) return stats(runtime, flags);
 
   process.stderr.write(fmt.err(`Unknown mem subcommand: ${sub}`) + '\n');
-  process.stderr.write('Try: search | dump | profile | forget | stats\n');
+  process.stderr.write('Try: search | dump | profile | forget | stats | migrate | sqlite-status\n');
   return 2;
 }
 
@@ -124,6 +128,78 @@ function stats(runtime, flags) {
     process.stdout.write('  embeddings     ' + fmt.dim('no key (keyword + FTS only)') + '\n');
   }
   return 0;
+}
+
+// PHASE 28 — SQLite + FTS5 mirror. The JSON file stays the source of
+// truth; the SQLite DB lives alongside it for richer queries.
+function _sqlitePaths(runtime) {
+  const path = require('path');
+  const ud = runtime.userDataDir || runtime.profileDir;
+  if (!ud) throw new Error('runtime is missing a userDataDir');
+  return {
+    jsonPath: runtime.memoryPath || path.join(ud, 'memory.json'),
+    dbPath:   path.join(ud, 'memory.sqlite'),
+  };
+}
+
+function migrate(runtime, flags) {
+  let paths;
+  try { paths = _sqlitePaths(runtime); }
+  catch (e) { process.stderr.write(fmt.err(e.message) + '\n'); return 2; }
+  let migrateJsonToSqlite;
+  try {
+    ({ migrateJsonToSqlite } = require('../../../src/main/runtime/migrateJsonToSqlite'));
+  } catch (e) {
+    process.stderr.write(fmt.err('migrate module unavailable: ' + e.message) + '\n');
+    return 2;
+  }
+  const result = migrateJsonToSqlite(paths);
+  if (flags.json) { process.stdout.write(JSON.stringify(result, null, 2) + '\n'); return result.ok ? 0 : 1; }
+  if (!result.ok) {
+    process.stderr.write(fmt.err('Migration failed: ' + result.error) + '\n');
+    if (/better-sqlite3/.test(result.error || '')) {
+      process.stderr.write(fmt.dim('Hint: run `npm run rebuild:native` in the app folder.') + '\n');
+    }
+    return 1;
+  }
+  const a = result.added || {};
+  process.stdout.write(fmt.ok(`✓ Mirrored to ${result.dbPath}`) + '\n');
+  process.stdout.write(`  + ${a.memories || 0} memories\n`);
+  process.stdout.write(`  + ${a.facts || 0} facts\n`);
+  process.stdout.write(`  + ${a.conversations || 0} conversations\n`);
+  if (result.backupPath) process.stdout.write(fmt.dim(`  prev DB backed up to ${result.backupPath}\n`));
+  return 0;
+}
+
+function sqliteStatus(runtime, flags) {
+  let paths;
+  try { paths = _sqlitePaths(runtime); }
+  catch (e) { process.stderr.write(fmt.err(e.message) + '\n'); return 2; }
+  const fs = require('fs');
+  if (!fs.existsSync(paths.dbPath)) {
+    if (flags.json) { process.stdout.write(JSON.stringify({ exists: false, dbPath: paths.dbPath }) + '\n'); return 0; }
+    process.stdout.write(fmt.dim('SQLite mirror not created yet. Run `horizon mem migrate` to mirror your memory.\n'));
+    process.stdout.write(fmt.dim(`Will write to: ${paths.dbPath}\n`));
+    return 0;
+  }
+  let MemoryDb;
+  try { ({ MemoryDb } = require('../../../src/main/memoryDb')); }
+  catch (e) { process.stderr.write(fmt.err('memoryDb unavailable: ' + e.message) + '\n'); return 1; }
+  try {
+    const db = new MemoryDb(paths.dbPath).open();
+    const stats = db.stats();
+    db.close();
+    if (flags.json) { process.stdout.write(JSON.stringify({ exists: true, dbPath: paths.dbPath, stats }) + '\n'); return 0; }
+    process.stdout.write(fmt.bold('SQLite mirror') + ` ${fmt.dim('· ' + paths.dbPath)}\n`);
+    process.stdout.write(`  memories       ${stats.memories}\n`);
+    process.stdout.write(`  facts          ${stats.facts}\n`);
+    process.stdout.write(`  conversations  ${stats.conversations}\n`);
+    process.stdout.write(fmt.dim(`  schema v${stats.schema}\n`));
+    return 0;
+  } catch (e) {
+    process.stderr.write(fmt.err('Status failed: ' + e.message) + '\n');
+    return 1;
+  }
 }
 
 module.exports = { run };

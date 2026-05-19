@@ -4927,6 +4927,53 @@ ipcMain.handle('memEmbedReindex', async () => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
+// PHASE 28 — SQLite + FTS5 storage backend (opt-in).
+// Inspector exposes two buttons: Status (row counts) and Export to SQLite
+// (one-way mirror of the JSON file). The JSON file stays the source of
+// truth; the SQLite DB sits next to it as `memory.sqlite` and can be
+// regenerated any time. better-sqlite3 loads lazily so users on a
+// platform without prebuilt bindings get a clear error message instead
+// of a crash.
+function _memSqlitePaths() {
+  const ud = (typeof app !== 'undefined' && app.getPath) ? app.getPath('userData') : null;
+  if (!ud) return null;
+  const path = require('path');
+  return {
+    jsonPath: path.join(ud, 'memory.json'),
+    dbPath: path.join(ud, 'memory.sqlite'),
+  };
+}
+
+ipcMain.handle('memoryDbStatus', () => {
+  const paths = _memSqlitePaths();
+  if (!paths) return { ok: false, error: 'userData path unavailable' };
+  try {
+    const { MemoryDb } = require('./memoryDb');
+    const db = new MemoryDb(paths.dbPath);
+    const fs = require('fs');
+    if (!fs.existsSync(paths.dbPath)) {
+      return { ok: true, exists: false, dbPath: paths.dbPath };
+    }
+    db.open();
+    const stats = db.stats();
+    db.close();
+    return { ok: true, exists: true, dbPath: paths.dbPath, stats };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('memoryDbMigrate', () => {
+  const paths = _memSqlitePaths();
+  if (!paths) return { ok: false, error: 'userData path unavailable' };
+  try {
+    const { migrateJsonToSqlite } = require('./runtime/migrateJsonToSqlite');
+    return migrateJsonToSqlite(paths);
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // Single-shot snapshot for the inspector's Learned tab — facts + most-recent
 // memories + learning.stats + user profile in one IPC roundtrip. Cheap
 // because everything lives in-memory in AgentMemory._data.

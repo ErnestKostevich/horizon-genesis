@@ -668,15 +668,15 @@
       </div>
 
       <div class="info-box" style="margin-top:10px">
-        <strong>⚠️ Почему Web Speech API не используется:</strong><br>
-        Google заблокировал его в Electron — бросает "network error". Это известный баг с 2020 года.<br><br>
-        <strong>✅ Как работает Horizon v5:</strong><br>
-        1. Нажми <strong>🌅 Wake</strong> → Horizon начинает слушать (каждые 2 сек)<br>
-        2. Скажи <strong>"Горизонт"</strong>, <strong>"Хорайзон"</strong>, <strong>"Horizon"</strong><br>
-        3. Horizon транскрибирует через <strong>Groq Whisper</strong> (бесплатно!)<br>
-        4. Распознаёт имя → отвечает → <strong>сразу пишет в поле</strong> что ты говоришь<br>
-        5. Говори команду → она отправляется автоматически<br><br>
-        <strong style="color:var(--red)">Нужен Groq ключ</strong> для wake word + голоса. Бесплатно: console.groq.com
+        <strong>⚠️ Why Web Speech API isn't used:</strong><br>
+        Google blocks it inside Electron — throws "network error". Known bug since 2020.<br><br>
+        <strong>✅ How Horizon v5 works:</strong><br>
+        1. Hit <strong>🌅 Wake</strong> → Horizon starts listening (every 2 s)<br>
+        2. Say <strong>"Horizon"</strong> (or "Горизонт" / "Хорайзон" if you prefer Russian)<br>
+        3. Horizon transcribes via <strong>Groq Whisper</strong> (free!)<br>
+        4. Recognises the wake word → answers → <strong>types your next utterance live</strong><br>
+        5. Speak the command → it sends automatically<br><br>
+        <strong style="color:var(--red)">Needs a Groq key</strong> for wake word + voice. Free at console.groq.com
       </div>
         </div>
       </section>
@@ -976,7 +976,7 @@
 <div class="wake-bar" id="wake-bar">
   <div class="wb-l">
     <div class="wb-dot"></div>
-    <span class="wb-txt" id="wb-txt">Слушаю «Горизонт»…</span>
+    <span class="wb-txt" id="wb-txt">Listening for "Horizon"…</span>
   </div>
   <div class="wb-lvl"><div class="wb-bar" id="wb-bar"></div></div>
 </div>
@@ -1337,6 +1337,22 @@
       <div class="insp-h">Workspace memory · .horizon/memory.json</div>
       <div id="insp-learned-workspace"><div class="insp-empty">Open a workspace to see committable team memory (conventions / glossary / decisions).</div></div>
     </div>
+    <!-- PHASE 28 — storage backend. Default is JSON + in-memory FTS +
+         embeddings sidecar. Power users can mirror to SQLite + FTS5 for
+         phrase / prefix / proximity queries and persistent FTS state. -->
+    <div class="insp-section">
+      <div class="insp-h">Storage backend</div>
+      <div id="insp-learned-storage" class="insp-empty" style="line-height:1.6;padding:8px 0">
+        <div>Default: <strong>JSON</strong> (human-readable) + <strong>in-memory FTS</strong> + <strong>embeddings sidecar</strong>.</div>
+        <div style="font-size:10px;color:var(--t3);margin-top:6px">
+          Experimental: mirror your memory to a <strong>SQLite + FTS5</strong> database for richer queries. The JSON file stays the source of truth — this is a one-way export you can rebuild any time.
+        </div>
+        <div class="insp-row" style="justify-content:flex-end;padding-top:8px;gap:6px">
+          <button class="hub-btn" onclick="window._inspMemoryDbStatus?.(this)" title="Show row counts in the SQLite mirror">Status</button>
+          <button class="hub-btn" onclick="window._inspMemoryMigrate?.(this)" title="Mirror current JSON memory into the SQLite + FTS5 database">Export to SQLite</button>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="insp-body" id="insp-body-cost" style="display:none">
     <div class="insp-section">
@@ -1478,7 +1494,10 @@ try { document.body.classList.add('with-sidebar'); } catch(_) {}
 // ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
-var prov='gemini', mode='chat', lang='ru', userName='Ernest';
+// PHASE 28 — language locked to English at the renderer level so all
+// hardcoded `lang === 'ru'` branches stay dormant. The persona's TTS /
+// recognition language is still chosen separately via voice settings.
+var prov='gemini', mode='chat', lang='en', userName='Ernest';
 var ttsOn=true, eyeOn=false, searchOn=false, wakeOn=false;
 var provider='gemini';
 var screenContextB64=null;
@@ -2538,7 +2557,10 @@ window.addEventListener('DOMContentLoaded', async()=>{
     H.get('mode'),H.get('searchOn'),loadWakeSettings()
   ]);
   if(nm){userName=nm;document.getElementById('tb-sub').textContent=nm.toUpperCase();}
-  if(lg)lang=lg;
+  // PHASE 28 — UI locked to English. Honour the persisted setting only
+  // if it's a non-ru value; we no longer surface Russian strings in the
+  // app to keep the experience uniform for all users.
+  if(lg && lg !== 'ru') lang=lg; else lang='en';
   if(pr)prov=pr;
   if(md)mode=md;
   if(gm)geminiModel=gm;
