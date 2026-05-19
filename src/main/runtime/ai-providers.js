@@ -46,6 +46,9 @@ const DEFAULT_PROVIDER_MODELS = {
   nebius: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
   azure: 'gpt-5.4',            // points to the user's Azure deployment name
   custom: 'gpt-4o-mini',       // generic OpenAI-compat — user fills URL + model
+  litellm: 'openai/gpt-4o-mini', // LiteLLM-style prefix routing — covers
+                                  // 200+ models through existing endpoints
+                                  // when you pass model="provider/model"
 };
 
 const OPENAI_COMPAT_ENDPOINTS = {
@@ -100,6 +103,80 @@ const KEY_NAMES = {
 // Providers that don't require an API key (local / proxied).
 const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'localai']);
 
+// LiteLLM-style prefix routing. When provider='litellm' and model is
+// "openai/gpt-4o" or "anthropic/claude-3-5-sonnet" or
+// "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo", we resolve the
+// real provider from the prefix and call its endpoint with the already-
+// configured key.
+//
+// This is how Hermes Agent and OpenClaw reach "200+ models" — they
+// don't have 200 endpoints, they have one router that knows the
+// shape of each upstream. Same trick here.
+const LITELLM_PREFIXES = {
+  // openai-family
+  'openai': { provider: 'openai' },
+  'azure': { provider: 'azure' },
+  // anthropic
+  'anthropic': { provider: 'claude' },
+  'claude': { provider: 'claude' },
+  // google
+  'google': { provider: 'gemini' },
+  'gemini': { provider: 'gemini' },
+  'vertex_ai': { provider: 'gemini' }, // approximate — uses Gemini endpoint
+  // groq / cerebras / fastest hosts
+  'groq': { provider: 'groq' },
+  'cerebras': { provider: 'cerebras' },
+  // open-model hosting
+  'together_ai': { provider: 'together' },
+  'together': { provider: 'together' },
+  'fireworks_ai': { provider: 'fireworks' },
+  'fireworks': { provider: 'fireworks' },
+  'deepinfra': { provider: 'deepinfra' },
+  'sambanova': { provider: 'sambanova' },
+  'nebius': { provider: 'nebius' },
+  // specialised
+  'mistral': { provider: 'mistral' },
+  'codestral': { provider: 'mistral' },
+  'cohere': { provider: 'cohere' },
+  'deepseek': { provider: 'deepseek' },
+  'perplexity': { provider: 'perplexity' },
+  'xai': { provider: 'grok' },
+  'grok': { provider: 'grok' },
+  'qwen': { provider: 'qwen' },
+  'dashscope': { provider: 'qwen' },
+  'moonshot': { provider: 'moonshot' },
+  'kimi': { provider: 'moonshot' },
+  'zhipu': { provider: 'zai' },
+  'glm': { provider: 'zai' },
+  'zai': { provider: 'zai' },
+  // aggregators
+  'openrouter': { provider: 'openrouter' },
+  // local
+  'ollama': { provider: 'ollama' },
+  'lmstudio': { provider: 'lmstudio' },
+  'lm_studio': { provider: 'lmstudio' },
+  'localai': { provider: 'localai' },
+  // custom
+  'custom': { provider: 'custom' },
+};
+
+/**
+ * Resolve a LiteLLM-style "provider/model" string into a concrete
+ * { provider, model } pair callable by complete()/completeStream().
+ *
+ * Returns null if the prefix isn't recognised.
+ */
+function resolveLiteLLM(spec) {
+  if (!spec || typeof spec !== 'string') return null;
+  const slash = spec.indexOf('/');
+  if (slash < 0) return null;
+  const prefix = spec.slice(0, slash).toLowerCase();
+  const rest = spec.slice(slash + 1);
+  const m = LITELLM_PREFIXES[prefix];
+  if (!m) return null;
+  return { provider: m.provider, model: rest };
+}
+
 function normalizeUsage(d, provider) {
   try {
     if (provider === 'claude') {
@@ -148,6 +225,14 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
   }
 
   async function complete(messages, opts = {}) {
+    // LiteLLM-style routing: provider=litellm + model="openai/gpt-4o" →
+    // unwrap into the concrete provider + model. Catches the common
+    // pattern where users copy-paste a LiteLLM spec from competitor docs.
+    if (opts.provider === 'litellm' && opts.model) {
+      const resolved = resolveLiteLLM(opts.model);
+      if (resolved) opts = { ...opts, provider: resolved.provider, model: resolved.model };
+      else return { error: `Unknown LiteLLM prefix in "${opts.model}". Supported prefixes: ${Object.keys(LITELLM_PREFIXES).join(', ')}` };
+    }
     const provider = opts.provider || settingsStore.get('provider') || 'gemini';
     const system = opts.system || '';
     const respProfile = settingsStore.get('responseProfile') || 'balanced';
@@ -373,6 +458,11 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
    * @returns {Promise<{reply, model, usage, error?}>}
    */
   async function completeStream(messages, opts = {}, onToken = () => {}) {
+    if (opts.provider === 'litellm' && opts.model) {
+      const resolved = resolveLiteLLM(opts.model);
+      if (resolved) opts = { ...opts, provider: resolved.provider, model: resolved.model };
+      else return { error: `Unknown LiteLLM prefix in "${opts.model}"` };
+    }
     const provider = opts.provider || settingsStore.get('provider') || 'gemini';
     const system = opts.system || '';
     const model = selectModel(provider, opts);
