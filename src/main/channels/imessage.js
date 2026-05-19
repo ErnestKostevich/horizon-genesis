@@ -113,4 +113,89 @@ function ping() {
   });
 }
 
-module.exports = { sendMessage, sendToChat, ping, isMacOS };
+/**
+ * Pull recent messages from ~/Library/Messages/chat.db via the
+ * preinstalled macOS sqlite3 CLI. The Messages SQLite schema:
+ *   message.rowid          — monotonic; we track lastSeenRowid
+ *   message.text           — body (can be NULL for attachments)
+ *   message.attributedBody — RTF blob (we don't decode; fallback)
+ *   message.is_from_me     — 0 = inbound, 1 = sent by us
+ *   handle.id              — phone/email of the other party
+ *   chat.guid              — group-chat identifier
+ *
+ * Two filtering rules:
+ *   1. Only inbound messages (is_from_me = 0)
+ *   2. rowid > lastSeenRowid we received last time
+ *
+ * Permissions: macOS requires the *Terminal* (or whatever shell parent
+ * is running Horizon) to have Full Disk Access. Without it, chat.db
+ * is inaccessible and sqlite3 errors with "unable to open database".
+ *
+ * @param {object} opts
+ * @param {number} [opts.lastRowid]   only return rows with rowid > this
+ * @param {number} [opts.limit=20]    cap rows returned
+ * @returns {Promise<{ok, messages, latestRowid?, error?}>}
+ */
+function receiveMessages(opts = {}) {
+  return new Promise((resolve) => {
+    if (!isMacOS()) return resolve({ ok: false, messages: [], error: 'macOS only' });
+    const lastRowid = Number(opts.lastRowid) || 0;
+    const limit = Math.max(1, Math.min(100, Number(opts.limit) || 20));
+    // chat.db lives at ~/Library/Messages/chat.db — sqlite3 expands ~
+    // in -line scripts but spawning, we need an absolute path.
+    const dbPath = require('node:path').join(require('node:os').homedir(), 'Library', 'Messages', 'chat.db');
+    // Query: join message → handle → chat to get sender + group id.
+    // Use unixepoch on date (Apple stores nanoseconds since 2001-01-01).
+    const sql = `
+      SELECT
+        m.rowid AS rowid,
+        COALESCE(m.text, '(attachment / non-text)') AS text,
+        m.is_from_me AS is_from_me,
+        m.date AS apple_date,
+        h.id AS handle,
+        c.guid AS chat_guid,
+        c.display_name AS chat_name
+      FROM message m
+      LEFT JOIN handle h ON h.rowid = m.handle_id
+      LEFT JOIN chat_message_join cmj ON cmj.message_id = m.rowid
+      LEFT JOIN chat c ON c.rowid = cmj.chat_id
+      WHERE m.is_from_me = 0
+        AND m.rowid > ${lastRowid}
+      ORDER BY m.rowid ASC
+      LIMIT ${limit};
+    `;
+    execFile('sqlite3', [
+      '-readonly',
+      '-json',
+      dbPath,
+      sql,
+    ], { timeout: 8000 }, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message || '');
+        if (/unable to open|authorization denied|permission denied/i.test(msg)) {
+          return resolve({
+            ok: false, messages: [],
+            error: 'Cannot read chat.db — grant Terminal (or your shell host) Full Disk Access in System Settings → Privacy & Security → Full Disk Access.',
+          });
+        }
+        return resolve({ ok: false, messages: [], error: msg.slice(0, 200) });
+      }
+      let rows;
+      try { rows = stdout.trim() ? JSON.parse(stdout) : []; }
+      catch (e) { return resolve({ ok: false, messages: [], error: 'sqlite output not JSON: ' + e.message }); }
+      const messages = rows.map(r => ({
+        chatId: r.chat_guid || r.handle,
+        text: r.text || '',
+        user: { id: r.handle || 'unknown', name: r.chat_name || r.handle || 'iMessage' },
+        source: 'imessage',
+        groupId: r.chat_guid && r.chat_guid.startsWith('iMessage;-;chat') ? r.chat_guid : null,
+        rowid: r.rowid,
+        appleDate: r.apple_date,
+      }));
+      const latestRowid = messages.length ? messages[messages.length - 1].rowid : lastRowid;
+      resolve({ ok: true, messages, latestRowid });
+    });
+  });
+}
+
+module.exports = { sendMessage, sendToChat, ping, isMacOS, receiveMessages };

@@ -78,14 +78,22 @@ async function main({ flags } = {}) {
     } catch (e) { process.stderr.write(fmt.err('discord start: ' + e.message) + '\n'); }
   }
 
-  // Phase 15 — Signal long-poll loop. iMessage and WhatsApp have no
-  // pull-based receive on our end (WhatsApp is webhook-driven, see the
-  // /api/whatsapp/webhook handler below; iMessage doesn't expose
-  // inbound via osascript at all).
+  // Phase 15 — Signal long-poll loop. WhatsApp is webhook-driven (see
+  // /api/whatsapp/webhook handler).
   let signalLoopStop = null;
   if (flags?.['enable-signal']) {
     signalLoopStop = startSignalLoop(runtime);
     process.stderr.write(fmt.dim('signal runtime: started (5s long-poll)') + '\n');
+  }
+  // Phase 16 — iMessage inbound via chat.db polling on macOS.
+  let imessageLoopStop = null;
+  if (flags?.['enable-imessage']) {
+    if (process.platform !== 'darwin') {
+      process.stderr.write(fmt.err('--enable-imessage requires macOS') + '\n');
+    } else {
+      imessageLoopStop = startImessageLoop(runtime);
+      process.stderr.write(fmt.dim('imessage runtime: started (3s chat.db poll)') + '\n');
+    }
   }
 
   const server = http.createServer((req, res) => handle(req, res, runtime, token));
@@ -425,6 +433,66 @@ function startSignalLoop(runtime) {
 }
 
 /**
+ * Phase 16 — iMessage inbound loop. Polls ~/Library/Messages/chat.db
+ * via sqlite3 every 3 seconds for messages with rowid > lastSeenRowid.
+ * For each new message: run through the AI agent, reply via osascript.
+ *
+ * Returns a stop() function. Cancellation is cooperative — the next
+ * tick after stop() is called will not fire.
+ *
+ * Permission gotcha: macOS denies chat.db reads unless the host
+ * terminal has Full Disk Access. First call surfaces the error and
+ * we back off to 30s polling.
+ */
+function startImessageLoop(runtime) {
+  const imessage = require('../src/main/channels/imessage');
+  let cancelled = false;
+  let lastRowid = Number(runtime.settingsStore.get('imessage.lastRowid')) || 0;
+  let intervalMs = 3_000;
+
+  async function tick() {
+    if (cancelled) return;
+    try {
+      const r = await imessage.receiveMessages({ lastRowid, limit: 20 });
+      if (!r.ok) {
+        if (intervalMs < 30_000) intervalMs *= 2;
+        if (/Full Disk Access/i.test(r.error || '')) {
+          process.stderr.write('imessage: ' + r.error + '\n');
+        }
+      } else {
+        intervalMs = 3_000;
+        if (r.messages.length) {
+          for (const m of r.messages) {
+            try {
+              const reply = await runtime.runChat(m.text, { source: 'imessage' });
+              if (reply.reply) {
+                // Reply via the same buddy — group vs 1:1 handled in adapter
+                if (m.groupId) {
+                  await imessage.sendToChat({ chatId: m.groupId, text: reply.reply.slice(0, 1500) });
+                } else {
+                  await imessage.sendMessage({ to: m.user.id, text: reply.reply.slice(0, 1500) });
+                }
+              }
+            } catch (e) {
+              process.stderr.write(`imessage handler error: ${e.message}\n`);
+            }
+          }
+          lastRowid = r.latestRowid;
+          // Persist lastRowid so we don't re-process messages after restart
+          try { runtime.settingsStore.set('imessage.lastRowid', lastRowid); } catch (_) {}
+        }
+      }
+    } catch (e) {
+      process.stderr.write(`imessage loop error: ${e.message}\n`);
+      if (intervalMs < 30_000) intervalMs *= 2;
+    }
+    if (!cancelled) setTimeout(tick, intervalMs);
+  }
+  setTimeout(tick, 1_500);
+  return () => { cancelled = true; };
+}
+
+/**
  * Handle inbound Twilio WhatsApp webhook. Twilio POSTs form-urlencoded
  * data with X-Twilio-Signature header. We verify the signature, parse
  * the form, run the agent, return TwiML so the user sees the reply
@@ -485,7 +553,7 @@ if (require.main === module) {
   const flags = parseArgv(process.argv.slice(2), {
     aliases: { p: 'port', t: 'token', h: 'host' },
     booleans: ['verbose', 'enable-tg', 'enable-discord', 'enable-signal',
-               'enable-whatsapp'],
+               'enable-whatsapp', 'enable-imessage'],
   });
   main({ flags }).catch(e => {
     process.stderr.write(fmt.err(e.stack || e.message) + '\n');
