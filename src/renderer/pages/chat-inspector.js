@@ -267,6 +267,11 @@ function formatCost(){
 }
 
 // Honest cost tab: no fabricated budget split. Provider-reported usage only.
+//
+// PHASE 28 — the previous version zeroed every bar segment so the user
+// saw "238 tok used" next to a completely empty bar. The bar now fills
+// with a single "Provider total" segment at 100% when usage exists, and
+// goes grey/empty only when there's genuinely nothing to show.
 refreshInspectorCost = function(){
   const headline = document.getElementById('insp-cost-headline');
   const sub = document.getElementById('insp-cost-sub');
@@ -279,7 +284,17 @@ refreshInspectorCost = function(){
   }
   const bar = document.getElementById('insp-token-bar');
   if (bar) {
+    // Reset every segment first.
     bar.querySelectorAll('.token-seg').forEach(seg => { seg.style.width = '0%'; });
+    // Then fill the "history" segment (the visual default segment that's
+    // already styled in chat-base.css) to 100% when we have real usage.
+    // Falls back to a 4% grey sliver so the bar isn't completely invisible.
+    const histSeg = bar.querySelector('.token-seg.history')
+      || bar.querySelector('.token-seg');
+    if (histSeg) {
+      histSeg.style.width = hasUsage ? '100%' : '4%';
+      histSeg.style.opacity = hasUsage ? '1' : '0.35';
+    }
   }
   const meta = document.getElementById('insp-token-meta');
   if (meta) {
@@ -776,15 +791,27 @@ window._inspReindex = async function _inspReindex(btn) {
       return;
     }
     if (inspectorTab === 'learned') refreshInspectorLearned();
-    if (r.indexed > 0) {
-      addMsg?.('bot', `✓ Reindexed **${r.indexed}** memor${r.indexed === 1 ? 'y' : 'ies'}${r.failed ? ` (${r.failed} failed: ${esc(String(r.error || 'unknown')).slice(0, 200)})` : ''}.`);
-    } else if (r.failed > 0) {
-      // Surface the actual error in the chat — user can see what went wrong.
-      addMsg?.('bot', `❌ Reindex failed: ${esc(String(r.error || 'no error message'))}\n\nFix hints:\n• Gemini key may not have embedding-API access — try another key or add an OpenAI key (text-embedding-3-small is cheap).\n• Check console for the raw HTTP error.`);
-    } else if (r.skipped > 0) {
-      addMsg?.('bot', `✓ All ${r.skipped} memories already indexed — nothing to do.`);
-    } else if (r.error) {
+    // PHASE 28 — order: error first (so "no embedding key" doesn't get
+    // mis-rendered as "all indexed"), then real work, then status.
+    // The backfill response now splits skipped into `alreadyIndexed`
+    // (cached) and `bad` (no key / no text) so we can be specific.
+    if (r.error && r.indexed === 0 && r.failed === 0) {
       addMsg?.('bot', `❌ ${esc(String(r.error))}`);
+    } else if (r.indexed > 0) {
+      const extras = [];
+      if (r.alreadyIndexed) extras.push(`${r.alreadyIndexed} already cached`);
+      if (r.bad) extras.push(`${r.bad} skipped (missing key/text)`);
+      if (r.failed) extras.push(`${r.failed} failed: ${esc(String(r.error || 'unknown')).slice(0, 200)}`);
+      const tail = extras.length ? ` (${extras.join('; ')})` : '';
+      addMsg?.('bot', `✓ Reindexed **${r.indexed}** memor${r.indexed === 1 ? 'y' : 'ies'}${tail}.`);
+    } else if (r.failed > 0) {
+      addMsg?.('bot', `❌ Reindex failed: ${esc(String(r.error || 'no error message'))}\n\nFix hints:\n• Gemini key may not have embedding-API access — try another key or add an OpenAI key (text-embedding-3-small is cheap).\n• Check console for the raw HTTP error.`);
+    } else if (r.alreadyIndexed > 0 && r.bad === 0) {
+      addMsg?.('bot', `✓ All ${r.alreadyIndexed} memories already indexed — nothing to do.`);
+    } else if (r.bad > 0) {
+      // Old shape — memories missing key/text. _ensureShape now heals
+      // these on next boot, so this message is a one-time hint.
+      addMsg?.('bot', `⚠️ ${r.bad} memor${r.bad === 1 ? 'y' : 'ies'} skipped (missing key/text). Restart the app — _ensureShape will heal old records, then click Reindex again.`);
     } else {
       addMsg?.('bot', '⚠️ Reindex returned no results.');
     }
@@ -798,6 +825,54 @@ window._inspReindex = async function _inspReindex(btn) {
     }
   }
 };
+
+// PHASE 28 — SQLite + FTS5 mirror buttons. The JSON file stays the
+// source of truth; this just lets users opt into a queryable database
+// alongside it. Failure modes are reported plainly so users on
+// platforms without a prebuilt better-sqlite3 binding know what to do.
+window._inspMemoryDbStatus = async function(btn) {
+  try {
+    const r = await H.memoryDbStatus?.();
+    if (!r) { addMsg?.('bot', '⚠️ memoryDbStatus IPC unavailable.'); return; }
+    if (!r.ok) { addMsg?.('bot', `❌ Status: ${esc(r.error || 'unknown error')}`); return; }
+    if (!r.exists) {
+      addMsg?.('bot', `📦 SQLite mirror not created yet. Click **Export to SQLite** to mirror your memory into\n\`${esc(r.dbPath)}\``);
+      return;
+    }
+    const s = r.stats || {};
+    addMsg?.('bot', `📦 SQLite mirror at \`${esc(r.dbPath)}\` — **${s.memories || 0}** memories, **${s.facts || 0}** facts, **${s.conversations || 0}** conversations (schema v${s.schema || 1}).`);
+  } catch (e) {
+    addMsg?.('bot', `❌ Status exception: ${esc(e.message)}`);
+  }
+};
+
+window._inspMemoryMigrate = async function(btn) {
+  if (btn instanceof HTMLElement) {
+    btn.disabled = true;
+    btn.dataset._origText = btn.dataset._origText || btn.textContent;
+    btn.textContent = 'Exporting…';
+  }
+  try {
+    addMsg?.('bot', '📦 Mirroring memory to SQLite + FTS5 — this is a one-way export. Your JSON file stays untouched.');
+    const r = await H.memoryDbMigrate?.();
+    if (!r) { addMsg?.('bot', '⚠️ Migration IPC unavailable.'); return; }
+    if (!r.ok) {
+      addMsg?.('bot', `❌ Migration failed: ${esc(r.error || 'unknown error')}\n\nIf the error mentions \`better-sqlite3\`, run \`npm run rebuild:native\` in the app folder or wait for the next packaged build.`);
+      return;
+    }
+    const a = r.added || {};
+    addMsg?.('bot', `✓ Mirrored to \`${esc(r.dbPath)}\` — added **${a.memories || 0}** memories, **${a.facts || 0}** facts, **${a.conversations || 0}** conversations.${r.backupPath ? `\n\nPrevious DB backed up to \`${esc(r.backupPath)}\`.` : ''}`);
+  } catch (e) {
+    addMsg?.('bot', `❌ Migration exception: ${esc(e.message)}`);
+    console.error('[memoryDbMigrate] exception:', e);
+  } finally {
+    if (btn instanceof HTMLElement) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._origText || 'Export to SQLite';
+    }
+  }
+};
+
 try {
   H.onMemoryEmbeddingProgress?.((p) => {
     // Only refresh if the Learned tab is visible; otherwise the next
