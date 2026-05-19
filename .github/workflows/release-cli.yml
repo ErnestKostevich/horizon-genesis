@@ -172,3 +172,36 @@ jobs:
             See `docs/cli.md` and `docs/deploy.md` for full reference.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-discord:
+    name: Notify Discord
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.release.result == 'success' }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Post embed to #announcements
+        run: |
+          if [ -z "${DISCORD_RELEASE_WEBHOOK}" ]; then
+            echo "DISCORD_RELEASE_WEBHOOK not set; skipping notification"
+            exit 0
+          fi
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${RELEASE_TAG}"
+          # 0xC5C5FF — cyan/violet blend for the CLI release embed
+          curl -sS -H "Content-Type: application/json" \
+            -X POST "${DISCORD_RELEASE_WEBHOOK}" \
+            -d @- <<JSON
+          {
+            "embeds": [{
+              "title": "🚀 horizon-ai CLI ${RELEASE_TAG}",
+              "description": "New CLI release on GitHub.\\n\`\`\`\\nnpm install -g horizon-ai@latest\\n# or grab a single-file binary from the release page\\n\`\`\`",
+              "url": "${RELEASE_URL}",
+              "color": 12968191,
+              "thumbnail": {"url": "https://horizonaai.dev/og-default.png"},
+              "footer": {"text": "horizonaai.dev · CLI"}
+            }]
+          }
+          JSON
+        env:
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
