@@ -2389,12 +2389,14 @@ ipcMain.handle('aiImageModels', async () => {
 async function runAiCompletion(_, messages, provider, system, opts) {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';
-  const lang     = settingsStore.get('lang') || 'en';
+  // PHASE 28.1 — Horizon is English-only. The bilingual identity prompt
+  // was previously selected by `settingsStore.get('lang')`, but the
+  // renderer no longer offers a Russian option and the system prompt
+  // benefits from a single shape we can iterate on.
+  const lang = 'en';
 
   // IDENTITY: Horizon always knows who it is
-  const identity = lang === 'ru'
-    ? `Ты — Хорайзон (Horizon AI), продвинутый персональный AI-агент для ПК. Тебя создал Эрнест Костевич (Ernest Kostevich). Ты НЕ являешься Claude, ChatGPT, Gemini или любым другим AI — ты Хорайзон. Пользователь: ${userName}. Время: ${new Date().toLocaleString()}. Ты умный, дружелюбный, немного как Джарвис из Marvel. Можешь управлять ПК, видеть экран. Используй Markdown.`
-    : `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown.`;
+  const identity = `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown. Always reply in English unless the user explicitly asks for another language for the reply itself.`;
 
   // PERSONA INJECTION (defense-in-depth): the renderer's chat send path
   // already prepends the active persona's prompt to `system` before
@@ -3684,6 +3686,48 @@ function loadAgentModules() {
         chatStore.init();
         console.log('✓ ChatStore loaded');
       }
+
+      // PHASE 28.1 — SQLite + FTS5 mirror is now ON by default. JSON
+      // stays the primary store (humans can edit it, it's the disk
+      // source of truth) and we mirror it into memory.sqlite on boot so
+      // every user gets queryable FTS5 without lifting a finger. If
+      // better-sqlite3 didn't rebuild for the runtime we log and skip;
+      // the JSON path keeps working untouched.
+      try {
+        const jsonPath = memPath.replace(/\.db$/, '.json');
+        const sqlitePath = path.join(app.getPath('userData'), 'memory.sqlite');
+        const fs = require('fs');
+        // Mirror when either: (a) no SQLite file exists, (b) JSON is
+        // newer than SQLite (someone added memories outside the mirror).
+        let shouldMirror = false;
+        if (fs.existsSync(jsonPath)) {
+          if (!fs.existsSync(sqlitePath)) shouldMirror = true;
+          else {
+            const j = fs.statSync(jsonPath).mtimeMs;
+            const s = fs.statSync(sqlitePath).mtimeMs;
+            if (j > s + 1000) shouldMirror = true;
+          }
+        }
+        if (shouldMirror) {
+          setTimeout(() => {
+            try {
+              const { migrateJsonToSqlite } = require('./runtime/migrateJsonToSqlite');
+              const r = migrateJsonToSqlite({ jsonPath, dbPath: sqlitePath, backup: false });
+              if (r.ok) {
+                console.log(`✓ SQLite mirror refreshed → ${sqlitePath}`,
+                  `(+${r.added?.memories || 0} mem, +${r.added?.facts || 0} facts, +${r.added?.conversations || 0} conv)`);
+              } else {
+                console.log('[memoryDb] mirror skipped:', r.error);
+              }
+            } catch (e) {
+              console.log('[memoryDb] mirror skipped:', e.message);
+            }
+          }, 6000); // after embeddings backfill kicks off
+        }
+      } catch (e) {
+        console.log('[memoryDb] mirror setup skipped:', e.message);
+      }
+
       console.log('✓ Agent tools loaded');
     } catch(e) {
       console.error('Agent tools failed:', e.message);
