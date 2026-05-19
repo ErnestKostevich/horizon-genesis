@@ -2389,14 +2389,25 @@ ipcMain.handle('aiImageModels', async () => {
 async function runAiCompletion(_, messages, provider, system, opts) {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';
-  // PHASE 28.2 — The UI is English-only (single option in the Language
-  // dropdown) but the LLM should still mirror the user's message
-  // language. We keep a single English baseline identity + an explicit
-  // "match the user's language" instruction so persona text stays in
-  // one canonical shape while replies auto-translate.
-  const lang = 'en';
 
-  // IDENTITY: Horizon always knows who it is
+  // PHASE 28.3 — chat language is independent of the UI menu language.
+  // The UI dropdown is English-only (labels, buttons), but the
+  // conversation itself follows whatever the user typed. We auto-detect
+  // by scanning the last 5 user messages for Cyrillic; this also picks
+  // the right *persona prompt* below so JARVIS stays "Sir" in English
+  // and "Сэр" in Russian without the user toggling anything.
+  const detectLang = () => {
+    try {
+      const recent = (messages || []).filter(m => m.role === 'user').slice(-5);
+      const text = recent.map(m => String(m.content || '')).join(' ');
+      return /[А-Яа-яЁё]/.test(text) ? 'ru' : 'en';
+    } catch (_) { return 'en'; }
+  };
+  const lang = detectLang();
+
+  // IDENTITY: Horizon always knows who it is. The "mirror the user's
+  // language" instruction is what makes the model actually answer in
+  // user's language even when persona prompt is loaded in English.
   const identity = `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown. Mirror the user's language: reply in whichever language they wrote in (Russian, English, anything else). Stay consistent within a conversation unless the user switches languages.`;
 
   // PERSONA INJECTION (defense-in-depth): the renderer's chat send path

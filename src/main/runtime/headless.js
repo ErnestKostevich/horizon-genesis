@@ -134,6 +134,41 @@ function createHorizonRuntime(opts = {}) {
     log('embeddings unavailable:', e.message);
   }
 
+  // PHASE 28.2 — SQLite + FTS5 backend (the second half of the hybrid).
+  // CLI and headless `horizon serve` now mirror the JSON file into a
+  // queryable SQLite database on first run, then keep it live-synced via
+  // AgentMemory.setMemoryDb(). Without this, CLI users only got the
+  // JSON + in-memory FTS half and the inspector's "Hybrid" claim wasn't
+  // honest from the shell.
+  try {
+    const fs = require('fs');
+    const jsonPath = memDbPath.replace(/\.db$/, '.json');
+    const sqlitePath = path.join(userDataDir, 'memory.sqlite');
+    let shouldMirror = false;
+    if (fs.existsSync(jsonPath)) {
+      if (!fs.existsSync(sqlitePath)) shouldMirror = true;
+      else {
+        const j = fs.statSync(jsonPath).mtimeMs;
+        const s = fs.statSync(sqlitePath).mtimeMs;
+        if (j > s + 1000) shouldMirror = true;
+      }
+    }
+    if (shouldMirror) {
+      const { migrateJsonToSqlite } = require('./migrateJsonToSqlite');
+      const r = migrateJsonToSqlite({ jsonPath, dbPath: sqlitePath, backup: false });
+      if (r.ok) log(`memory.sqlite refreshed (+${r.added?.memories || 0} mem, +${r.added?.facts || 0} facts, +${r.added?.conversations || 0} conv)`);
+      else log('SQLite mirror skipped:', r.error);
+    }
+    if (fs.existsSync(sqlitePath)) {
+      const { MemoryDb } = require('../memoryDb');
+      const liveDb = new MemoryDb(sqlitePath).open();
+      agentMemory.setMemoryDb(liveDb);
+      log('memoryDb: live SQLite + FTS5 wired');
+    }
+  } catch (e) {
+    log('SQLite hybrid unavailable:', e.message);
+  }
+
   // ── Workspace memory ──────────────────────────────────────────────────
   let workspaceMemory = null;
   try {
