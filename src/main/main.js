@@ -4248,12 +4248,34 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
     } catch (_) {}
   }
 
+  // PHASE 12 — vision-on-turn-1. The renderer attaches a screenshot (or
+  // any image as data URL) via opts.attachedImages when Agent mode kicks
+  // off and the task mentions the screen. We hold those images in this
+  // closure and prepend them to the last user message on the FIRST
+  // call to aiFn. Subsequent calls in the same agent loop see the same
+  // text history without the image (the model already "saw" it).
+  let pendingAttachedImages = Array.isArray(opts.attachedImages)
+    ? opts.attachedImages.filter(im => im && im.dataUrl)
+    : [];
+
+  /** Strip a data URL into {mediaType, base64}. */
+  function parseDataUrl(dataUrl) {
+    const m = /^data:([^;]+);base64,(.*)$/i.exec(dataUrl || '');
+    if (!m) return null;
+    return { mediaType: m[1], base64: m[2] };
+  }
+
   // AI function wrapper
   const aiFn = async (messages, systemPrompt, agentMeta = {}) => {
     const fetch = require('node-fetch');
     const localEp = localOpenAIEndpoint(provider);
     const k = localEp ? (localEp.key || '__local_no_key__') : keysStore.get(`k_${provider}`);
     if (!k) return { error: `${provider} key not set → Settings` };
+
+    // Decide whether this is the first turn that should carry images.
+    const includeImages = pendingAttachedImages.length > 0;
+    const imagesToSend = includeImages ? pendingAttachedImages.slice() : [];
+    if (includeImages) pendingAttachedImages = []; // one-shot — clear after use
 
     try {
       if (provider === 'gemini') {
@@ -4271,6 +4293,15 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         }
         if (!fixed.length) fixed.push({ role:'user', parts:[{text: userMessage}] });
         if (fixed[fixed.length-1].role !== 'user') fixed.push({ role:'user', parts:[{text:'continue'}] });
+        // PHASE 12 — Gemini vision: append inline_data parts to the last
+        // user message. mime_type from the data-URL (image/png etc.).
+        if (imagesToSend.length) {
+          const lastUser = fixed[fixed.length - 1];
+          for (const im of imagesToSend) {
+            const p = parseDataUrl(im.dataUrl);
+            if (p) lastUser.parts.push({ inline_data: { mime_type: p.mediaType, data: p.base64 } });
+          }
+        }
         const geminiBody = applyReasoningProfile('gemini', model, {
           system_instruction:{parts:[{text:systemPrompt}]},
           contents:fixed,
@@ -4289,11 +4320,36 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
         const model = selectedModel('claude', opts);
         const useNativeTools = Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
         const toolPack = useNativeTools ? nativeToolPack(agentMeta.tools) : { tools: [], map: {} };
+        let claudeMessages = useNativeTools ? toAnthropicMessages(messages) : messages;
+        // PHASE 12 — Claude vision: rewrite the last user message's
+        // content to an array containing image blocks + the original
+        // text. Anthropic format: { type:'image', source:{type:'base64',
+        // media_type, data} }.
+        if (imagesToSend.length && claudeMessages.length) {
+          claudeMessages = claudeMessages.slice();
+          let li = claudeMessages.length - 1;
+          while (li >= 0 && claudeMessages[li].role !== 'user') li--;
+          if (li >= 0) {
+            const orig = claudeMessages[li];
+            const text = typeof orig.content === 'string' ? orig.content
+                       : Array.isArray(orig.content) ? orig.content.find(x => x.type === 'text')?.text || '' : '';
+            const blocks = [];
+            for (const im of imagesToSend) {
+              const p = parseDataUrl(im.dataUrl);
+              if (p) blocks.push({
+                type: 'image',
+                source: { type: 'base64', media_type: p.mediaType, data: p.base64 },
+              });
+            }
+            if (text) blocks.push({ type: 'text', text });
+            claudeMessages[li] = { role: 'user', content: blocks };
+          }
+        }
         const body = applyReasoningProfile('claude', model, {
           model,
           max_tokens:4096,
           system:systemPrompt,
-          messages: useNativeTools ? toAnthropicMessages(messages) : messages
+          messages: claudeMessages
         });
         if (useNativeTools) body.tools = toAnthropicTools(toolPack.tools);
         const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -4340,10 +4396,32 @@ ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
       }
       const useNativeOpenAITools = provider === 'openai' && Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
       const toolPack = useNativeOpenAITools ? nativeToolPack(agentMeta.tools) : { tools: [], map: {} };
+      let openaiMessages = useNativeOpenAITools
+        ? toOpenAIChatMessages(messages, systemPrompt)
+        : [{role:'system',content:systemPrompt},...messages];
+      // PHASE 12 — OpenAI-compat vision: replace the last user message's
+      // content with an array of {type:'image_url'} + {type:'text'}.
+      // Works for openai, openrouter, groq (some models), and any
+      // OpenAI-shaped vision endpoint.
+      if (imagesToSend.length && openaiMessages.length) {
+        openaiMessages = openaiMessages.slice();
+        let li = openaiMessages.length - 1;
+        while (li >= 0 && openaiMessages[li].role !== 'user') li--;
+        if (li >= 0) {
+          const orig = openaiMessages[li];
+          const text = typeof orig.content === 'string' ? orig.content : '';
+          const parts = [];
+          for (const im of imagesToSend) {
+            parts.push({ type: 'image_url', image_url: { url: im.dataUrl } });
+          }
+          if (text) parts.push({ type: 'text', text });
+          openaiMessages[li] = { role: 'user', content: parts };
+        }
+      }
       const body = applyReasoningProfile(provider, ep.model, {
         model:ep.model,
         max_tokens:4096,
-        messages: useNativeOpenAITools ? toOpenAIChatMessages(messages, systemPrompt) : [{role:'system',content:systemPrompt},...messages]
+        messages: openaiMessages
       });
       if (useNativeOpenAITools) body.tools = toOpenAITools(toolPack.tools);
       const r = await fetch(ep.url, {
