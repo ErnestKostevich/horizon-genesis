@@ -2389,14 +2389,15 @@ ipcMain.handle('aiImageModels', async () => {
 async function runAiCompletion(_, messages, provider, system, opts) {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';
-  // PHASE 28.1 — Horizon is English-only. The bilingual identity prompt
-  // was previously selected by `settingsStore.get('lang')`, but the
-  // renderer no longer offers a Russian option and the system prompt
-  // benefits from a single shape we can iterate on.
+  // PHASE 28.2 — The UI is English-only (single option in the Language
+  // dropdown) but the LLM should still mirror the user's message
+  // language. We keep a single English baseline identity + an explicit
+  // "match the user's language" instruction so persona text stays in
+  // one canonical shape while replies auto-translate.
   const lang = 'en';
 
   // IDENTITY: Horizon always knows who it is
-  const identity = `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown. Always reply in English unless the user explicitly asks for another language for the reply itself.`;
+  const identity = `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown. Mirror the user's language: reply in whichever language they wrote in (Russian, English, anything else). Stay consistent within a conversation unless the user switches languages.`;
 
   // PERSONA INJECTION (defense-in-depth): the renderer's chat send path
   // already prepends the active persona's prompt to `system` before
@@ -3724,6 +3725,24 @@ function loadAgentModules() {
             }
           }, 6000); // after embeddings backfill kicks off
         }
+
+        // PHASE 28.2 — open a long-lived MemoryDb handle and inject into
+        // AgentMemory. After this point, ftsSearch() uses SQLite bm25
+        // and remember/forget/setFact mirror through to SQLite live
+        // (not just on boot). The JSON file stays the source of truth.
+        // Wait long enough for the mirror migration above to finish.
+        setTimeout(() => {
+          try {
+            if (fs.existsSync(sqlitePath)) {
+              const { MemoryDb } = require('./memoryDb');
+              const liveDb = new MemoryDb(sqlitePath).open();
+              agentMemory.setMemoryDb(liveDb);
+              console.log('✓ MemoryDb wired into AgentMemory (live SQLite + FTS5 backend)');
+            }
+          } catch (e) {
+            console.log('[memoryDb] live wire-up skipped:', e.message);
+          }
+        }, 8000);
       } catch (e) {
         console.log('[memoryDb] mirror setup skipped:', e.message);
       }
