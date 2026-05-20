@@ -393,6 +393,7 @@ contextBridge.exposeInMainWorld('H', {
   licensePollInvoice:      (id)            => ipcRenderer.invoke('licensePollInvoice', id),
   licenseOpenUpgradePage:  ()              => ipcRenderer.invoke('licenseOpenUpgradePage'),
   licenseOpenContact:      (channel)       => ipcRenderer.invoke('licenseOpenContactLink', channel),
+  ownerContacts:           ()              => ipcRenderer.invoke('ownerContacts'),
   onLicenseChange:         (cb)            => ipcRenderer.on('license-state', (_, s) => cb(s)),
 });
 

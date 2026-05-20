@@ -102,15 +102,46 @@ function setEnabled(rt, rest, enabled) {
   return 0;
 }
 
-function tools(rt, flags) {
-  // mcpRegistry is Electron-only — CLI runtime doesn't currently load it.
-  // We show what's stored + a note explaining where to see live tool lists.
+async function tools(rt, flags) {
+  // PHASE 28.5 — CLI now spawns MCP servers (see headless.js). When
+  // the live registry is on the runtime we go through it for fresh
+  // tools; otherwise we fall back to whatever was cached the last
+  // time anyone hit refreshTools() (Electron or CLI).
+  if (rt.mcpRegistry && typeof rt.mcpRegistry.refreshTools === 'function') {
+    try {
+      const live = await rt.mcpRegistry.refreshTools();
+      if (flags.json) { process.stdout.write(JSON.stringify(live, null, 2) + '\n'); return 0; }
+      if (!live.length) {
+        process.stdout.write(fmt.dim('  No MCP tools available. Add a server with `horizon mcp add`.\n'));
+        return 0;
+      }
+      process.stdout.write(fmt.bold('  Live MCP tools:') + '\n');
+      for (const t of live) {
+        process.stdout.write(`    ${fmt.cyan(t.name)}  ${fmt.dim(t.desc || '')}\n`);
+      }
+      return 0;
+    } catch (e) {
+      process.stderr.write(fmt.err('Live refresh failed: ' + e.message) + '\n');
+      // fall through to cached view below
+    }
+  }
+  // Fallback — read the cached list main.js / headless.js most recently
+  // wrote to settingsStore. This is what powers the Electron Settings
+  // → MCP table without re-spawning.
+  const cached = rt.settingsStore.get('mcp.toolsCache') || [];
   const servers = getServers(rt).filter(s => s.enabled !== false);
-  if (flags.json) { process.stdout.write(JSON.stringify(servers, null, 2) + '\n'); return 0; }
-  process.stdout.write(fmt.dim('  MCP tool listing is exposed by the Electron app (Settings → MCP).\n'));
-  process.stdout.write(fmt.dim('  CLI runtime doesn\'t spawn MCP processes yet — use the desktop app for live tool calls.\n'));
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ servers, cached, live: false }, null, 2) + '\n');
+    return 0;
+  }
+  if (cached.length) {
+    process.stdout.write(fmt.bold('  Cached MCP tools') + fmt.dim(' (last refresh: ' + (rt.settingsStore.get('mcp.toolsCacheAt') || 'never') + ')') + '\n');
+    for (const t of cached.slice(0, 60)) {
+      process.stdout.write(`    ${fmt.cyan(t.name)}  ${fmt.dim(t.desc || '')}\n`);
+    }
+  }
   if (servers.length) {
-    process.stdout.write('\n' + fmt.bold('  Configured & enabled:') + '\n');
+    process.stdout.write('\n' + fmt.bold('  Configured & enabled servers:') + '\n');
     for (const s of servers) {
       process.stdout.write(`    ${fmt.cyan(s.name || s.id)}  ${fmt.dim(s.command + ' ' + (s.args || []).join(' '))}\n`);
     }

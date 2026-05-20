@@ -257,6 +257,29 @@ function createHorizonRuntime(opts = {}) {
     log('skills:', skillsManager.list().length);
   } catch (e) { log('skills manager failed:', e.message); }
 
+  // PHASE 28.5 — MCP servers in CLI. Up to today the CLI only knew how
+  // to read/write mcp.servers config; the registry that actually spawns
+  // those processes lived only in Electron's main.js. Wire it here so
+  // `horizon serve` and `horizon agent` see the same MCP tools the
+  // desktop app does. Skip on HORIZON_NO_MCP=1 for fast cold starts.
+  let mcpRegistry = null;
+  if (opts.withMcp !== false && !process.env.HORIZON_NO_MCP) {
+    try {
+      const { MCPRegistry } = require('../mcp/mcpRegistry');
+      mcpRegistry = new MCPRegistry(settingsStore);
+      const enabled = mcpRegistry.getServers().filter(s => s.enabled !== false);
+      if (enabled.length) {
+        // refreshTools() lazily spawns each enabled server (stdio
+        // handshake + tools/list call) and caches the result on the
+        // settingsStore so callers can read it without re-spawning.
+        const tools = await mcpRegistry.refreshTools().catch(e => { log('mcp refreshTools failed:', e.message); return []; });
+        log(`mcp: ${enabled.length} server${enabled.length === 1 ? '' : 's'} live, ${tools.length} tools cached`);
+      } else {
+        log('mcp: no servers configured (use `horizon mcp add` to register)');
+      }
+    } catch (e) { log('mcp registry unavailable:', e.message); }
+  }
+
   // ── Connections ───────────────────────────────────────────────────────
   let connectionsManager = null;
   if (opts.withConnections !== false) {
@@ -544,6 +567,11 @@ function createHorizonRuntime(opts = {}) {
     agentMemory, embeddingService, workspaceMemory,
     personas, executor, skillsManager, connectionsManager,
     aiClient, costTracker,
+    // PHASE 28.5 — exposed so CLI commands can call mcpRegistry.refreshTools()
+    // / .testServer() / etc. dialecticModel + memoryReviewer too for the
+    // same reason (the `horizon mem review` and dialectic CLI surfaces
+    // need a handle).
+    mcpRegistry, dialecticModel, memoryReviewer,
     resolveAutoProvider,
     // High-level entry points
     runAgent, runChat, runChatStream,

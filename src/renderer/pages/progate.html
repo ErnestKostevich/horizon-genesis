@@ -347,10 +347,10 @@ h1 .acc{
   <div class="contact">
     <div class="lbl">Message Ernest directly for manual key dispatch or questions:</div>
     <div class="grid">
-      <a class="link" data-ch="telegram_primary">Telegram: t.me/Ernest_Kostevich</a>
-      <a class="link" data-ch="telegram_secondary">Telegram: t.me/ernest0kostevich</a>
-      <a class="link" data-ch="email_primary">Email: ernest2011kostevich@gmail.com</a>
-      <a class="link" data-ch="email_secondary">Email: ernestkostevich@gmail.com</a>
+      <a class="link" data-ch="telegram_primary" id="link-tg-primary">Telegram: t.me/Ernest_Kostevich</a>
+      <a class="link" data-ch="telegram_secondary" id="link-tg-secondary">Telegram: t.me/ernest0kostevich</a>
+      <a class="link" data-ch="email_primary" id="link-email-primary">Email: ernest2011kostevich@gmail.com</a>
+      <a class="link" data-ch="email_secondary" id="link-email-secondary">Email: ernestkostevich@gmail.com</a>
     </div>
   </div>
 
@@ -597,12 +597,37 @@ async function openWebAuth(mode) {
 }
 
 // Contact links (Telegram / email)
+// PHASE 28.5 — pull live owner contacts from main process so a future
+// maintainer / fork only needs to set HORIZON_OWNER_EMAIL env var
+// instead of editing HTML.
+let _ownerContacts = {
+  emailPrimary:   'ernest2011kostevich@gmail.com',
+  emailSecondary: 'ernestkostevich@gmail.com',
+  tgPrimary:      'Ernest_Kostevich',
+  tgSecondary:    'ernest0kostevich',
+};
+(async () => {
+  try {
+    if (window.H && typeof window.H.ownerContacts === 'function') {
+      const c = await window.H.ownerContacts();
+      if (c && typeof c === 'object') {
+        _ownerContacts = { ..._ownerContacts, ...c };
+        const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+        setText('link-tg-primary',      'Telegram: t.me/' + _ownerContacts.tgPrimary);
+        setText('link-tg-secondary',    'Telegram: t.me/' + _ownerContacts.tgSecondary);
+        setText('link-email-primary',   'Email: ' + _ownerContacts.emailPrimary);
+        setText('link-email-secondary', 'Email: ' + _ownerContacts.emailSecondary);
+      }
+    }
+  } catch (_) { /* keep defaults if bridge not ready */ }
+})();
+
 document.querySelectorAll('.contact .link').forEach(a => {
   a.addEventListener('click', (e) => {
     e.preventDefault();
     if (bridgeReady('licenseOpenContact')) H.licenseOpenContact(a.dataset.ch);
-    else if (String(a.dataset.ch || '').startsWith('email')) openFallback('mailto:ernest2011kostevich@gmail.com');
-    else openFallback('https://t.me/Ernest_Kostevich');
+    else if (String(a.dataset.ch || '').startsWith('email')) openFallback('mailto:' + _ownerContacts.emailPrimary);
+    else openFallback('https://t.me/' + _ownerContacts.tgPrimary);
   });
 });
 
