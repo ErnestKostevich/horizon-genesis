@@ -87,7 +87,7 @@
   left: 0;
   width: 32px;
   height: 2px;
-  background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+  background: var(--accent-grad);
   border-radius: 1px;
 }
 
@@ -126,7 +126,7 @@
 #panel .pf > label small {
   font-weight: 400;
   color: var(--t3, #7a808a);
-  font-size: 11px;
+  font-size: var(--text-sm, 12px);
 }
 
 /* ── Row (input + button) layout ──────────────────────────────────────── */
@@ -216,7 +216,7 @@
 
 #panel .pf .psv.primary,
 #panel .ps .psv.primary {
-  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  background: var(--accent-grad);
   border-color: transparent;
   color: #fff;
 }
@@ -229,7 +229,7 @@
 
 /* ── Status / help line under fields ─────────────────────────────────── */
 #panel .local-status {
-  font-size: 11px;
+  font-size: var(--text-sm, 12px);
   color: var(--t3, #7a808a);
   line-height: 1.45;
   margin-top: 4px;
@@ -281,7 +281,7 @@
 
 #panel .psview-sub code {
   font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--text-sm, 12px);
   padding: 1px 6px;
   background: rgba(139, 92, 246, 0.12);
   border-radius: 4px;
@@ -301,7 +301,7 @@
 #panel .panel-title {
   font-size: 22px;
   font-weight: 700;
-  background: linear-gradient(135deg, #06b6d4, #8b5cf6, #ec4899);
+  background: var(--accent-grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -432,7 +432,7 @@
   bottom: 12px;
   width: 2px;
   border-radius: 1px;
-  background: linear-gradient(180deg, #06b6d4, #8b5cf6);
+  background: var(--accent-grad);
   opacity: 0;
   animation: ps-pulse-in 0.25s forwards ease-out;
 }
@@ -486,7 +486,7 @@
   top: 8px;
   right: 12px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
+  font-size: var(--text-sm, 12px);
   font-weight: 600;
   letter-spacing: 0.16em;
   padding: 2px 7px;
@@ -513,13 +513,13 @@
   bottom: 30%;
   width: 2px;
   border-radius: 0 2px 2px 0;
-  background: linear-gradient(180deg, #06b6d4, #8b5cf6, #ec4899);
+  background: var(--accent-grad);
 }
 
 /* ── Section heading — eyebrow-style ─────────────────────────────────── */
 #panel .psview-h {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: var(--text-sm, 12px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.3em;

@@ -76,12 +76,12 @@
     dialog.style.cssText = `
       background: var(--bg, #0f1115);
       color: var(--fg, #d6d8db);
-      border: 1px solid var(--accent, #8b5cf6);
+      border: 1px solid var(--accent, #7c6df2);
       border-radius: 12px;
       padding: 22px 28px;
       max-width: 580px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.45),
-                  0 0 30px rgba(139,92,246,0.18);
+                  0 0 30px rgba(124,109,242,0.18);
     `;
 
     const title = isRu ? '⚡ Включить режим Агента?' : '⚡ Enable Agent mode?';
@@ -97,7 +97,7 @@
       <div id="agent-consent-caps" style="display:grid;gap:8px;margin:0 0 18px;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button id="agent-consent-cancel"  class="hub-btn" style="padding:8px 16px;">${cancelLabel}</button>
-        <button id="agent-consent-confirm" class="hub-btn primary" style="padding:8px 16px;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:#fff;font-weight:600;">${confirmLabel}</button>
+        <button id="agent-consent-confirm" class="hub-btn primary" style="padding:8px 16px;background:var(--accent-grad,linear-gradient(135deg,#7c6df2,#a78bfa));color:#fff;font-weight:600;">${confirmLabel}</button>
       </div>
     `;
     overlay.appendChild(dialog);

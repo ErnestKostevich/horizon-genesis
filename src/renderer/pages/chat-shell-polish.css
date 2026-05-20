@@ -27,24 +27,30 @@
   content:'';
   position:absolute;
   left:0;right:0;bottom:-1px;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(86,210,255,.42),rgba(251,191,36,.28),transparent);
+  background:linear-gradient(90deg,transparent,rgba(124,109,242,.42),rgba(167,139,250,.28),transparent);
   opacity:.75;
   pointer-events:none;
 }
 .tb-l{min-width:0;gap:12px}
 .tb-l > div:last-child{min-width:0}
+/* Sprint-1 fix: was a 36px conic-gradient w/ breathing animation cycling
+   cyan→blue→amber. Three colors disagreed with the rest of the app, the
+   breath drew the eye away from content. Replaced with a flat rounded-square
+   monogram "H" in the unified accent gradient — no animation, no glow churn. */
 .logo{
-  width:36px;height:36px;border-radius:12px;
-  background:
-    radial-gradient(circle at 50% 50%,rgba(255,255,255,.95) 0 2px,transparent 3px),
-    conic-gradient(from 20deg,#56d2ff,#6c8cff,#fbbf24,#56d2ff);
-  color:#06101a;
-  box-shadow:0 0 0 1px rgba(86,210,255,.30),0 0 28px rgba(86,210,255,.22);
-  animation:horizonLogoBreath 4.5s ease-in-out infinite;
+  width:32px;height:32px;border-radius:10px;
+  background:var(--accent-grad, linear-gradient(135deg,#7c6df2,#a78bfa));
+  color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font:800 16px/1 var(--font, 'Plus Jakarta Sans', system-ui);
+  letter-spacing:-.02em;
+  box-shadow:0 1px 2px rgba(0,0,0,.25), 0 0 0 1px rgba(124,109,242,.32);
+  animation:none;
 }
 @keyframes horizonLogoBreath{
-  0%,100%{filter:saturate(1);box-shadow:0 0 0 1px rgba(86,210,255,.28),0 0 24px rgba(86,210,255,.16)}
-  50%{filter:saturate(1.16);box-shadow:0 0 0 1px rgba(86,210,255,.42),0 0 38px rgba(86,210,255,.28)}
+  /* Sprint-1 fix: animation removed but keyframes kept defined for any
+     legacy ref that might still call them — no-op cycle. */
+  0%,100%{filter:none}
 }
 .tb-name{font-size:15px;letter-spacing:.1px}
 .tb-sub{
@@ -85,7 +91,7 @@ body.with-sidebar > .tb .tb-r{max-width:min(740px,calc(100vw - var(--sidebar-w) 
 }
 .ic-btn:hover{
   color:#fff;
-  background:linear-gradient(180deg,rgba(86,210,255,.16),rgba(108,140,255,.07));
+  background:linear-gradient(180deg,rgba(86,210,255,.16),rgba(124,109,242,.07));
   border-color:rgba(86,210,255,.34);
   transform:translateY(-1px);
 }
@@ -124,7 +130,7 @@ body.with-sidebar > .tb .tb-r{max-width:min(740px,calc(100vw - var(--sidebar-w) 
 }
 .chip:hover,.mt:hover{background:rgba(255,255,255,.055);transform:translateY(-1px)}
 .chip.on,.mt.on{
-  background:linear-gradient(180deg,rgba(86,210,255,.15),rgba(108,140,255,.08));
+  background:linear-gradient(180deg,rgba(86,210,255,.15),rgba(124,109,242,.08));
   border-color:rgba(86,210,255,.35);
   color:#d9f7ff;
   box-shadow:0 0 18px rgba(86,210,255,.08);
@@ -524,7 +530,7 @@ body.with-sidebar > .tb .tb-r{max-width:none}
 }
 .cs-act.on,.cs-act.proc{
   color:#d9f7ff;
-  background:linear-gradient(135deg,rgba(86,210,255,.16),rgba(108,140,255,.07));
+  background:linear-gradient(135deg,rgba(86,210,255,.16),rgba(124,109,242,.07));
   border-color:rgba(86,210,255,.28);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
 }
@@ -580,7 +586,7 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
   color:#8eeaff;
   text-transform:uppercase;
   letter-spacing:.8px;
-  font-size:9px;
+  font-size:var(--text-sm);
 }
 .qsk-chip{
   padding:4px 8px;
@@ -867,7 +873,7 @@ body::after{display:none!important}
   border:1px solid var(--shell-line)!important;
   color:#aeb8c9!important;
   box-shadow:none!important;
-  font-size:11px!important;
+  font-size:var(--text-sm)!important;
 }
 .shell-chip.primary{
   background:#e8edf6!important;
@@ -1067,7 +1073,7 @@ body.chat-sidebar-collapsed .cs-collapse svg{
   width:15px;height:15px;border:2px solid currentColor;border-radius:999px;
   box-sizing:border-box;
 }
-.btn-mic .mlbl{font-size:7px!important}
+.btn-mic .mlbl{font-size:var(--text-xs)!important}
 .wake-bar,.sb,.modes,.chat-status-bar,.inp-wrap{backdrop-filter:none!important}
 .chat-status-bar{
   min-height:34px!important;
@@ -1267,7 +1273,7 @@ textarea#inp{background:transparent!important}
   padding: 10px 14px;
   margin: 0 auto;
   max-width: 1080px;
-  background: linear-gradient(135deg, rgba(86,210,255,.10), rgba(108,140,255,.06));
+  background: linear-gradient(135deg, rgba(86,210,255,.10), rgba(124,109,242,.06));
   border: 1px solid var(--accent-cyan-300, rgba(86,210,255,.32));
   border-radius: var(--radius-lg, 12px);
   font: 600 var(--text-sm, 12px)/1.4 var(--font);

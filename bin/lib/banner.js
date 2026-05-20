@@ -53,23 +53,52 @@ function paintEach(text, colors) {
   return out + RESET;
 }
 
-function bannerBig() {
-  // Generated ASCII — kept narrow enough for an 80-col terminal.
-  const lines = [
-    '  ██╗  ██╗ ██████╗ ██████╗ ██╗███████╗ ██████╗ ███╗   ██╗',
-    '  ██║  ██║██╔═══██╗██╔══██╗██║╚══███╔╝██╔═══██╗████╗  ██║',
-    '  ███████║██║   ██║██████╔╝██║  ███╔╝ ██║   ██║██╔██╗ ██║',
-    '  ██╔══██║██║   ██║██╔══██╗██║ ███╔╝  ██║   ██║██║╚██╗██║',
-    '  ██║  ██║╚██████╔╝██║  ██║██║███████╗╚██████╔╝██║ ╚████║',
-    '  ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝',
+// Fix 1 — single-line wordmark. Replaces the rainbow ASCII block.
+// Format: " ⌁ horizon   v0.0.1   ·   bring your own model"
+//   - ⌁ glyph painted in accent (deep blue-violet #7c6df2 via truecolor;
+//     falls back to magenta when truecolor isn't available)
+//   - "horizon" in bold white
+//   - version in dim grey
+//   - tagline in dim grey
+//
+// bannerBig() and bannerCompact() now both return the same wordmark —
+// the only legitimate use of "big" (welcome reveal) uses it the same way.
+function _wordmark() {
+  if (!supportsColor) {
+    return '  horizon  v' + _pkgVersion() + '  ·  bring your own model';
+  }
+  const ACCENT = supportsTruecolor ? rgb(124, 109, 242) : '\x1b[35m'; // #7c6df2 / magenta
+  const RESET = '\x1b[0m';
+  const BOLD_WHITE = '\x1b[1m\x1b[97m';
+  const DIM = '\x1b[2m';
+  const parts = [
+    '  ',
+    ACCENT + '⌁' + RESET,
+    ' ',
+    BOLD_WHITE + 'horizon' + RESET,
+    '   ',
+    DIM + 'v' + _pkgVersion() + RESET,
+    '   ',
+    DIM + '·' + RESET,
+    '   ',
+    DIM + 'bring your own model' + RESET,
   ];
-  return lines.map(l => paintEach(l, GRADIENT)).join('\n');
+  return parts.join('');
 }
 
-function bannerCompact() {
-  if (!supportsColor) return 'HORIZON AI';
-  return paintEach('▌╎▐  H O R I Z O N  ', GRADIENT);
+let _cachedVersion = null;
+function _pkgVersion() {
+  if (_cachedVersion) return _cachedVersion;
+  try {
+    _cachedVersion = require('../../package.json').version || '0.0.0';
+  } catch (_) {
+    _cachedVersion = '0.0.0';
+  }
+  return _cachedVersion;
 }
+
+function bannerBig()     { return _wordmark(); }
+function bannerCompact() { return _wordmark(); }
 
 // Spinner — a gradient-flowing braille spinner. Used by TUI/agent command.
 class GradientSpinner {
@@ -155,10 +184,11 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
   process.stdout.write('\x1b[2J\x1b[H');
   if (!fast) process.stdout.write('\x1b[?25l');
 
+  // Fix 2 — quick 1-second flash, not 4 seconds. 30ms/line instead of 90.
   const lines = bannerBig().split('\n');
   for (const line of lines) {
     process.stdout.write(line + '\n');
-    if (!fast) await new Promise(r => setTimeout(r, 90));
+    if (!fast) await new Promise(r => setTimeout(r, 30));
   }
   process.stdout.write('\n');
 
@@ -167,11 +197,11 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
     process.stdout.write('  ' + tagline + '\n');
   } else {
     process.stdout.write('  ');
-    await typeOut(tagline, 14);
+    await typeOut(tagline, 5);
     process.stdout.write('\n');
   }
 
-  if (!fast) await new Promise(r => setTimeout(r, 200));
+  if (!fast) await new Promise(r => setTimeout(r, 80));
 
   const hints = [
     [fmt.dim('Provider:'), fmt.cyan(provider || 'gemini'), '   ',
@@ -186,7 +216,7 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
   ];
   for (const h of hints) {
     process.stdout.write('  ' + h + '\n');
-    if (!fast && h) await new Promise(r => setTimeout(r, 60));
+    if (!fast && h) await new Promise(r => setTimeout(r, 20));
   }
 
   if (!fast) {
