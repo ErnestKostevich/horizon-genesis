@@ -62,6 +62,8 @@ function printHelp() {
       [c('cost'),       '',           'Token + dollar spend (--days N --json --provider X)'],
       [c('skill'),      'subcommand', 'list | show <id> | new <id> | run <id> "task" | enable | disable'],
       [c('mem'),        'subcommand', 'search | dump | profile | forget | stats | migrate | sqlite-status | review'],
+      [c('dialectic'),  'subcommand', 'Honcho 9th-layer diff log: summary | recent | search | clear'],
+      [c('canvas'),     'subcommand', 'Live Canvas surface: show | append | prepend | replace | clear'],
       [c('model'),      '[provider]', 'Read/set provider. --list shows all 25 options'],
       [c('persona'),    '[id]',       'Read/set active persona. --list shows options'],
       [c('connect'),    'subcommand', 'list | test <id> | telegram|discord|slack|notion|linear|whatsapp|signal|imessage|email --token X'],
@@ -214,7 +216,9 @@ async function dispatch(argv) {
                  'cron', 'sessions', 'backup', 'status', 'insights',
                  'logs', 'checkpoints', 'hooks', 'agents',
                  // Phase 12 management
-                 'mcp', 'plugins', 'rules', 'ws', 'workspace'];
+                 'mcp', 'plugins', 'rules', 'ws', 'workspace',
+                 // Phase 28.5 — Honcho dialectic + Live Canvas surfaces
+                 'dialectic', 'canvas'];
 
   // Phase 12 — AI-helper + utility verbs bundled in two shared files.
   // Dispatch routes them to the right module + passes the subcommand
