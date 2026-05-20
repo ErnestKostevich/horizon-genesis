@@ -10,6 +10,22 @@
 // These show up because some transitive npm dependency still uses the
 // removed `punycode` module. We can't fix it from our side and it
 // rattles the user on every launch.
+//
+// Three-layer suppression because Node emits warnings BEFORE the user
+// script even loads in some pkg-bundled scenarios, and listener-based
+// suppression alone misses those early-boot deprecation prints:
+//   1. Global V8 flag — covers everything after this line
+//   2. emitWarning() override — intercepts at the API level
+//   3. Listener cleanup — for warnings that slip past (1) and (2)
+process.noDeprecation = true;
+const _origEmitWarning = process.emitWarning;
+process.emitWarning = function patchedEmitWarning(warning, type, code) {
+  // Drop ALL deprecation/punycode warnings unconditionally — these are
+  // upstream issues we can't fix and clutter every launch on Node 22+.
+  if (type === 'DeprecationWarning' || code === 'DEP0040') return;
+  if (typeof warning === 'object' && warning?.name === 'DeprecationWarning') return;
+  return _origEmitWarning.call(this, warning, type, code);
+};
 process.removeAllListeners('warning');
 process.on('warning', (w) => {
   if (w?.name === 'DeprecationWarning') return;
