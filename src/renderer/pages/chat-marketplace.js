@@ -47,7 +47,8 @@ async function refreshAccount() {
       btn.classList.add('loggedin');
       btn.title = `Signed in as ${currentUser.display_name || currentUser.email}`;
     } else {
-      btn.textContent = '👤';
+      // Sprint-2 fix — was textContent '👤', now lucide user SVG.
+      btn.innerHTML = '<svg class="licon"><use href="#i-user"/></svg>';
       btn.classList.remove('loggedin');
       btn.title = 'Horizon account — sign in or create one';
     }
@@ -356,15 +357,15 @@ async function renderStoreWorkflows(body) {
           <div class="wf-trigger-badge" style="${w.enabled === false ? 'color:var(--t3);border-color:var(--b1)' : 'color:var(--green);border-color:rgba(52,211,153,.28);background:rgba(52,211,153,.08)'}">${w.enabled === false ? 'paused' : 'enabled'}</div>
         </div>
         <div class="wf-steps">
-          <div class="wf-step"><span class="wf-step-icon">&#9889;</span>${steps} ${steps === 1 ? 'step' : 'steps'}</div>
-          <div class="wf-step"><span class="wf-step-icon">&#9654;</span>${runs} ${runs === 1 ? 'run' : 'runs'}</div>
+          <div class="wf-step"><span class="wf-step-icon"><svg class="licon"><use href="#i-zap"/></svg></span>${steps} ${steps === 1 ? 'step' : 'steps'}</div>
+          <div class="wf-step"><span class="wf-step-icon"><svg class="licon"><use href="#i-play"/></svg></span>${runs} ${runs === 1 ? 'run' : 'runs'}</div>
           <div class="wf-step"><span class="wf-step-icon">&#10003;</span>${rate === null ? 'no success data' : `${rate}% success`}</div>
-          <div class="wf-step"><span class="wf-step-icon">&#8987;</span>${_escHtml(w.lastRun ? _wfFmtRel(w.lastRun) : 'never run')}</div>
+          <div class="wf-step"><span class="wf-step-icon"><svg class="licon"><use href="#i-clock"/></svg></span>${_escHtml(w.lastRun ? _wfFmtRel(w.lastRun) : 'never run')}</div>
         </div>
         <div class="wf-footer">
           <div class="wf-trigger">Trigger: <span class="wf-trigger-badge ${trigger.cls || ''}">${_escHtml(trigger.label)}</span></div>
           <div class="wf-actions">
-            <button class="wf-btn run" onclick="runStoreWorkflow('${id}')">&#9654; Run</button>
+            <button class="wf-btn run" onclick="runStoreWorkflow('${id}')"><svg class="licon" style="vertical-align:-2px"><use href="#i-play"/></svg> Run</button>
             <button class="wf-btn" onclick="openWorkflowPanelFromStore('overview')">Open</button>
           </div>
         </div>
@@ -492,7 +493,7 @@ function renderStorePlugins(items, installed) {
         <span>Signed in as <b>${currentUser.display_name || currentUser.email}</b>. Installs, purchases and reviews are tied to your account.</span>
       </div>`
     : `<div style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--acc3);border:1px solid rgba(108,140,255,.25);border-radius:10px;margin-bottom:14px;font-size:11px;color:var(--t2)">
-        <span style="font-size:14px">&#128100;</span>
+        <svg class="licon"><use href="#i-user"/></svg>
         <span style="flex:1">Not signed in. Free plugins install anonymously - paid plugins need an account.</span>
         <button class="sc-btn primary" style="padding:4px 10px" onclick="openAccount()">Sign in</button>
       </div>`;
@@ -505,7 +506,7 @@ function renderStorePlugins(items, installed) {
       ${cats.map(c => `<button class="store-cat ${c === storeCat ? 'on' : ''}" onclick="setStoreCat('${c}')">${c === 'all' ? 'All' : c}</button>`).join('')}
     </div>
     <div class="store-grid" id="store-grid">
-      ${items.length ? renderStoreCards(items, installed) : '<div class="empty-state"><div class="es-icon">&#128269;</div><h3>No real marketplace plugins yet</h3><p>Horizon only shows plugins returned by the marketplace API. Local built-ins live under Installed.</p></div>'}
+      ${items.length ? renderStoreCards(items, installed) : '<div class="empty-state"><div class="es-icon"><svg class="licon lg"><use href="#i-search"/></svg></div><h3>No real marketplace plugins yet</h3><p>Horizon only shows plugins returned by the marketplace API. Local built-ins live under Installed.</p></div>'}
     </div>
   `;
 }
@@ -563,7 +564,7 @@ function filterStore(q) {
     return matchCat && matchQ;
   });
   const grid = document.getElementById('store-grid');
-  if (grid) grid.innerHTML = filtered.length ? renderStoreCards(filtered, storeInstalled) : '<div class="empty-state"><div class="es-icon">&#128269;</div><h3>No matching real plugins</h3><p>Try a different category or search query.</p></div>';
+  if (grid) grid.innerHTML = filtered.length ? renderStoreCards(filtered, storeInstalled) : '<div class="empty-state"><div class="es-icon"><svg class="licon lg"><use href="#i-search"/></svg></div><h3>No matching real plugins</h3><p>Try a different category or search query.</p></div>';
 }
 
 async function installStorePlugin(id, price = 0, slug = '') {

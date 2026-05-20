@@ -21,38 +21,47 @@
 // ═══════════════════════════════════════════════════════════════
 // COMMAND PALETTE (Ctrl+K) — instant access to all features
 // ═══════════════════════════════════════════════════════════════
+// Sprint-2 fix — was emoji-per-command. Now each item carries a
+// lucide-symbol id (resolved against the <symbol> library at the top
+// of chat.html). _renderCmdIcon(c) renders the matching <svg>.
+function _cmdIconHtml(item) {
+  if (item && item.iconId) {
+    return '<svg class="licon"><use href="#' + item.iconId + '"/></svg>';
+  }
+  return '';
+}
 var COMMANDS = [
-  { icon:'🤖', text:'Agent Mode', hint:'autonomous', action:()=>setMode('agent') },
-  { icon:'\u{1F4AC}', text:'Chat Mode', hint:'conversation', action:()=>setMode('chat') },
-  { icon:'\u{1F441}', text:'Vision Mode', hint:'screen analysis', action:()=>setMode('vision') },
-  { icon:'\u{1F4BB}', text:'Code Mode', hint:'programming', action:()=>setMode('code') },
-  { icon:'🎯', text:'Focus Mode', hint:'deep work', action:()=>setMode('focus') },
-  { icon:'\u{1F4CB}', text:'Plan Mode', hint:'task planning', action:()=>setMode('plan') },
-  { icon:'🏆', text:'Coach Mode', hint:'motivation', action:()=>setMode('coach') },
-  { icon:'✍️', text:'Write Mode', hint:'content', action:()=>setMode('write') },
-  { icon:'\u{2709}\u{FE0F}', text:'Email Mode', hint:'compose', action:()=>setMode('email') },
-  { icon:'\u{1F50D}', text:'Search Mode', hint:'web search', action:()=>setMode('search') },
-  { icon:'🌐', text:'Translate', hint:'languages', action:()=>setMode('translate') },
-  { icon:'🎭', text:'Roleplay', hint:'creative', action:()=>setMode('roleplay') },
-  { icon:'📸', text:'Take Screenshot', hint:'capture screen', action:async()=>{const r=await H.pcScreenshot();if(r.ok)addCard(lang==='ru'?'📸 Скриншот':'📸 Screenshot','',r.base64);} },
-  { icon:'🖥', text:'System Info', hint:'PC status', action:async()=>{const r=await H.getDetailedSysInfo();addMsg('bot','```json\n'+JSON.stringify(r,null,2)+'\n```');} },
-  { icon:'\u{1F5A5}', text:'Running Apps', hint:'processes', action:async()=>{const r=await H.getRunningApps();addCard('🖥 Apps',r.out||'');} },
-  { icon:'\u{1F4CB}', text:'Clipboard Content', hint:'paste', action:async()=>{const r=await H.getClipboard();addCard('\u{1F4CB} Clipboard',r||'(empty)');} },
-  { icon:'🧠', text:'Memory — Recent', hint:'recall', action:async()=>{const r=await H.memGetRecent(10);addMsg('bot','**Recent Memories:**\n'+r.map(m=>'- '+m.content).join('\n'));} },
-  { icon:'📝', text:'Memory — Facts', hint:'stored facts', action:async()=>{const r=await H.memGetFacts();addMsg('bot','**Facts:**\n```json\n'+JSON.stringify(r,null,2)+'\n```');} },
-  { icon:'🍎', text:'Nutrition Today', hint:'food tracking', action:async()=>{const r=await H.nutritionToday();addMsg('bot','**Today\'s Nutrition:**\nCalories: '+r.total.calories+'\nProtein: '+r.total.protein+'g\nCarbs: '+r.total.carbs+'g\nFat: '+r.total.fat+'g\nMeals: '+r.meals.length);} },
-  { icon:'⏱', text:'Focus Timer (25 min)', hint:'pomodoro', action:()=>startFocusTimer(25) },
-  { icon:'⏱', text:'Focus Timer (10 min)', hint:'short', action:()=>startFocusTimer(10) },
-  { icon:'🌅', text:'Toggle Wake Word', hint:'voice activate', action:()=>toggleWake() },
-  { icon:'🌐', text:'Toggle Ambient Mode', hint:'screen watch', action:()=>toggleAmbient() },
-  { icon:'\u{1F4C4}', text:'Toggle Notifications', hint:'briefing', action:()=>toggleNotifications() },
-  { icon:'☀️', text:'Daily Briefing Now', hint:'weather+calendar', action:()=>requestBriefing() },
-  { icon:'⚡', text:'Create Workflow', hint:'no-code automation', action:()=>{closeCmdPalette();const inp=document.getElementById('inp');inp.value=lang==='ru'?'Создай workflow: ':'Create workflow: ';inp.focus();} },
-  { icon:'⚡', text:'List Workflows', hint:'show all', action:()=>{addMsg('bot',workflows.length?(lang==='ru'?'**Workflows:**\n':'**Workflows:**\n')+workflows.map(w=>`- **${w.name}** (${w.steps.length} steps) [ID: ${w.id}]`).join('\n'):(lang==='ru'?'Нет workflows. Создай командой.':'No workflows. Create one.'));} },
-  { icon:'\u{1F4CB}', text:'Analyze Clipboard', hint:'smart paste', action:()=>analyzeClipboard() },
-  { icon:'\u{1F5D1}', text:'Clear Chat', hint:'reset', action:()=>clearHist() },
-  { icon:'⚙️', text:'Settings', hint:'configure', action:()=>openPanel() },
-  { icon:'\u{1F4D8}', text:'Skill Hub', hint:'browse/edit SKILL.md bundles', action:()=>{ try { closeCmdPalette(); window.openSkillHub?.(); } catch(_){} } },
+  { iconId:'i-bot',         text:'Agent Mode',         hint:'autonomous',        action:()=>setMode('agent') },
+  { iconId:'i-message',     text:'Chat Mode',          hint:'conversation',      action:()=>setMode('chat') },
+  { iconId:'i-eye',         text:'Vision Mode',        hint:'screen analysis',   action:()=>setMode('vision') },
+  { iconId:'i-code',        text:'Code Mode',          hint:'programming',       action:()=>setMode('code') },
+  { iconId:'i-target',      text:'Focus Mode',         hint:'deep work',         action:()=>setMode('focus') },
+  { iconId:'i-clipboard',   text:'Plan Mode',          hint:'task planning',     action:()=>setMode('plan') },
+  { iconId:'i-trophy',      text:'Coach Mode',         hint:'motivation',        action:()=>setMode('coach') },
+  { iconId:'i-pen',         text:'Write Mode',         hint:'content',           action:()=>setMode('write') },
+  { iconId:'i-mail',        text:'Email Mode',         hint:'compose',           action:()=>setMode('email') },
+  { iconId:'i-search',      text:'Search Mode',        hint:'web search',        action:()=>setMode('search') },
+  { iconId:'i-globe',       text:'Translate',          hint:'languages',         action:()=>setMode('translate') },
+  { iconId:'i-drama',       text:'Roleplay',           hint:'creative',          action:()=>setMode('roleplay') },
+  { iconId:'i-eye',         text:'Take Screenshot',    hint:'capture screen',    action:async()=>{const r=await H.pcScreenshot();if(r.ok)addCard(lang==='ru'?'Скриншот':'Screenshot','',r.base64);} },
+  { iconId:'i-settings',    text:'System Info',        hint:'PC status',         action:async()=>{const r=await H.getDetailedSysInfo();addMsg('bot','```json\n'+JSON.stringify(r,null,2)+'\n```');} },
+  { iconId:'i-layout',      text:'Running Apps',       hint:'processes',         action:async()=>{const r=await H.getRunningApps();addCard('Apps',r.out||'');} },
+  { iconId:'i-clipboard',   text:'Clipboard Content',  hint:'paste',             action:async()=>{const r=await H.getClipboard();addCard('Clipboard',r||'(empty)');} },
+  { iconId:'i-brain',       text:'Memory — Recent',    hint:'recall',            action:async()=>{const r=await H.memGetRecent(10);addMsg('bot','**Recent Memories:**\n'+r.map(m=>'- '+m.content).join('\n'));} },
+  { iconId:'i-file-text',   text:'Memory — Facts',     hint:'stored facts',      action:async()=>{const r=await H.memGetFacts();addMsg('bot','**Facts:**\n```json\n'+JSON.stringify(r,null,2)+'\n```');} },
+  { iconId:'i-trending-up', text:'Nutrition Today',    hint:'food tracking',     action:async()=>{const r=await H.nutritionToday();addMsg('bot','**Today\'s Nutrition:**\nCalories: '+r.total.calories+'\nProtein: '+r.total.protein+'g\nCarbs: '+r.total.carbs+'g\nFat: '+r.total.fat+'g\nMeals: '+r.meals.length);} },
+  { iconId:'i-clock',       text:'Focus Timer (25 min)', hint:'pomodoro',        action:()=>startFocusTimer(25) },
+  { iconId:'i-clock',       text:'Focus Timer (10 min)', hint:'short',           action:()=>startFocusTimer(10) },
+  { iconId:'i-sunrise',     text:'Toggle Wake Word',   hint:'voice activate',    action:()=>toggleWake() },
+  { iconId:'i-eye',         text:'Toggle Ambient Mode', hint:'screen watch',     action:()=>toggleAmbient() },
+  { iconId:'i-bell',        text:'Toggle Notifications', hint:'briefing',        action:()=>toggleNotifications() },
+  { iconId:'i-sun',         text:'Daily Briefing Now', hint:'weather+calendar',  action:()=>requestBriefing() },
+  { iconId:'i-zap',         text:'Create Workflow',    hint:'no-code automation',action:()=>{closeCmdPalette();const inp=document.getElementById('inp');inp.value=lang==='ru'?'Создай workflow: ':'Create workflow: ';inp.focus();} },
+  { iconId:'i-workflow',    text:'List Workflows',     hint:'show all',          action:()=>{addMsg('bot',workflows.length?(lang==='ru'?'**Workflows:**\n':'**Workflows:**\n')+workflows.map(w=>`- **${w.name}** (${w.steps.length} steps) [ID: ${w.id}]`).join('\n'):(lang==='ru'?'Нет workflows. Создай командой.':'No workflows. Create one.'));} },
+  { iconId:'i-clipboard',   text:'Analyze Clipboard',  hint:'smart paste',       action:()=>analyzeClipboard() },
+  { iconId:'i-trash',       text:'Clear Chat',         hint:'reset',             action:()=>clearHist() },
+  { iconId:'i-settings',    text:'Settings',           hint:'configure',         action:()=>openPanel() },
+  { iconId:'i-book',        text:'Skill Hub',          hint:'browse/edit SKILL.md bundles', action:()=>{ try { closeCmdPalette(); window.openSkillHub?.(); } catch(_){} } },
 ];
 var cmdActiveIdx = 0;
 
@@ -86,21 +95,21 @@ function _paletteDynamicItems() {
   // Same approach for personas — the persona picker handles selection.
   dyn.push({
     group: 'Switch',
-    icon: '🧠',
+    iconId: 'i-brain',
     text: 'Switch model…',
     hint: 'open the model picker (one switcher for every provider)',
     action: () => { try { closeCmdPalette(); openModelPicker({ stopPropagation: ()=>{}, currentTarget: document.getElementById('composer-model-chip') }); } catch(_){} }
   });
   dyn.push({
     group: 'Switch',
-    icon: '🎭',
+    iconId: 'i-drama',
     text: 'Switch persona…',
     hint: 'open the persona picker',
     action: () => { try { closeCmdPalette(); openPersonaPicker({ stopPropagation: ()=>{}, currentTarget: document.getElementById('composer-persona-chip') }); } catch(_){} }
   });
   dyn.push({
     group: 'Switch',
-    icon: '⚡',
+    iconId: 'i-zap',
     text: 'Switch mode…',
     hint: 'open the mode picker (Chat / Code / Agent / Vision / 8 niche)',
     action: () => { try { closeCmdPalette(); openModePicker({ stopPropagation: ()=>{}, currentTarget: document.getElementById('composer-mode-chip') }); } catch(_){} }
@@ -112,7 +121,7 @@ function _paletteDynamicItems() {
         const title = c?.title || 'New chat';
         dyn.push({
           group: 'Switch chat',
-          icon: '💬',
+          iconId: 'i-message',
           text: title.slice(0, 60),
           hint: c?.id ? `chat-${c.id.slice(0, 8)}` : '',
           action: () => { try { switchChat?.(c.id); } catch(_){} }
@@ -128,7 +137,7 @@ function _paletteDynamicItems() {
   ]) {
     dyn.push({
       group: 'Open settings',
-      icon: '⚙',
+      iconId: 'i-settings',
       text: `Settings · ${lbl}`,
       hint: `open ${tab} tab`,
       action: () => { try { openPanel(tab); } catch(_){} }
@@ -198,7 +207,7 @@ function filterCommands(query) {
     const i = runIdx;
     // Cache the item on a data-index for runCommand().
     return `<div class="cmd-item${i===0?' active':''}" data-runidx="${i}" onclick="runDynamicCommand(${i})" onmouseenter="cmdActiveIdx=${i};highlightCmd()">
-      <span class="cmd-item-icon">${c.icon || ''}</span>
+      <span class="cmd-item-icon">${_cmdIconHtml(c)}</span>
       <span class="cmd-item-text">${esc(c.text)}</span>
       <span class="cmd-item-hint">${esc(c.hint || '')}</span>
     </div>`;
