@@ -114,4 +114,59 @@ function promptYesNo(question) {
   });
 }
 
-module.exports = { fmt, Spinner, isTTY, supportsColor, supportsTruecolor, rgb, bgRgb, promptYesNo };
+// v0.0.2 — translate raw provider/runtime errors into something the
+// user can act on. The default error stream returns strings like
+// "HTTP 429" or "fetch failed" which leave end users staring blankly
+// at the terminal. This helper maps the common cases to a short
+// English line + a hint about what to try next.
+//
+// Returns the original string for anything we don't recognise — we
+// never want to swallow the actual error.
+function friendlyError(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return 'unknown error';
+
+  // Match HTTP status — accepts "HTTP 429", "status 429", or just "429".
+  const m = s.match(/(?:HTTP|status)\s*(\d{3})|\b(\d{3})\b/i);
+  const code = m ? parseInt(m[1] || m[2], 10) : null;
+
+  if (code === 429) {
+    return 'Rate limit hit — your provider is throttling requests.\n  Tip: wait 30–60 seconds, or switch provider with `horizon model <id>`.';
+  }
+  if (code === 401 || code === 403) {
+    return 'API key rejected — the provider says your key is missing, wrong, or expired.\n  Tip: run `horizon setup` to re-enter, or `horizon doctor` to check what is configured.';
+  }
+  if (code === 402) {
+    return 'Payment required — your provider account has no credit.\n  Tip: top up at the provider dashboard, or switch with `horizon model <id>`.';
+  }
+  if (code === 404) {
+    return 'Model not found — the configured model name does not exist for this provider.\n  Tip: run `horizon model` to see available models.';
+  }
+  if (code === 408 || /timeout/i.test(s)) {
+    return 'Request timed out — the provider took too long to respond.\n  Tip: try again, or switch to a faster provider (groq/cerebras).';
+  }
+  if (code && code >= 500) {
+    return `Provider returned ${code} — their side is having trouble right now.\n  Tip: wait a minute and retry, or switch with \`horizon model <id>\`.`;
+  }
+
+  // Network-level failures (no HTTP code).
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(s)) {
+    return 'DNS lookup failed — check your internet connection or firewall.';
+  }
+  if (/ECONNREFUSED/i.test(s)) {
+    return 'Connection refused — if you set a local provider URL (Ollama/LM Studio/LocalAI), make sure that server is running.';
+  }
+  if (/ECONNRESET|EPIPE|socket hang up/i.test(s)) {
+    return 'Connection dropped mid-request — usually transient. Retry once.';
+  }
+  if (/fetch failed/i.test(s)) {
+    return 'Network request failed — check connectivity and provider status.';
+  }
+  if (/key not set|not configured/i.test(s)) {
+    return s + '\n  Tip: run `horizon setup` to add it.';
+  }
+
+  return s;
+}
+
+module.exports = { fmt, Spinner, isTTY, supportsColor, supportsTruecolor, rgb, bgRgb, promptYesNo, friendlyError };
