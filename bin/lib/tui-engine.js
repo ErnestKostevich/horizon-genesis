@@ -35,6 +35,52 @@ const readline = require('readline');
 const { fmt } = require('./tty');
 const { ctxFor } = require('./themes');
 
+// Sprint 2.12 — git branch detection for the Hermes-style status bar.
+// Walks UP from `cwd` looking for a `.git/HEAD` file; returns the branch
+// name (e.g. "main", "claude/cli-tui-serve") or a 7-char SHA prefix for
+// detached HEAD states. Cached per-process so we don't re-stat on every
+// status redraw (~20 fps).
+let _gitBranchCache = null;
+function _getGitBranch(cwd) {
+  if (_gitBranchCache !== null) return _gitBranchCache || null;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    let dir = cwd || process.cwd();
+    while (dir && dir !== path.dirname(dir)) {
+      const head = path.join(dir, '.git', 'HEAD');
+      if (fs.existsSync(head)) {
+        const c = fs.readFileSync(head, 'utf8').trim();
+        const m = c.match(/^ref: refs\/heads\/(.+)$/);
+        _gitBranchCache = m ? m[1] : c.slice(0, 7);
+        return _gitBranchCache;
+      }
+      dir = path.dirname(dir);
+    }
+  } catch (_) {}
+  _gitBranchCache = false;
+  return null;
+}
+
+// Sprint 2.12 — `~`-shorten a path for the status bar.
+// Always normalises Windows backslashes to forward-slash so the displayed
+// cwd reads cleanly across platforms ("~/Genesis/horizon-genesis" rather
+// than "C:\Users\…\horizon-genesis").
+function _tildify(p) {
+  if (!p) return '';
+  try {
+    const home = require('os').homedir();
+    const np = String(p).replace(/\\/g, '/');
+    const nh = String(home).replace(/\\/g, '/');
+    if (nh && np.toLowerCase().startsWith(nh.toLowerCase())) {
+      return '~' + np.slice(nh.length);
+    }
+    return np;
+  } catch (_) {
+    return String(p);
+  }
+}
+
 const ANSI = {
   clearScreen: '\x1b[2J\x1b[H',
   clearLine:   '\x1b[2K',
@@ -287,6 +333,38 @@ class TuiEngine {
     this._mouseSwallowDeadline = 0;   // ms epoch; 0 = inactive
     this._mouseEnabled = false;
     this._dataBuffer = '';            // persistent byte-level scan buffer
+
+    // Sprint 2.12 — Hermes-style enriched status bar fields.
+    //   _agentState: 'ready' | 'thinking' | 'running' | 'starting' | 'interrupted'
+    //     Drives the leftmost "▎ <state>" segment on the first status row.
+    //   _promptStartMs / _promptElapsedMs: track per-prompt elapsed time so
+    //     the status bar can show "⏱ 12s/3m 45s" (current/total).
+    //   _compressionCount: memory compactions this session (placeholder
+    //     until wired into the compactor; visible in status bar already).
+    //   _bgTaskCount: background subagents (placeholder; surfaces through
+    //     setBgTaskCount() once the orchestrator hooks in).
+    //   _yoloMode: shown when --auto-approve / YOLO is on.
+    //   _altScreen: when true the engine is rendering in alternate screen
+    //     so streaming differential updates don't pollute scrollback.
+    this._agentState = 'ready';
+    this._promptStartMs = 0;
+    this._promptElapsedMs = 0;
+    this._compressionCount = 0;
+    this._bgTaskCount = 0;
+    this._yoloMode = !!opts.yolo;
+    this._altScreen = false;
+    this._altScreenRequested = !!opts.altScreen
+      || process.env.HORIZON_ALT_SCREEN === '1';
+
+    // Sprint 2.12 — collapsible startup-banner sections. The keys are
+    // section ids; expanded:true → ▾, false → ▸. Toggled via /sections
+    // or by short-key tap; rendered by bannerHeader() in horizon-tui.js.
+    this._collapsibleSections = {
+      tools:   { expanded: true,  name: 'Tools' },
+      skills:  { expanded: false, name: 'Skills' },
+      prompt:  { expanded: false, name: 'System prompt' },
+      mcp:     { expanded: false, name: 'MCP servers' },
+    };
   }
 
   // ── public API ──────────────────────────────────────────────────────
@@ -485,6 +563,9 @@ class TuiEngine {
         // a no-op but would still write escape bytes to stdout right
         // before exit — best to be tidy.
         if (this._mouseEnabled) process.stdout.write(ANSI.mouseOff);
+        // Sprint 2.12 — drop alt-screen on exit so the user's scrollback
+        // is restored intact when they leave the TUI.
+        if (this._altScreen) process.stdout.write(ANSI.altOff);
         process.stdout.write(ANSI.cursorShow);
         try { process.stdin.setRawMode(false); } catch (_) {}
       }
@@ -583,9 +664,142 @@ class TuiEngine {
   /** Mark composer as "sending" so we ignore Enter until reply comes back. */
   setSending(on) {
     this._sending = !!on;
+    // Sprint 2.12 — toggling sending also flips the agent state.
+    if (on) {
+      this._agentState = 'thinking';
+      this._promptStartMs = Date.now();
+    } else {
+      // Stash the elapsed for the last prompt so the timer reads "12s/3m 45s".
+      if (this._promptStartMs) {
+        this._promptElapsedMs += Date.now() - this._promptStartMs;
+      }
+      this._promptStartMs = 0;
+      this._agentState = 'ready';
+    }
     // Fix 5 — force-redraw on completion so the final frame reflects state
     // even if a throttled token redraw was pending.
     if (!on && process.stdin.isTTY && !this._closed) this._forceRedraw();
+  }
+
+  /**
+   * Sprint 2.12 — public agent-state setter.
+   * The TUI/agent loop can call setAgentState('running') / ('interrupted')
+   * to surface its current phase in the status bar without lying about the
+   * sending flag (which controls the input bar lock).
+   */
+  setAgentState(state) {
+    if (!state) return;
+    this._agentState = String(state);
+    if (process.stdin.isTTY && !this._closed) this._forceRedraw();
+  }
+
+  /** Sprint 2.12 — public setters for the soft session counters. */
+  setBgTaskCount(n) {
+    this._bgTaskCount = Math.max(0, n | 0);
+    if (process.stdin.isTTY && !this._closed) this._forceRedraw();
+  }
+  setCompressionCount(n) {
+    this._compressionCount = Math.max(0, n | 0);
+    if (process.stdin.isTTY && !this._closed) this._forceRedraw();
+  }
+  setYoloMode(on) {
+    this._yoloMode = !!on;
+    if (process.stdin.isTTY && !this._closed) this._forceRedraw();
+  }
+
+  /**
+   * Sprint 2.12 — toggle a startup-banner collapsible section. Returns the
+   * new expanded boolean (or null if the section id is unknown). Caller is
+   * responsible for re-printing the banner via bannerHeader().
+   */
+  toggleSection(name) {
+    const id = String(name || '').toLowerCase();
+    if (!this._collapsibleSections[id]) return null;
+    this._collapsibleSections[id].expanded = !this._collapsibleSections[id].expanded;
+    return this._collapsibleSections[id].expanded;
+  }
+  getSections() { return this._collapsibleSections; }
+
+  /**
+   * Sprint 2.12 — modal overlay rendering. Enters the terminal's alternate
+   * screen buffer, prints `content` (string or array of strings), then
+   * waits for Esc/q to leave. On exit we restore the original screen
+   * untouched — search, scrollback, and the streaming buffer all survive.
+   *
+   * Returns a Promise that resolves to true if dismissed, or false if the
+   * call was a no-op (non-TTY / engine closed).
+   */
+  modalOverlay(content) {
+    return new Promise((resolve) => {
+      if (!process.stdin.isTTY || this._closed) {
+        // Non-TTY fall-through — print inline.
+        const text = Array.isArray(content) ? content.join('\n') : String(content || '');
+        process.stdout.write(text + '\n');
+        return resolve(false);
+      }
+      const text = Array.isArray(content) ? content.join('\n') : String(content || '');
+      // Pause input handlers so we don't fight the keypress decoder.
+      this.pause();
+      // Enter alternate screen + hide cursor while modal is open.
+      process.stdout.write(ANSI.altOn);
+      process.stdout.write(ANSI.cursorHome);
+      process.stdout.write(ANSI.clearScreen);
+      process.stdout.write(text + '\n');
+      // Footer hint.
+      const footer = '\n' + fmt.dim('  Esc / q to close');
+      process.stdout.write(footer + '\n');
+
+      const onKey = (ch, key) => {
+        if (!key) return;
+        // Any of Esc, q, Ctrl+C dismisses; never crash the modal.
+        if (key.name === 'escape' || key.name === 'q'
+            || (key.ctrl && (key.name === 'c' || key.name === 'd'))) {
+          cleanup();
+          return resolve(true);
+        }
+      };
+      const cleanup = () => {
+        try { process.stdin.off('keypress', onKey); } catch (_) {}
+        try { process.stdout.write(ANSI.altOff); } catch (_) {}
+        try { process.stdout.write(ANSI.cursorShow); } catch (_) {}
+        // Restore input handlers + repaint the live view.
+        this.resume();
+      };
+      try {
+        readline.emitKeypressEvents(process.stdin);
+        process.stdin.on('keypress', onKey);
+        try { process.stdin.setRawMode(true); } catch (_) {}
+        process.stdin.resume();
+      } catch (e) {
+        cleanup();
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Sprint 2.12 — toggle the alternate-screen rendering mode. When ON the
+   * engine renders the live view in the terminal's alt-screen so streaming
+   * deltas don't accumulate in scrollback (Hermes feel). The original
+   * scrollback restores on exit / toggle-off.
+   */
+  setAltScreen(on) {
+    const want = !!on;
+    if (want === this._altScreen) return;
+    if (want) {
+      try {
+        process.stdout.write(ANSI.altOn);
+        process.stdout.write(ANSI.cursorHome);
+        process.stdout.write(ANSI.clearScreen);
+      } catch (_) {}
+      this._altScreen = true;
+    } else {
+      try {
+        process.stdout.write(ANSI.altOff);
+      } catch (_) {}
+      this._altScreen = false;
+    }
+    if (process.stdin.isTTY && !this._closed) this._forceRedraw();
   }
 
   // ── key handling ────────────────────────────────────────────────────
@@ -1193,17 +1407,17 @@ class TuiEngine {
   }
 
   /**
-   * Sprint 2 — Hermes-grade status bar v2.
+   * Sprint 2.12 — Hermes-grade status bar v3.
    *
-   * Full (≥100 cols):
-   *   ⌁ <prov>:<model> · <persona> · <tokens>/<ctx> · [████░░░] <pct>% · $<cost> · <mm:ss>
-   * Medium (70–99 cols):
-   *   ⌁ <prov>:<model> · <persona> · <tokens>/<ctx> · [████░░] <pct>% · $<cost>
-   * Narrow (<70 cols):
+   * Two-row format (full + medium widths):
+   *   ▎ <state>  ⌁ <prov>:<model>  <persona>  ~/<cwd> (<branch>)  [⚠ YOLO]
+   *   ▎ <tokens>/<ctx> [████░░░░░░] <pct>%  $<cost>  ⏱ <cur>/<total>  🗜 <N>  ▶ <N>
+   *
+   * Narrow (<70 cols) — single-row fallback retained:
    *   ⌁ <prov>:<model> · <persona> · <pct>%
    *
-   * Bar fill colour by % of context used:
-   *   <50% green, 50–80% yellow, 80–95% warn/orange, ≥95% red.
+   * The leading "▎" ribbon is rendered in the agent-state colour:
+   *   ready=green · thinking/running/starting=cyan · interrupted=red
    */
   _statusLine() {
     const rt = this.runtime;
@@ -1213,10 +1427,6 @@ class TuiEngine {
     try {
       provider = rt.settingsStore.get('provider') || 'gemini';
       persona = rt.settingsStore.get('persona') || 'jarvis';
-      // Sprint 2.11 fix — user's saved choice (settingsStore) wins over
-      // the cached `lastModel` from the most recent reply. Otherwise
-      // swapping models via /model-list shows the OLD model in the bar
-      // until the next chat completion lands.
       modelName = rt.settingsStore.get('model.' + provider)
         || this.sessionStats.lastModel
         || '';
@@ -1238,22 +1448,28 @@ class TuiEngine {
     };
     const tokensStr = `${fmtTokens(used)}/${fmtTokens(ctxMax)}`;
 
-    // Session time mm:ss (≥1h shows h:mm:ss)
-    const elapsed = Math.floor((Date.now() - this._sessionStartMs) / 1000);
+    // Per-prompt elapsed timer ("12s/3m 45s" = current / total session prompts).
+    const fmtSec = (secs) => {
+      if (!secs || secs < 0) return '—';
+      if (secs < 60) return secs + 's';
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return `${m}m ${String(s).padStart(2, '0')}s`;
+    };
+    const curSecs = this._promptStartMs
+      ? Math.floor((Date.now() - this._promptStartMs) / 1000) : 0;
+    const totalElapsedMs = this._promptElapsedMs
+      + (this._promptStartMs ? Date.now() - this._promptStartMs : 0);
+    const totalSecs = Math.floor(totalElapsedMs / 1000);
     let timeStr;
-    if (elapsed >= 3600) {
-      const hh = Math.floor(elapsed / 3600);
-      const mm = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
-      const ss = String(elapsed % 60).padStart(2, '0');
-      timeStr = `${hh}:${mm}:${ss}`;
+    if (!curSecs && !totalSecs) {
+      timeStr = '⏱ —';
     } else {
-      const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-      const ss = String(elapsed % 60).padStart(2, '0');
-      timeStr = `${mm}:${ss}`;
+      timeStr = '⏱ ' + fmtSec(curSecs || totalSecs)
+              + (totalSecs && curSecs && totalSecs !== curSecs ? '/' + fmtSec(totalSecs) : '');
     }
 
     // Cost — combine THIS-SESSION accumulator with persisted today's spend.
-    // sessionStats wins when non-zero; else fall back to costTracker.summary({days:1}).
     let costUsd = this.sessionStats.costUsd || 0;
     if (!costUsd) {
       try {
@@ -1279,7 +1495,7 @@ class TuiEngine {
     // Colour by usage
     let barFn;
     if (pct >= 95) barFn = fmt.red;
-    else if (pct >= 80) barFn = fmt.yellow;   // warn (orange) — yellow is closest in default palette
+    else if (pct >= 80) barFn = fmt.yellow;
     else if (pct >= 50) barFn = fmt.yellow;
     else barFn = fmt.green;
     const barColored = barFn(barRaw);
@@ -1290,13 +1506,56 @@ class TuiEngine {
     const personaPart = fmt.cyan(persona);
 
     if (!wantFull && !wantMedium) {
-      // Narrow: prov:model · persona · pct%
+      // Narrow: single-row fallback — prov:model · persona · pct%.
       return head + SEP + personaPart + SEP + barFn(pctStr);
     }
 
-    const parts = [head, personaPart, fmt.dim(tokensStr), '[' + barColored + '] ' + barFn(pctStr), fmt.green(costStr)];
-    if (wantFull) parts.push(fmt.dim(timeStr));
-    return parts.join(SEP);
+    // ── Two-row Hermes-style bar ────────────────────────────────────
+    // Agent-state colour-coded ribbon.
+    const state = String(this._agentState || 'ready');
+    let ribbonFn;
+    if (state === 'ready')                 ribbonFn = fmt.green;
+    else if (state === 'interrupted')      ribbonFn = fmt.red;
+    else if (state === 'thinking'
+          || state === 'running'
+          || state === 'starting')         ribbonFn = fmt.cyan;
+    else                                   ribbonFn = fmt.yellow;
+    const ribbon = ribbonFn('▎ ');
+    const stateText = state === 'thinking' || state === 'running' || state === 'starting'
+      ? state + '…'
+      : state;
+    const statePainted = ribbonFn(stateText);
+
+    // Working dir + git branch.
+    const cwd = (rt && rt.workspaceDir) || process.cwd();
+    const cwdShort = _tildify(cwd);
+    const branch = _getGitBranch(cwd);
+    const cwdPart = fmt.cyan(cwdShort)
+      + (branch ? ' ' + fmt.dim('(' + branch + ')') : '');
+
+    // YOLO flag.
+    const yoloPart = this._yoloMode ? '  ' + fmt.yellow('⚠ YOLO') : '';
+
+    // Row 1 — state + provider + persona + cwd (branch) + YOLO
+    const sep2 = '  ';
+    const row1 = ribbon + statePainted + sep2 + head + sep2 + personaPart
+               + sep2 + cwdPart + yoloPart;
+
+    // Row 2 — tokens/ctx [bar] pct%  $cost  ⏱ time  🗜 N  ▶ N
+    const tokensPart = fmt.dim(tokensStr);
+    const barPart    = '[' + barColored + '] ' + barFn(pctStr);
+    const costPart   = fmt.green(costStr);
+    const compPart   = fmt.dim('🗜 ' + this._compressionCount);
+    const bgPart     = fmt.dim('▶ ' + this._bgTaskCount);
+    const timePart   = fmt.dim(timeStr);
+    const row2parts  = [tokensPart, barPart, costPart, timePart];
+    if (wantFull) {
+      row2parts.push(compPart);
+      row2parts.push(bgPart);
+    }
+    const row2 = ribbon + row2parts.join(sep2);
+
+    return row1 + '\n' + row2;
   }
 
   _renderInputBar() {
@@ -1316,9 +1575,14 @@ class TuiEngine {
 
     if (this._sending) {
       // Show status line above the sending indicator if runtime is set.
+      // Sprint 2.12 — status may span multiple rows (2-row Hermes layout);
+      // count rows precisely so _eraseInputBar() rewinds correctly.
       const status = this._statusLine();
       let height = 0;
-      if (status) { process.stdout.write(status + '\n'); height++; }
+      if (status) {
+        process.stdout.write(status + '\n');
+        height += status.split('\n').length;
+      }
       const bar = fmt.dim('  …sending — press Ctrl+C to interrupt');
       process.stdout.write(bar);
       this._lastDrawHeight = height + 1;
@@ -1348,10 +1612,15 @@ class TuiEngine {
       menuHeight++;
     }
 
-    // Status line (above composer)
+    // Status line (above composer). Sprint 2.12 — status now may be a
+    // 2-row block (Hermes layout); count rows from the rendered string so
+    // _eraseInputBar() rewinds the correct number of lines next frame.
     const status = this._statusLine();
     let statusHeight = 0;
-    if (status) { process.stdout.write(status + '\n'); statusHeight++; }
+    if (status) {
+      process.stdout.write(status + '\n');
+      statusHeight += status.split('\n').length;
+    }
 
     // Sprint 2 — slash live hint above composer (single dim line).
     // Only render when:

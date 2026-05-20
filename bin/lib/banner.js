@@ -100,6 +100,74 @@ function _pkgVersion() {
 function bannerBig()     { return _wordmark(); }
 function bannerCompact() { return _wordmark(); }
 
+/**
+ * Sprint 2.12 — Hermes-style framed banner box.
+ * Renders a rounded-corner Unicode box around the wordmark + tagline.
+ * Width adapts to the inner content; the box always uses light-violet
+ * (accent) borders so it pops on any background.
+ *
+ *   ╭──────────────────────────────────────╮
+ *   │ ⌁ horizon · v0.0.1                   │
+ *   │   the agent that learns who you are  │
+ *   ╰──────────────────────────────────────╯
+ */
+function bannerFramedBox() {
+  const v = _pkgVersion();
+  const titleVis = '⌁ horizon · v' + v;
+  const subVis   = '  the agent that learns who you are';
+  // Inner width = wider of the two strings + 3-char trailing gutter so the
+  // right border has visible breathing room.
+  const innerW = Math.max(titleVis.length, subVis.length) + 3;
+  const horiz  = '─'.repeat(innerW);
+  // Padding helper: visible-text padding to fill the inner width minus
+  // the leading 1-char gutter.
+  const padTo = (visLen) => ' '.repeat(Math.max(0, innerW - 1 - visLen));
+  if (!supportsColor) {
+    return [
+      '╭' + horiz + '╮',
+      '│ ' + titleVis + padTo(titleVis.length) + '│',
+      '│ ' + subVis   + padTo(subVis.length)   + '│',
+      '╰' + horiz + '╯',
+    ].join('\n');
+  }
+  const [r, g, b] = _accentRgb();
+  const ACCENT = supportsTruecolor ? rgb(r, g, b) : '\x1b[35m';
+  const RESET  = '\x1b[0m';
+  const BOLD   = '\x1b[1m\x1b[97m';
+  const DIM    = '\x1b[2m';
+  const titlePainted = ACCENT + '⌁' + RESET + ' ' + BOLD + 'horizon' + RESET
+                     + DIM + ' · v' + v + RESET;
+  const subPainted   = DIM + subVis + RESET;
+  return [
+    ACCENT + '╭' + horiz + '╮' + RESET,
+    ACCENT + '│' + RESET + ' ' + titlePainted + padTo(titleVis.length) + ACCENT + '│' + RESET,
+    ACCENT + '│' + RESET + ' ' + subPainted   + padTo(subVis.length)   + ACCENT + '│' + RESET,
+    ACCENT + '╰' + horiz + '╯' + RESET,
+  ].join('\n');
+}
+
+/**
+ * Sprint 2.12 — Hermes-style collapsible section row.
+ * Renders a single startup-banner row with a chevron (▾ when expanded,
+ * ▸ when collapsed), a left-aligned section label, and a dim summary.
+ * When expanded the optional `body` array is rendered as indented dim
+ * sub-lines underneath.
+ *
+ *   ▾ Tools          37 built-in · 24 channels · 12 MCP
+ *   ▸ Skills         8 enabled · /skills to manage
+ */
+function renderCollapsibleSection(name, summary, expanded, body) {
+  const chevron = expanded ? '▾' : '▸';
+  const labelW = 14;
+  const labelPainted = fmt.bold(fmt.cyan(chevron)) + ' '
+                     + fmt.bold(String(name).padEnd(labelW));
+  const summaryPainted = fmt.dim(String(summary || ''));
+  const head = '  ' + labelPainted + summaryPainted;
+  if (!expanded || !body || !body.length) return head;
+  const lines = body.map(l => '    ' + fmt.dim(String(l)));
+  return [head, ...lines].join('\n');
+}
+
 // ────────────────────────────────────────────────────────────────────────
 // Hermes-style ASCII art moments — small tasteful illustrations shown at
 // earned moments (first launch, setup intro, agent goal-met, doctor clean
@@ -528,10 +596,57 @@ function _activeThemeFrames() {
   return _themeFramesCache;
 }
 
+// Sprint 2.12 — read the active theme's kawaii face palette (if any).
+// Used by GradientSpinner to rotate kawaii faces every ~2.5s, giving the
+// kawaii theme a Hermes-style lively feel.
+let _kawaiiFacesCache = null;
+function _activeKawaiiFaces() {
+  if (_kawaiiFacesCache !== null) return _kawaiiFacesCache;
+  try {
+    const themes = require('./themes');
+    const fs = require('fs');
+    const path = require('path');
+    const { defaultUserDataDir } = require('../../src/main/runtime/store-shim');
+    const baseDir = defaultUserDataDir();
+    const candidates = [path.join(baseDir, 'settings.json')];
+    try {
+      const f = path.join(baseDir, 'active-profile.txt');
+      if (fs.existsSync(f)) {
+        const name = fs.readFileSync(f, 'utf8').trim();
+        if (name && name !== 'default' && /^[a-z0-9][a-z0-9-_]{0,30}$/i.test(name)) {
+          candidates.unshift(path.join(baseDir, 'profiles', name, 'settings.json'));
+        }
+      }
+    } catch (_) {}
+    for (const file of candidates) {
+      try {
+        if (fs.existsSync(file)) {
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const name = data.cliTheme;
+          if (name) {
+            const t = themes.getTheme(name);
+            if (t && Array.isArray(t.kawaiiFaces) && t.kawaiiFaces.length) {
+              _kawaiiFacesCache = t.kawaiiFaces;
+              return _kawaiiFacesCache;
+            }
+            _kawaiiFacesCache = false;
+            return _kawaiiFacesCache;
+          }
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  _kawaiiFacesCache = false;
+  return _kawaiiFacesCache;
+}
+
 // Spinner — a gradient-flowing braille spinner. Used by TUI/agent command.
 // Now phase-aware: setPhase('thinking'|'planning'|'executing'|'reflecting'|
 // 'finishing') swaps the glyph set without resetting the gradient timer.
 // The theme's spinnerFrames override the phase frames when set.
+//
+// Sprint 2.12 — kawaii theme also rotates a face palette every 2.5s so
+// the spinner mutates visually even mid-stream (Hermes-style "alive" feel).
 class GradientSpinner {
   constructor(text) {
     this.text = text || '';
@@ -541,6 +656,10 @@ class GradientSpinner {
     this.timer = null;
     this.lastLen = 0;
     this.isTTY = !!process.stdout.isTTY;
+    // Kawaii face rotation state.
+    this._kawaiiFaces = _activeKawaiiFaces() || null;
+    this._kawaiiFaceIdx = 0;
+    this._kawaiiLastSwap = Date.now();
   }
   _framesFor(phase) {
     const themeFrames = _activeThemeFrames();
@@ -567,9 +686,24 @@ class GradientSpinner {
     return this;
   }
   _tick() {
-    const f = this.frames[this.i++ % this.frames.length];
+    // Sprint 2.12 — kawaii face rotation. Every 2.5s, rotate to the
+    // next face in the theme's kawaiiFaces palette. The spinner still
+    // animates frame-by-frame via setInterval; we just sub in the
+    // rotating face when it's time.
+    let face;
+    if (this._kawaiiFaces && this._kawaiiFaces.length) {
+      const now = Date.now();
+      if (now - this._kawaiiLastSwap >= 2500) {
+        this._kawaiiFaceIdx = (this._kawaiiFaceIdx + 1) % this._kawaiiFaces.length;
+        this._kawaiiLastSwap = now;
+      }
+      face = this._kawaiiFaces[this._kawaiiFaceIdx];
+      this.i++;  // still advance for the gradient colour rotation
+    } else {
+      face = this.frames[this.i++ % this.frames.length];
+    }
     const color = supportsColor ? GRADIENT[this.i % GRADIENT.length] : '';
-    const line = `${color}${f}${RESET} ${this.text}`;
+    const line = `${color}${face}${RESET} ${this.text}`;
     // Erase previous line residue
     process.stderr.write(`\r\x1b[K${line}`);
     this.lastLen = line.length;
@@ -798,4 +932,4 @@ async function personaPickerInteractive(currentPersona) {
   });
 }
 
-module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen, renderArt, animateArt, ART, ART_FRAMES, artSuppressed, buildGreetingBase, timeOfDayArt, GREETINGS };
+module.exports = { bannerBig, bannerCompact, bannerFramedBox, renderCollapsibleSection, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen, renderArt, animateArt, ART, ART_FRAMES, artSuppressed, buildGreetingBase, timeOfDayArt, GREETINGS };
