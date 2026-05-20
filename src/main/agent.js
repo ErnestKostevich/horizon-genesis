@@ -1413,334 +1413,30 @@ function setMemoryInstance(mem) {
   memoryInstance = mem;
 }
 
+// Exposed so the tool registry modules (./tools/memory.js, ./tools/self.js)
+// can read the latest binding without holding a stale capture from import
+// time. Returns null until setMemoryInstance() has been called.
+function _getMemoryInstance() {
+  return memoryInstance;
+}
+
+// ── Tool registry ──────────────────────────────────────────────────────────
+// The 34-case switch that used to live here moved into per-category files
+// under ./tools/. Each file self-registers via require() side-effect; the
+// index module (./tools/index.js) loads them all and exports the registry.
+//
+// dispatchTool now just looks up the tool and runs it. Behaviour-preserving
+// refactor — no execute() bodies changed, defaults preserved, error
+// envelopes ({ ok: false, err: ... } vs throw) unchanged.
+const toolRegistry = require('./tools');
+
 async function dispatchTool(name, args = {}, ctx = {}) {
-  switch (name) {
-    case 'run_code':
-      return _routeExec(args.code, args.language || 'shell', args.timeout);
-    case 'run_powershell':
-      return _routeExec(args.code, 'powershell', args.timeout);
-    case 'run_javascript':
-      return _routeExec(args.code, 'javascript', args.timeout);
-    case 'run_shell':
-      return _routeExec(args.code, 'shell', args.timeout);
-    case 'read_file':
-      return readFile(args.path);
-    case 'write_file':
-      return writeFile(args.path, args.content);
-    case 'list_dir':
-      return listDir(args.path || os.homedir());
-    case 'search_files':
-      return searchFiles(args.dir || os.homedir(), args.pattern || '');
-    case 'mouse_move':
-      return mouseMove(args.x, args.y);
-    case 'mouse_click':
-      return mouseClick(args.x, args.y, args.button || 'left', args.double || false);
-    case 'type_text':
-      return typeText(args.text || '', args.enter || false);
-    case 'press_key':
-      return pressKey(args.key);
-    case 'scroll':
-      return scroll(args.direction || 'down', args.amount || 3);
-    case 'browser_open':
-      return browserNavigate(args.url);
-    case 'browser_search':
-      return browserSearch(args.query, args.engine);
-    case 'open_site':
-      const sites = {
-        'youtube': 'https://youtube.com',
-        'google': 'https://google.com',
-        'gmail': 'https://mail.google.com',
-        'github': 'https://github.com'
-      };
-      const siteUrl = sites[(args.name || '').toLowerCase()] || `https://${args.name}.com`;
-      return browserNavigate(siteUrl);
-    case 'get_system_info':
-      return getDetailedSysInfo();
-    case 'get_running_apps':
-      return { ok: true, out: await getRunningApps() };
-    case 'shell_command': {
-      const safe = /^(dir|ls|echo|date|time|whoami|hostname|ipconfig|ifconfig|pwd|cat\s|type\s|find\s|grep\s|ping\s|df |du |free |netstat|systeminfo|tasklist|ps |ver|uname|where|which)/i;
-      if (!safe.test((args.cmd || '').trim())) {
-        return { ok: false, out: '', err: 'Only read-only commands allowed. Use run_code for scripts.' };
-      }
-      return sh(args.cmd, 8000);
-    }
-    // Memory tools
-    case 'remember':
-      if (memoryInstance) {
-        memoryInstance.remember(args.content, args.category, args.importance, 'tool');
-        return { ok: true, out: 'Remembered.' };
-      }
-      return { ok: false, err: 'Memory not initialized' };
-    case 'recall':
-      if (memoryInstance) {
-        const results = memoryInstance.recall(args.query, args.limit);
-        return { ok: true, out: JSON.stringify(results, null, 2), results };
-      }
-      return { ok: false, err: 'Memory not initialized' };
-    case 'set_fact':
-      if (memoryInstance) {
-        memoryInstance.setFact(args.key, args.value, 'tool');
-        return { ok: true, out: `Fact saved: ${args.key}` };
-      }
-      return { ok: false, err: 'Memory not initialized' };
-    case 'get_facts':
-      if (memoryInstance) {
-        const facts = memoryInstance.getAllFacts();
-        return { ok: true, out: JSON.stringify(facts, null, 2), facts };
-      }
-      return { ok: false, err: 'Memory not initialized' };
-    // Nutrition tools
-    case 'log_meal':
-      if (memoryInstance) {
-        memoryInstance.logMeal(args.description, args.calories, args.protein, args.carbs, args.fat);
-        return { ok: true, out: `Meal logged: ${args.description}` };
-      }
-      return { ok: false, err: 'Memory not initialized' };
-    case 'get_nutrition':
-      if (memoryInstance) {
-        const nutrition = memoryInstance.getTodayNutrition();
-        return { ok: true, out: JSON.stringify(nutrition, null, 2), nutrition };
-      }
-      return { ok: false, err: 'Memory not initialized' };
-    case 'skill_run_helper':
-      return runSkillHelper(args.skill, args.helper, args.args, args.timeoutMs);
-    case 'spawn_subagent': {
-      // Delegated to main.js so the subagent reuses the parent's aiFn /
-      // sysInfo / persona / event-bridge without us re-implementing them
-      // here. Lazy require.cache lookup keeps agent.js standalone for
-      // tests.
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const spawn = mainMod?.exports?.spawnSubagent;
-        if (typeof spawn !== 'function') return { ok: false, err: 'subagent runtime not initialised' };
-        return await spawn({
-          task: String(args.task || '').trim(),
-          parentRunId: ctx.runId || null,
-          event: ctx.event || null,
-          allowedTools: Array.isArray(args.tools) ? args.tools : null,
-          maxSteps: Number(args.maxSteps) || undefined,
-          timeoutMs: Number(args.timeoutMs) || undefined,
-        });
-      } catch (e) {
-        return { ok: false, err: 'spawn_subagent failed: ' + e.message };
-      }
-    }
-    case 'canvas_read': {
-      // Lazy lookup of canvasManager via main.js — same pattern as
-      // spawn_subagent — so agent.js stays standalone for tests.
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const mgr = mainMod?.exports?.getCanvasManager?.();
-        if (!mgr) return { ok: false, err: 'canvas not initialised' };
-        const snap = mgr.get();
-        return { ok: true, content: snap.content, version: snap.version, updatedAt: snap.updatedAt };
-      } catch (e) {
-        return { ok: false, err: 'canvas_read failed: ' + e.message };
-      }
-    }
-    case 'canvas_write': {
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const mgr = mainMod?.exports?.getCanvasManager?.();
-        if (!mgr) return { ok: false, err: 'canvas not initialised' };
-        const content = String(args.content || '');
-        if (!content) return { ok: false, err: 'canvas_write needs non-empty content' };
-        const mode = ['append', 'prepend', 'replace'].includes(args.mode) ? args.mode : 'append';
-        const snap = mgr.write({ mode, content, source: 'agent' });
-        return { ok: true, mode, version: snap.version, bytesWritten: content.length };
-      } catch (e) {
-        return { ok: false, err: 'canvas_write failed: ' + e.message };
-      }
-    }
-    // ── PHASE 28.5 — Self-knowledge tools ─────────────────────────────
-    // Hermes-style progressive disclosure: cheap list first, full read
-    // only when actually needed. Lets the agent answer "what can you
-    // do?" honestly + verify capabilities before promising them.
-    case 'self_describe': {
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const mem = memoryInstance || mainMod?.exports?.agentMemory || null;
-        const personasMod = (() => { try { return require('./personas'); } catch (_) { return null; } })();
-        const settingsStore = mainMod?.exports?.settingsStore || null;
-        const dialecticTotal = mem?.dialectic?.records?.length || 0;
-        const stats = {
-          memories: mem?._data?.memories?.length || 0,
-          facts: Object.keys(mem?._data?.facts || {}).length,
-          conversations: mem?._data?.conversations?.length || 0,
-          dialectic: dialecticTotal,
-        };
-        let pkg = {};
-        try { pkg = require('../../package.json'); } catch (_) {}
-        const personaId = settingsStore?.get?.('persona') || 'jarvis';
-        const personaName = personasMod?.getPersona?.(personaId)?.name || personaId;
-        const provider = settingsStore?.get?.('provider') || 'gemini';
-        const exec = settingsStore?.get?.('executionMode') || 'host';
-        const channels = ['telegram_bot', 'discord', 'slack', 'whatsapp', 'signal', 'imessage', 'email']
-          .filter(id => {
-            const live = settingsStore?.get?.(`connection.${id}.live`) === true || settingsStore?.get?.(`${id}.enabled`) === true;
-            return live;
-          });
-        return {
-          ok: true,
-          name: 'Horizon AI',
-          version: pkg.version || 'unknown',
-          provider,
-          activePersona: { id: personaId, name: personaName },
-          executor: exec,
-          memory: { backend: 'JSON + SQLite + FTS5 + embeddings', layers: 9, ...stats },
-          channelsLive: channels,
-          author: pkg.author?.name || 'Ernest Kostevich',
-          license: pkg.license || 'BUSL-1.1',
-        };
-      } catch (e) {
-        return { ok: false, err: 'self_describe failed: ' + e.message };
-      }
-    }
-    case 'self_list_capabilities': {
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const personasMod = (() => { try { return require('./personas'); } catch (_) { return null; } })();
-        const skillsMgr = mainMod?.exports?.skillsManager || null;
-        const tools = TOOL_DEFINITIONS.map(t => ({ name: t.name, desc: t.desc.slice(0, 140) }));
-        let skills = [];
-        if (skillsMgr && typeof skillsMgr.list === 'function') {
-          try {
-            const all = skillsMgr.list() || [];
-            skills = all.slice(0, 60).map(s => ({ id: s.id, name: s.name, desc: (s.description || '').slice(0, 140), scope: s.scope }));
-          } catch (_) {}
-        }
-        const personas = (personasMod?.getAllPersonas?.() || []).map(p => ({ id: p.id, name: p.name, builtin: p.builtin }));
-        return {
-          ok: true,
-          tools,
-          skills,
-          personas,
-          channels: ['telegram_bot', 'discord', 'slack', 'whatsapp', 'signal', 'imessage', 'email', 'notion', 'linear'],
-          executors: ['host', 'docker', 'ssh', 'modal', 'daytona', 'singularity'],
-          note: 'For full details on any skill, call self_read_skill. For full persona prompt, call self_read_persona.',
-        };
-      } catch (e) {
-        return { ok: false, err: 'self_list_capabilities failed: ' + e.message };
-      }
-    }
-    case 'self_read_skill': {
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const skillsMgr = mainMod?.exports?.skillsManager || null;
-        if (!skillsMgr) return { ok: false, err: 'skills manager not loaded' };
-        const id = String(args.skill || '').trim();
-        if (!id) return { ok: false, err: 'self_read_skill needs { skill: <id> }' };
-        const skill = (skillsMgr.list() || []).find(s => s.id === id || s.name === id);
-        if (!skill) return { ok: false, err: `unknown skill: ${id}` };
-        const fs = require('fs');
-        const path = require('path');
-        const md = skill.path ? path.join(skill.path, 'SKILL.md') : null;
-        let content = '';
-        if (md && fs.existsSync(md)) content = fs.readFileSync(md, 'utf8');
-        return {
-          ok: true,
-          id: skill.id,
-          name: skill.name,
-          scope: skill.scope,
-          description: skill.description || '',
-          path: skill.path || null,
-          content: content.slice(0, 12000),
-        };
-      } catch (e) {
-        return { ok: false, err: 'self_read_skill failed: ' + e.message };
-      }
-    }
-    case 'self_read_persona': {
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const personasMod = (() => { try { return require('./personas'); } catch (_) { return null; } })();
-        if (!personasMod) return { ok: false, err: 'personas module unavailable' };
-        const settingsStore = mainMod?.exports?.settingsStore || null;
-        const id = String(args.id || '').trim() || (settingsStore?.get?.('persona') || 'jarvis');
-        const persona = personasMod.getPersonaFull?.(id);
-        if (!persona) return { ok: false, err: `unknown persona: ${id}` };
-        return {
-          ok: true,
-          id: persona.id,
-          name: persona.name,
-          icon: persona.icon || null,
-          builtin: !!persona.builtin,
-          allowedTools: persona.allowedTools || null,
-          prompt: persona.prompt || {},
-          memories: (persona.memories || []).slice(0, 40),
-          memoriesCount: (persona.memories || []).length,
-          wakeResponses: persona.wakeResponses || {},
-        };
-      } catch (e) {
-        return { ok: false, err: 'self_read_persona failed: ' + e.message };
-      }
-    }
-    // ── PHASE 28.5 — Skill self-improvement ───────────────────────────
-    // Lets the agent refine a skill it just used. Heavy guardrails:
-    //   - Built-in skills are NEVER mutated (writeSource rejects them).
-    //   - Every edit gets logged to <userData>/skill-edits.log (NDJSON).
-    //   - Requires user permission gate (via withPermission), wrapped at
-    //     dispatch time when this case is reached.
-    //   - skillsManager.writeSource validates YAML + frontmatter; bad
-    //     content is rejected without writing.
-    case 'self_improve_skill': {
-      try {
-        const mainMod = require.cache[require.resolve('./main')];
-        const skillsMgr = mainMod?.exports?.skillsManager || null;
-        if (!skillsMgr) return { ok: false, err: 'skills manager not loaded' };
-        const id = String(args.skill || '').trim();
-        const updated = String(args.updatedContent || '');
-        const rationale = String(args.rationale || '').slice(0, 400);
-        if (!id || !updated) return { ok: false, err: 'self_improve_skill needs { skill, updatedContent, rationale }' };
-        // Find the skill so we can pick the right scope. Built-ins
-        // bounce here — writeSource also blocks them, but we want a
-        // clear error first.
-        const skill = (skillsMgr.list() || []).find(s => s.id === id || s.name === id);
-        if (!skill) return { ok: false, err: `unknown skill: ${id}` };
-        if (skill.scope === 'builtin') {
-          return { ok: false, err: 'built-in skills are read-only. Copy it to user scope first via Settings → Personas / Skills.' };
-        }
-        // Read the old content so we can log a diff record.
-        let oldContent = '';
-        try { oldContent = skillsMgr.readSource ? skillsMgr.readSource(id) : ''; } catch (_) {}
-        const r = skillsMgr.writeSource(id, updated, skill.scope);
-        if (!r.ok) return { ok: false, err: r.error || 'writeSource failed' };
-        // Append-only edit log so the user can audit + roll back.
-        try {
-          const fs = require('fs');
-          const path = require('path');
-          const app = mainMod?.exports?.app || null;
-          const userDataDir = app?.getPath?.('userData')
-            || (mainMod?.exports?.userDataDir)
-            || process.env.HORIZON_USER_DATA
-            || path.join(require('os').homedir(), '.horizon-ai');
-          const logPath = path.join(userDataDir, 'skill-edits.log');
-          const entry = {
-            ts: new Date().toISOString(),
-            skill: id,
-            scope: skill.scope,
-            rationale,
-            oldChars: oldContent.length,
-            newChars: updated.length,
-            delta: updated.length - oldContent.length,
-          };
-          fs.appendFileSync(logPath, JSON.stringify(entry) + '\n');
-        } catch (e) { console.warn('[self_improve_skill] log write failed:', e.message); }
-        return {
-          ok: true,
-          id: r.id,
-          scope: r.scope,
-          dir: r.dir,
-          rationale,
-          delta: updated.length - oldContent.length,
-        };
-      } catch (e) {
-        return { ok: false, err: 'self_improve_skill failed: ' + e.message };
-      }
-    }
-    default:
-      return { ok: false, err: `Unknown tool: ${name}` };
+  const tool = toolRegistry.get(name);
+  if (!tool) return { ok: false, err: `Unknown tool: ${name}` };
+  try {
+    return await tool.execute(args || {}, ctx || {});
+  } catch (e) {
+    return { ok: false, err: e?.message || String(e) };
   }
 }
 
@@ -1971,6 +1667,7 @@ module.exports = {
   DEFAULT_USER_PROFILE,
   dispatchTool,
   setMemoryInstance,
+  _getMemoryInstance,
   executeCode,
   mouseMove,
   mouseClick,
@@ -1986,5 +1683,7 @@ module.exports = {
   browserNavigate,
   browserSearch,
   runSkillHelper,
-  TOOL_DEFINITIONS
+  sh,
+  TOOL_DEFINITIONS,
+  toolRegistry,
 };

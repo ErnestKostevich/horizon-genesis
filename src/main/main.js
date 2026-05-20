@@ -216,45 +216,26 @@ const ALLOWED_SETTING_KEYS = new Set([
   'planActGate', 'shellClean', 'settingsScroll',
 ]);
 
-const DEFAULT_PROVIDER_MODELS = {
-  claude: 'claude-sonnet-4-6',
-  openai: 'gpt-5.4',
-  gemini: 'gemini-2.5-flash',
-  groq: 'llama-3.3-70b-versatile',
-  deepseek: 'deepseek-chat',
-  grok: 'grok-4',
-  mistral: 'mistral-large-latest',
-  qwen: 'qwen-plus',
-  perplexity: 'sonar-pro',
-  cohere: 'command-a-03-2025',
-  openrouter: 'openai/gpt-5.4-mini',
-  ollama: 'llama3.1',
-  lmstudio: 'local-model',
-  localai: 'local-model',
-};
-
-const KNOWN_PROVIDER_MODELS = {
-  claude: ['claude-sonnet-4-6', 'claude-opus-4-7', 'claude-haiku-4-5'],
-  openai: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2', 'o3', 'o4-mini'],
-  gemini: ['gemini-3.1-pro-preview', 'gemini-3.1-flash-preview', 'gemini-3.0-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
-  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b', 'moonshotai/kimi-k2-instruct', 'openai/gpt-oss-120b'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  grok: ['grok-4', 'grok-4-fast-reasoning', 'grok-4-mini', 'grok-code-fast-1'],
-  mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest'],
-  qwen: ['qwen-plus', 'qwen3-max', 'qwen3-coder-plus'],
-  perplexity: ['sonar-pro', 'sonar', 'sonar-reasoning', 'sonar-reasoning-pro'],
-  cohere: ['command-a-03-2025', 'command-a-reasoning-08-2025', 'command-a-vision-07-2025', 'command-r-plus-08-2024'],
-};
-
-function normalizeSelectedModel(provider, model) {
-  const id = String(model || '').trim();
-  if (!id) return DEFAULT_PROVIDER_MODELS[provider] || '';
-  if (provider === 'openrouter') return id.includes('/') ? id : DEFAULT_PROVIDER_MODELS.openrouter;
-  if (provider === 'ollama' || provider === 'lmstudio' || provider === 'localai') return id;
-  const known = KNOWN_PROVIDER_MODELS[provider];
-  if (!known || known.includes(id)) return id;
-  return DEFAULT_PROVIDER_MODELS[provider] || id;
-}
+// Provider model registries, SSE stream parsing, native-tool conversion,
+// and similar pure helpers live in runtime/aiHelpers.js.
+const {
+  DEFAULT_PROVIDER_MODELS,
+  KNOWN_PROVIDER_MODELS,
+  normalizeSelectedModel,
+  firstTextFromAnthropic,
+  normaliseUsage,
+  lastUserMessageText,
+  readSseStream,
+  extractStreamPayload,
+  nativeToolPack,
+  toOpenAITools,
+  toAnthropicTools,
+  toOpenAIChatMessages,
+  toAnthropicMessages,
+  parseAnthropicToolCalls,
+  parseOpenAIToolCalls,
+  mapNativeToolCalls,
+} = require('./runtime/aiHelpers');
 
 function assertAllowedKey(service) {
   if (!ALLOWED_KEY_IDS.has(String(service || ''))) {
@@ -346,53 +327,6 @@ function applyReasoningProfile(provider, model, body) {
   return body;
 }
 
-function firstTextFromAnthropic(d) {
-  return (d.content || []).find(b => b && b.type === 'text')?.text || d.content?.[0]?.text || 'No response';
-}
-
-function normaliseUsage(d, provider) {
-  try {
-    if (!d) return null;
-    if (provider === 'claude') {
-      const u = d.usage; if (!u) return null;
-      const p = u.input_tokens || 0, c = u.output_tokens || 0;
-      return { prompt: p, completion: c, total: p + c };
-    }
-    if (provider === 'gemini') {
-      const u = d.usageMetadata; if (!u) return null;
-      return {
-        prompt: u.promptTokenCount || 0,
-        completion: u.candidatesTokenCount || 0,
-        total: u.totalTokenCount || ((u.promptTokenCount || 0) + (u.candidatesTokenCount || 0)),
-      };
-    }
-    if (provider === 'cohere') {
-      const t = d.usage?.tokens || d.meta?.tokens || d.delta?.usage?.tokens;
-      if (!t) return null;
-      const p = t.input_tokens || 0, c = t.output_tokens || 0;
-      return { prompt: p, completion: c, total: p + c };
-    }
-    const u = d.usage; if (!u) return null;
-    return {
-      prompt: u.prompt_tokens || 0,
-      completion: u.completion_tokens || 0,
-      total: u.total_tokens || ((u.prompt_tokens || 0) + (u.completion_tokens || 0)),
-    };
-  } catch (_) { return null; }
-}
-
-function lastUserMessageText(messages) {
-  if (!Array.isArray(messages)) return '';
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i] || {};
-    if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.trim()) {
-      return msg.content.trim();
-    }
-  }
-  const last = messages[messages.length - 1];
-  return typeof last?.content === 'string' ? last.content.trim() : '';
-}
-
 function resolveSkillsForMessages(messages, opts = {}) {
   const forcedIds = Array.isArray(opts?.forcedSkillIds)
     ? opts.forcedSkillIds.map(String).map(s => s.trim()).filter(Boolean)
@@ -436,79 +370,23 @@ function appendSkillsToSystemPrompt(systemPrompt, skillsResolved) {
   return `${String(systemPrompt || '').trim()}\n\n## Skills loaded for this turn\n\n${block}`;
 }
 
-async function readSseStream(response, onEvent) {
-  let buffer = '';
-  let eventName = 'message';
-  let dataLines = [];
-  const flush = async () => {
-    if (!dataLines.length) { eventName = 'message'; return; }
-    const data = dataLines.join('\n');
-    dataLines = [];
-    const ev = eventName || 'message';
-    eventName = 'message';
-    await onEvent({ event: ev, data });
-  };
-  for await (const chunk of response.body) {
-    buffer += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : Buffer.from(chunk).toString('utf8');
-    buffer = buffer.replace(/\r\n/g, '\n');
-    let idx;
-    while ((idx = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 1);
-      if (line === '') { await flush(); continue; }
-      if (line.startsWith(':')) continue;
-      if (line.startsWith('event:')) { eventName = line.slice(6).trim() || 'message'; continue; }
-      if (line.startsWith('data:')) { dataLines.push(line.slice(5).trimStart()); }
-    }
-  }
-  if (buffer.trim()) {
-    if (buffer.startsWith('data:')) dataLines.push(buffer.slice(5).trimStart());
-    else dataLines.push(buffer.trim());
-  }
-  await flush();
-}
-
-function extractStreamPayload(provider, eventName, rawData) {
-  if (!rawData || rawData === '[DONE]') return { done: true };
-  let d;
-  try { d = JSON.parse(rawData); }
-  catch (_) { return { text: '' }; }
-  if (d.error) return { error: d.error.message || d.error };
-
-  if (provider === 'gemini') {
-    const parts = d.candidates?.[0]?.content?.parts || [];
-    return {
-      text: parts.map(p => p?.text || '').join(''),
-      usage: normaliseUsage(d, 'gemini'),
-      done: Boolean(d.candidates?.[0]?.finishReason),
-    };
-  }
-
-  if (provider === 'cohere') {
-    const type = d.type || eventName;
-    if (type === 'content-delta') {
-      return { text: d.delta?.message?.content?.text || '' };
-    }
-    if (type === 'message-end') {
-      return { done: true, usage: normaliseUsage(d, 'cohere') };
-    }
-    return { text: '' };
-  }
-
-  const choice = d.choices?.[0] || {};
-  const delta = choice.delta || {};
-  const message = choice.message || {};
-  const text = delta.content || delta.text || '';
-  const reasoning = delta.reasoning_content || delta.reasoning || d.delta?.reasoning || '';
-  const fallbackFullText = !text && typeof message.content === 'string' ? message.content : '';
-  return {
-    text: text || fallbackFullText,
-    reasoning,
-    usage: normaliseUsage(d, provider),
-    done: rawData === '[DONE]' || Boolean(choice.finish_reason),
-    error: choice.finish_reason === 'error' ? (d.error?.message || `${provider} stream ended with error`) : null,
-  };
-}
+// Non-streaming chat completion + dialectic extractor. Factory binds
+// keysStore / settingsStore / model helpers, then exposes runAiCompletion
+// (the `ai` IPC handler) + `_extractDialecticDiffs` (background user-model
+// extractor wired into agentMemory). Lazy `getPersonas` / `getDialecticModel`
+// avoid the chicken-and-egg with loadAgentModules() which constructs them.
+const { runAiCompletion, _extractDialecticDiffs } = require('./runtime/aiCompletion').createAiCompletion({
+  keysStore,
+  settingsStore,
+  selectedModel,
+  applyReasoningProfile,
+  localOpenAIEndpoint,
+  resolveSkillsForMessages,
+  appendSkillsToSystemPrompt,
+  loadAgentModules: () => loadAgentModules(),
+  getPersonas: () => personas,
+  getDialecticModel: () => dialecticModel,
+});
 
 // ── Source-preview build check ────────────────────────────────────────────────
 // The CI release workflow (.github/workflows/release.yml) writes build-info.json
@@ -516,161 +394,6 @@ function extractStreamPayload(provider, eventName, rawData) {
 // the file doesn't exist — we show a preview window and exit. Source is BSL 1.1 and
 // readable for audit/contribution; runnable builds come from GitHub Releases.
 // Native tool-call conversion helpers for agent mode.
-function toolParamsToJsonSchema(params = {}) {
-  const properties = {};
-  for (const [name, hint] of Object.entries(params || {})) {
-    const text = String(hint || '');
-    let type = 'string';
-    if (/number|integer|float/i.test(text)) type = 'number';
-    else if (/boolean|bool/i.test(text)) type = 'boolean';
-    else if (/array|list/i.test(text)) type = 'array';
-    else if (/object/i.test(text)) type = 'object';
-    properties[name] = { type, description: text || name };
-  }
-  return { type: 'object', properties, additionalProperties: true };
-}
-
-function nativeToolName(rawName, used = new Set()) {
-  const base = String(rawName || 'tool')
-    .replace(/[^a-zA-Z0-9_]/g, '_')
-    .replace(/^_+/, '')
-    .slice(0, 58) || 'tool';
-  let name = /^[a-zA-Z_]/.test(base) ? base : `tool_${base}`;
-  let idx = 2;
-  while (used.has(name)) {
-    const suffix = `_${idx++}`;
-    name = `${base.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
-  }
-  used.add(name);
-  return name;
-}
-
-function nativeToolPack(tools = []) {
-  const used = new Set();
-  const map = {};
-  const native = (tools || []).map(t => {
-    const safeName = nativeToolName(t.name, used);
-    map[safeName] = t.name;
-    return { ...t, nativeName: safeName, name: safeName, originalName: t.name };
-  });
-  return { tools: native, map };
-}
-
-function toOpenAITools(tools = []) {
-  return tools.map(t => ({
-    type: 'function',
-    function: {
-      name: t.name,
-      description: t.desc || t.description || t.name,
-      parameters: t.inputSchema || toolParamsToJsonSchema(t.params)
-    }
-  }));
-}
-
-function toAnthropicTools(tools = []) {
-  return tools.map(t => ({
-    name: t.name,
-    description: t.desc || t.description || t.name,
-    input_schema: t.inputSchema || toolParamsToJsonSchema(t.params)
-  }));
-}
-
-function safeJsonParseArgs(value) {
-  if (!value) return {};
-  if (typeof value === 'object') return value;
-  try { return JSON.parse(value); } catch { return {}; }
-}
-
-function toOpenAIChatMessages(messages = [], systemPrompt = '') {
-  const out = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
-  for (const m of messages || []) {
-    if (m.role === 'tool') {
-      out.push({
-        role: 'tool',
-        tool_call_id: m.toolCallId || m.id || m.name || 'tool_call',
-        name: m.name,
-        content: String(m.content || '')
-      });
-      continue;
-    }
-    if (m.role === 'assistant' && Array.isArray(m.toolCalls) && m.toolCalls.length) {
-      out.push({
-        role: 'assistant',
-        content: m.content || null,
-        tool_calls: m.toolCalls.map(call => ({
-          id: call.id || `${call.providerTool || call.tool || call.name || 'tool'}_call`,
-          type: 'function',
-          function: { name: call.providerTool || call.tool || call.name, arguments: JSON.stringify(call.args || {}) }
-        }))
-      });
-      continue;
-    }
-    out.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') });
-  }
-  return out;
-}
-
-function asAnthropicBlocks(content) {
-  return Array.isArray(content) ? content : [{ type: 'text', text: String(content || '') }];
-}
-
-function appendAnthropicMessage(out, message) {
-  const last = out[out.length - 1];
-  if (last && last.role === message.role) {
-    last.content = [...asAnthropicBlocks(last.content), ...asAnthropicBlocks(message.content)];
-  } else {
-    out.push(message);
-  }
-}
-
-function toAnthropicMessages(messages = []) {
-  const out = [];
-  for (const m of messages || []) {
-    if (m.role === 'tool') {
-      appendAnthropicMessage(out, {
-        role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: m.toolCallId || m.id || m.name || 'tool_call', content: String(m.content || '') }]
-      });
-      continue;
-    }
-    if (m.role === 'assistant' && Array.isArray(m.toolCalls) && m.toolCalls.length) {
-      const content = [];
-      if (m.content) content.push({ type: 'text', text: String(m.content) });
-      for (const call of m.toolCalls) {
-        content.push({ type: 'tool_use', id: call.id || `${call.providerTool || call.tool || call.name || 'tool'}_call`, name: call.providerTool || call.tool || call.name, input: call.args || {} });
-      }
-      appendAnthropicMessage(out, { role: 'assistant', content });
-      continue;
-    }
-    appendAnthropicMessage(out, { role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') });
-  }
-  return out;
-}
-
-function parseAnthropicToolCalls(d) {
-  return (d.content || [])
-    .filter(block => block && block.type === 'tool_use')
-    .map(block => ({ id: block.id, tool: block.name, args: block.input || {}, reason: 'Claude tool_use' }));
-}
-
-function parseOpenAIToolCalls(message = {}) {
-  return (message.tool_calls || [])
-    .filter(call => call?.type === 'function' && call.function?.name)
-    .map(call => ({
-      id: call.id,
-      tool: call.function.name,
-      args: safeJsonParseArgs(call.function.arguments),
-      reason: 'OpenAI tool_call'
-    }));
-}
-
-function mapNativeToolCalls(toolCalls = [], nameMap = {}) {
-  return (toolCalls || []).map(call => ({
-    ...call,
-    providerTool: call.tool,
-    tool: nameMap[call.tool] || call.tool
-  }));
-}
 
 // Source-preview build check.
 const BUILD_INFO_PATH = path.join(__dirname, 'build-info.json');
@@ -928,338 +651,27 @@ function updateTrayMenu() {
 }
 
 // ── IPC: Window ────────────────────────────────────────────────────────────────
-ipcMain.on('minimize', () => win?.minimize());
-ipcMain.on('hide',     () => win?.hide());
-ipcMain.on('quit',     () => { isQuitting = true; app.quit(); });
-ipcMain.handle('go',   (_, p) => { createWindow(p); return true; });
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── IPC: Keys & Settings ──────────────────────────────────────────────────────
-ipcMain.handle('saveKey',   (_, s, k) => {
-  assertAllowedKey(s);
-  keysStore.set(`k_${s}`, k);
-  // PHASE 28.3 — when the user adds their first OpenAI / Gemini key,
-  // kick off an embeddings backfill so existing memories become
-  // semantically searchable without waiting for the next app reboot.
-  // Best-effort + debounced (the key-save IPC fires per character on
-  // some inputs, so we wait 1.5s after the latest write).
-  if ((s === 'openai' || s === 'gemini') && k && k.length > 10) {
-    try {
-      clearTimeout(global.__hzEmbedBackfillTimer);
-      global.__hzEmbedBackfillTimer = setTimeout(() => {
-        try {
-          loadAgentModules();
-          if (!agentMemory || !agentMemory.embeddings) return;
-          if (!agentMemory.embeddings.isAvailable()) return;
-          if (!agentMemory._data?.memories?.length) return;
-          console.log('[embeddings] key saved — kicking off backfill for', agentMemory._data.memories.length, 'memories');
-          agentMemory.embedAllPending(progress => {
-            try {
-              const wins = BrowserWindow.getAllWindows();
-              for (const w of wins) {
-                if (w && !w.isDestroyed() && w.webContents) w.webContents.send('memory:embeddingProgress', progress);
-              }
-            } catch (_) {}
-          }).then(r => console.log('[embeddings] post-key-save backfill:', r))
-            .catch(e => console.warn('[embeddings] post-key-save backfill failed:', e.message));
-        } catch (e) { console.warn('[embeddings] backfill trigger failed:', e.message); }
-      }, 1500);
-    } catch (_) {}
-  }
-  return true;
-});
-ipcMain.handle('getKey',    (_, s)    => { assertAllowedKey(s); return keysStore.get(`k_${s}`, null); });
-ipcMain.handle('hasKey',    (_, s)    => { assertAllowedKey(s); return !!keysStore.get(`k_${s}`); });
-ipcMain.handle('deleteKey', (_, s)    => { assertAllowedKey(s); keysStore.delete(`k_${s}`); return true; });
-ipcMain.handle('set',       (_, k, v) => { assertAllowedSetting(k); settingsStore.set(k, v); return true; });
-ipcMain.handle('get',       (_, k)    => { assertAllowedSetting(k); return settingsStore.get(k, null); });
-ipcMain.handle('getPort',   ()        => port);
-ipcMain.handle('settingsDiagnostics', () => {
-  const userDataPath = app.getPath('userData');
-  return {
-    ok: true,
-    version: app.getVersion(),
-    userDataPath,
-    settingsPath: settingsStore.path || path.join(userDataPath, 'horizon-settings.json'),
-    hasMarketplaceToken: !!settingsStore.get('marketplaceToken'),
-    marketplaceUser: settingsStore.get('marketplaceUser') || null,
-    saved: {
-      userName: settingsStore.get('userName') || null,
-      lang: settingsStore.get('lang') || null,
-      provider: settingsStore.get('provider') || null,
-      mode: settingsStore.get('mode') || null,
-      voiceProvider: settingsStore.get('voiceProvider') || null,
-      ttsProvider: settingsStore.get('ttsProvider') || null,
-      wakeOn: !!settingsStore.get('wakeOn'),
-      searchOn: !!settingsStore.get('searchOn'),
-      screenWatcher: !!settingsStore.get('screenWatcher'),
-      ambientOn: !!settingsStore.get('ambientOn'),
-      notificationsOn: !!settingsStore.get('notificationsOn'),
-      persona: settingsStore.get('persona') || null,
-      ollamaUrl: settingsStore.get('ollamaUrl') || null,
-      ollamaModel: settingsStore.get('ollamaModel') || null,
-      lmStudioUrl: settingsStore.get('lmStudioUrl') || null,
-      lmStudioModel: settingsStore.get('lmStudioModel') || null,
-      settingsHealthCheckAt: settingsStore.get('settingsHealthCheckAt') || null,
-    },
-  };
-});
-ipcMain.handle('openSettingsFolder', async () => {
-  const userDataPath = app.getPath('userData');
-  const error = await shell.openPath(userDataPath);
-  return error ? { ok: false, path: userDataPath, error } : { ok: true, path: userDataPath };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
+
 // Pull the OpenRouter model catalog (200+ entries). Public endpoint — no key
 // required to list. Returns {ok, models:[{id,name,context_length}]}.
-ipcMain.handle('openrouterListModels', async () => {
-  try {
-    const fetch = require('node-fetch');
-    const r = await fetch('https://openrouter.ai/api/v1/models', {
-      headers: { 'HTTP-Referer': 'https://horizonaai.dev', 'X-Title': 'Horizon Genesis' },
-      timeout: 8000,
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, error: data.error?.message || `HTTP ${r.status}` };
-    const models = Array.isArray(data.data)
-      ? data.data.map((m) => ({ id: m.id, name: m.name || m.id, context_length: m.context_length })).filter((m) => m.id)
-      : [];
-    return { ok: true, models };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
-
-ipcMain.handle('localProviderStatus', async (_, provider) => {
-  const ep = localOpenAIEndpoint(provider);
-  if (!ep) return { ok: false, error: 'Unknown local provider' };
-  const modelsUrl = ep.url.replace(/\/chat\/completions$/, '/models');
-  const installUrl = provider === 'ollama' ? 'https://ollama.com' : provider === 'lmstudio' ? 'https://lmstudio.ai' : '';
-  try {
-    const fetch = require('node-fetch');
-    const headers = {};
-    if (ep.key) headers.Authorization = `Bearer ${ep.key}`;
-    const r = await fetch(modelsUrl, { headers, timeout: 2500 });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, installed: true, status: r.status, error: data.error?.message || data.error || `HTTP ${r.status}`, installUrl };
-    const models = Array.isArray(data.data) ? data.data.map((m) => m.id || m.name).filter(Boolean) : [];
-    return { ok: true, installed: true, provider, url: modelsUrl, models };
-  } catch (e) {
-    return {
-      ok: false,
-      installed: false,
-      provider,
-      url: modelsUrl,
-      installUrl,
-      error: provider === 'ollama'
-        ? 'Ollama is not reachable. Install Ollama, run a model, then test again.'
-        : 'LM Studio server is not reachable. Install LM Studio, start the local server, then test again.',
-      detail: e.message,
-    };
-  }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── IPC: Misc ─────────────────────────────────────────────────────────────────
-ipcMain.handle('copy',         (_, t) => { clipboard.writeText(t); return true; });
-ipcMain.handle('paste',        ()     => clipboard.readText());
-ipcMain.handle('getClipboard', ()     => ({ text: clipboard.readText() }));
-ipcMain.handle('openUrl',      async (_, u) => openExternalReliable(u, 'Horizon Link'));
-ipcMain.handle('notify',       (_, t, b) => { new Notification({ title: `◈ ${t}`, body: b }).show(); return true; });
-
-ipcMain.handle('sysInfo', () => ({
-  platform: IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux',
-  hostname: os.hostname(),
-  user:     os.userInfo().username,
-  home:     os.homedir(),
-  ram:      (os.totalmem() / 1e9).toFixed(1) + ' GB',
-  freeRam:  (os.freemem()  / 1e9).toFixed(1) + ' GB',
-  cpu:      os.cpus()[0]?.model || 'Unknown',
-  cores:    os.cpus().length,
-  uptime:   Math.round(os.uptime() / 3600) + 'h',
-  time:     new Date().toLocaleString(),
-  arch:     os.arch()
-}));
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── VOICE: Multiple external providers ───────────────────────────────────────
 // Provider pricing and quotas change often, so Horizon does not hardcode them.
-ipcMain.handle('transcribeAudio', async (_, base64Audio, mimeType) => {
-  const fetch    = require('node-fetch');
-  const FormData = require('form-data');
-  const voiceProv = settingsStore.get('voiceProvider') || 'groq';
-
-  const buf = Buffer.from(base64Audio, 'base64');
-  const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : 'mp4';
-  const tmp = path.join(os.tmpdir(), `horizon_audio_${Date.now()}.${ext}`);
-  fs.writeFileSync(tmp, buf);
-  const cleanup = () => { try { fs.unlinkSync(tmp); } catch {} };
-
-  try {
-    if (voiceProv === 'groq') {
-      const key = keysStore.get('k_groq_voice') || keysStore.get('k_groq');
-      if (!key) { cleanup(); return { error: 'Groq key needed for voice → Settings → Voice. Free at groq.com' }; }
-      const form = new FormData();
-      form.append('file', fs.createReadStream(tmp), { filename: `audio.${ext}`, contentType: mimeType.split(';')[0] });
-      form.append('model', 'whisper-large-v3');
-      form.append('response_format', 'json');
-      const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST', headers: { 'Authorization': `Bearer ${key}`, ...form.getHeaders() }, body: form
-      });
-      const d = await r.json();
-      cleanup();
-      if (d.error) return { error: d.error.message };
-      return { text: d.text };
-    }
-
-    if (voiceProv === 'openai') {
-      const key = keysStore.get('k_openai');
-      if (!key) { cleanup(); return { error: 'OpenAI key needed for voice → Settings' }; }
-      const form = new FormData();
-      form.append('file', fs.createReadStream(tmp), { filename: `audio.${ext}`, contentType: mimeType.split(';')[0] });
-      form.append('model', 'whisper-1');
-      const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST', headers: { 'Authorization': `Bearer ${key}`, ...form.getHeaders() }, body: form
-      });
-      const d = await r.json();
-      cleanup();
-      if (d.error) return { error: d.error.message };
-      return { text: d.text };
-    }
-
-    if (voiceProv === 'deepgram') {
-      const key = keysStore.get('k_deepgram');
-      if (!key) { cleanup(); return { error: 'Deepgram key needed -> Settings -> Voice.' }; }
-      const audioData = fs.readFileSync(tmp);
-      // Deepgram param tuning for wake/command clips:
-      //  - `smart_format=true` was the previous default; it formats numbers /
-      //    dates / punctuation. On its own that's harmless, but combined with
-      //    `language=multi` it tends to drop low-confidence segments to
-      //    empty for clips that include echo of the bot's TTS reply. We turn
-      //    it off — short transcripts don't need smart formatting anyway.
-      //  - Pick an explicit language code per user setting (ru/en) instead of
-      //    `multi`. Explicit-language gives much more reliable transcripts on
-      //    Nova-2 for short utterances; `multi` was useful when we didn't
-      //    know the user's tongue, but Horizon already has `lang` in
-      //    settings.
-      //  - `punctuate=true` produces cleaner output (capitals + punctuation)
-      //    for the command-send path.
-      //  - `filler_words=false` strips "um/ah" that often poisons matching.
-      const userLang = String(settingsStore.get('lang') || 'en').toLowerCase();
-      const dgLang = userLang.startsWith('ru') ? 'ru' : 'en';
-      const dgParams = new URLSearchParams({
-        model: 'nova-2',
-        language: dgLang,
-        punctuate: 'true',
-        filler_words: 'false',
-      }).toString();
-      const r = await fetch(`https://api.deepgram.com/v1/listen?${dgParams}`, {
-        method: 'POST', headers: { 'Authorization': `Token ${key}`, 'Content-Type': mimeType.split(';')[0] }, body: audioData
-      });
-      const d = await r.json();
-      cleanup();
-      // Deepgram error shapes vary by error class:
-      //   - top-level { err_code, err_msg } for legacy paths
-      //   - { error: "..." } or { message: "..." } for newer / auth errors
-      //   - HTTP 4xx with empty body for rate limits
-      if (!r.ok) {
-        return { error: d?.err_msg || d?.message || d?.error || `Deepgram HTTP ${r.status}` };
-      }
-      if (d?.err_msg || d?.error) {
-        return { error: d.err_msg || (typeof d.error === 'string' ? d.error : 'Deepgram error') };
-      }
-      return { text: d.results?.channels?.[0]?.alternatives?.[0]?.transcript || '' };
-    }
-
-    cleanup();
-    return { error: `Unknown voice provider: ${voiceProv}` };
-  } catch(e) { cleanup(); return { error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Screen Capture ────────────────────────────────────────────────────────────
-ipcMain.handle('captureScreen', async () => {
-  try {
-    const disp    = screen.getPrimaryDisplay();
-    const w       = Math.min(disp.workAreaSize.width, 1920);
-    const h       = Math.min(disp.workAreaSize.height, 1080);
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: w, height: h } });
-    if (!sources.length) return { ok: false, error: 'No screen source' };
-    const buf = sources[0].thumbnail.toPNG();
-    const tmp = path.join(os.tmpdir(), `horizon_ss_${Date.now()}.png`);
-    fs.writeFileSync(tmp, buf);
-    return { ok: true, base64: buf.toString('base64'), path: tmp };
-  } catch(e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Analyze Screen with Vision AI ─────────────────────────────────────────────
-ipcMain.handle('analyzeScreen', async (_, question) => {
-  const fetch = require('node-fetch');
-  const userName = settingsStore.get('userName') || 'user';
-  const lang = settingsStore.get('lang') || 'en';
-
-  try {
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } });
-    if (!sources.length) return { error: 'Cannot capture screen' };
-    const base64 = sources[0].thumbnail.toPNG().toString('base64');
-    const q = question || (lang === 'ru'
-      ? 'Что сейчас на экране? Опиши подробно. Если это игра — дай умный совет.'
-      : 'What is on the screen? Describe everything. If it\'s a game, give smart strategic advice.');
-
-    // Try Claude Vision
-    const claudeKey = keysStore.get('k_claude');
-    if (claudeKey) {
-      const model = selectedModel('claude');
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify(applyReasoningProfile('claude', model, {
-          model, max_tokens: 1024,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
-            { type: 'text', text: q }
-          ]}]
-        }))
-      });
-      const d = await r.json();
-      if (!d.error) return { reply: firstTextFromAnthropic(d), model, base64 };
-    }
-
-    // Try GPT-4o Vision
-    const openaiKey = keysStore.get('k_openai');
-    if (openaiKey) {
-      const model = selectedModel('openai');
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
-        body: JSON.stringify(applyReasoningProfile('openai', model, {
-          model, max_tokens: 1024,
-          messages: [{ role: 'user', content: [
-            { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}` } },
-            { type: 'text', text: q }
-          ]}]
-        }))
-      });
-      const d = await r.json();
-      if (!d.error) return { reply: d.choices?.[0]?.message?.content || 'No response', model, base64 };
-    }
-
-    // Try Gemini Vision
-    const geminiKey = keysStore.get('k_gemini');
-    if (geminiKey) {
-      const model = selectedModel('gemini');
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(applyReasoningProfile('gemini', model, { contents: [{ parts: [
-          { inline_data: { mime_type: 'image/png', data: base64 } },
-          { text: q }
-        ]}]}))
-      });
-      const d = await r.json();
-      if (!d.error && d.candidates?.[0]?.content?.parts?.[0]?.text) return { reply: d.candidates[0].content.parts[0].text, model, base64 };
-    }
-
-    return { error: lang === 'ru'
-      ? 'Нет ключа для Vision AI. Добавь Claude, OpenAI или Gemini в Настройках.'
-      : 'No Vision AI key. Add Claude, OpenAI, or Gemini key in Settings.' };
-  } catch(e) { return { error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Shell helper ──────────────────────────────────────────────────────────────
 function runShell(cmd, timeout = 12000, options = {}) {
@@ -1457,270 +869,7 @@ function smartOpenUrl(raw) {
   return null;
 }
 
-ipcMain.handle('pcOpen', async (event, appName = '') => {
-  const target = String(appName || '').trim();
-  if (!target) return { ok: false, err: 'Empty target' };
-  return withPermission(
-    event.sender,
-    'app.open',
-    { target },
-    'Open app, URL, or folder',
-    async () => {
-  const raw = target;
-
-  // 1. Smart URL
-  const smartUrl = smartOpenUrl(raw);
-  if (smartUrl) { shell.openExternal(smartUrl); return { ok: true, url: smartUrl }; }
-
-  // 2. Absolute Windows path: D:\Game or C:\Users\...
-  if (/^[A-Za-z]:[\\\/]/.test(raw)) {
-    shell.openPath(raw); return { ok: true, opened: raw };
-  }
-
-  // 3. Folder request: "папку Game", "папку на D", "folder Game"
-  const folderM = raw.match(/^(?:папку?|folder|директорию?|каталог|directory)\s+(.+)/i);
-  if (folderM) {
-    let name = folderM[1].trim();
-    const driveM = name.match(/\s+(?:на\s+)?(?:диске\s+|drive\s+)?([A-Za-z])[:\s]*$/i);
-    const drives = driveM ? [driveM[1].toUpperCase()] : ['D','C','E','F'];
-    if (driveM) name = name.replace(driveM[0],'').trim();
-    if (IS_WIN) {
-      const user = os.userInfo().username;
-      for (const d of drives) {
-        const cands = [
-          `${d}:\\${name}`,
-          `${d}:\\Users\\${user}\\${name}`,
-          `${d}:\\Users\\${user}\\Desktop\\${name}`,
-          `${d}:\\Users\\${user}\\Documents\\${name}`,
-          `${d}:\\Users\\${user}\\Downloads\\${name}`,
-          `${d}:\\Games\\${name}`,
-          `${d}:\\Program Files\\${name}`,
-        ];
-        for (const p of cands) {
-          if (fs.existsSync(p)) { shell.openPath(p); return { ok: true, opened: p }; }
-        }
-      }
-      const fallDrive = `${drives[0]}:\\`;
-      shell.openPath(fallDrive);
-      return { ok: false, notFound: name, opened: fallDrive };
-    } else {
-      const p = `${os.homedir()}/${name}`;
-      shell.openPath(fs.existsSync(p) ? p : os.homedir());
-      return { ok: true };
-    }
-  }
-
-  // 4. Check if it's literally a folder on disk (no extension, no @, not a known app name)
-  const KNOWN_APPS = /^(chrome|firefox|edge|discord|telegram|spotify|youtube|google|steam|code|vscode|notepad|calculator|slack|zoom|obs|paint|word|excel|powerpoint|settings|cmd|terminal|explorer|safari|finder)$/i;
-  if (IS_WIN && !KNOWN_APPS.test(raw) && !/[.@:/]/.test(raw) && raw.length > 2) {
-    const user = os.userInfo().username;
-    const deskCands = [
-      `D:\\${raw}`, `C:\\${raw}`,
-      `C:\\Users\\${user}\\Desktop\\${raw}`,
-      `D:\\Users\\${user}\\Desktop\\${raw}`,
-      `C:\\Users\\${user}\\Documents\\${raw}`,
-      `D:\\Users\\${user}\\Documents\\${raw}`,
-    ];
-    for (const p of deskCands) {
-      if (fs.existsSync(p)) { shell.openPath(p); return { ok: true, opened: p }; }
-    }
-  }
-
-  // 5. Known web apps
-  const n = resolveAppName(raw);
-  if (WEB_APPS[n]) { shell.openExternal(WEB_APPS[n]); return { ok: true }; }
-
-  // 6. Native apps map
-  let cmd;
-  if (IS_WIN) {
-    cmd = APP_WIN_MAP[n] || APP_WIN_MAP[raw.toLowerCase()];
-    if (!cmd) cmd = `start "" "${raw}" 2>nul`;
-  } else if (IS_MAC) {
-    cmd = APP_MAC_MAP[n] || APP_MAC_MAP[raw.toLowerCase()] || `open -a "${raw}" 2>/dev/null || open "${raw}"`;
-  } else {
-    cmd = `xdg-open "${raw}" 2>/dev/null &`;
-  }
-  return runShell(cmd);
-    }
-  );
-});
-
-ipcMain.handle('pcOpenPath', async (event, p) => withPermission(
-  event.sender,
-  'app.open_path',
-  { path: String(p || '') },
-  'Open local path',
-  () => {
-  if (!p) return { ok: false };
-  shell.openPath(p);
-  return { ok: true, opened: p };
-  }
-));
-
-ipcMain.handle('pcScreenshot', async (event) => withPermission(
-  event.sender,
-  'screen.capture',
-  { target: 'primary-display' },
-  'Capture screen',
-  async () => {
-  try {
-    const sources = await desktopCapturer.getSources({ types:['screen'], thumbnailSize:{ width:1920, height:1080 } });
-    if (!sources.length) return { ok:false, err:'No source' };
-    const buf = sources[0].thumbnail.toPNG();
-    const tmp = path.join(os.tmpdir(), `horizon_ss_${Date.now()}.png`);
-    fs.writeFileSync(tmp, buf);
-    return { ok:true, base64:buf.toString('base64'), path:tmp };
-  } catch(e) { return { ok:false, err:e.message }; }
-  }
-));
-
-ipcMain.handle('pcShell',      async (event, cmd) => withPermission(
-  event.sender,
-  'shell_command',
-  { command: String(cmd || '') },
-  'Run shell command',
-  () => runShell(cmd)
-));
-ipcMain.handle('pcProcesses',  async ()        => runShell(IS_WIN ? 'tasklist /FO CSV /NH' : 'ps aux --sort=-%cpu | head -25'));
-ipcMain.handle('pcKillProc',   async (event, n) => withPermission(
-  event.sender,
-  'process.kill',
-  { target: String(n || '') },
-  'Kill process',
-  () => runShell(IS_WIN ? `taskkill /F /IM "${n}"` : `pkill -f "${n}"`)
-));
-ipcMain.handle('pcClipboard',  ()              => ({ ok:true, out: clipboard.readText()||'(empty)' }));
-ipcMain.handle('pcSetClip',    async (event, t) => withPermission(
-  event.sender,
-  'clipboard.write',
-  { text: String(t || '').slice(0, 240) },
-  'Write clipboard',
-  () => { clipboard.writeText(t); return { ok:true }; }
-));
-
-ipcMain.handle('pcType', async (event, text) => {
-  text = String(text ?? '');
-  const esc = text.replace(/'/g, "''");
-  let cmd;
-  if (IS_WIN)      cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 200; [System.Windows.Forms.SendKeys]::SendWait('${esc.replace(/[+^%~(){}[\]]/g,'{$&}')}')"`;
-  else if (IS_MAC) cmd = `osascript -e 'tell application "System Events" to keystroke "${text.replace(/"/g,'\\"')}"'`;
-  else             cmd = `xdotool type --clearmodifiers --delay 20 '${esc}'`;
-  return withPermission(event.sender, 'computer.type', { text: String(text || '').slice(0, 240) }, 'Type into the active app', () => runShell(cmd));
-});
-
-ipcMain.handle('pcKeyPress', async (event, key) => {
-  key = String(key ?? '');
-  const wm = {'ctrl+c':'^c','ctrl+v':'^v','ctrl+z':'^z','ctrl+a':'^a','ctrl+s':'^s',
-               'alt+f4':'%{F4}','alt+tab':'%{TAB}','enter':'{ENTER}','escape':'{ESC}','tab':'{TAB}',
-               'win':'{LWIN}','f5':'{F5}','delete':'{DEL}','backspace':'{BS}'};
-  let cmd;
-  if (IS_WIN)      cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.SendKeys]::SendWait('${wm[key.toLowerCase()]||`{${key.toUpperCase()}}`}')"`;
-  else if (IS_MAC) cmd = `osascript -e 'tell application "System Events" to keystroke "${key}"'`;
-  else             cmd = `xdotool key ${key}`;
-  return withPermission(event.sender, 'computer.press_key', { key: String(key || '') }, 'Press key in the active app', () => runShell(cmd));
-});
-
-ipcMain.handle('pcVolume', async (event, level) => {
-  let cmd;
-  if (IS_WIN)      cmd = `powershell -NoProfile -Command "& {$v=[uint32](${level}/100.0*65535);Add-Type -TypeDefinition 'using System.Runtime.InteropServices;public class A{[DllImport(\\"winmm.dll\\")]public static extern int waveOutSetVolume(System.IntPtr h,uint v);}';[A]::waveOutSetVolume([System.IntPtr]::Zero,$v -bor ($v -shl 16))}"`;
-  else if (IS_MAC) cmd = `osascript -e 'set volume output volume ${level}'`;
-  else             cmd = `amixer sset Master ${level}%`;
-  return withPermission(event.sender, 'system.volume', { level: Number(level) }, 'Change system volume', () => runShell(cmd));
-});
-
-ipcMain.handle('pcReadFile',  (_, p) => { try { return {ok:true,content:fs.readFileSync(p,'utf8')}; } catch(e) { return {ok:false,err:e.message}; } });
-ipcMain.handle('pcWriteFile', async (event, p, c) => withPermission(
-  event.sender,
-  'fs.write_file',
-  { path: String(p || ''), bytes: Buffer.byteLength(String(c ?? ''), 'utf8') },
-  'Write file',
-  () => { try { fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,c,'utf8');return {ok:true}; } catch(e) { return {ok:false,err:e.message}; } }
-));
-ipcMain.handle('pcListDir',   (_, d) => { try { return {ok:true,entries:fs.readdirSync(d,{withFileTypes:true}).map(e=>({name:e.name,isDir:e.isDirectory()}))}; } catch(e) { return {ok:false,err:e.message}; } });
-ipcMain.handle('pcChooseFolder', async () => {
-  try {
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Choose Horizon workspace',
-      properties: ['openDirectory']
-    });
-    if (r.canceled || !r.filePaths?.[0]) return { ok:false, canceled:true };
-    settingsStore.set('codeWorkspace', r.filePaths[0]);
-    return { ok:true, path:r.filePaths[0] };
-  } catch(e) { return { ok:false, err:e.message }; }
-});
-
-ipcMain.handle('wsChooseFolder', async () => {
-  try {
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Choose Horizon code workspace',
-      properties: ['openDirectory'],
-    });
-    if (r.canceled || !r.filePaths?.[0]) return { ok:false, canceled:true };
-    const root = path.resolve(r.filePaths[0]);
-    settingsStore.set('codeWorkspace', root);
-    // PR-D2 — kick off symbol indexing in the background. Doesn't
-    // block the IPC response; renderer can poll wsIndexStatus to know
-    // when @symbol autocomplete becomes useful.
-    setImmediate(() => {
-      try { _getWsIndexer().build(root).catch(() => {}); } catch (_) {}
-    });
-    return { ok:true, path:root };
-  } catch(e) { return { ok:false, err:e.message }; }
-});
-
-ipcMain.handle('wsGetWorkspace', () => {
-  try {
-    const root = currentWorkspaceRoot();
-    return { ok:true, path:root };
-  } catch(e) {
-    return { ok:false, err:e.message, path:settingsStore.get('codeWorkspace') || '' };
-  }
-});
-
-ipcMain.handle('wsList', (_, rel = '') => {
-  try {
-    const { root, target } = resolveWorkspacePath(rel);
-    if (!fs.statSync(target).isDirectory()) return { ok:false, err:'Not a directory' };
-    return { ok:true, root, rel:String(rel || '').replace(/\\/g, '/'), entries:safeDirEntries(target) };
-  } catch(e) { return { ok:false, err:e.message }; }
-});
-
-ipcMain.handle('wsRead', (_, rel = '') => {
-  try {
-    const { root, target, rel: safeRel } = resolveWorkspacePath(rel);
-    const stat = fs.statSync(target);
-    if (!stat.isFile()) return { ok:false, err:'Not a file' };
-    if (stat.size > 2 * 1024 * 1024) return { ok:false, err:'File is larger than 2MB' };
-    return { ok:true, root, rel:safeRel, content:fs.readFileSync(target, 'utf8'), size:stat.size };
-  } catch(e) { return { ok:false, err:e.message }; }
-});
-
-ipcMain.handle('wsWrite', async (event, rel = '', content = '') => {
-  try {
-    const { root, target, rel: safeRel } = resolveWorkspacePath(rel);
-    return withPermission(
-      event.sender,
-      'fs.write_file',
-      { path: safeRel, bytes: Buffer.byteLength(String(content ?? ''), 'utf8') },
-      'Write workspace file',
-      () => {
-        fs.mkdirSync(path.dirname(target), { recursive:true });
-        fs.writeFileSync(target, String(content ?? ''), 'utf8');
-        return { ok:true, root, rel:safeRel, bytes:Buffer.byteLength(String(content ?? ''), 'utf8') };
-      }
-    );
-  } catch(e) { return { ok:false, err:e.message }; }
-});
-
-ipcMain.handle('wsSearch', (_, query = '', rel = '') => {
-  try {
-    const q = String(query || '').trim();
-    if (!q) return { ok:true, results:[] };
-    const { root, target } = resolveWorkspacePath(rel);
-    const start = fs.existsSync(target) && fs.statSync(target).isDirectory() ? target : root;
-    return { ok:true, root, query:q, results:searchWorkspaceFiles(root, start, q) };
-  } catch(e) { return { ok:false, err:e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // PR-D3 — Project config (.horizon/rules.md + hooks.json). Per-
 // workspace agent customisation; agentLoop.js pulls rules.md via
@@ -1751,27 +900,7 @@ function _getWorkspaceMemory() {
 }
 module.exports.getWorkspaceMemory = _getWorkspaceMemory;
 
-ipcMain.handle('projectConfigGet', () => {
-  try {
-    const root = currentWorkspaceRoot();
-    if (!root) return { ok: false, err: 'no workspace open' };
-    return { ok: true, ...(_getProjectConfig().get(root)) };
-  } catch (e) { return { ok: false, err: e.message }; }
-});
-ipcMain.handle('projectConfigWriteRules', (_, content) => {
-  try {
-    const root = currentWorkspaceRoot();
-    if (!root) return { ok: false, error: 'no workspace open' };
-    return _getProjectConfig().writeRules(root, content);
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('projectConfigWriteHooks', (_, hooks) => {
-  try {
-    const root = currentWorkspaceRoot();
-    if (!root) return { ok: false, error: 'no workspace open' };
-    return _getProjectConfig().writeHooks(root, hooks || {});
-  } catch (e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // PR-D2 — Workspace symbol indexer (lazy singleton). Build runs in
 // the main process; caps inside workspaceIndexer.js keep it bounded
@@ -1785,41 +914,7 @@ function _getWsIndexer() {
   return _wsIndexer;
 }
 
-ipcMain.handle('wsIndexBuild', async (_, opts = {}) => {
-  try {
-    const root = currentWorkspaceRoot();
-    if (!root) return { ok: false, err: 'no workspace open' };
-    return await _getWsIndexer().build(root, opts || {});
-  } catch (e) { return { ok: false, err: e.message }; }
-});
-
-ipcMain.handle('wsIndexStatus', () => {
-  try { return _getWsIndexer().status(); }
-  catch (e) { return { ok: false, err: e.message }; }
-});
-
-ipcMain.handle('wsIndexQuery', (_, q = '', opts = {}) => {
-  try { return _getWsIndexer().query(q, opts || {}); }
-  catch (e) { return { ok: false, err: e.message }; }
-});
-
-ipcMain.handle('wsIndexClear', () => {
-  try { _getWsIndexer().clear(); return { ok: true }; }
-  catch (e) { return { ok: false, err: e.message }; }
-});
-
-ipcMain.handle('wsShell', async (event, cmd) => {
-  try {
-    const root = currentWorkspaceRoot();
-    return await withPermission(
-      event.sender,
-      'shell_command',
-      { command: String(cmd || ''), cwd: root },
-      'Run workspace command',
-      () => runShell(String(cmd || ''), 30000, { cwd: root })
-    );
-  } catch(e) { return { ok:false, err:e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 const terminalSessions = new Map();
 let nodePtyState = { tried: false, mod: null, error: null };
@@ -1913,65 +1008,7 @@ function createPipeTerminal({ termId, cwd, send, onExit }) {
   };
 }
 
-ipcMain.handle('terminalCreate', async (event, id, rel = '', cols = 100, rows = 30) => {
-  try {
-    const { target } = resolveWorkspacePath(rel || '.');
-    const cwd = fs.statSync(target).isDirectory() ? target : path.dirname(target);
-    const termId = String(id || `term-${Date.now().toString(36)}`);
-    if (terminalSessions.has(termId)) {
-      try { terminalSessions.get(termId).kill(); } catch (_) {}
-      terminalSessions.delete(termId);
-    }
-    const send = data => {
-      const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data || '');
-      try { event.sender.send('terminalData', { id: termId, data: text.replace(/\n/g, '\r\n') }); } catch (_) {}
-    };
-    const onExit = (exitCode, signal) => {
-      terminalSessions.delete(termId);
-      try { event.sender.send('terminalData', { id: termId, data: `\r\n[process exited ${exitCode}${signal ? ` ${signal}` : ''}]\r\n`, exitCode, signal }); } catch (_) {}
-    };
-    const term = createPtyTerminal({ termId, cwd, cols, rows, send, onExit })
-      || createPipeTerminal({ termId, cwd, send, onExit });
-    terminalSessions.set(termId, term);
-    return {
-      ok:true,
-      id:termId,
-      cwd,
-      shell:term.shell,
-      backend:term.backend,
-      nativePty:term.backend === 'pty',
-      nativeError:term.nativeError || '',
-    };
-  } catch(e) {
-    return { ok:false, err:e.message };
-  }
-});
-
-ipcMain.handle('terminalWrite', (_, id, data) => {
-  const term = terminalSessions.get(String(id || ''));
-  if (!term) return { ok:false, err:'Terminal session not found' };
-  term.write(String(data ?? ''));
-  return { ok:true };
-});
-
-ipcMain.handle('terminalResize', (_, id, cols, rows) => {
-  const term = terminalSessions.get(String(id || ''));
-  if (!term) return { ok:false, err:'Terminal session not found' };
-  term.resize(cols, rows);
-  return {
-    ok:true,
-    backend:term.backend,
-    note:term.backend === 'pty' ? 'resized native PTY' : 'resize is ignored by the pipe-backed terminal transport',
-  };
-});
-
-ipcMain.handle('terminalKill', (_, id) => {
-  const term = terminalSessions.get(String(id || ''));
-  if (!term) return { ok:true };
-  try { term.kill(); } catch (_) {}
-  terminalSessions.delete(String(id || ''));
-  return { ok:true };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MOUSE & KEYBOARD — PowerShell only (no external deps, works on all Windows)
@@ -1986,875 +1023,38 @@ public class HorizonMouse {
 }
 '@ -PassThru`;
 
-ipcMain.handle('pcMouseMove', async (event, x, y) => withPermission(
-  event.sender,
-  'computer.mouse_move',
-  { x: Number(x), y: Number(y) },
-  'Move mouse cursor',
-  () => {
-  if (IS_WIN) return runShell(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x}, ${y})"`);
-  if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to set the position of the mouse to {${x}, ${y}}'`);
-  return runShell(`xdotool mousemove ${x} ${y}`);
-  }
-));
-
-ipcMain.handle('pcMouseClick', async (event, x, y, button) => withPermission(
-  event.sender,
-  'computer.mouse_click',
-  { x: Number(x), y: Number(y), button: button || 'left' },
-  'Click mouse',
-  () => {
-  button = button || 'left';
-  if (IS_WIN) {
-    const flags = button === 'right'
-      ? '[HorizonMouse]::mouse_event([HorizonMouse]::R_DOWN,0,0,0,0);[HorizonMouse]::mouse_event([HorizonMouse]::R_UP,0,0,0,0)'
-      : '[HorizonMouse]::mouse_event([HorizonMouse]::L_DOWN,0,0,0,0);[HorizonMouse]::mouse_event([HorizonMouse]::L_UP,0,0,0,0)';
-    return runShell(`powershell -NoProfile -Command "${PS_MOUSE_CLASS} | Out-Null; [HorizonMouse]::SetCursorPos(${x},${y}); Start-Sleep -Milliseconds 100; ${flags}"`);
-  }
-  if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to ${button === 'right' ? 'secondary click' : 'click'} at {${x}, ${y}}'`);
-  return runShell(`xdotool mousemove ${x} ${y} click ${button === 'right' ? '3' : '1'}`);
-  }
-));
-
-ipcMain.handle('pcMouseDoubleClick', async (event, x, y) => withPermission(
-  event.sender,
-  'computer.mouse_double_click',
-  { x: Number(x), y: Number(y) },
-  'Double-click mouse',
-  () => {
-  if (IS_WIN) return runShell(`powershell -NoProfile -Command "${PS_MOUSE_CLASS} | Out-Null; [HorizonMouse]::SetCursorPos(${x},${y}); Start-Sleep -Milliseconds 80; [HorizonMouse]::mouse_event([HorizonMouse]::L_DOWN,0,0,0,0);[HorizonMouse]::mouse_event([HorizonMouse]::L_UP,0,0,0,0);Start-Sleep -Milliseconds 60;[HorizonMouse]::mouse_event([HorizonMouse]::L_DOWN,0,0,0,0);[HorizonMouse]::mouse_event([HorizonMouse]::L_UP,0,0,0,0)"`);
-  if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to double click at {${x}, ${y}}'`);
-  return runShell(`xdotool mousemove ${x} ${y} click --repeat 2 1`);
-  }
-));
-
-ipcMain.handle('pcMouseScroll', async (event, direction, amount) => withPermission(
-  event.sender,
-  'computer.mouse_scroll',
-  { direction: String(direction || ''), amount: Number(amount || 3) },
-  'Scroll mouse wheel',
-  () => {
-  amount = amount || 3;
-  if (IS_WIN) return runShell(`powershell -NoProfile -Command "${PS_MOUSE_CLASS} | Out-Null; [HorizonMouse]::mouse_event([HorizonMouse]::WHEEL,0,0,${direction === 'down' ? -120*amount : 120*amount},0)"`);
-  if (IS_MAC) return runShell(`osascript -e 'tell application "System Events" to scroll ${direction === 'down' ? 'down' : 'up'} 3'`);
-  return runShell(`xdotool click ${direction === 'down' ? '5' : '4'} --repeat ${amount}`);
-  }
-));
-
-ipcMain.handle('pcMouseDrag', async (event, x1, y1, x2, y2) => withPermission(
-  event.sender,
-  'computer.mouse_drag',
-  { from: [Number(x1), Number(y1)], to: [Number(x2), Number(y2)] },
-  'Drag mouse',
-  () => {
-  if (IS_WIN) return runShell(`powershell -NoProfile -Command "${PS_MOUSE_CLASS} | Out-Null; [HorizonMouse]::SetCursorPos(${x1},${y1}); Start-Sleep -Milliseconds 50; [HorizonMouse]::mouse_event([HorizonMouse]::L_DOWN,0,0,0,0); Start-Sleep -Milliseconds 50; [HorizonMouse]::SetCursorPos(${x2},${y2}); Start-Sleep -Milliseconds 50; [HorizonMouse]::mouse_event([HorizonMouse]::L_UP,0,0,0,0)"`);
-  return runShell(`xdotool mousemove ${x1} ${y1} mousedown 1 mousemove ${x2} ${y2} mouseup 1`);
-  }
-));
-
-ipcMain.handle('pcGetMousePos', async () => {
-  if (IS_WIN) {
-    const r = await runShell(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $p=[System.Windows.Forms.Cursor]::Position; Write-Output ($p.X.ToString()+','+$p.Y.ToString())"`);
-    return { ok: r.ok, pos: r.out };
-  }
-  return { ok: true, pos: '0,0' };
-});
-
-ipcMain.handle('pcScreenSize', () => {
-  const d = screen.getPrimaryDisplay();
-  return { width: d.workAreaSize.width, height: d.workAreaSize.height };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Image/File analysis via AI Vision ────────────────────────────────────────
-ipcMain.handle('analyzeImage', async (_, base64, mimeType, question) => {
-  const fetch = require('node-fetch');
-  const lang = settingsStore.get('lang') || 'en';
-  const q = question || (lang === 'ru' ? 'Что на этом изображении? Опиши подробно.' : 'What is in this image? Describe in detail.');
-
-  // Try Claude first (best vision)
-  const claudeKey = keysStore.get('k_claude');
-  if (claudeKey) {
-    const model = selectedModel('claude');
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify(applyReasoningProfile('claude', model, {
-        model, max_tokens: 2048,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType || 'image/jpeg', data: base64 } },
-          { type: 'text', text: q }
-        ]}]
-      }))
-    });
-    const d = await r.json();
-    if (!d.error) return { reply: firstTextFromAnthropic(d), model };
-  }
-
-  // Try GPT-4o
-  const openaiKey = keysStore.get('k_openai');
-  if (openaiKey) {
-    const model = selectedModel('openai');
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
-      body: JSON.stringify(applyReasoningProfile('openai', model, {
-        model, max_tokens: 2048,
-        messages: [{ role: 'user', content: [
-          { type: 'image_url', image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${base64}` } },
-          { type: 'text', text: q }
-        ]}]
-      }))
-    });
-    const d = await r.json();
-    if (!d.error) return { reply: d.choices?.[0]?.message?.content || 'No response', model };
-  }
-
-  // Try Gemini
-  const geminiKey = keysStore.get('k_gemini');
-  if (geminiKey) {
-    const model = selectedModel('gemini');
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(applyReasoningProfile('gemini', model, { contents: [{ parts: [
-        { inline_data: { mime_type: mimeType || 'image/jpeg', data: base64 } },
-        { text: q }
-      ]}]}))
-    });
-    const d = await r.json();
-    if (!d.error && d.candidates?.[0]?.content?.parts?.[0]?.text) return { reply: d.candidates[0].content.parts[0].text, model };
-  }
-
-  return { error: lang === 'ru'
-    ? 'Нужен ключ Claude, OpenAI или Gemini для анализа изображений'
-    : 'Need Claude, OpenAI or Gemini key for image analysis' };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── File reading for ZIP/TXT/code ────────────────────────────────────────────
-ipcMain.handle('readUploadedFile', async (_, base64, fileName, mimeType) => {
-  try {
-    const buf = Buffer.from(base64, 'base64');
-    const ext = fileName.split('.').pop().toLowerCase();
-
-    // Text-based files — read directly
-    const textExts = ['txt','md','js','ts','jsx','tsx','py','html','css','json','csv','xml','yaml','yml','sh','bat','sql','log','ini','env','gitignore','dockerfile'];
-    if (textExts.includes(ext)) {
-      const text = buf.toString('utf8').slice(0, 50000); // limit 50k chars
-      return { ok: true, type: 'text', content: text, ext };
-    }
-
-    // ZIP — list contents and read text files inside
-    if (ext === 'zip') {
-      const tmp = path.join(os.tmpdir(), `horizon_zip_${Date.now()}`);
-      const zipPath = tmp + '.zip';
-      fs.writeFileSync(zipPath, buf);
-      // Use PowerShell/unzip to list contents
-      let listing = '';
-      if (IS_WIN) {
-        const r = await runShell(`powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[System.IO.Compression.ZipFile]::OpenRead('${zipPath}'); $z.Entries | ForEach-Object{$_.FullName}; $z.Dispose()"`);
-        listing = r.out;
-      } else {
-        const r = await runShell(`unzip -l "${zipPath}" 2>/dev/null | awk 'NR>3{print $4}' | head -50`);
-        listing = r.out;
-      }
-      try { fs.unlinkSync(zipPath); } catch(_) {}
-      return { ok: true, type: 'zip', content: `ZIP archive contents:
-${listing}`, ext };
-    }
-
-    // PDF — extract text via shell tools
-    if (ext === 'pdf') {
-      const tmp = path.join(os.tmpdir(), `horizon_pdf_${Date.now()}.pdf`);
-      fs.writeFileSync(tmp, buf);
-      let text = '';
-      if (IS_WIN) {
-        const r = await runShell(`powershell -NoProfile -Command "try{Add-Type -Path 'C:\Program Files\iTextSharp\itextsharp.dll' -ErrorAction Stop}catch{};"`);
-        text = 'PDF uploaded. I can see it as an image — use Claude or GPT-4o vision to read it.';
-      } else {
-        const r = await runShell(`pdftotext "${tmp}" - 2>/dev/null | head -200`);
-        text = r.ok ? r.out : 'PDF uploaded (use vision AI to read)';
-      }
-      try { fs.unlinkSync(tmp); } catch(_) {}
-      return { ok: true, type: 'pdf', content: text, ext };
-    }
-
-    return { ok: false, error: `Unsupported file type: .${ext}` };
-  } catch(e) {
-    return { ok: false, error: e.message };
-  }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Direct URL opener ─────────────────────────────────────────────────────────
-ipcMain.handle('pcOpenUrl', async (event, url) => withPermission(
-  event.sender,
-  'browser.open',
-  { url: String(url || '') },
-  'Open URL',
-  () => { shell.openExternal(url); return { ok: true }; }
-));
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Smart Web Search / YouTube opener ────────────────────────────────────────
-ipcMain.handle('pcSearch', async (event, query, engine) => {
-  const urls = {
-    google:   `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-    youtube:  `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
-    yandex:   `https://yandex.ru/search/?text=${encodeURIComponent(query)}`,
-    bing:     `https://www.bing.com/search?q=${encodeURIComponent(query)}`,
-    github:   `https://github.com/search?q=${encodeURIComponent(query)}`,
-    reddit:   `https://www.reddit.com/search/?q=${encodeURIComponent(query)}`,
-  };
-  const url = urls[engine || 'google'];
-  return withPermission(
-    event.sender,
-    'browser.search',
-    { query: String(query || ''), engine: engine || 'google', url },
-    'Open web search',
-    () => { shell.openExternal(url); return { ok: true, url }; }
-  );
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── ElevenLabs TTS ────────────────────────────────────────────────────────────
-ipcMain.handle('ttsElevenLabs', async (_, text, voiceId) => {
-  const fetch = require('node-fetch');
-  const key = keysStore.get('k_elevenlabs');
-  if (!key) return { error: 'ElevenLabs key not set → Settings' };
-  const vid = voiceId || settingsStore.get('elevenLabsVoice') || 'pNInz6obpgDQGcFmaJgB'; // Adam
-  try {
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'xi-api-key': key },
-      body: JSON.stringify({ text: text.slice(0, 500), model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } })
-    });
-    if (!r.ok) { const e = await r.json().catch(() => ({})); return { error: e?.detail?.message || 'ElevenLabs TTS failed' }; }
-    const buf = await r.buffer();
-    return { ok: true, base64: buf.toString('base64'), mimeType: 'audio/mpeg' };
-  } catch(e) { return { error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── OpenAI TTS ────────────────────────────────────────────────────────────────
-ipcMain.handle('ttsOpenAI', async (_, text, voice) => {
-  const fetch = require('node-fetch');
-  const key = keysStore.get('k_openai');
-  if (!key) return { error: 'OpenAI key not set → Settings' };
-  try {
-    const r = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model: 'tts-1', input: text.slice(0, 4096), voice: voice || 'onyx' })
-    });
-    if (!r.ok) { const e = await r.json().catch(() => ({})); return { error: e?.error?.message || 'OpenAI TTS failed' }; }
-    const buf = await r.buffer();
-    return { ok: true, base64: buf.toString('base64'), mimeType: 'audio/mpeg' };
-  } catch(e) { return { error: e.message }; }
-});
-
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── AI Providers ──────────────────────────────────────────────────────────────
-ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) => {
-  const fetch = require('node-fetch');
-  const runId = opts.streamId || _streamRunId();
-  const abort = new AbortController();
-  const p = provider || settingsStore.get('provider') || 'gemini';
-  const skillsResolved = resolveSkillsForMessages(messages, opts);
-  // PHASE 28.4 — inject dialectic on streaming path too.
-  let baseSystem = String(system || '').trim() || 'You are Horizon AI. Use Markdown.';
-  try {
-    if (dialecticModel && typeof dialecticModel.injection === 'function') {
-      const dial = dialecticModel.injection(6);
-      if (dial) baseSystem = baseSystem + dial;
-    }
-  } catch (_) {}
-  const sysMsg = appendSkillsToSystemPrompt(baseSystem, skillsResolved);
-  let reply = '';
-  let reasoning = '';
-  let usage = null;
-  let model = '';
-  const emit = (type, payload = {}) => {
-    try { event.sender.send('aiStreamChunk', { runId, type, provider: p, ...payload }); } catch (_) {}
-    try {
-      if (type === 'delta' && payload.delta) _broadcast('ai:chunk', { runId, delta: payload.delta });
-      if (type === 'reasoning' && payload.delta) _broadcast('ai:chunk', { runId, delta: payload.delta, reasoning: true });
-      if (type === 'done') _broadcast('ai:done', {
-        runId,
-        ok: true,
-        fullText: payload.reply || reply,
-        reply: payload.reply || reply,
-        model: payload.model || model,
-        usage: payload.usage || usage,
-        reasoning: payload.reasoning || reasoning,
-        skillsSelected: payload.skillsSelected || skillsResolved,
-      });
-      if (type === 'error') _broadcast('ai:done', {
-        runId,
-        ok: false,
-        error: payload.error || 'Stream failed',
-        fullText: reply,
-        reply,
-        model,
-        usage,
-        reasoning,
-      });
-    } catch (_) {}
-  };
-  const fail = (error) => {
-    emit('error', { error });
-    return { ok: false, error, runId, model };
-  };
-  _activeStreams.set(runId, abort);
-  const openaiCompatible = {
-    openai:     { url: 'https://api.openai.com/v1/chat/completions',                    model: selectedModel('openai', opts),     key: keysStore.get('k_openai') },
-    groq:       { url: 'https://api.groq.com/openai/v1/chat/completions',               model: selectedModel('groq', opts),       key: keysStore.get('k_groq') },
-    grok:       { url: 'https://api.x.ai/v1/chat/completions',                          model: selectedModel('grok', opts),       key: keysStore.get('k_grok') },
-    deepseek:   { url: 'https://api.deepseek.com/chat/completions',                      model: selectedModel('deepseek', opts),   key: keysStore.get('k_deepseek') },
-    mistral:    { url: 'https://api.mistral.ai/v1/chat/completions',                     model: selectedModel('mistral', opts),    key: keysStore.get('k_mistral') },
-    qwen:       { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: selectedModel('qwen', opts), key: keysStore.get('k_qwen') },
-    perplexity: { url: 'https://api.perplexity.ai/chat/completions',                     model: selectedModel('perplexity', opts), key: keysStore.get('k_perplexity') },
-    openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions',                  model: selectedModel('openrouter', opts), key: keysStore.get('k_openrouter') },
-  };
-
-  try {
-    let url, headers, body;
-    const localEp = localOpenAIEndpoint(p);
-
-    if (p === 'gemini') {
-      const k = keysStore.get('k_gemini');
-      if (!k) return fail('Gemini key not set');
-      model = selectedModel('gemini', opts);
-      const rawContents = (messages || []).map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content || '...' }],
-      }));
-      const contents = [];
-      for (const msg of rawContents) {
-        if (!contents.length) {
-          if (msg.role === 'user') contents.push(msg);
-        } else if (contents[contents.length - 1].role !== msg.role) {
-          contents.push(msg);
-        } else {
-          contents[contents.length - 1].parts[0].text += '\n' + msg.parts[0].text;
-        }
-      }
-      if (!contents.length) {
-        const lastMsg = Array.isArray(messages) && messages.length ? messages[messages.length - 1] : null;
-        contents.push({ role: 'user', parts: [{ text: lastMsg?.content || '...' }] });
-      }
-      if (contents[contents.length - 1].role !== 'user') contents.push({ role: 'user', parts: [{ text: 'continue' }] });
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
-      headers = { 'Content-Type': 'application/json', 'x-goog-api-key': k };
-      body = applyReasoningProfile('gemini', model, {
-        system_instruction: { parts: [{ text: sysMsg }] },
-        contents,
-        generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
-      });
-    } else if (p === 'cohere') {
-      const k = keysStore.get('k_cohere');
-      if (!k) return fail('Cohere key not set');
-      model = selectedModel('cohere', opts);
-      url = 'https://api.cohere.com/v2/chat';
-      headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${k}` };
-      body = { model, messages: [{ role: 'system', content: sysMsg }, ...(messages || [])], max_tokens: 4096, stream: true };
-    } else if (localEp || openaiCompatible[p]) {
-      const ep = localEp || openaiCompatible[p];
-      model = selectedModel(p, opts);
-      if (!localEp && !ep.key) return fail(`${p} key not set`);
-      url = ep.url;
-      headers = { 'Content-Type': 'application/json' };
-      if (!localEp || ep.key) headers.Authorization = `Bearer ${ep.key}`;
-      if (p === 'openrouter') {
-        headers['HTTP-Referer'] = 'https://horizonaai.dev';
-        headers['X-Title'] = 'Horizon Genesis';
-      }
-      body = applyReasoningProfile(p, model, {
-        model,
-        max_tokens: 4096,
-        stream: true,
-        messages: [{ role: 'system', content: sysMsg }, ...(messages || [])],
-      });
-      if (p === 'perplexity') body.stream_mode = 'concise';
-    } else {
-      return fail(`Streaming is not configured for ${p}`);
-    }
-
-    emit('start', { model });
-    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: abort.signal });
-    if (!response.ok || !response.body) {
-      const d = await response.json().catch(async () => ({ error: await response.text().catch(() => '') }));
-      const msg = d.error?.message || d.message || d.error || `${p} stream failed (${response.status})`;
-      return fail(msg);
-    }
-
-    await readSseStream(response, async ({ event: eventName, data }) => {
-      if (abort.signal.aborted) throw new Error('aborted');
-      const chunk = extractStreamPayload(p, eventName, data);
-      if (chunk.error) {
-        emit('error', { error: chunk.error });
-        throw new Error(chunk.error);
-      }
-      if (chunk.usage) usage = chunk.usage;
-      if (chunk.reasoning) {
-        reasoning += chunk.reasoning;
-        emit('reasoning', { delta: chunk.reasoning });
-      }
-      if (chunk.text) {
-        reply += chunk.text;
-        emit('delta', { delta: chunk.text });
-      }
-      if (chunk.done) emit('done-part', { usage });
-    });
-    emit('done', { reply, model, usage, reasoning, skillsSelected: skillsResolved });
-    return { ok: true, reply, model, usage, reasoning, runId, skillsSelected: skillsResolved };
-  } catch (e) {
-    const msg = abort.signal.aborted ? 'aborted' : (e?.message || String(e));
-    emit('error', { error: msg });
-    return { ok: false, error: msg, runId };
-  } finally {
-    _activeStreams.delete(runId);
-  }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Phase 4.1 — image generation IPC (BYOK: caller picks provider + model,
 // we read the user's stored key, never proxy). Returns base64 image data
 // so renderer can render via <img src="data:..."> without disk round-trip.
-ipcMain.handle('aiImage', async (_, opts) => {
-  try {
-    const { generateImage } = require('./imageGen');
-    // getKey passed in so imageGen.js doesn't have to know about
-    // electron-store directly (keeps it testable + provider-agnostic).
-    return await generateImage(opts || {}, (svc) => keysStore.get(`k_${svc}`, null));
-  } catch (e) {
-    return { ok: false, error: e?.message || String(e) };
-  }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
-ipcMain.handle('aiImageModels', async () => {
-  try {
-    const { listImageModels, DEFAULTS } = require('./imageGen');
-    return { ok: true, models: listImageModels(), defaults: DEFAULTS };
-  } catch (e) {
-    return { ok: false, error: e?.message || String(e), models: {} };
-  }
-});
-
-/**
- * PHASE 28.4 — LLM-driven dialectic extractor.
- *
- * Builds a tiny prompt that shows the assistant + user turn plus the
- * last 5 dialectic entries, asks for a JSON object listing new diffs,
- * validates the output, and returns an array of records ready for
- * dialecticModel.record(). Fail-soft: any parse/HTTP error returns [].
- *
- * The model is whatever provider the user already configured (we use
- * runAiCompletion directly, no extra key required). Cost is bounded:
- * ~150 input + ~80 output tokens per call, and the caller in agent.js
- * samples to one call per ~2 turns once the model is bootstrapped.
- */
-async function _extractDialecticDiffs(user, assistant, recent, ctx) {
-  try {
-    if (!user || !assistant) return [];
-    const recentLines = (recent || [])
-      .slice(0, 5)
-      .map(r => `- [${r.kind}] ${r.after}${r.before ? ' (was: ' + r.before + ')' : ''}`)
-      .join('\n') || '(empty — this is one of the first records)';
-
-    const systemPrompt = [
-      'You are a user-model extractor. After each conversation turn, you emit a JSON object describing what NEW information the turn revealed about the user.',
-      '',
-      'Valid kinds:',
-      '  belief          — a new opinion or preference the user revealed',
-      '  desire          — a new goal or want',
-      '  knowledge       — a fact about the user\'s skills / context they just stated',
-      '  theory-of-mind  — an assumption we made that was confirmed or refuted',
-      '  correction      — something the user explicitly corrected',
-      '',
-      'Recent diff log (do not re-emit these):',
-      recentLines,
-      '',
-      'Rules:',
-      '  • Emit AT MOST 3 entries. Empty {"updates":[]} is fine if nothing was learned.',
-      '  • Skip trivial small-talk and acknowledgements.',
-      '  • Skip facts the user has clearly stated before (see the log above).',
-      '  • Each entry: {"kind":"...","before":null or "...","after":"<= 200 chars","evidence":"<= 120 chars quote","confidence":0.0..1.0}',
-      '  • RESPOND WITH RAW JSON ONLY. No prose, no markdown fences.',
-    ].join('\n');
-
-    const messages = [{
-      role: 'user',
-      content: 'TURN:\nUser: ' + String(user).slice(0, 1200) + '\nAssistant: ' + String(assistant).slice(0, 1200),
-    }];
-    // Use the user's active provider so we don't add a new key requirement.
-    const activeProvider = settingsStore.get('provider') || 'gemini';
-    const opts = { temperature: 0.1, maxTokens: 280 };
-    const r = await runAiCompletion(null, messages, activeProvider, systemPrompt, opts);
-    if (!r || r.error || !r.reply) return [];
-    // The model sometimes wraps JSON in ```json fences — strip them.
-    let raw = String(r.reply).trim();
-    raw = raw.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-    // Or it may emit just the array — handle both shapes.
-    let parsed;
-    try { parsed = JSON.parse(raw); }
-    catch (_) {
-      // Fallback: try to extract the first { … } block.
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) return [];
-      try { parsed = JSON.parse(m[0]); } catch (_) { return []; }
-    }
-    const list = Array.isArray(parsed) ? parsed
-               : Array.isArray(parsed?.updates) ? parsed.updates
-               : [];
-    return list
-      .filter(x => x && typeof x === 'object' && x.kind && x.after)
-      .slice(0, 3);
-  } catch (e) {
-    console.warn('[dialectic] extractor exception:', e.message);
-    return [];
-  }
-}
-
-async function runAiCompletion(_, messages, provider, system, opts) {
-  const fetch    = require('node-fetch');
-  const userName = settingsStore.get('userName') || 'user';
-
-  // PHASE 28.3 — chat language is independent of the UI menu language.
-  // The UI dropdown is English-only (labels, buttons), but the
-  // conversation itself follows whatever the user typed. We auto-detect
-  // by scanning the last 5 user messages for Cyrillic; this also picks
-  // the right *persona prompt* below so JARVIS stays "Sir" in English
-  // and "Сэр" in Russian without the user toggling anything.
-  const detectLang = () => {
-    try {
-      const recent = (messages || []).filter(m => m.role === 'user').slice(-5);
-      const text = recent.map(m => String(m.content || '')).join(' ');
-      return /[А-Яа-яЁё]/.test(text) ? 'ru' : 'en';
-    } catch (_) { return 'en'; }
-  };
-  const lang = detectLang();
-
-  // IDENTITY: Horizon always knows who it is. The "mirror the user's
-  // language" instruction is what makes the model actually answer in
-  // user's language even when persona prompt is loaded in English.
-  const identity = `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown. Mirror the user's language: reply in whichever language they wrote in (Russian, English, anything else). Stay consistent within a conversation unless the user switches languages.`;
-
-  // PERSONA INJECTION (defense-in-depth): the renderer's chat send path
-  // already prepends the active persona's prompt to `system` before
-  // invoking H.ai (chat.html ~line 5921). But other call sites — agent
-  // loop, voice bursts, plugin re-asks — sometimes hand us a system
-  // string that doesn't carry the persona, or pass null entirely. So we
-  // also read the active persona from settingsStore here and merge it
-  // in. This is what makes the user-visible persona dropdown actually
-  // shape every assistant reply, not just the ones initiated from the
-  // chat UI.
-  let personaPrompt = '';
-  try {
-    loadAgentModules();
-    if (personas) {
-      const personaId = settingsStore.get('persona') || 'jarvis';
-      // Skip if the renderer already inlined the persona text — cheap
-      // substring check on the persona's signature opening line keeps us
-      // from doubling the prompt for the common chat path.
-      const pp = personas.getPersonaPrompt(personaId, lang);
-      if (pp && (!system || !system.includes(pp.slice(0, 32)))) {
-        personaPrompt = pp;
-      }
-    }
-  } catch (_) { /* persona is optional; never block a send */ }
-
-  const sysParts = [identity];
-  if (personaPrompt) sysParts.push(personaPrompt);
-  if (system && (!system.includes('Ты') && !system.includes('You are'))) {
-    sysParts.push(system);
-  } else if (system) {
-    // Renderer supplied a self-contained system message (already includes
-    // identity + persona) — use it verbatim so we don't double up.
-    sysParts.length = 0;
-    sysParts.push(system);
-  }
-  // PHASE 28.4 — inject the dialectic snippet so the model sees what
-  // we've learned about this user in past turns. Skipped silently when
-  // the dialectic store is empty or unavailable.
-  try {
-    if (dialecticModel && typeof dialecticModel.injection === 'function') {
-      const dial = dialecticModel.injection(6);
-      if (dial) sysParts.push(dial);
-    }
-  } catch (_) { /* injection is opportunistic */ }
-  const skillsResolved = resolveSkillsForMessages(messages, opts || {});
-  const sysMsg = appendSkillsToSystemPrompt(sysParts.join('\n\n'), skillsResolved);
-
-  // Normalise per-provider usage shapes to {prompt, completion, total}.
-  // Returns null if the response didn't include usage info (e.g. local models
-  // that don't surface token counts) — renderer falls back to estimate.
-  const _usage = (d, provider) => {
-    try {
-      if (provider === 'claude') {
-        const u = d?.usage; if (!u) return null;
-        const p = u.input_tokens || 0, c = u.output_tokens || 0;
-        return { prompt: p, completion: c, total: p + c };
-      }
-      if (provider === 'gemini') {
-        const u = d?.usageMetadata; if (!u) return null;
-        return {
-          prompt: u.promptTokenCount || 0,
-          completion: u.candidatesTokenCount || 0,
-          total: u.totalTokenCount || ((u.promptTokenCount||0)+(u.candidatesTokenCount||0))
-        };
-      }
-      if (provider === 'cohere') {
-        const t = d?.usage?.tokens || d?.meta?.tokens; if (!t) return null;
-        const p = t.input_tokens || 0, c = t.output_tokens || 0;
-        return { prompt: p, completion: c, total: p + c };
-      }
-      // OpenAI-compatible: openai, groq, deepseek, mistral, qwen, grok, perplexity, ollama, lmstudio
-      const u = d?.usage; if (!u) return null;
-      return {
-        prompt: u.prompt_tokens || 0,
-        completion: u.completion_tokens || 0,
-        total: u.total_tokens || ((u.prompt_tokens||0)+(u.completion_tokens||0))
-      };
-    } catch (_) { return null; }
-  };
-
-  try {
-    switch (provider) {
-      case 'claude': {
-        const k = keysStore.get('k_claude');
-        if (!k) return { error: lang==='ru'?'Ключ Claude не задан → Настройки':'Claude key not set → Settings' };
-        // Default: Sonnet 4.6 — best speed/intelligence balance per Anthropic.
-        // User can override via settingsStore.get('model.claude') or opts.model.
-        const claudeModel = selectedModel('claude', opts);
-        const respProfile = settingsStore.get('responseProfile') || 'balanced';
-        const claudeBody = { model: claudeModel, max_tokens: 4096, system: sysMsg, messages };
-        // Deep → enable extended thinking. Need headroom on max_tokens because
-        // the budget is debited from it. Anthropic also requires temperature
-        // to be unset (which it already is) when thinking is on.
-        if (respProfile === 'deep') {
-          claudeBody.thinking = { type: 'enabled', budget_tokens: 8000 };
-          claudeBody.max_tokens = 16000;
-        }
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-          method:'POST', headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
-          body:JSON.stringify(claudeBody)
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message };
-        // With thinking enabled the first content block is `{type:'thinking'}`
-        // and the user-visible reply is the first `{type:'text'}` block.
-        const textBlock = (d.content || []).find(b => b && b.type === 'text');
-        return { reply: textBlock?.text || d.content?.[0]?.text || 'No response', model: claudeModel, usage: _usage(d,'claude') };
-      }
-      case 'openai': {
-        const k = keysStore.get('k_openai');
-        if (!k) return { error: lang==='ru'?'Ключ OpenAI не задан':'OpenAI key not set' };
-        const openaiModel = selectedModel('openai', opts);
-        const respProfile = settingsStore.get('responseProfile') || 'balanced';
-        // reasoning_effort is only honoured by reasoning models.
-        const isReasoningModel = /^o[134]/.test(openaiModel) || /thinking|reasoning/.test(openaiModel);
-        const openaiBody = { model: openaiModel, max_tokens: 4096, messages: [{role:'system',content:sysMsg},...messages] };
-        if (isReasoningModel) {
-          if (respProfile === 'deep') openaiBody.reasoning_effort = 'high';
-          else if (respProfile === 'fast') openaiBody.reasoning_effort = 'low';
-          // balanced: leave unset → provider default (medium)
-        }
-        const r = await fetch('https://api.openai.com/v1/chat/completions', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify(openaiBody)
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: openaiModel, usage: _usage(d,'openai') };
-      }
-      case 'gemini': {
-        const k = keysStore.get('k_gemini');
-        if (!k) return { error: lang==='ru'?'Ключ Gemini не задан. Бесплатно: aistudio.google.com':'Gemini key not set. Free at aistudio.google.com' };
-        const model = selectedModel('gemini', opts);
-
-        // Fix alternating roles — Gemini requires user/model/user/model sequence
-        // Remove consecutive duplicates and ensure starts with 'user'
-        const rawContents = messages.map(m => ({ role: m.role==='assistant'?'model':'user', parts:[{text: m.content||'...'}] }));
-        const contents = [];
-        for (const msg of rawContents) {
-          if (contents.length === 0) {
-            if (msg.role === 'user') contents.push(msg);
-            // skip leading assistant messages
-          } else if (contents[contents.length-1].role !== msg.role) {
-            contents.push(msg);
-          } else {
-            // Merge consecutive same-role messages
-            contents[contents.length-1].parts[0].text += '\n' + msg.parts[0].text;
-          }
-        }
-        // Gemini must end with user message
-        if (!contents.length) contents.push({ role:'user', parts:[{text: messages[messages.length-1]?.content || '...'}] });
-        if (contents[contents.length-1].role !== 'user') contents.push({ role:'user', parts:[{text:'...'}] });
-
-        const respProfile = settingsStore.get('responseProfile') || 'balanced';
-        const generationConfig = { maxOutputTokens:4096, temperature:0.7 };
-        // Gemini 2.5+ exposes a `thinkingConfig`. budget = -1 → dynamic (model
-        // decides). budget = 0 → no thinking, fastest path. Older 2.0 / 1.x
-        // models don't support the field at all.
-        if (/^gemini-(2\.5|3)/.test(model)) {
-          if (respProfile === 'deep') generationConfig.thinkingConfig = { thinkingBudget: -1 };
-          else if (respProfile === 'fast') generationConfig.thinkingConfig = { thinkingBudget: 0 };
-        }
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ system_instruction:{parts:[{text:sysMsg}]}, contents, generationConfig })
-        });
-        const d = await r.json();
-        if (d.error) return { error: d.error.message };
-        const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-          // Blocked or empty response
-          const reason = d.candidates?.[0]?.finishReason || d.promptFeedback?.blockReason || 'empty response';
-          return { error: `Gemini: ${reason}. Check your API key at aistudio.google.com` };
-        }
-        return { reply: text, model, usage: _usage(d,'gemini') };
-      }
-      case 'groq': {
-        const k = keysStore.get('k_groq');
-        if (!k) return { error: lang==='ru'?'Ключ Groq не задан. Бесплатно: groq.com':'Groq key not set. Free at groq.com' };
-        const groqModel = selectedModel('groq', opts);
-        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:groqModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: groqModel, usage: _usage(d,'groq') };
-      }
-      case 'grok': {
-        const k = keysStore.get('k_grok');
-        if (!k) return { error: lang==='ru'?'Ключ Grok (xAI) не задан → console.x.ai':'Grok (xAI) key not set → console.x.ai' };
-        // Keep Grok model selection centralized with the rest of the providers.
-        const grokModel = selectedModel('grok', opts);
-        const r = await fetch('https://api.x.ai/v1/chat/completions', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:grokModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: grokModel, usage: _usage(d,'grok') };
-      }
-      case 'deepseek': {
-        const k = keysStore.get('k_deepseek');
-        if (!k) return { error: lang==='ru'?'Ключ DeepSeek не задан → platform.deepseek.com':'DeepSeek key not set → platform.deepseek.com' };
-        // 'deepseek-chat' is the cheap-fast alias (currently → V3.1). For the
-        const deepseekModel = selectedModel('deepseek', opts);
-        const r = await fetch('https://api.deepseek.com/chat/completions', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:deepseekModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: deepseekModel, usage: _usage(d,'deepseek') };
-      }
-      case 'mistral': {
-        const k = keysStore.get('k_mistral');
-        if (!k) return { error: lang==='ru'?'Ключ Mistral не задан → console.mistral.ai':'Mistral key not set → console.mistral.ai' };
-        const mistralModel = selectedModel('mistral', opts);
-        const r = await fetch('https://api.mistral.ai/v1/chat/completions', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:mistralModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: mistralModel, usage: _usage(d,'mistral') };
-      }
-      case 'qwen': {
-        const k = keysStore.get('k_qwen');
-        if (!k) return { error: lang==='ru'?'Ключ Qwen не задан → dashscope.aliyuncs.com':'Qwen key not set → dashscope.aliyuncs.com' };
-        // qwen-plus is the cheap workhorse. qwen3-max is the flagship.
-        const qwenModel = selectedModel('qwen', opts);
-        const r = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:qwenModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: qwenModel, usage: _usage(d,'qwen') };
-      }
-      case 'perplexity': {
-        const k = keysStore.get('k_perplexity');
-        if (!k) return { error: lang==='ru'?'Ключ Perplexity не задан → perplexity.ai/settings/api':'Perplexity key not set → perplexity.ai/settings/api' };
-        // Sonar models hit the live web for grounded answers — different
-        // cost/latency profile than other providers but the OpenAI-shape
-        // /chat/completions endpoint is the same.
-        const pplxModel = selectedModel('perplexity', opts);
-        const r = await fetch('https://api.perplexity.ai/chat/completions', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:pplxModel, max_tokens:4096, messages:[{role:'system',content:sysMsg},...messages] })
-        });
-        const d = await r.json(); if (d.error) return { error: d.error.message || d.error };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: pplxModel, usage: _usage(d,'perplexity') };
-      }
-      case 'cohere': {
-        const k = keysStore.get('k_cohere');
-        if (!k) return { error: lang==='ru'?'Ключ Cohere не задан → dashboard.cohere.com':'Cohere key not set → dashboard.cohere.com' };
-        const cohereModel = selectedModel('cohere', opts);
-        // Cohere v2 chat API: takes `messages` (system role supported), returns
-        // d.message.content[0].text. Different shape from OpenAI-compatible.
-        const r = await fetch('https://api.cohere.com/v2/chat', {
-          method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},
-          body:JSON.stringify({ model:cohereModel, messages:[{role:'system',content:sysMsg},...messages], max_tokens:4096 })
-        });
-        const d = await r.json(); if (d.message?.error || d.error) return { error: d.message?.error || d.error || 'Cohere error' };
-        const text = d.message?.content?.[0]?.text || d.text || 'No response';
-        return { reply: text, model: cohereModel, usage: _usage(d,'cohere') };
-      }
-      case 'openrouter': {
-        const k = keysStore.get('k_openrouter');
-        if (!k) return { error: lang==='ru'?'Ключ OpenRouter не задан → openrouter.ai/keys':'OpenRouter key not set → openrouter.ai/keys' };
-        // OpenRouter is a router across 200+ models behind one OpenAI-compatible
-        // endpoint. The HTTP-Referer + X-Title headers are recommended by their
-        // attribution policy and unlock the per-app analytics page.
-        const orModel = selectedModel('openrouter', opts);
-        const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${k}`,
-            'HTTP-Referer': 'https://horizonaai.dev',
-            'X-Title': 'Horizon Genesis',
-          },
-          body: JSON.stringify({ model: orModel, max_tokens: 4096, messages: [{role:'system',content:sysMsg},...messages] })
-        });
-        const d = await r.json();
-        if (d.error) return { error: d.error.message || d.error };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: orModel, usage: _usage(d,'openrouter') };
-      }
-      case 'ollama':
-      case 'lmstudio':
-      case 'localai': {
-        const ep = localOpenAIEndpoint(provider);
-        const headers = { 'Content-Type': 'application/json' };
-        if (ep.key) headers.Authorization = `Bearer ${ep.key}`;
-        const r = await fetch(ep.url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            model: selectedModel(provider, opts),
-            max_tokens: 4096,
-            messages: [{ role: 'system', content: sysMsg }, ...messages],
-          }),
-        });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok || d.error) return { error: d.error?.message || d.error || `${provider} connection failed (${r.status})` };
-        return { reply: d.choices?.[0]?.message?.content || 'No response', model: selectedModel(provider, opts), usage: _usage(d, provider) };
-      }
-      default: return { error: `Unknown provider: ${provider}` };
-    }
-  } catch(e) { return { error: `Network error: ${e.message}` }; }
-}
-
-ipcMain.handle('ai', runAiCompletion);
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Web Search ────────────────────────────────────────────────────────────────
-ipcMain.handle('search', async (_, query) => {
-  const fetch = require('node-fetch');
-  const key   = keysStore.get('k_tavily');
-  if (!key) return { error: 'Tavily key not set', results: [] };
-  try {
-    const r = await fetch('https://api.tavily.com/search', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ api_key:key, query, max_results:5, include_answer:true })
-    });
-    const d = await r.json();
-    return { answer: d.answer, results: d.results?.slice(0, 5) || [] };
-  } catch(e) { return { error: e.message, results: [] }; }
-});
-
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PR-C5 — STREAMING AI (Claude + OpenAI SSE)
@@ -2898,193 +1098,13 @@ function _broadcast(channel, payload) {
   } catch (_) { /* best-effort */ }
 }
 
-async function _streamClaude({ runId, sysMsg, messages, opts, abort }) {
-  const model = selectedModel('claude', opts);
-  const respProfile = settingsStore.get('responseProfile') || 'balanced';
-  const k = keysStore.get('k_claude');
-  if (!k) {
-    _broadcast('ai:done', { runId, ok: false, error: 'Claude key not set → Settings' });
-    return;
-  }
-  const body = { model, max_tokens: 4096, system: sysMsg, messages, stream: true };
-  if (respProfile === 'deep') {
-    body.thinking = { type: 'enabled', budget_tokens: 8000 };
-    body.max_tokens = 16000;
-  }
-  let res;
-  try {
-    res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': k,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
-      signal: abort.signal,
-    });
-  } catch (e) {
-    _broadcast('ai:done', { runId, ok: false, error: 'Network: ' + e.message });
-    return;
-  }
-  if (!res.ok) {
-    let errMsg = `HTTP ${res.status}`;
-    try { const j = await res.json(); errMsg = j.error?.message || errMsg; } catch (_) {}
-    _broadcast('ai:done', { runId, ok: false, error: errMsg });
-    return;
-  }
-  let fullText = '';
-  let usage = null;
-  let buf = '';
-  try {
-    for await (const chunk of res.body) {
-      if (abort.signal.aborted) break;
-      buf += chunk.toString('utf8');
-      // Anthropic frames are separated by `\n\n`.
-      const frames = buf.split(/\n\n/);
-      buf = frames.pop() || '';
-      for (const frame of frames) {
-        const lines = frame.split('\n');
-        let event = '';
-        let data = '';
-        for (const ln of lines) {
-          if (ln.startsWith('event: ')) event = ln.slice(7).trim();
-          else if (ln.startsWith('data: ')) data = ln.slice(6).trim();
-        }
-        if (!data) continue;
-        let parsed = null;
-        try { parsed = JSON.parse(data); } catch (_) { continue; }
-        if (event === 'content_block_delta') {
-          const delta = parsed?.delta?.text || '';
-          if (delta) {
-            fullText += delta;
-            _broadcast('ai:chunk', { runId, delta });
-          }
-        } else if (event === 'message_delta') {
-          const u = parsed?.usage;
-          if (u) {
-            usage = {
-              prompt: u.input_tokens || 0,
-              completion: u.output_tokens || 0,
-              total: (u.input_tokens || 0) + (u.output_tokens || 0),
-            };
-          }
-        } else if (event === 'message_start') {
-          const u = parsed?.message?.usage;
-          if (u) {
-            usage = {
-              prompt: u.input_tokens || 0,
-              completion: u.output_tokens || 0,
-              total: (u.input_tokens || 0) + (u.output_tokens || 0),
-            };
-          }
-        }
-      }
-    }
-  } catch (e) {
-    if (e.name === 'AbortError') {
-      _broadcast('ai:done', { runId, ok: false, error: 'aborted', aborted: true, fullText, model, usage });
-      return;
-    }
-    _broadcast('ai:done', { runId, ok: false, error: 'Stream: ' + e.message, fullText, model, usage });
-    return;
-  }
-  _broadcast('ai:done', { runId, ok: true, fullText, usage, model });
-}
-
-async function _streamOpenAI({ runId, sysMsg, messages, opts, abort }) {
-  const model = selectedModel('openai', opts);
-  const respProfile = settingsStore.get('responseProfile') || 'balanced';
-  const k = keysStore.get('k_openai');
-  if (!k) {
-    _broadcast('ai:done', { runId, ok: false, error: 'OpenAI key not set' });
-    return;
-  }
-  const isReasoningModel = /^o[134]/.test(model) || /thinking|reasoning/.test(model);
-  const body = {
-    model,
-    max_tokens: 4096,
-    messages: [{ role: 'system', content: sysMsg }, ...messages],
-    stream: true,
-    stream_options: { include_usage: true },
-  };
-  if (isReasoningModel) {
-    if (respProfile === 'deep') body.reasoning_effort = 'high';
-    else if (respProfile === 'fast') body.reasoning_effort = 'low';
-  }
-  let res;
-  try {
-    res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + k },
-      body: JSON.stringify(body),
-      signal: abort.signal,
-    });
-  } catch (e) {
-    _broadcast('ai:done', { runId, ok: false, error: 'Network: ' + e.message });
-    return;
-  }
-  if (!res.ok) {
-    let errMsg = `HTTP ${res.status}`;
-    try { const j = await res.json(); errMsg = j.error?.message || errMsg; } catch (_) {}
-    _broadcast('ai:done', { runId, ok: false, error: errMsg });
-    return;
-  }
-  let fullText = '';
-  let usage = null;
-  let buf = '';
-  try {
-    for await (const chunk of res.body) {
-      if (abort.signal.aborted) break;
-      buf += chunk.toString('utf8');
-      const lines = buf.split(/\r?\n/);
-      buf = lines.pop() || '';
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t || !t.startsWith('data: ')) continue;
-        const data = t.slice(6).trim();
-        if (data === '[DONE]') continue;
-        let parsed = null;
-        try { parsed = JSON.parse(data); } catch (_) { continue; }
-        const delta = parsed?.choices?.[0]?.delta?.content;
-        if (delta) {
-          fullText += delta;
-          _broadcast('ai:chunk', { runId, delta });
-        }
-        if (parsed?.usage) {
-          const u = parsed.usage;
-          usage = {
-            prompt: u.prompt_tokens || 0,
-            completion: u.completion_tokens || 0,
-            total: u.total_tokens || ((u.prompt_tokens || 0) + (u.completion_tokens || 0)),
-          };
-        }
-      }
-    }
-  } catch (e) {
-    if (e.name === 'AbortError') {
-      _broadcast('ai:done', { runId, ok: false, error: 'aborted', aborted: true, fullText, model, usage });
-      return;
-    }
-    _broadcast('ai:done', { runId, ok: false, error: 'Stream: ' + e.message, fullText, model, usage });
-    return;
-  }
-  _broadcast('ai:done', { runId, ok: true, fullText, usage, model });
-}
-
 // PHASE 28.5 — removed `_disabledLegacyAiStreamHandler` (was a 53-line
 // dead-code function from an earlier refactor, never registered as an
 // IPC handler). Active streaming lives in the `aiStream` handler near
 // line 2253 and the non-streaming path in `runAiCompletion`. Both
 // inject identity + persona + dialectic the same way.
 
-ipcMain.handle('aiAbort', (_, runId) => {
-  const ctl = _activeStreams.get(runId);
-  if (!ctl) return { ok: false, error: 'no active stream for runId' };
-  try { ctl.abort(); } catch (_) {}
-  _activeStreams.delete(runId);
-  return { ok: true };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HORIZON V12 — FULL AGENT CAPABILITIES
@@ -4349,85 +2369,7 @@ async function dispatchGithubConnectionTool(tool, args = {}) {
   }
 }
 
-ipcMain.handle('mcpServersList', async () => {
-  loadAgentModules();
-  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded', servers: [] };
-  return { ok: true, servers: await mcpRegistry.listServers() };
-});
-
-ipcMain.handle('mcpServerUpsert', async (_, config) => {
-  loadAgentModules();
-  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
-  try { return { ok: true, server: await mcpRegistry.upsertServer(config) }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('mcpServerRemove', async (_, id) => {
-  loadAgentModules();
-  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
-  try { await mcpRegistry.removeServer(id); return { ok: true }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('mcpServerEnable', async (_, id, enabled) => {
-  loadAgentModules();
-  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
-  try { return { ok: true, server: await mcpRegistry.setEnabled(id, enabled) }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('mcpServerTest', async (_, config) => {
-  loadAgentModules();
-  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
-  try { return await mcpRegistry.testServer(config); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('mcpToolsRefresh', async () => {
-  loadAgentModules();
-  if (!mcpRegistry) return { ok: false, error: 'MCP registry not loaded' };
-  try { return { ok: true, tools: await mcpRegistry.refreshTools() }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('agentControl', async (event, runId, action) => {
-  const run = findActiveRun(runId);
-  if (!run) return { ok: false, error: 'No active agent run' };
-  // PR-Plan-Act — approve-plan / reject-plan resolve the pending
-  // plan-pending Promise stored in _planActPending for this run.
-  // approve-plan optionally takes a follow-up flag to make the run
-  // Always-approve for the rest of the session.
-  if (action === 'approve-plan' || action === 'reject-plan') {
-    const pending = _planActPending.get(runId);
-    if (!pending) return { ok: false, error: 'No plan-pending state for run' };
-    if (action === 'approve-plan') {
-      pending.resolve('approve');
-      _planActApprovedRuns.add(runId);
-      const payload = { type: 'plan-decision', runId, decision: 'approve' };
-      run.observe(payload);
-      broadcastAgentStep(payload, event.sender);
-      return { ok: true };
-    } else {
-      pending.resolve('reject');
-      const payload = { type: 'plan-decision', runId, decision: 'reject' };
-      run.observe(payload);
-      broadcastAgentStep(payload, event.sender);
-      // Also stop the run so no tools execute.
-      try { run.stop(); } catch (_) {}
-      return { ok: true };
-    }
-  }
-  let result;
-  if (action === 'pause') result = run.pause();
-  else if (action === 'resume') result = run.resume();
-  else if (action === 'step') result = run.step();
-  else if (action === 'stop') result = run.stop();
-  else return { ok: false, error: `Unknown agent control: ${action}` };
-  const payload = { type: 'control', runId: run.record.id, action, status: run.record.status, currentStepId: run.record.currentStepId || null };
-  run.observe(payload);
-  broadcastAgentStep(payload, event.sender);
-  return result;
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // PR-Plan-Act — registry of runs that have an outstanding plan-pending
 // gate, plus a per-session set of runs the user has Approved-All-Plans
@@ -4435,1016 +2377,61 @@ ipcMain.handle('agentControl', async (event, runId, action) => {
 const _planActPending = new Map(); // runId → { resolve, reject, broadcastedAt }
 const _planActApprovedRuns = new Set();
 
-ipcMain.handle('agentStep', async (_, stepId, decision) => {
-  const run = pendingAgentSteps.get(stepId);
-  if (!run) return { ok: false, error: 'No waiting step for this id' };
-  return run.resolveStep(stepId, decision);
-});
-
-ipcMain.handle('permissionAllowlistList', async () => ({
-  ok: true,
-  entries: getPermissionAllowlist(),
-}));
-
-ipcMain.handle('permissionAllowlistRevoke', async (_, id) => ({
-  ok: true,
-  revoked: revokePermissionAllowlist(String(id || '')),
-  entries: getPermissionAllowlist(),
-}));
-
-ipcMain.handle('agentRuns', async (_, limit = 50) => {
-  const active = [...activeAgentRuns.values()].map(r => compactAgentRun(r.record)).reverse();
-  return { ok: true, active, history: readAgentRuns(limit).map(compactAgentRun) };
-});
-
-ipcMain.handle('agentRunDetails', async (_, runId) => {
-  const active = activeAgentRuns.get(runId);
-  if (active) return { ok: true, run: scrubRunValue(active.record), active: true };
-  const found = readAgentRuns(200).find(r => r.id === runId);
-  return found ? { ok: true, run: found, active: false } : { ok: false, error: 'Run not found' };
-});
-
-ipcMain.handle('agentRun', async (event, userMessage, opts = {}) => {
-  loadAgentModules();
-
-  if (!agentLoop) {
-    return { ok: false, error: 'Agent module not loaded', steps: [] };
-  }
-
-  const runId = opts.runId || `agent-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
-  // Register this top-level run at depth 0 so any spawn_subagent calls
-  // can compute their depth relative to it. Cleaned up in the finally
-  // block when the run ends (whether ok, errored, or stopped).
-  subagentDepthByRunId.set(runId, 0);
-  const provider = opts.provider || settingsStore.get('provider') || 'gemini';
-  const lang     = settingsStore.get('lang') || 'en';
-  const userName = settingsStore.get('userName') || 'User';
-  const runRecord = {
-    id: runId,
-    prompt: String(userMessage || ''),
-    provider,
-    model: opts.model || selectedModel(provider, opts),
-    status: 'running',
-    startedAt: new Date().toISOString(),
-    endedAt: null,
-    steps: [],
-    events: [],
-  };
-  const controller = new AgentRunController(runRecord);
-  activeAgentRuns.set(runId, controller);
-
-  // Get system info for agent context
-  let sysInfo = null;
-  try { sysInfo = await agentTools.getDetailedSysInfo(); } catch(e) {}
-  sysInfo = sysInfo || {};
-  if (agentMemory) {
-    try {
-      // Prefer semantic recall when embeddings are available — paraphrased
-      // queries (e.g. "what's my project name" vs the stored fact
-      // "user told me they work on Horizon Genesis") now surface their
-      // matching memory. Falls back to keyword recall on missing key or
-      // embedding failure, no regression.
-      // Tell AgentMemory which persona is active so any remember()
-      // call during this turn is tagged correctly. PHASE 7/8.
-      const personaForMemory = opts.personaId || settingsStore.get('persona') || 'jarvis';
-      if (typeof agentMemory.setActivePersona === 'function') {
-        agentMemory.setActivePersona(personaForMemory);
-      }
-      const relevant = (typeof agentMemory.semanticRecall === 'function')
-        ? await agentMemory.semanticRecall(userMessage, 8, { activePersona: personaForMemory }).catch(() => agentMemory.recall(userMessage, 8))
-        : agentMemory.recall(userMessage, 8);
-      sysInfo.memory = {
-        facts: agentMemory.getAllFacts(),
-        relevant,
-        recentConversations: agentMemory.searchConversations(userMessage, 5),
-        // PHASE 5/8 memory: user profile block (Big Five + style) ready
-        // to inject into the system prompt. Empty string when confidence
-        // is still below the 0.2 threshold (we don't invent a profile
-        // we can't justify).
-        userProfileBlock: typeof agentMemory.buildUserProfileBlock === 'function'
-          ? agentMemory.buildUserProfileBlock()
-          : '',
-      };
-    } catch (_) {}
-  }
-  // PHASE 8/8 — workspace memory injection. Read .horizon/memory.json
-  // from the active workspace and pass the rendered block to
-  // agentLoop so it lands in the system prompt right after rules.md.
-  try {
-    const ws = currentWorkspaceRoot();
-    if (ws) {
-      const block = _getWorkspaceMemory().buildSystemBlock(ws);
-      if (block) sysInfo.workspaceMemoryBlock = block;
-    }
-  } catch (_) {}
-  if (githubConnector) {
-    try { sysInfo.github_repos = githubConnector.listRepos(); } catch (_) {}
-  }
-  if (connectionsManager) {
-    try { sysInfo.connections = connectionsManager.list().filter(c => c.connected).map(c => ({ id: c.id, name: c.name, toolCount: c.toolCount })); } catch (_) {}
-  }
-  if (googleAuth) {
-    try {
-      sysInfo.google_workspace = { connected: Boolean(googleAuth.isAuthenticated?.()) };
-      if (sysInfo.google_workspace.connected) await ensureGoogleWorkspaceTools().catch(() => null);
-    } catch (_) {}
-  }
-
-  // PHASE 12 — vision-on-turn-1. The renderer attaches a screenshot (or
-  // any image as data URL) via opts.attachedImages when Agent mode kicks
-  // off and the task mentions the screen. We hold those images in this
-  // closure and prepend them to the last user message on the FIRST
-  // call to aiFn. Subsequent calls in the same agent loop see the same
-  // text history without the image (the model already "saw" it).
-  let pendingAttachedImages = Array.isArray(opts.attachedImages)
-    ? opts.attachedImages.filter(im => im && im.dataUrl)
-    : [];
-
-  /** Strip a data URL into {mediaType, base64}. */
-  function parseDataUrl(dataUrl) {
-    const m = /^data:([^;]+);base64,(.*)$/i.exec(dataUrl || '');
-    if (!m) return null;
-    return { mediaType: m[1], base64: m[2] };
-  }
-
-  // AI function wrapper
-  const aiFn = async (messages, systemPrompt, agentMeta = {}) => {
-    const fetch = require('node-fetch');
-    const localEp = localOpenAIEndpoint(provider);
-    const k = localEp ? (localEp.key || '__local_no_key__') : keysStore.get(`k_${provider}`);
-    if (!k) return { error: `${provider} key not set → Settings` };
-
-    // Decide whether this is the first turn that should carry images.
-    const includeImages = pendingAttachedImages.length > 0;
-    const imagesToSend = includeImages ? pendingAttachedImages.slice() : [];
-    if (includeImages) pendingAttachedImages = []; // one-shot — clear after use
-
-    try {
-      if (provider === 'gemini') {
-        const model = selectedModel('gemini', opts);
-        const contents = messages.map(m => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content || '...' }]
-        }));
-        const fixed = [];
-        for (const m of contents) {
-          if (!fixed.length && m.role !== 'user') continue;
-          if (fixed.length && fixed[fixed.length-1].role === m.role)
-            fixed[fixed.length-1].parts[0].text += '\n' + m.parts[0].text;
-          else fixed.push(m);
-        }
-        if (!fixed.length) fixed.push({ role:'user', parts:[{text: userMessage}] });
-        if (fixed[fixed.length-1].role !== 'user') fixed.push({ role:'user', parts:[{text:'continue'}] });
-        // PHASE 12 — Gemini vision: append inline_data parts to the last
-        // user message. mime_type from the data-URL (image/png etc.).
-        if (imagesToSend.length) {
-          const lastUser = fixed[fixed.length - 1];
-          for (const im of imagesToSend) {
-            const p = parseDataUrl(im.dataUrl);
-            if (p) lastUser.parts.push({ inline_data: { mime_type: p.mediaType, data: p.base64 } });
-          }
-        }
-        const geminiBody = applyReasoningProfile('gemini', model, {
-          system_instruction:{parts:[{text:systemPrompt}]},
-          contents:fixed,
-          generationConfig:{maxOutputTokens:4096}
-        });
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(geminiBody)
-        });
-        const d = await r.json();
-        if (d.error) return { error: d.error.message };
-        return { reply: d.candidates?.[0]?.content?.parts?.[0]?.text || 'No response', model };
-      }
-
-      if (provider === 'claude') {
-        const model = selectedModel('claude', opts);
-        const useNativeTools = Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
-        const toolPack = useNativeTools ? nativeToolPack(agentMeta.tools) : { tools: [], map: {} };
-        let claudeMessages = useNativeTools ? toAnthropicMessages(messages) : messages;
-        // PHASE 12 — Claude vision: rewrite the last user message's
-        // content to an array containing image blocks + the original
-        // text. Anthropic format: { type:'image', source:{type:'base64',
-        // media_type, data} }.
-        if (imagesToSend.length && claudeMessages.length) {
-          claudeMessages = claudeMessages.slice();
-          let li = claudeMessages.length - 1;
-          while (li >= 0 && claudeMessages[li].role !== 'user') li--;
-          if (li >= 0) {
-            const orig = claudeMessages[li];
-            const text = typeof orig.content === 'string' ? orig.content
-                       : Array.isArray(orig.content) ? orig.content.find(x => x.type === 'text')?.text || '' : '';
-            const blocks = [];
-            for (const im of imagesToSend) {
-              const p = parseDataUrl(im.dataUrl);
-              if (p) blocks.push({
-                type: 'image',
-                source: { type: 'base64', media_type: p.mediaType, data: p.base64 },
-              });
-            }
-            if (text) blocks.push({ type: 'text', text });
-            claudeMessages[li] = { role: 'user', content: blocks };
-          }
-        }
-        const body = applyReasoningProfile('claude', model, {
-          model,
-          max_tokens:4096,
-          system:systemPrompt,
-          messages: claudeMessages
-        });
-        if (useNativeTools) body.tools = toAnthropicTools(toolPack.tools);
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
-          method:'POST',
-          headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01'},
-          body:JSON.stringify(body)
-        });
-        const d = await r.json();
-        if (d.error) return { error: d.error.message };
-        if (!d.content || !d.content[0]) return { error: 'Empty response from Claude' };
-        const toolCalls = mapNativeToolCalls(parseAnthropicToolCalls(d), toolPack.map);
-        const text = (d.content || []).find(b => b && b.type === 'text')?.text || '';
-        return { reply: text || (toolCalls.length ? '' : firstTextFromAnthropic(d)), toolCalls, model };
-      }
-
-      // OpenAI-compatible (openai, groq, grok, deepseek, mistral, qwen, perplexity, cohere)
-      const endpoints = {
-        openai:     { url:'https://api.openai.com/v1/chat/completions',                    model:selectedModel('openai', opts) },
-        groq:       { url:'https://api.groq.com/openai/v1/chat/completions',               model:selectedModel('groq', opts) },
-        grok:       { url:'https://api.x.ai/v1/chat/completions',                          model:selectedModel('grok', opts) },
-        deepseek:   { url:'https://api.deepseek.com/chat/completions',                     model:selectedModel('deepseek', opts) },
-        mistral:    { url:'https://api.mistral.ai/v1/chat/completions',                    model:selectedModel('mistral', opts) },
-        qwen:       { url:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model:selectedModel('qwen', opts) },
-        perplexity: { url:'https://api.perplexity.ai/chat/completions',                    model:selectedModel('perplexity', opts) },
-        openrouter: { url:'https://openrouter.ai/api/v1/chat/completions',                 model:selectedModel('openrouter', opts) },
-      };
-      const ep = localEp || endpoints[provider] || endpoints.openai;
-      const headers = {'Content-Type':'application/json'};
-      if (!localEp || localEp.key) headers.Authorization = `Bearer ${k}`;
-      if (provider === 'openrouter') {
-        headers['HTTP-Referer'] = 'https://horizonaai.dev';
-        headers['X-Title'] = 'Horizon Genesis';
-      }
-      if (provider === 'cohere') {
-        const model = selectedModel('cohere', opts);
-        const r = await fetch('https://api.cohere.com/v2/chat', {
-          method:'POST',
-          headers,
-          body:JSON.stringify({ model, messages:[{role:'system',content:systemPrompt},...messages], max_tokens:4096 })
-        });
-        const d = await r.json();
-        if (d.message?.error || d.error) return { error: d.message?.error || d.error || 'Cohere error' };
-        return { reply: d.message?.content?.[0]?.text || d.text || 'No response', model };
-      }
-      const useNativeOpenAITools = provider === 'openai' && Boolean(agentMeta.nativeTools && agentMeta.tools?.length);
-      const toolPack = useNativeOpenAITools ? nativeToolPack(agentMeta.tools) : { tools: [], map: {} };
-      let openaiMessages = useNativeOpenAITools
-        ? toOpenAIChatMessages(messages, systemPrompt)
-        : [{role:'system',content:systemPrompt},...messages];
-      // PHASE 12 — OpenAI-compat vision: replace the last user message's
-      // content with an array of {type:'image_url'} + {type:'text'}.
-      // Works for openai, openrouter, groq (some models), and any
-      // OpenAI-shaped vision endpoint.
-      if (imagesToSend.length && openaiMessages.length) {
-        openaiMessages = openaiMessages.slice();
-        let li = openaiMessages.length - 1;
-        while (li >= 0 && openaiMessages[li].role !== 'user') li--;
-        if (li >= 0) {
-          const orig = openaiMessages[li];
-          const text = typeof orig.content === 'string' ? orig.content : '';
-          const parts = [];
-          for (const im of imagesToSend) {
-            parts.push({ type: 'image_url', image_url: { url: im.dataUrl } });
-          }
-          if (text) parts.push({ type: 'text', text });
-          openaiMessages[li] = { role: 'user', content: parts };
-        }
-      }
-      const body = applyReasoningProfile(provider, ep.model, {
-        model:ep.model,
-        max_tokens:4096,
-        messages: openaiMessages
-      });
-      if (useNativeOpenAITools) body.tools = toOpenAITools(toolPack.tools);
-      const r = await fetch(ep.url, {
-        method:'POST',
-        headers,
-        body:JSON.stringify(body)
-      });
-      const d = await r.json();
-      if (d.error) return { error: d.error.message };
-      if (!d.choices || !d.choices[0]) return { error: `Empty response from ${provider}` };
-      const message = d.choices[0].message || {};
-      const toolCalls = useNativeOpenAITools ? mapNativeToolCalls(parseOpenAIToolCalls(message), toolPack.map) : [];
-      return { reply: message.content || '', toolCalls, model: ep.model };
-
-    } catch(e) { return { error: e.message }; }
-  };
-
-  // Screen capture function for agent
-  const screenCapFn = async () => {
-    try {
-      const src = await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:1280,height:720}});
-      if (!src.length) return null;
-      return { ok:true, base64: src[0].thumbnail.toPNG().toString('base64') };
-    } catch { return null; }
-  };
-
-  let mcpTools = [];
-  if (mcpRegistry && settingsStore.get('mcp.enabled') !== false) {
-    try { mcpTools = await mcpRegistry.toolsForAgent(); }
-    catch (e) { console.warn('MCP tools unavailable:', e.message); }
-  }
-
-  // Plugin tools — pluginManager.getToolDefinitions() returns the list of
-  // tool descriptors from every enabled plugin's manifest in the format
-  // the agent loop already understands (`{name, desc, params, _plugin}`).
-  // Without this branch the agent never *saw* installed plugins and the
-  // user's complaint that "all plugins are stubs that don't do anything"
-  // was correct — even a fully-implemented Spotify plugin had no path
-  // from the LLM's tool call to its handler. Dispatch routes plugin
-  // tools (prefixed `plugin.<id>.<tool>` or matched via _plugin marker)
-  // to pluginManager.executeTool().
-  let pluginTools = [];
-  if (pluginManager && typeof pluginManager.getToolDefinitions === 'function') {
-    try { pluginTools = pluginManager.getToolDefinitions() || []; }
-    catch (e) { console.warn('Plugin tools unavailable:', e.message); }
-  }
-
-  let connectionTools = [];
-  if (connectionsManager && typeof connectionsManager.toolsForAgent === 'function') {
-    try { connectionTools = connectionsManager.toolsForAgent() || []; }
-    catch (e) { console.warn('Connection tools unavailable:', e.message); }
-  }
-  connectionTools.push(...googleConnectionToolsForAgent(), ...githubConnectionToolsForAgent());
-
-  const activePersonaId = settingsStore.get('persona') || 'jarvis';
-  let allowedToolGroups = null;
-  try {
-    if (personas && typeof personas.getPersonaFull === 'function') {
-      const personaFull = personas.getPersonaFull(activePersonaId);
-      if (Array.isArray(personaFull?.allowedTools)) allowedToolGroups = personaFull.allowedTools;
-    }
-  } catch (_) {}
-  // PHASE 11 — "Real AI with PC access" mode. When the renderer sends
-  // opts.unlockAllTools (set when the user explicitly switches to Agent
-  // mode via #m-agent), the persona's allowedTools filter is bypassed so
-  // computer-use (mouse_click, keyboard_type, screenshot, smart_click,
-  // run_code, write_file, etc.) becomes available to the agent loop
-  // regardless of which persona is currently active. The user already
-  // consented to this by toggling Agent mode + (first-time) the consent
-  // modal in chat-agent-mode.js, plus every destructive call still goes
-  // through withPermission() per-invocation.
-  const fullAccessMode = !!opts.unlockAllTools;
-  const personaAllowsTool = (toolName) => {
-    if (fullAccessMode) return true;
-    if (!agentLoop?.toolAllowedByPersona) return true;
-    return agentLoop.toolAllowedByPersona(toolName, allowedToolGroups);
-  };
-
-  const dispatchToolFn = async (tool, args) => {
-    if (!personaAllowsTool(tool)) {
-      return {
-        ok: false,
-        err: `Tool ${tool} is disabled for persona ${activePersonaId}`,
-        error: `Tool ${tool} is disabled for persona ${activePersonaId}`,
-      };
-    }
-    if (mcpRegistry && String(tool || '').includes('__')) {
-      const mcpResult = await mcpRegistry.dispatch(tool, args);
-      if (mcpResult) return mcpResult;
-    }
-    const connToolName = String(tool || '');
-    if (connToolName.startsWith('conn_google_')) {
-      return dispatchGoogleConnectionTool(connToolName, args || {});
-    }
-    if (connToolName.startsWith('conn_github_')) {
-      return dispatchGithubConnectionTool(connToolName, args || {});
-    }
-    if (connToolName.startsWith('conn_') && connectionsManager) {
-      const connResult = await connectionsManager.dispatch(tool, args || {});
-      if (connResult) return connResult;
-    }
-    // Plugin tool name format from pluginManager.getToolDefinitions():
-    // `plugin_<pluginId>_<toolName>`. Look up the descriptor by name in
-    // the pluginTools list (richer match — pluginId might itself contain
-    // underscores, so we can't safely split blindly). Fall through to
-    // built-in tools when not found.
-    const t = String(tool || '');
-    if (t.startsWith('plugin_') && pluginManager) {
-      const def = pluginTools.find(d => d && d.name === t);
-      if (def && def.pluginId) {
-        const toolName = t.slice(`plugin_${def.pluginId}_`.length);
-        try {
-          const r = await pluginManager.executeTool(def.pluginId, toolName, args || {});
-          return r;
-        } catch (e) {
-          return { ok: false, error: 'Plugin tool failed: ' + (e?.message || e) };
-        }
-      }
-    }
-    // Pass runId/event so spawn_subagent (in agent.js dispatchTool) knows
-    // its parent context for depth tracking + step broadcasting.
-    return agentTools.dispatchTool(tool, args, { runId, event });
-  };
-
-  // Send step updates to renderer via the event sender.
-  // PR-Plan-Act — when planActGate setting is on AND this is the run's
-  // first 'executing' step, broadcast a `plan-pending` step instead
-  // and pause until the user clicks Approve plan / Reject plan in
-  // the renderer (resolves the Promise via agentControl IPC).
-  const planActGateOn = settingsStore.get('planActGate') === true;
-  let firstExecutingSeen = false;
-  const onStep = async (step) => {
-    if (planActGateOn
-        && step?.type === 'executing'
-        && !firstExecutingSeen
-        && !_planActApprovedRuns.has(runId)) {
-      firstExecutingSeen = true;
-      // Broadcast the first executing step as a `plan-pending` event
-      // so the renderer can render the step-rail-gate UI.
-      const planPending = {
-        type: 'plan-pending',
-        runId,
-        firstTool: step.tool,
-        firstArgs: step.args,
-        reason: step.reason,
-      };
-      controller.observe(planPending);
-      broadcastAgentStep(planPending, event.sender);
-      // Wait for the user's decision via agentControl(runId, 'approve-plan'|'reject-plan')
-      const decision = await new Promise((resolve) => {
-        _planActPending.set(runId, { resolve, broadcastedAt: Date.now() });
-      });
-      _planActPending.delete(runId);
-      if (decision === 'reject') {
-        // Run was already stop()'d by the IPC handler; emit a
-        // plan-rejected step so the renderer cleans up its UI, then
-        // bail without dispatching the original step.
-        const rejected = { type: 'plan-rejected', runId };
-        controller.observe(rejected);
-        broadcastAgentStep(rejected, event.sender);
-        return;
-      }
-      // approved → fall through to the normal observe + broadcast path.
-    }
-    controller.observe(step);
-    broadcastAgentStep(step, event.sender);
-  };
-
-  let result;
-  try {
-    const startStep = { type: 'run-start', runId, provider, model: runRecord.model, prompt: runRecord.prompt };
-    controller.observe(startStep);
-    broadcastAgentStep(startStep, event.sender);
-    // Resolve any Claude Code-style skills matching the user's message and
-    // pass them to the agent loop. forcedSkillIds (from `/skill <name>` slash
-    // command) live in opts.forcedSkillIds passed by the renderer.
-    let skillsBlock = '';
-    let skillsSelected = null;
-    if (skillsManager) {
-      try {
-        const res = skillsManager.getSkillsBlock(userMessage, {
-          forcedIds: Array.isArray(opts.forcedSkillIds) ? opts.forcedSkillIds : [],
-        });
-        skillsBlock = res.block || '';
-        skillsSelected = {
-          selected: (res.selected || []).map(s => ({ id: s.id, score: s.score, breakdown: s.breakdown, scope: s.scope, forced: s.forced, truncated: s.truncated, bytes: s.bytes })),
-          scored: (res.scored || []).map(s => ({ id: s.id, score: s.score, breakdown: s.breakdown, scope: s.scope, forced: s.forced })),
-        };
-        skillsManager.recordUsage(skillsSelected.selected.map(s => s.id), userMessage, 'selected');
-        // Emit a dedicated step so the inspector can render a "Skills loaded"
-        // panel. Same channel agentLoop uses for tool dispatches, so the
-        // renderer's existing onAgentStep listener picks it up.
-        const skillsStep = { type: 'skills-selected', runId, payload: skillsSelected };
-        controller.observe(skillsStep);
-        broadcastAgentStep(skillsStep, event.sender);
-      } catch (e) {
-        console.warn('skills resolve failed:', e.message);
-      }
-    }
-
-    result = await agentLoop.runAgentLoop(userMessage, {
-      aiFn,
-      sysInfo,
-      lang,
-      userName,
-      history: opts.history || [],
-      maxSteps: opts.maxSteps || 8,
-      onStep,
-      analyzeScreenFn: screenCapFn,
-      runId,
-      control: controller,
-      nativeTools: provider === 'claude' || provider === 'openai',
-      extraTools: [...mcpTools, ...pluginTools, ...connectionTools],
-      personaId: activePersonaId,
-      allowedToolGroups,
-      dispatchToolFn,
-      skillsBlock,
-      skillsSelected
-    });
-  } catch (e) {
-    result = { ok: false, error: e.message, steps: runRecord.steps };
-  } finally {
-    runRecord.status = controller.stopped || result?.stopped ? 'stopped' : (result?.ok ? 'done' : 'error');
-    runRecord.endedAt = new Date().toISOString();
-    runRecord.answer = result?.answer || null;
-    runRecord.error = result?.error || null;
-    activeAgentRuns.delete(runId);
-    subagentDepthByRunId.delete(runId);
-    if (controller.pending) pendingAgentSteps.delete(controller.pending.stepId);
-    const endStep = { type: 'run-end', runId, status: runRecord.status, result: scrubRunValue(result) };
-    controller.observe(endStep);
-    appendAgentRun(runRecord);
-    broadcastAgentStep(endStep, event.sender);
-  }
-
-  // Save to memory
-  if (agentMemory) {
-    try {
-      if (typeof agentMemory.learnFromTurn === 'function') {
-        agentMemory.learnFromTurn(userMessage, result?.answer || result?.error || '', {
-          provider,
-          model: runRecord.model,
-          persona: activePersonaId,
-          runId,
-        });
-      } else {
-        agentMemory.remember(`Task: ${userMessage}`, 'agent_task', 7);
-        if (result.ok && result.answer) {
-          agentMemory.remember(`Result: ${result.answer.slice(0, 200)}`, 'agent_result', 6);
-        }
-      }
-    } catch (e) {
-      console.warn('Memory learning failed:', e.message);
-    }
-  }
-
-  // PHASE Auto-skill suggester — feed the suggester after each turn so
-  // it can detect repeated query patterns / partial goals. Suggestions
-  // are broadcast to all renderer windows as `skill:suggestion` events.
-  if (skillSuggester) {
-    try {
-      // Refresh known-skill ids so we don't suggest a skill name that
-      // already exists.
-      if (skillsManager && typeof skillsManager.list === 'function') {
-        skillSuggester.setKnownSkills((skillsManager.list() || []).map(s => s.id));
-      }
-      // Find the latest reflection step for this run to feed goal_met.
-      // run-end carries result; reflection step has goalMet. We use the
-      // final answer + (if any) the cached reflection from the agent loop.
-      skillSuggester.ingestTurn(userMessage, {
-        goalMet: result?.reflection?.goalMet || null,
-        answer: result?.answer || '',
-        runId,
-      });
-    } catch (e) {
-      console.warn('SkillSuggester ingestTurn failed:', e.message);
-    }
-  }
-
-  return { ...result, runId };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── DIRECT TOOL CALLS (from chat toolbar/quick actions) ──────────────────────
-ipcMain.handle('agentTool', async (event, toolName, args) => {
-  loadAgentModules();
-  if (!agentTools) return { ok: false, err: 'Agent not loaded' };
-  if (mcpRegistry && String(toolName || '').includes('__')) {
-    const mcpResult = await mcpRegistry.dispatch(toolName, args);
-    if (mcpResult) return mcpResult;
-  }
-  const tool = String(toolName || '');
-  if (tool.startsWith('conn_google_')) {
-    return withPermission(
-      event.sender,
-      tool,
-      args || {},
-      'Run Google connection tool',
-      () => dispatchGoogleConnectionTool(tool, args || {})
-    );
-  }
-  if (tool.startsWith('conn_github_')) {
-    return withPermission(
-      event.sender,
-      tool,
-      args || {},
-      'Run GitHub connection tool',
-      () => dispatchGithubConnectionTool(tool, args || {})
-    );
-  }
-  if (tool.startsWith('conn_') && connectionsManager) {
-    return withPermission(
-      event.sender,
-      tool,
-      args || {},
-      'Run connection tool',
-      () => connectionsManager.dispatch(tool, args || {})
-    );
-  }
-  return agentTools.dispatchTool(toolName, args);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── MEMORY ────────────────────────────────────────────────────────────────────
-ipcMain.handle('memRemember', (_, content, category, importance) => {
-  loadAgentModules();
-  if (!agentMemory) return false;
-  agentMemory.remember(content, category || 'general', importance || 5);
-  return true;
-});
-
-ipcMain.handle('memRecall', (_, query, limit) => {
-  loadAgentModules();
-  if (!agentMemory) return [];
-  return agentMemory.recall(query, limit || 10);
-});
-
-ipcMain.handle('memSetFact', (_, key, value) => {
-  loadAgentModules();
-  if (!agentMemory) return false;
-  agentMemory.setFact(key, value);
-  return true;
-});
-
-ipcMain.handle('memGetFact', (_, key) => {
-  loadAgentModules();
-  if (!agentMemory) return null;
-  return agentMemory.getFact(key);
-});
-
-ipcMain.handle('memGetFacts', () => {
-  loadAgentModules();
-  if (!agentMemory) return {};
-  return agentMemory.getAllFacts();
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Live Canvas (Phase 26 MVP) ─────────────────────────────────────────
 // Renderer → main: read current canvas state.
-ipcMain.handle('canvas:get', () => {
-  if (!canvasManager) return { content: '', version: 0, updatedAt: null, editLogTail: [] };
-  return canvasManager.get();
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
+
 // Renderer → main: user-driven write (debounced from the textarea).
 // Source is forced to `user` regardless of what the renderer sent, so
 // a malicious skin can't pretend an edit came from the agent.
-ipcMain.handle('canvas:set', (_, content) => {
-  if (!canvasManager) return { ok: false, error: 'Canvas not initialised' };
-  const snap = canvasManager.setContent(typeof content === 'string' ? content : '', 'user');
-  return { ok: true, ...snap };
-});
-// Renderer → main: append (used by quick-action buttons).
-ipcMain.handle('canvas:write', (_, payload = {}) => {
-  if (!canvasManager) return { ok: false, error: 'Canvas not initialised' };
-  const snap = canvasManager.write({
-    mode: payload.mode || 'append',
-    content: String(payload.content || ''),
-    source: 'user',
-  });
-  return { ok: true, ...snap };
-});
-ipcMain.handle('canvas:clear', () => {
-  if (!canvasManager) return { ok: false };
-  return { ok: true, ...canvasManager.clear('user') };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
-ipcMain.handle('memGetRecent', (_, limit) => {
-  loadAgentModules();
-  if (!agentMemory) return [];
-  return agentMemory.getRecent(limit || 20);
-});
+// Renderer → main: append (used by quick-action buttons).
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Embedding index status + manual reindex trigger. Used by the Learned tab
 // to show "X/Y indexed" and the optional "Reindex now" button.
-ipcMain.handle('memEmbedStatus', () => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  try { return { ok: true, ...agentMemory.embeddingStatus() }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
-ipcMain.handle('memEmbedReindex', async () => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  try {
-    const r = await agentMemory.embedAllPending(progress => {
-      try {
-        const wins = BrowserWindow.getAllWindows();
-        for (const w of wins) {
-          if (w && !w.isDestroyed() && w.webContents) w.webContents.send('memory:embeddingProgress', progress);
-        }
-      } catch (_) {}
-    });
-    return { ok: true, ...r };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-
-// PHASE 28 — SQLite + FTS5 storage backend (opt-in).
-// Inspector exposes two buttons: Status (row counts) and Export to SQLite
-// (one-way mirror of the JSON file). The JSON file stays the source of
-// truth; the SQLite DB sits next to it as `memory.sqlite` and can be
-// regenerated any time. better-sqlite3 loads lazily so users on a
-// platform without prebuilt bindings get a clear error message instead
-// of a crash.
-function _memSqlitePaths() {
-  const ud = (typeof app !== 'undefined' && app.getPath) ? app.getPath('userData') : null;
-  if (!ud) return null;
-  const path = require('path');
-  return {
-    jsonPath: path.join(ud, 'memory.json'),
-    dbPath: path.join(ud, 'memory.sqlite'),
-  };
-}
 
 // PHASE 28.3 — manual trigger for the memory reviewer (Inspector
 // "Review now" button) + status read-back.
 // PHASE 28.4 — Dialectic user model (Honcho-inspired diff log).
-ipcMain.handle('dialecticSummary', () => {
-  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized' };
-  try { return { ok: true, ...dialecticModel.summary() }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('dialecticRecent', (_, opts) => {
-  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized', records: [] };
-  try {
-    const limit = Math.max(1, Math.min(500, Number(opts?.limit) || 50));
-    return { ok: true, records: dialecticModel.getRecent(limit) };
-  } catch (e) { return { ok: false, error: e.message, records: [] }; }
-});
-ipcMain.handle('dialecticSearch', (_, payload) => {
-  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized', records: [] };
-  try {
-    const limit = Math.max(1, Math.min(500, Number(payload?.limit) || 50));
-    const q = String(payload?.query || '').slice(0, 200);
-    return { ok: true, records: dialecticModel.search(q, limit) };
-  } catch (e) { return { ok: false, error: e.message, records: [] }; }
-});
-ipcMain.handle('dialecticRecord', (_, diff) => {
-  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized' };
-  try {
-    const entry = dialecticModel.record(diff || {});
-    return entry ? { ok: true, entry } : { ok: false, error: 'invalid diff payload' };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('dialecticClear', () => {
-  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized' };
-  try { return { ok: true, ...dialecticModel.clear() }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('memoryReviewerStatus', () => {
-  if (!memoryReviewer) return { ok: false, error: 'reviewer not initialized' };
-  return { ok: true, ...memoryReviewer.status() };
-});
-ipcMain.handle('memoryReviewerRunNow', async () => {
-  if (!memoryReviewer) return { ok: false, error: 'reviewer not initialized' };
-  try {
-    const r = await memoryReviewer.reviewNow();
-    return r;
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('memoryDbStatus', () => {
-  const paths = _memSqlitePaths();
-  if (!paths) return { ok: false, error: 'userData path unavailable' };
-  try {
-    const { MemoryDb } = require('./memoryDb');
-    const db = new MemoryDb(paths.dbPath);
-    const fs = require('fs');
-    if (!fs.existsSync(paths.dbPath)) {
-      return { ok: true, exists: false, dbPath: paths.dbPath };
-    }
-    db.open();
-    const stats = db.stats();
-    db.close();
-    return { ok: true, exists: true, dbPath: paths.dbPath, stats };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
-
-ipcMain.handle('memoryDbMigrate', () => {
-  const paths = _memSqlitePaths();
-  if (!paths) return { ok: false, error: 'userData path unavailable' };
-  try {
-    const { migrateJsonToSqlite } = require('./runtime/migrateJsonToSqlite');
-    return migrateJsonToSqlite(paths);
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Single-shot snapshot for the inspector's Learned tab — facts + most-recent
 // memories + learning.stats + user profile in one IPC roundtrip. Cheap
 // because everything lives in-memory in AgentMemory._data.
-ipcMain.handle('memSnapshot', (_, opts) => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  const factLimit = Math.max(1, Math.min(200, Number(opts?.factLimit) || 50));
-  const memLimit = Math.max(1, Math.min(200, Number(opts?.memLimit) || 30));
-  try {
-    // Project raw facts dict into UI-friendly array with provenance.
-    const factsRaw = agentMemory._data?.facts || {};
-    const factEntries = Object.entries(factsRaw)
-      .map(([key, v]) => ({
-        key,
-        value: typeof v === 'object' && v !== null ? (v.value ?? '') : String(v ?? ''),
-        seen: typeof v === 'object' && v !== null ? (v.seen || 0) : 0,
-        updated: typeof v === 'object' && v !== null ? v.updated : null,
-        source: typeof v === 'object' && v !== null ? (v.source || 'unknown') : 'unknown',
-        lastSource: typeof v === 'object' && v !== null ? (v.lastSource || v.source || 'unknown') : 'unknown',
-      }))
-      .sort((a, b) => (b.updated || 0) - (a.updated || 0))
-      .slice(0, factLimit);
-    const recent = typeof agentMemory.getRecent === 'function' ? agentMemory.getRecent(memLimit) : [];
-    const stats = agentMemory._data?.learning?.stats || {};
-    const userProfile = typeof agentMemory.getUserProfile === 'function' ? agentMemory.getUserProfile() : null;
-    return {
-      ok: true,
-      facts: factEntries,
-      memories: recent,
-      userProfile,
-      stats: {
-        totalFacts: Object.keys(factsRaw).length,
-        totalMemories: agentMemory._data?.memories?.length || 0,
-        learnedItems: stats.learnedItems || 0,
-        lastLearnedAt: stats.lastLearnedAt || null,
-        conversations: agentMemory._data?.conversations?.length || 0,
-      },
-    };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Memory edit/forget + user profile IPC ───────────────────────────────
 // Used by the Inspector → Learned tab edit/delete UI. Each handler returns
 // {ok, ...} so the renderer can show success/failure inline.
-ipcMain.handle('memForgetFact', (_, key) => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  return { ok: agentMemory.forgetFact(String(key || '')) };
-});
-
-ipcMain.handle('memForgetMemory', (_, idOrKey) => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  return { ok: agentMemory.forgetMemory(String(idOrKey || '')) };
-});
-
-ipcMain.handle('memEditFact', (_, key, value) => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  return { ok: agentMemory.setFact(String(key || ''), String(value || ''), 'manual') };
-});
-
-ipcMain.handle('memEditMemory', (_, idOrKey, partial) => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  return { ok: agentMemory.editMemory(String(idOrKey || ''), partial || {}) };
-});
-
-ipcMain.handle('memGetUserProfile', () => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  return { ok: true, profile: agentMemory.getUserProfile() };
-});
-
-ipcMain.handle('memUpdateUserProfile', (_, partial) => {
-  loadAgentModules();
-  if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
-  return { ok: true, profile: agentMemory.updateUserProfile(partial || {}, 'manual') };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // PHASE 6/8 — Full-text search across memories + facts + conversations.
-ipcMain.handle('memFtsSearch', (_, query, limit) => {
-  loadAgentModules();
-  if (!agentMemory || typeof agentMemory.ftsSearch !== 'function') return { ok: false, error: 'fts unavailable' };
-  return { ok: true, results: agentMemory.ftsSearch(String(query || ''), Math.max(1, Math.min(200, Number(limit) || 30))), stats: agentMemory.ftsStats?.() || {} };
-});
-
-ipcMain.handle('memFtsStats', () => {
-  loadAgentModules();
-  if (!agentMemory || typeof agentMemory.ftsStats !== 'function') return { ok: false, error: 'fts unavailable' };
-  return { ok: true, stats: agentMemory.ftsStats() };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // PHASE 8/8 — Workspace memory (committable .horizon/memory.json).
-ipcMain.handle('workspaceMemoryGet', () => {
-  try {
-    const root = currentWorkspaceRoot();
-    if (!root) return { ok: false, error: 'no workspace open' };
-    return { ok: true, root, ...(_getWorkspaceMemory().get(root)) };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Executor status — used by Settings UI to show "Docker available · Y" /
 // "Docker not installed · falling back to host". Read-only, no PRO gate.
-ipcMain.handle('executorStatus', () => {
-  loadAgentModules();
-  if (!executor) return { ok: false, error: 'executor not loaded' };
-  return { ok: true, ...executor.status() };
-});
-
-ipcMain.handle('workspaceMemoryWrite', (_, partial) => {
-  try {
-    const root = currentWorkspaceRoot();
-    if (!root) return { ok: false, error: 'no workspace open' };
-    return _getWorkspaceMemory().write(root, partial || {});
-  } catch (e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── NUTRITION TRACKING (from jarvis) ─────────────────────────────────────────
-ipcMain.handle('nutritionLog', (_, description, calories, protein, carbs, fat) => {
-  loadAgentModules();
-  if (!agentMemory) return false;
-  return agentMemory.logMeal(description, calories, protein, carbs, fat);
-});
-
-ipcMain.handle('nutritionGet', (_, days) => {
-  loadAgentModules();
-  if (!agentMemory) return { meals: [], total: {} };
-  return agentMemory.getMeals(days || 7);
-});
-
-ipcMain.handle('nutritionToday', () => {
-  loadAgentModules();
-  if (!agentMemory) return { meals: [], total: { calories: 0, protein: 0, carbs: 0, fat: 0 } };
-  return agentMemory.getTodayNutrition();
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── CONVERSATION MEMORY ─────────────────────────────────────────────────────
-ipcMain.handle('memSaveConversation', (_, userMessage, assistantReply) => {
-  loadAgentModules();
-  if (!agentMemory) return false;
-  agentMemory.saveConversation(userMessage, assistantReply);
-  return true;
-});
-
-ipcMain.handle('memSearchConversations', (_, query, limit) => {
-  loadAgentModules();
-  if (!agentMemory) return [];
-  return agentMemory.searchConversations(query, limit || 10);
-});
-
-ipcMain.handle('githubAttachRepo', async (_, repoUrl) => {
-  loadAgentModules();
-  if (!githubConnector) return { ok: false, error: 'GitHub connector not loaded' };
-  try { return { ok: true, repo: await githubConnector.attachRepo(repoUrl) }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('githubListRepos', () => {
-  loadAgentModules();
-  return githubConnector ? githubConnector.listRepos() : [];
-});
-ipcMain.handle('githubRemoveRepo', (_, fullName) => {
-  loadAgentModules();
-  return githubConnector ? githubConnector.removeRepo(fullName) : false;
-});
-ipcMain.handle('githubRepoContext', async (_, fullName) => {
-  loadAgentModules();
-  if (!githubConnector) return { ok: false, error: 'GitHub connector not loaded' };
-  try { return { ok: true, ...(await githubConnector.repoContext(fullName)) }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('connectionsList', () => {
-  loadAgentModules();
-  try { return { ok: true, connections: connectionsManager ? connectionsManager.list() : [] }; }
-  catch (e) { return { ok: false, error: e.message, connections: [] }; }
-});
-
-ipcMain.handle('connectionsTest', async (_, id) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try { return await connectionsManager.testConnection(String(id || '')); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('connectionsSetLive', async (_, id, enabled) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try {
-    if (String(id || '') === 'telegram_bot') return await connectionsManager.setTelegramLive(!!enabled);
-    if (String(id || '') === 'discord') return await connectionsManager.setDiscordLive(!!enabled);
-    if (String(id || '') === 'email') return await _emailSetLive(!!enabled);
-    return { ok: false, error: `Live runtime is not available for ${id}` };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
-
-ipcMain.handle('connectionsRuntimeStatus', async (_, id) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try {
-    if (String(id || '') === 'telegram_bot') return connectionsManager.telegramStatus();
-    if (String(id || '') === 'discord') return connectionsManager.discordStatus();
-    if (String(id || '') === 'email') return _emailStatus();
-    return { ok: false, error: `Runtime status is not available for ${id}` };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Mobile companion: one-click pairing ────────────────────────────────────
 // The "Connect phone" button in Settings spawns `bin/horizon-serve.js` as a
@@ -5518,113 +2505,7 @@ function _mobileKillServer() {
   } catch (_) { /* already gone */ }
 }
 
-ipcMain.handle('mobile:start', async () => {
-  // Idempotent: if already running, just return current state with a fresh QR
-  // so the renderer can re-paint after a Settings reopen.
-  if (mobileServerProc && mobileServerState.running && mobileServerState.url) {
-    return {
-      ok: true,
-      url: mobileServerState.url,
-      qrDataUrl: mobileServerState.qrDataUrl,
-      token: mobileServerState.token,
-      port: HORIZON_MOBILE_PORT,
-      since: mobileServerState.since,
-    };
-  }
-
-  const token = crypto.randomBytes(16).toString('hex');
-  const localIp = _mobilePickLocalIp();
-  const url = `http://${localIp}:${HORIZON_MOBILE_PORT}/?token=${encodeURIComponent(token)}`;
-  const serveScript = path.resolve(__dirname, '..', '..', 'bin', 'horizon-serve.js');
-  if (!fs.existsSync(serveScript)) {
-    return { ok: false, error: 'horizon-serve.js not found at ' + serveScript };
-  }
-
-  try {
-    // Bind to 0.0.0.0 so phones on the same LAN can reach the server. The
-    // bearer token still gates every /api/* call, so this is not an open
-    // door — but we narrow CORS implicitly via the token check.
-    const child = spawn(process.execPath, [
-      serveScript,
-      '--port', String(HORIZON_MOBILE_PORT),
-      '--host', '0.0.0.0',
-      '--token', token,
-    ], {
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1', // run plain Node, not a second Electron window
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    let readyResolve;
-    const ready = new Promise((resolve) => { readyResolve = resolve; });
-    let stderrBuf = '';
-    child.stderr?.on?.('data', (chunk) => {
-      const s = String(chunk);
-      stderrBuf += s;
-      // serve.js prints "Horizon serve  http://..." once the listener is up.
-      if (/Horizon serve\s+http:\/\//i.test(stderrBuf) && readyResolve) {
-        readyResolve(true);
-        readyResolve = null;
-      }
-    });
-    child.on('exit', (code, sig) => {
-      if (mobileServerProc === child) {
-        mobileServerProc = null;
-        mobileServerState = { running: false, url: null, qrDataUrl: null, token: null, since: 0 };
-      }
-      console.log('[mobile] serve exited', code, sig);
-    });
-    child.on('error', (err) => {
-      console.error('[mobile] serve error:', err.message);
-      if (readyResolve) { readyResolve(false); readyResolve = null; }
-    });
-
-    // Race ready signal against a 4-second timeout — most cold-starts on a
-    // dev machine finish in <500ms, but if something goes wrong we shouldn't
-    // hang the Settings UI forever.
-    const winner = await Promise.race([
-      ready,
-      new Promise((r) => setTimeout(() => r(false), 4000)),
-    ]);
-    if (!winner || !child.pid) {
-      try { child.kill(); } catch (_) {}
-      return { ok: false, error: 'serve did not become ready in 4s: ' + stderrBuf.slice(-300) };
-    }
-
-    mobileServerProc = child;
-    const qrDataUrl = await _mobileBuildQrDataUrl(url);
-    mobileServerState = {
-      running: true,
-      url,
-      qrDataUrl,
-      token,
-      since: Date.now(),
-    };
-    return { ok: true, url, qrDataUrl, token, port: HORIZON_MOBILE_PORT, since: mobileServerState.since };
-  } catch (e) {
-    return { ok: false, error: e.message || String(e) };
-  }
-});
-
-ipcMain.handle('mobile:stop', () => {
-  _mobileKillServer();
-  return { ok: true, running: false };
-});
-
-ipcMain.handle('mobile:status', () => {
-  return {
-    ok: true,
-    running: !!mobileServerState.running,
-    url: mobileServerState.url || null,
-    qrDataUrl: mobileServerState.qrDataUrl || null,
-    token: mobileServerState.token || null,
-    port: HORIZON_MOBILE_PORT,
-    since: mobileServerState.since || 0,
-  };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // PHASE 28.3 — Email runtime adapter lifecycle. Lives outside
 // connectionsManager because the EmailAdapter has its own start/stop
@@ -5672,759 +2553,101 @@ async function _emailSetLive(enabled) {
 }
 
 // Outbound `email_send` tool — let the agent send mail.
-ipcMain.handle('emailSend', async (_, payload) => {
-  if (!emailAdapter) {
-    try {
-      const { EmailAdapter } = require('./channelAdapters/email');
-      emailAdapter = new EmailAdapter({ settingsStore, keysStore });
-    } catch (e) { return { ok: false, error: 'email adapter unavailable: ' + e.message }; }
-  }
-  // Lazy start the transporter without polling.
-  if (!emailAdapter.transporter) {
-    try {
-      const nodemailer = require('nodemailer');
-      const cfg = emailAdapter._cfg();
-      if (!cfg?.smtp) return { ok: false, error: 'SMTP not configured' };
-      emailAdapter.transporter = nodemailer.createTransport({
-        host: cfg.smtp.host, port: cfg.smtp.port, secure: cfg.smtp.secure, auth: cfg.smtp.auth,
-      });
-    } catch (e) { return { ok: false, error: 'nodemailer unavailable: ' + e.message }; }
-  }
-  return emailAdapter.send(payload || {});
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Discord chat viewer ─────────────────────────────────────────────────
 // Mirrors the Telegram tg* IPC. discord runtime stores per-channel history
 // in settingsStore (same locality as keys). These handlers expose it +
 // outbound send.
-ipcMain.handle('dcListChats', () => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded', chats: [] };
-  try { return connectionsManager.discordListChats(); }
-  catch (e) { return { ok: false, error: e.message, chats: [] }; }
-});
-
-ipcMain.handle('dcGetHistory', (_, channelId, limit) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try { return connectionsManager.discordGetHistory(channelId, limit); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('dcClearHistory', (_, channelId) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try { return connectionsManager.discordClearHistory(channelId); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('dcSendFromUI', async (_, channelId, content) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try { return await connectionsManager.discordSendFromUI(channelId, content); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── TELEGRAM CHAT VIEWER ─────────────────────────────────────────────────
 // Lets the desktop UI show the same chats the bot is having on Telegram.
 // History is persisted per-chat in settingsStore (see connectionsManager
 // TG_HISTORY_CAP); these handlers expose it + outbound send.
-ipcMain.handle('tgListChats', () => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded', chats: [] };
-  try { return connectionsManager.telegramListChats(); }
-  catch (e) { return { ok: false, error: e.message, chats: [] }; }
-});
-
-ipcMain.handle('tgGetHistory', (_, chatId, limit) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try { return connectionsManager.telegramGetHistory(chatId, limit); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('tgClearHistory', (_, chatId) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try { return connectionsManager.telegramClearHistory(chatId); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('tgSendFromUI', async (_, chatId, text) => {
-  loadAgentModules();
-  if (!connectionsManager) return { ok: false, error: 'Connections manager not loaded' };
-  try { return await connectionsManager.telegramSendFromUI(chatId, text); }
-  catch (e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── CHAT MANAGEMENT ──────────────────────────────────────────────────────────
-ipcMain.handle('chatList', () => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.list() : []; } catch (e) { return []; }
-});
-ipcMain.handle('chatGet', (_, id) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.get(id) : null; } catch (e) { return null; }
-});
-ipcMain.handle('chatCreate', (_, opts) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.create(opts) : null; } catch (e) { return null; }
-});
-ipcMain.handle('chatSwitch', (_, id) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.switchTo(id) : null; } catch (e) { return null; }
-});
-ipcMain.handle('chatRename', (_, id, title) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.rename(id, title) : false; } catch (e) { return false; }
-});
-ipcMain.handle('chatDelete', (_, id) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.remove(id) : { ok: false }; } catch (e) { return { ok: false }; }
-});
-ipcMain.handle('chatAddMessage', (_, id, role, content, meta) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.addMessage(id, role, content, meta) : { ok: false }; } catch (e) { return { ok: false }; }
-});
-ipcMain.handle('chatGetLogs', (_, id) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.getLogs(id) : { ok: false, logs: [] }; } catch (e) { return { ok: false, logs: [] }; }
-});
-ipcMain.handle('chatSetLogs', (_, id, logs) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.setLogs(id, logs) : { ok: false }; } catch (e) { return { ok: false }; }
-});
-ipcMain.handle('chatClearLogs', (_, id) => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.clearLogs(id) : { ok: false }; } catch (e) { return { ok: false }; }
-});
-ipcMain.handle('chatGetCurrent', () => {
-  loadAgentModules();
-  try { return chatStore ? chatStore.getCurrent() : null; } catch (e) { return null; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── CODE EXECUTION ────────────────────────────────────────────────────────────
-ipcMain.handle('executeCode', async (event, code, language) => {
-  loadAgentModules();
-  if (!agentTools) return { ok: false, err: 'Agent not loaded' };
-  return withPermission(
-    event.sender,
-    'shell_command',
-    { command: String(code || '').slice(0, 1200), language: language || 'python' },
-    'Execute code',
-    () => agentTools.executeCode(code, language || 'python')
-  );
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── DETAILED SYSTEM INFO ──────────────────────────────────────────────────────
-ipcMain.handle('getDetailedSysInfo', async () => {
-  loadAgentModules();
-  if (!agentTools) return {};
-  return agentTools.getDetailedSysInfo();
-});
-
-ipcMain.handle('getRunningApps', async () => {
-  loadAgentModules();
-  if (!agentTools) return { ok: false, out: '' };
-  const out = await agentTools.getRunningApps();
-  return { ok: true, out };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── SHOW WINDOW (for wake word) ───────────────────────────────────────────────
-ipcMain.handle('showWindow', () => { win?.show(); win?.focus(); return true; });
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── MCP: LOCATION & WEATHER ──────────────────────────────────────────────────
-ipcMain.handle('mcpGetLocation', async () => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.getLocation();
-});
-
-ipcMain.handle('mcpGetWeather', async () => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.getWeather();
-});
-
-ipcMain.handle('mcpGetTimezone', async () => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.getTimezone();
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── MCP: WEB SEARCH ──────────────────────────────────────────────────────────
-ipcMain.handle('mcpWebSearch', async (_, query) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.search(query);
-});
-
-ipcMain.handle('mcpWikipedia', async (_, query, limit) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.searchWikipedia(query, limit);
-});
-
-ipcMain.handle('mcpWikipediaSummary', async (_, title) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.getWikipediaSummary(title);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── MCP: GMAIL ───────────────────────────────────────────────────────────────
-ipcMain.handle('mcpGmailSetToken', (_, token) => {
-  loadAgentModules();
-  if (!mcpManager) return false;
-  mcpManager.setGmailToken(token);
-  return true;
-});
-
-ipcMain.handle('mcpGmailList', async (_, query, max) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.listEmails(query, max);
-});
-
-ipcMain.handle('mcpGmailRead', async (_, id) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.readEmail(id);
-});
-
-ipcMain.handle('mcpGmailSend', async (_, to, subject, body, cc, bcc) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.sendEmail(to, subject, body, cc, bcc);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── MCP: CALENDAR ────────────────────────────────────────────────────────────
-ipcMain.handle('mcpCalendarSetToken', (_, token) => {
-  loadAgentModules();
-  if (!mcpManager) return false;
-  mcpManager.setCalendarToken(token);
-  return true;
-});
-
-ipcMain.handle('mcpCalendarList', async (_, cal, max) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.listEvents(cal, max);
-});
-
-ipcMain.handle('mcpCalendarToday', async () => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.getTodayEvents();
-});
-
-ipcMain.handle('mcpCalendarCreate', async (_, cal, summary, start, end, desc, loc, attendees) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.createEvent(cal, summary, start, end, desc, loc, attendees);
-});
-
-ipcMain.handle('mcpCalendarQuickAdd', async (_, text) => {
-  loadAgentModules();
-  if (!mcpManager) return { ok: false, error: 'MCP not loaded' };
-  return mcpManager.quickAddEvent('primary', text);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── COMPUTER USE: Smart click by description ─────────────────────────────────
-ipcMain.handle('smartClick', async (event, targetDescription) => withPermission(
-  event.sender,
-  'computer.smart_click',
-  { target: String(targetDescription || '') },
-  'Analyze screen and click target',
-  async () => {
-  loadAgentModules();
-  if (!computerUse || !agentTools) return { ok: false, error: 'Computer Use not loaded' };
-  
-  const captureScreenFn = async () => {
-    try {
-      const src = await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:1920,height:1080}});
-      if (!src.length) return null;
-      return { ok: true, base64: src[0].thumbnail.toPNG().toString('base64') };
-    } catch { return null; }
-  };
-  
-  const geminiKey = keysStore.get('k_gemini');
-  if (!geminiKey) return { ok: false, error: 'Gemini key needed for vision' };
-  
-  const aiVisionFn = async (base64, prompt) => {
-    const fetch = require('node-fetch');
-    const model = selectedModel('gemini');
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(applyReasoningProfile('gemini', model, {
-        contents: [{
-          role: 'user',
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: 'image/png', data: base64 } }
-          ]
-        }]
-      }))
-    });
-    const d = await r.json();
-    if (d.error) return { error: d.error.message };
-    return { text: d.candidates?.[0]?.content?.parts?.[0]?.text || '' };
-  };
-  
-  return computerUse.smartClick(
-    targetDescription,
-    captureScreenFn,
-    aiVisionFn,
-    agentTools.mouseClick
-  );
-  }
-));
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── COMPUTER USE: Find UI Elements ───────────────────────────────────────────
-ipcMain.handle('findUIElements', async () => {
-  loadAgentModules();
-  if (!computerUse) return { ok: false, error: 'Computer Use not loaded' };
-  
-  try {
-    const src = await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:1920,height:1080}});
-    if (!src.length) return { ok: false, error: 'No screen' };
-    const base64 = src[0].thumbnail.toPNG().toString('base64');
-    
-    const geminiKey = keysStore.get('k_gemini');
-    if (!geminiKey) return { ok: false, error: 'Gemini key needed for vision' };
-    
-    const fetch = require('node-fetch');
-    const aiVisionFn = async (b64, prompt) => {
-      const model = selectedModel('gemini');
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(applyReasoningProfile('gemini', model, {
-          contents: [{role:'user', parts:[{text:prompt},{inline_data:{mime_type:'image/png',data:b64}}]}]
-        }))
-      });
-      const d = await r.json();
-      return { text: d.candidates?.[0]?.content?.parts?.[0]?.text || '' };
-    };
-    
-    return computerUse.findUIElements(base64, aiVisionFn);
-  } catch(e) { return { ok: false, error: e.message }; }
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── BROWSER AUTOMATION ───────────────────────────────────────────────────────
-ipcMain.handle('browserOpenUrl', async (event, url) => withPermission(
-  event.sender,
-  'browser.open',
-  { url: String(url || '') },
-  'Open browser URL',
-  async () => {
-  loadAgentModules();
-  if (!browserManager) return { ok: false, error: 'Browser not loaded' };
-  return browserManager.openUrl(url);
-  }
-));
-
-ipcMain.handle('browserSearch', async (event, query, engine) => withPermission(
-  event.sender,
-  'browser.search',
-  { query: String(query || ''), engine: engine || 'google' },
-  'Search in browser',
-  async () => {
-  loadAgentModules();
-  if (!browserManager) return { ok: false, error: 'Browser not loaded' };
-  return browserManager.search(query, engine);
-  }
-));
-
-ipcMain.handle('browserOpenSite', async (event, name) => withPermission(
-  event.sender,
-  'browser.open_site',
-  { site: String(name || '') },
-  'Open browser site',
-  async () => {
-  loadAgentModules();
-  if (!browserManager) return { ok: false, error: 'Browser not loaded' };
-  return browserManager.openSite(name);
-  }
-));
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── PERSONAS ─────────────────────────────────────────────────────────────────
-ipcMain.handle('getPersonas', () => {
-  loadAgentModules();
-  if (!personas) return [];
-  return personas.getAllPersonas();
-});
-
-ipcMain.handle('getPersona', (_, id) => {
-  loadAgentModules();
-  if (!personas) return null;
-  return personas.getPersona(id);
-});
-
-ipcMain.handle('getPersonaPrompt', (_, id, lang) => {
-  loadAgentModules();
-  if (!personas) return '';
-  return personas.getPersonaPrompt(id, lang);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Full persona shape (with prompts, memories, allowed tools) — used by
 // the Personas editor in the renderer.
-ipcMain.handle('getPersonaFull', (_, id) => {
-  loadAgentModules();
-  if (!personas || typeof personas.getPersonaFull !== 'function') return null;
-  return personas.getPersonaFull(id);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Upsert overlay (built-in edit OR new custom persona). Patch is partial.
-ipcMain.handle('personaUpsert', (_, id, patch) => {
-  loadAgentModules();
-  if (!personas || typeof personas.upsertPersona !== 'function') {
-    return { ok: false, error: 'Personas module unavailable' };
-  }
-  return personas.upsertPersona(id, patch || {});
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Delete overlay (resets built-in OR removes custom).
-ipcMain.handle('personaDelete', (_, id) => {
-  loadAgentModules();
-  if (!personas || typeof personas.deletePersona !== 'function') {
-    return { ok: false, error: 'Personas module unavailable' };
-  }
-  return personas.deletePersona(id);
-});
-
-ipcMain.handle('getWakeResponse', (_, id, lang) => {
-  loadAgentModules();
-  if (!personas) return 'Ready.';
-  return personas.getWakeResponse(id, lang);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── PLUGIN MANAGER v2 ────────────────────────────────────────────────────────
-ipcMain.handle('pluginList', () => {
-  loadAgentModules();
-  if (!pluginManager) return [];
-  return pluginManager.list();
-});
-
-ipcMain.handle('pluginInstall', (_, pluginJson) => {
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  return pluginManager.install(pluginJson);
-});
-
-ipcMain.handle('pluginUninstall', (_, id) => {
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  return pluginManager.uninstall(id);
-});
-
-ipcMain.handle('pluginInstallTemplate', (_, templateId) => {
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  const { PluginManager } = require('./pluginManager');
-  const templates = PluginManager.getBuiltinTemplates();
-  const tpl = templates.find(t => t.id === templateId);
-  if (!tpl) return { ok: false, error: 'Template not found' };
-  return pluginManager.install(tpl);
-});
-
-ipcMain.handle('pluginToggle', (_, id) => {
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  return pluginManager.toggleEnable(id);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── SKILLS (Claude Code-style markdown skills) ───────────────────────────────
-ipcMain.handle('skillsList', () => {
-  loadAgentModules();
-  if (!skillsManager) return [];
-  skillsManager.refreshIfStale();
-  return skillsManager.list();
-});
-
-ipcMain.handle('skillsRead', (_, id, scope) => {
-  loadAgentModules();
-  if (!skillsManager) return '';
-  return skillsManager.readSource(id, scope);
-});
-
-ipcMain.handle('skillsWrite', (_, id, content, scope) => {
-  loadAgentModules();
-  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
-  return skillsManager.writeSource(id, content, scope);
-});
-
-ipcMain.handle('skillsToggle', (_, id, scope) => {
-  loadAgentModules();
-  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
-  return skillsManager.toggleEnable(id, scope);
-});
-
-ipcMain.handle('skillsUninstall', (_, id, scope) => {
-  loadAgentModules();
-  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
-  return skillsManager.uninstall(id, scope);
-});
-
-ipcMain.handle('skillsInstallBundle', (_, bundle, opts) => {
-  loadAgentModules();
-  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
-  return skillsManager.installFromBundle(bundle, opts || {});
-});
-
-ipcMain.handle('skillsInstallFromUrl', (_, url) => {
-  loadAgentModules();
-  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded' };
-  return skillsManager.installFromShareUrl(url);
-});
-
-ipcMain.handle('skillsShareUrl', (_, id) => {
-  loadAgentModules();
-  if (!skillsManager) return null;
-  return skillsManager.generateShareUrl(id);
-});
-
-ipcMain.handle('skillsPreviewMatch', (_, query, opts) => {
-  loadAgentModules();
-  if (!skillsManager) return { block: '', selected: [], scored: [] };
-  skillsManager.refreshIfStale();
-  return skillsManager.getSkillsBlock(query || '', opts || {});
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Forwarded to agent.js dispatchTool — gated by withPermission so the standard
 // approval UX fires before any helper script runs.
-ipcMain.handle('skillsPreviewSource', (_, query, content, opts) => {
-  loadAgentModules();
-  if (!skillsManager) return { ok: false, error: 'Skills manager not loaded', selected: [], scored: [] };
-  skillsManager.refreshIfStale();
-  return skillsManager.previewSource(query || '', content || '', opts || {});
-});
-
-ipcMain.handle('skillsRunHelper', async (event, skillId, helperRel, helperArgs, timeoutMs) => {
-  loadAgentModules();
-  if (!agentTools || !skillsManager) return { ok: false, error: 'Skills manager not loaded' };
-  return withPermission(
-    event.sender,
-    `skill_run_helper:${skillId || '?'}/${helperRel || '?'}`,
-    { skill: skillId, helper: helperRel, args: helperArgs },
-    `Run helper from skill "${skillId}"`,
-    () => agentTools.runSkillHelper(skillId, helperRel, helperArgs, timeoutMs)
-  );
-});
-
-ipcMain.handle('pluginExecTool', async (event, pluginId, toolName, args) => {
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  let permissionTool = `${pluginId || 'plugin'}__${toolName || 'run'}`;
-  try {
-    const manifest = pluginManager.plugins?.get?.(pluginId) || {};
-    const spec = (manifest.tools || []).find(t => t && t.name === toolName);
-    if (spec?.action) permissionTool = `${pluginId || 'plugin'}__${spec.action}`;
-  } catch (_) {}
-  return withPermission(
-    event.sender,
-    permissionTool,
-    args || {},
-    'Run plugin tool',
-    () => pluginManager.executeTool(pluginId, toolName, args)
-  );
-});
-
-ipcMain.handle('pluginSetConfig', (_, pluginId, config) => {
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  return pluginManager.setConfig(pluginId, config);
-});
-
-ipcMain.handle('pluginShareUrl', (_, id) => {
-  loadAgentModules();
-  if (!pluginManager) return null;
-  return pluginManager.generateShareUrl(id);
-});
-
-ipcMain.handle('pluginInstallFromUrl', (_, url) => {
-  loadAgentModules();
-  if (!pluginManager) return { ok: false, error: 'Plugin manager not loaded' };
-  return pluginManager.installFromShareUrl(url);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Legacy — fake templates removed; real plugins come from the marketplace backend.
-ipcMain.handle('pluginTemplates', () => {
-  loadAgentModules();
-  const { PluginManager } = require('./pluginManager');
-  return PluginManager.getBuiltinTemplates();
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── WORKFLOW ENGINE ───────────────────────────────────────────────────────────
-ipcMain.handle('workflowList', () => {
-  loadAgentModules();
-  if (!workflowEngine) return [];
-  return workflowEngine.loadAll();
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
-// Server-side trigger sanitiser. Mirrors the renderer's
-// normaliseWorkflowTrigger() — defense-in-depth so a malformed trigger
-// from a marketplace install / external IPC consumer can't crash the
-// engine at run time. Anything we can't recognise drops to "manual".
-function _sanitiseWorkflowTrigger(trigger) {
-  const raw = String(trigger || 'manual').trim();
-  if (!raw || raw === 'manual') return 'manual';
-  if (raw === 'startup') return 'startup';
-  if (raw.startsWith('interval:')) {
-    const n = Number(raw.slice('interval:'.length));
-    return (Number.isFinite(n) && n > 0 && n <= 60 * 24 * 30) ? `interval:${Math.floor(n)}` : 'manual';
-  }
-  if (raw.startsWith('schedule:')) {
-    const m = raw.slice('schedule:'.length).match(/^(\d{1,2}):(\d{1,2})$/);
-    if (m) {
-      const hh = Number(m[1]), mm = Number(m[2]);
-      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
-        return `schedule:${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      }
-    }
-    return 'manual';
-  }
-  if (raw.startsWith('wake:')) {
-    const kw = raw.slice('wake:'.length).trim();
-    if (kw && kw.length <= 32 && /^[\p{L}\p{N}\s_\-]+$/u.test(kw)) return `wake:${kw}`;
-    return 'manual';
-  }
-  return 'manual';
-}
 
-ipcMain.handle('workflowCreate', (_, name, trigger, steps, desc) => {
-  loadAgentModules();
-  if (!workflowEngine) return { ok: false, error: 'Workflow engine not loaded' };
-  return workflowEngine.create(name, _sanitiseWorkflowTrigger(trigger), steps, desc);
-});
-
-ipcMain.handle('workflowUpdate', (_, id, updates) => {
-  loadAgentModules();
-  if (!workflowEngine) return { ok: false, error: 'Workflow engine not loaded' };
-  return workflowEngine.update(id, updates);
-});
-
-ipcMain.handle('workflowDelete', (_, id) => {
-  loadAgentModules();
-  if (!workflowEngine) return { ok: false, error: 'Workflow engine not loaded' };
-  return workflowEngine.delete(id);
-});
-
-ipcMain.handle('workflowRun', async (event, id) => {
-  loadAgentModules();
-  if (!workflowEngine) return { ok: false, error: 'Workflow engine not loaded' };
-  const onStep = (step) => { try { event.sender.send('workflowStep', step); } catch {} };
-  return workflowEngine.run(id, onStep, { sender: event.sender });
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Snapshot of currently-running workflows for the premium Workflows panel
 // (animated graph view of the live run). Renderer also listens for the
 // workflow:running:start / step / end events emitted by the engine bridge.
-ipcMain.handle('workflowActiveRuns', () => {
-  loadAgentModules();
-  if (!workflowEngine) return [];
-  return workflowEngine.getActiveRuns();
-});
-
-ipcMain.handle('workflowExamples', () => {
-  const { WorkflowEngine } = require('./workflowEngine');
-  return WorkflowEngine.getExampleWorkflows();
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── SCREEN RECORDER + AI NARRATOR ────────────────────────────────────────────
-ipcMain.handle('recorderGetSources', async () => {
-  loadAgentModules();
-  if (!screenRecorder) return { ok: false, error: 'Recorder not loaded' };
-  return screenRecorder.getSources();
-});
-
-ipcMain.handle('recorderStart', (_, outputPath) => {
-  loadAgentModules();
-  if (!screenRecorder) return { ok: false, error: 'Recorder not loaded' };
-  return screenRecorder.startRecording(outputPath);
-});
-
-ipcMain.handle('recorderStop', () => {
-  loadAgentModules();
-  if (!screenRecorder) return { ok: false, error: 'Recorder not loaded' };
-  return screenRecorder.stopRecording();
-});
-
-ipcMain.handle('recorderSave', (_, b64, mime) => {
-  loadAgentModules();
-  if (!screenRecorder) return { ok: false, error: 'Recorder not loaded' };
-  return screenRecorder.saveRecording(b64, mime);
-});
-
-ipcMain.handle('recorderStatus', () => {
-  loadAgentModules();
-  if (!screenRecorder) return { isRecording: false };
-  return screenRecorder.getStatus();
-});
-
-ipcMain.handle('recorderNarrate', async (_, b64, mime, ctx) => {
-  loadAgentModules();
-  if (!screenRecorder) return { ok: false, error: 'Recorder not loaded' };
-  return screenRecorder.generateNarration(b64, mime, ctx);
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── MARKETPLACE ───────────────────────────────────────────────────────────────
 // Legacy template-based marketplace is gone. The real one is `marketRemoteList`
 // (FastAPI backend) — see further down. These stubs remain so old UI code that
 // still calls them gets an empty list instead of 4 fake "plugins".
-ipcMain.handle('marketplaceList', () => []);
-ipcMain.handle('marketplaceSearch', () => []);
-
-ipcMain.handle('marketplacePublish', async () => {
-  const base = marketClient?.webBase || process.env.HORIZON_MARKETPLACE_WEB_URL || 'https://horizonaai.dev';
-  const url = `${String(base).replace(/\/+$/, '')}/publish`;
-  return {
-    ok: false,
-    url,
-    error: 'Desktop publishing is disabled. Publish from the web dashboard so moderation, account ownership, and payouts are recorded correctly.',
-  };
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── GOOGLE OAUTH ─────────────────────────────────────────────────────────────
-ipcMain.handle('googleAuth', async (_, clientId, clientSecret) => {
-  loadAgentModules();
-  if (!googleAuth) return { ok: false, error: 'Google Auth not loaded' };
-  const result = await googleAuth.authenticate(clientId, clientSecret);
-  // Also connect to Gmail/Calendar MCP
-  if (result.ok && mcpManager) {
-    mcpManager.setGmailToken(result.access_token);
-    mcpManager.setCalendarToken(result.access_token);
-  }
-  return result;
-});
-
-ipcMain.handle('googleAuthStatus', () => {
-  loadAgentModules();
-  if (!googleAuth) return { ok: false };
-  return { ok: true, authenticated: googleAuth.isAuthenticated() };
-});
-
-ipcMain.handle('googleLogout', () => {
-  loadAgentModules();
-  if (!googleAuth) return { ok: false };
-  if (mcpManager) {
-    mcpManager.setGmailToken(null);
-    mcpManager.setCalendarToken(null);
-  }
-  return googleAuth.logout();
-});
-
-ipcMain.handle('googleGetToken', async () => {
-  loadAgentModules();
-  if (!googleAuth) return { ok: false, error: 'Google Auth not loaded' };
-  const result = await googleAuth.getAccessToken();
-  // Auto-connect MCP when getting fresh token
-  if (result.ok && mcpManager) {
-    mcpManager.setGmailToken(result.token);
-    mcpManager.setCalendarToken(result.token);
-  }
-  return result;
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -6487,26 +2710,8 @@ function _licenseTickRedirect() {
 setInterval(_licenseTickRedirect, 60 * 1000);
 app.on('browser-window-focus', _licenseTickRedirect);
 
-ipcMain.handle('licenseState',   () => licenseManager.evaluate());
-ipcMain.handle('licenseRefresh', () => licenseManager.refresh());
-ipcMain.handle('licenseCreateCryptoPayment', async (_, plan) => {
-  try {
-    if (!marketClient.token) return { ok: false, error: 'not-logged-in' };
-    const invoice = await marketClient.createCryptoPayment(plan);
-    return { ok: true, invoice };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('licensePollInvoice', async (_, invoiceId) => {
-  try {
-    const r = await marketClient.pollInvoice(invoiceId);
-    return { ok: true, ...r };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('licenseOpenUpgradePage', async () => {
-  const base = getMarketplaceWebBase();
-  const url = `${base}/pricing?src=desktop&intent=upgrade`;
-  return openExternalReliable(url, 'Horizon Pro');
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
+
 // PHASE 28.5 — owner contact links pulled from env so corporate forks
 // or hand-offs to a future maintainer don't require a code edit. The
 // defaults stay the project owner so a fresh checkout works out of
@@ -6516,26 +2721,12 @@ const OWNER_EMAIL_SECONDARY = String(process.env.HORIZON_OWNER_EMAIL_2 || 'ernes
 const OWNER_TG_PRIMARY      = String(process.env.HORIZON_OWNER_TG     || 'Ernest_Kostevich');
 const OWNER_TG_SECONDARY    = String(process.env.HORIZON_OWNER_TG_2   || 'ernest0kostevich');
 
-ipcMain.handle('licenseOpenContactLink', (_, channel) => {
-  const links = {
-    telegram_primary:   `https://t.me/${OWNER_TG_PRIMARY}`,
-    telegram_secondary: `https://t.me/${OWNER_TG_SECONDARY}`,
-    email_primary:      `mailto:${OWNER_EMAIL_PRIMARY}`,
-    email_secondary:    `mailto:${OWNER_EMAIL_SECONDARY}`,
-  };
-  const url = links[channel];
-  if (!url) return { ok: false, url };
-  return openExternalReliable(url, 'Horizon Support');
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // PHASE 28.5 — expose contacts so the renderer (progate.html etc.) can
 // render the live values instead of baking them into HTML.
-ipcMain.handle('ownerContacts', () => ({
-  emailPrimary:   OWNER_EMAIL_PRIMARY,
-  emailSecondary: OWNER_EMAIL_SECONDARY,
-  tgPrimary:      OWNER_TG_PRIMARY,
-  tgSecondary:    OWNER_TG_SECONDARY,
-}));
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
+
 // Wipe the license cache when the user logs out of the marketplace account,
 // so the next login forces a fresh server check.
 const _origLogout = marketClient.logout.bind(marketClient);
@@ -6544,31 +2735,105 @@ marketClient.logout = function patchedLogout() {
   licenseManager.clearCache();
 };
 
-ipcMain.handle('marketRemoteList', async (_, filters = {}) => {
-  try { return { ok: true, items: await marketClient.list(filters) }; }
-  catch (e) { return { ok: false, error: e.message, items: [] }; }
-});
-
-ipcMain.handle('marketRemoteInstall', async (_, pluginId) => {
-  try {
-    loadAgentModules();
-    if (!pluginManager) return { ok: false, error: 'Plugin manager not ready' };
-    // Tell the server we installed (for download count + gating of paid plugins)
-    try { await marketClient.install(pluginId); } catch (_) { /* ignore — anonymous install OK for free plugins */ }
-    const bundle = await marketClient.bundle(pluginId);
-    const m = bundle.manifest;
-    const r = pluginManager.install({
-      id: m.id, name: m.name, version: m.version,
-      description: m.description, author: m.author,
-      category: m.category,
-      tier: ['built_in', 'demo', 'local', 'marketplace'].includes(m.tier) ? m.tier : 'marketplace',
-      icon: m.icon,
-      tools: m.tools, settings: m.settings || [],
-      permissions: m.permissions || [],
-      handler: bundle.handler || '',
-    });
-    return r;
-  } catch (e) { return { ok: false, error: e.message }; }
+// ── Register every IPC handler module ────────────────────────────────────────
+// Each ipc/*.js file owns a slice of the surface. Helpers, state vars, and
+// the runtime closures live in this file so getters can fetch the current
+// (possibly lazy-initialized) references at call time.
+require('./ipc').registerAll({
+  // Electron + Node modules
+  ipcMain, app,
+  BrowserWindow, Notification, clipboard, shell, dialog,
+  desktopCapturer, screen,
+  crypto, os, fs, path,
+  spawn, exec,
+  // platform flags
+  IS_WIN, IS_MAC,
+  // Stores
+  keysStore, settingsStore,
+  // Allow-listers
+  assertAllowedKey, assertAllowedSetting,
+  // Model selection / response shaping
+  selectedModel, applyReasoningProfile, localOpenAIEndpoint,
+  firstTextFromAnthropic,
+  resolveSkillsForMessages, appendSkillsToSystemPrompt,
+  readSseStream, extractStreamPayload,
+  nativeToolPack, toAnthropicMessages, toAnthropicTools,
+  toOpenAIChatMessages, toOpenAITools,
+  parseAnthropicToolCalls, parseOpenAIToolCalls, mapNativeToolCalls,
+  // Helpers
+  runShell, withPermission,
+  WEB_APPS, APP_WIN_MAP, APP_MAC_MAP,
+  resolveAppName, smartOpenUrl,
+  currentWorkspaceRoot, resolveWorkspacePath, safeDirEntries, searchWorkspaceFiles,
+  getProjectConfig: _getProjectConfig,
+  getWsIndexer: _getWsIndexer,
+  getWorkspaceMemory: _getWorkspaceMemory,
+  terminalSessions, createPtyTerminal, createPipeTerminal,
+  // AI helpers
+  runAiCompletion,
+  activeStreams: _activeStreams,
+  streamRunId: _streamRunId,
+  broadcast: _broadcast,
+  // Window getters / lifecycle hooks
+  getWin: () => win,
+  setQuitting: (v) => { isQuitting = v; },
+  createWindow,
+  getPort: () => port,
+  openExternalReliable,
+  getMarketplaceWebBase,
+  // Lazy module getters
+  loadAgentModules,
+  getAgentTools: () => agentTools,
+  getAgentMemory: () => agentMemory,
+  getAgentLoop: () => agentLoop,
+  getChatStore: () => chatStore,
+  getMcpManager: () => mcpManager,
+  getMcpRegistry: () => mcpRegistry,
+  getComputerUse: () => computerUse,
+  getBrowserManager: () => browserManager,
+  getPluginManager: () => pluginManager,
+  getSkillsManager: () => skillsManager,
+  getGoogleAuth: () => googleAuth,
+  getPersonas: () => personas,
+  getWorkflowEngine: () => workflowEngine,
+  getScreenRecorder: () => screenRecorder,
+  getCanvasManager: () => canvasManager,
+  getMemoryReviewer: () => memoryReviewer,
+  getDialecticModel: () => dialecticModel,
+  getGithubConnector: () => githubConnector,
+  getConnectionsManager: () => connectionsManager,
+  getExecutor: () => executor,
+  getSkillSuggester: () => skillSuggester,
+  // Agent-run plumbing
+  activeAgentRuns, pendingAgentSteps, subagentDepthByRunId,
+  planActPending: _planActPending,
+  planActApprovedRuns: _planActApprovedRuns,
+  AgentRunController,
+  findActiveRun,
+  getPermissionAllowlist, revokePermissionAllowlist,
+  readAgentRuns, compactAgentRun, scrubRunValue, appendAgentRun,
+  broadcastAgentStep,
+  ensureGoogleWorkspaceTools,
+  googleConnectionToolsForAgent, githubConnectionToolsForAgent,
+  dispatchGoogleConnectionTool, dispatchGithubConnectionTool,
+  // Email runtime
+  emailSetLive: _emailSetLive,
+  emailStatus: _emailStatus,
+  getEmailAdapter: () => emailAdapter,
+  setEmailAdapter: (v) => { emailAdapter = v; },
+  // Mobile pairing
+  HORIZON_MOBILE_PORT,
+  getMobileServerProc: () => mobileServerProc,
+  setMobileServerProc: (v) => { mobileServerProc = v; },
+  getMobileServerState: () => mobileServerState,
+  setMobileServerState: (v) => { mobileServerState = v; },
+  mobilePickLocalIp: _mobilePickLocalIp,
+  mobileBuildQrDataUrl: _mobileBuildQrDataUrl,
+  mobileKillServer: _mobileKillServer,
+  // Marketplace + license
+  marketClient, licenseManager,
+  OWNER_EMAIL_PRIMARY, OWNER_EMAIL_SECONDARY,
+  OWNER_TG_PRIMARY, OWNER_TG_SECONDARY,
 });
 
 // Install a published workflow from the marketplace into the local engine.
@@ -6579,76 +2844,7 @@ ipcMain.handle('marketRemoteInstall', async (_, pluginId) => {
 //   2. Legacy: handler is empty, steps live inside manifest.tools (each
 //      tool acts as a step with action / args)
 // Either way we end up calling workflowEngine.create(name, trigger, steps).
-ipcMain.handle('marketRemoteInstallWorkflow', async (_, workflowId) => {
-  try {
-    loadAgentModules();
-    if (!workflowEngine) return { ok: false, error: 'Workflow engine not ready' };
-    try { await marketClient.install(workflowId); } catch (_) { /* anonymous install OK for free items */ }
-    const bundle = await marketClient.bundle(workflowId);
-    const m = bundle.manifest || {};
-    let trigger = 'manual';
-    let steps = [];
-    let name = m.name || 'Imported workflow';
-    let desc = m.description || '';
-
-    // Shape 1: handler is JSON for the workflow.
-    if (bundle.handler && typeof bundle.handler === 'string') {
-      try {
-        const parsed = JSON.parse(bundle.handler);
-        if (parsed && typeof parsed === 'object') {
-          if (parsed.trigger) trigger = parsed.trigger;
-          if (Array.isArray(parsed.steps)) steps = parsed.steps;
-          if (parsed.name) name = parsed.name;
-          if (parsed.description) desc = parsed.description;
-        }
-      } catch (_) { /* handler wasn't JSON — fall through to tools shape */ }
-    }
-
-    // Shape 2: derive steps from manifest.tools (each tool ↔ workflow step).
-    if (!steps.length && Array.isArray(m.tools) && m.tools.length) {
-      steps = m.tools.map(t => ({
-        action: t.name || 'shell',
-        args: t.params || {}
-      }));
-    }
-
-    if (!steps.length) {
-      return { ok: false, error: 'Workflow bundle has no steps (neither handler JSON nor tools[])' };
-    }
-
-    const result = workflowEngine.create(name, _sanitiseWorkflowTrigger(trigger), steps, desc);
-    return { ok: true, workflow: result };
-  } catch (e) { return { ok: false, error: e.message }; }
-});
-
-ipcMain.handle('marketGetUrl', () => marketClient.base);
-ipcMain.handle('marketGetWebUrl', () => marketClient.webBase);
-ipcMain.handle('marketSetUrl', (_, url) => { settingsStore.set('marketplaceUrl', url); return true; });
-ipcMain.handle('marketSetWebUrl', (_, url) => { settingsStore.set('marketplaceWebUrl', url); return true; });
-ipcMain.handle('marketLogin', async (_, email, password) => {
-  try { const d = await marketClient.login(email, password); return { ok: true, user: d.user }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('marketSignup', async (_, email, password, display_name) => {
-  try { const d = await marketClient.signup(email, password, display_name); return { ok: true, user: d.user }; }
-  catch (e) { return { ok: false, error: e.message }; }
-});
-ipcMain.handle('marketLogout', () => { marketClient.logout(); return true; });
-ipcMain.handle('marketMe', async () => {
-  if (!marketClient.token) return { ok: false };
-  try { const d = await marketClient.me(); return { ok: true, user: d }; }
-  catch (e) {
-    marketClient.logout();
-    licenseManager.clearCache();
-    return { ok: false, error: e.message };
-  }
-});
-ipcMain.handle('marketOpenWebAuth', async (_, mode = 'login') => {
-  const base = getMarketplaceWebBase();
-  const pathName = mode === 'signup' ? '/signup' : '/login';
-  const url = `${base}${pathName}?desktop=1`;
-  return openExternalReliable(url, 'Horizon Account');
-});
+// (ipcMain handlers moved to src/main/ipc/*.js — see ipc/index.js)
 
 // Register horizon:// protocol so the marketplace website can install
 // plugins with one click (horizon://plugin/install?data=<base64>).
