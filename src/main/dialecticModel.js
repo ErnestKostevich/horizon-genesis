@@ -46,6 +46,19 @@ const path = require('path');
 const DEFAULT_CAP = 500;
 const VALID_KINDS = new Set(['belief', 'desire', 'knowledge', 'theory-of-mind', 'correction']);
 
+/**
+ * Multi-level theory-of-mind levels (PHASE 28.5).
+ *
+ *   0 — first-order: what the USER knows / wants / believes
+ *   1 — second-order: what the user thinks the AGENT knows about them
+ *   2 — third-order: what the user thinks the AGENT thinks the user wants
+ *
+ * Levels 1 + 2 only get populated when the user explicitly references
+ * the agent's understanding (e.g. "you keep assuming I prefer X but I
+ * don't"). Most entries are level 0.
+ */
+const VALID_LEVELS = new Set([0, 1, 2]);
+
 class DialecticModel {
   constructor(filePath, opts = {}) {
     if (!filePath) throw new Error('DialecticModel requires a filePath');
@@ -96,14 +109,23 @@ class DialecticModel {
     if (!VALID_KINDS.has(kind)) return null;
     const after = String(diff.after || '').slice(0, 600).trim();
     if (!after) return null;
+    // PHASE 28.5 — Multi-level ToM. Default level 0 (first-order: what
+    // the user knows/wants). Levels 1-2 only fire when the agent saw
+    // an explicit signal about its own state.
+    const level = VALID_LEVELS.has(Number(diff.level)) ? Number(diff.level) : 0;
     const entry = {
       id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       ts: Date.now(),
       kind,
+      level,
       before: diff.before ? String(diff.before).slice(0, 600).trim() : null,
       after,
       evidence: diff.evidence ? String(diff.evidence).slice(0, 400).trim() : null,
       personaId: diff.personaId ? String(diff.personaId) : null,
+      // PHASE 28.5 — Multi-tenant scoping. userId is null for the
+      // single-user case (Electron app, one CLI install). When set
+      // (e.g. "tg:123456789") all reads/queries filter by it.
+      userId: diff.userId ? String(diff.userId).slice(0, 80) : null,
       confidence: typeof diff.confidence === 'number' ? Math.max(0, Math.min(1, diff.confidence)) : 0.7,
     };
     this.records.push(entry);
@@ -115,26 +137,41 @@ class DialecticModel {
     return entry;
   }
 
-  /** Latest N records, newest first. */
-  getRecent(limit = 50) {
-    const cap = Math.max(1, Math.min(this.cap, limit));
-    return [...this.records].reverse().slice(0, cap);
+  /** Scope helper — filter records by userId. Pass null to get the
+   *  single-user pool (records without a userId). Pass a string to get
+   *  just that tenant. Pass '*' to get everything regardless. */
+  _scoped(userId) {
+    if (userId === '*') return this.records;
+    if (userId == null || userId === undefined) {
+      return this.records.filter(r => !r.userId);
+    }
+    return this.records.filter(r => r.userId === userId);
   }
 
-  byKind(kind, limit = 50) {
+  /** Latest N records, newest first. `opts.userId` filters by tenant.
+   *  `opts.level` filters by ToM level (0/1/2). */
+  getRecent(limit = 50, opts = {}) {
+    const cap = Math.max(1, Math.min(this.cap, limit));
+    let pool = this._scoped(opts.userId);
+    if (typeof opts.level === 'number') pool = pool.filter(r => (r.level || 0) === opts.level);
+    return [...pool].reverse().slice(0, cap);
+  }
+
+  byKind(kind, limit = 50, opts = {}) {
     const k = String(kind || '').toLowerCase();
     if (!VALID_KINDS.has(k)) return [];
-    return this.records
-      .filter(r => r.kind === k)
-      .slice(-limit)
-      .reverse();
+    let pool = this._scoped(opts.userId);
+    if (typeof opts.level === 'number') pool = pool.filter(r => (r.level || 0) === opts.level);
+    return pool.filter(r => r.kind === k).slice(-limit).reverse();
   }
 
   /** Substring search across before/after/evidence — for Inspector. */
-  search(query, limit = 50) {
+  search(query, limit = 50, opts = {}) {
     const q = String(query || '').toLowerCase().trim();
-    if (!q) return this.getRecent(limit);
-    return this.records
+    if (!q) return this.getRecent(limit, opts);
+    let pool = this._scoped(opts.userId);
+    if (typeof opts.level === 'number') pool = pool.filter(r => (r.level || 0) === opts.level);
+    return pool
       .filter(r =>
         (r.before || '').toLowerCase().includes(q) ||
         (r.after  || '').toLowerCase().includes(q) ||
@@ -143,44 +180,74 @@ class DialecticModel {
       .reverse();
   }
 
-  summary() {
+  summary(opts = {}) {
+    const pool = this._scoped(opts.userId);
     const byKind = {};
-    for (const r of this.records) byKind[r.kind] = (byKind[r.kind] || 0) + 1;
-    const latest = this.records[this.records.length - 1];
+    const byLevel = { 0: 0, 1: 0, 2: 0 };
+    for (const r of pool) {
+      byKind[r.kind] = (byKind[r.kind] || 0) + 1;
+      const lvl = r.level || 0;
+      byLevel[lvl] = (byLevel[lvl] || 0) + 1;
+    }
+    const latest = pool[pool.length - 1];
+    // List of unique userIds present in the store (for multi-tenant UI).
+    const tenants = new Set();
+    for (const r of this.records) if (r.userId) tenants.add(r.userId);
     return {
-      total: this.records.length,
+      total: pool.length,
+      grandTotal: this.records.length,
       cap: this.cap,
       byKind,
+      byLevel,
+      tenants: [...tenants],
       lastUpdatedAt: latest ? latest.ts : null,
       lastEntry: latest || null,
     };
   }
 
   /**
-   * Inject the dialectic layer into a system prompt. Picks the K most
-   * recent high-confidence records and renders them as a bulleted
-   * section the LLM can use to reason. Returns '' when empty so callers
-   * can `.concat()` without checks.
+   * Inject the dialectic layer into a system prompt. Levels are
+   * surfaced separately so the model knows which axis each diff is on:
+   *
+   *   Level 0 — direct beliefs about the user
+   *   Level 1 — user's expectations OF the agent
+   *   Level 2 — recursive: user's beliefs about agent's understanding
+   *
+   * Falsy return ('') when empty so callers can `.concat()` without
+   * checks. `opts.userId` scopes to one tenant.
    */
-  injection(k = 6) {
-    const top = this.records
-      .filter(r => (r.confidence || 0) >= 0.5)
-      .slice(-k)
-      .reverse();
-    if (!top.length) return '';
-    const lines = top.map(r => {
-      const head = `• [${r.kind}] ${r.after}`;
-      const tail = r.before ? ` (was: ${r.before})` : '';
-      return head + tail;
-    });
-    return '\n\nUser model (dialectic — what we have learned):\n' + lines.join('\n');
+  injection(k = 6, opts = {}) {
+    let pool = this._scoped(opts.userId);
+    const high = pool.filter(r => (r.confidence || 0) >= 0.5).slice(-k * 2);
+    if (!high.length) return '';
+    const lvl = (n) => high.filter(r => (r.level || 0) === n).slice(-k);
+    const lines0 = lvl(0).map(r => `• [${r.kind}] ${r.after}${r.before ? ` (was: ${r.before})` : ''}`);
+    const lines1 = lvl(1).map(r => `• [${r.kind}] ${r.after}`);
+    const lines2 = lvl(2).map(r => `• [${r.kind}] ${r.after}`);
+    const parts = [];
+    if (lines0.length) parts.push('Level 0 — what we know about the user:\n' + lines0.join('\n'));
+    if (lines1.length) parts.push('Level 1 — what the user expects of us:\n' + lines1.join('\n'));
+    if (lines2.length) parts.push('Level 2 — recursive (their model of our model):\n' + lines2.join('\n'));
+    if (!parts.length) return '';
+    return '\n\nUser model (dialectic — what we have learned):\n' + parts.join('\n\n');
   }
 
-  clear() {
+  /**
+   * Clear records. With no args wipes everything. With { userId } only
+   * clears that tenant. Useful for "right to be forgotten" requests.
+   */
+  clear(opts = {}) {
+    if (opts && opts.userId) {
+      const before = this.records.length;
+      this.records = this.records.filter(r => r.userId !== opts.userId);
+      this._save();
+      return { ok: true, removed: before - this.records.length };
+    }
+    const removed = this.records.length;
     this.records = [];
     this._save();
-    return { ok: true };
+    return { ok: true, removed };
   }
 }
 
-module.exports = { DialecticModel, VALID_KINDS };
+module.exports = { DialecticModel, VALID_KINDS, VALID_LEVELS };

@@ -150,3 +150,98 @@ test('VALID_KINDS has the five expected entries', () => {
   assert.ok(VALID_KINDS.has('theory-of-mind'));
   assert.ok(VALID_KINDS.has('correction'));
 });
+
+// ── PHASE 28.5 — Multi-level theory-of-mind + multi-tenant tests ────────
+test('records default to level 0', () => {
+  const { dir, m } = tmpModel();
+  try {
+    const e = m.record({ kind: 'belief', after: 'user likes coffee' });
+    assert.equal(e.level, 0);
+  } finally { cleanup(dir); }
+});
+
+test('level field stored when explicitly set', () => {
+  const { dir, m } = tmpModel();
+  try {
+    m.record({ kind: 'belief',         after: 'user has CS background',       level: 0 });
+    m.record({ kind: 'theory-of-mind', after: 'user expects agent to know Git', level: 1 });
+    m.record({ kind: 'theory-of-mind', after: 'user thinks agent over-estimates them', level: 2 });
+    const s = m.summary();
+    assert.equal(s.byLevel[0], 1);
+    assert.equal(s.byLevel[1], 1);
+    assert.equal(s.byLevel[2], 1);
+  } finally { cleanup(dir); }
+});
+
+test('level filter on getRecent works', () => {
+  const { dir, m } = tmpModel();
+  try {
+    m.record({ kind: 'belief', after: 'A', level: 0 });
+    m.record({ kind: 'belief', after: 'B', level: 1 });
+    m.record({ kind: 'belief', after: 'C', level: 0 });
+    const lvl0 = m.getRecent(10, { level: 0 });
+    assert.equal(lvl0.length, 2);
+    assert.ok(lvl0.every(r => (r.level || 0) === 0));
+  } finally { cleanup(dir); }
+});
+
+test('userId scoping — multi-tenant separation', () => {
+  const { dir, m } = tmpModel();
+  try {
+    m.record({ kind: 'belief', after: 'tenant A fact 1', userId: 'tg:111' });
+    m.record({ kind: 'belief', after: 'tenant A fact 2', userId: 'tg:111' });
+    m.record({ kind: 'belief', after: 'tenant B fact 1', userId: 'tg:222' });
+    m.record({ kind: 'belief', after: 'untagged single-user fact' });
+    const a = m.getRecent(10, { userId: 'tg:111' });
+    const b = m.getRecent(10, { userId: 'tg:222' });
+    const single = m.getRecent(10);
+    const all = m.getRecent(10, { userId: '*' });
+    assert.equal(a.length, 2);
+    assert.equal(b.length, 1);
+    assert.equal(single.length, 1, 'untagged scope returns only the untagged record');
+    assert.equal(all.length, 4, '"*" returns everything');
+  } finally { cleanup(dir); }
+});
+
+test('clear({userId}) only wipes that tenant', () => {
+  const { dir, m } = tmpModel();
+  try {
+    m.record({ kind: 'belief', after: 'A', userId: 'tg:111' });
+    m.record({ kind: 'belief', after: 'B', userId: 'tg:222' });
+    const r = m.clear({ userId: 'tg:111' });
+    assert.equal(r.removed, 1);
+    const left = m.getRecent(10, { userId: '*' });
+    assert.equal(left.length, 1);
+    assert.equal(left[0].userId, 'tg:222');
+  } finally { cleanup(dir); }
+});
+
+test('summary reports tenants list', () => {
+  const { dir, m } = tmpModel();
+  try {
+    m.record({ kind: 'belief', after: 'X', userId: 'tg:111' });
+    m.record({ kind: 'belief', after: 'Y', userId: 'tg:222' });
+    m.record({ kind: 'belief', after: 'Z', userId: 'email:a@b.c' });
+    const s = m.summary({ userId: '*' });
+    assert.equal(s.tenants.length, 3);
+    assert.ok(s.tenants.includes('tg:111'));
+    assert.ok(s.tenants.includes('tg:222'));
+    assert.ok(s.tenants.includes('email:a@b.c'));
+  } finally { cleanup(dir); }
+});
+
+test('injection renders multi-level sections when present', () => {
+  const { dir, m } = tmpModel();
+  try {
+    m.record({ kind: 'belief',         after: 'L0 fact about user', level: 0, confidence: 0.9 });
+    m.record({ kind: 'theory-of-mind', after: 'L1 expectation', level: 1, confidence: 0.8 });
+    m.record({ kind: 'theory-of-mind', after: 'L2 recursive', level: 2, confidence: 0.85 });
+    const txt = m.injection(6);
+    assert.ok(txt.includes('Level 0'));
+    assert.ok(txt.includes('Level 1'));
+    assert.ok(txt.includes('Level 2'));
+    assert.ok(txt.includes('L0 fact'));
+    assert.ok(txt.includes('L1 expectation'));
+    assert.ok(txt.includes('L2 recursive'));
+  } finally { cleanup(dir); }
+});

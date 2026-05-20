@@ -23,7 +23,7 @@ const PROVIDER_ENDPOINTS = {
 function buildSystemPrompt(recent) {
   const recentLines = (recent || [])
     .slice(0, 5)
-    .map(r => `- [${r.kind}] ${r.after}${r.before ? ' (was: ' + r.before + ')' : ''}`)
+    .map(r => `- L${r.level || 0} [${r.kind}] ${r.after}${r.before ? ' (was: ' + r.before + ')' : ''}`)
     .join('\n') || '(empty — this is one of the first records)';
   return [
     'You are a user-model extractor. After each conversation turn, you emit a JSON object describing what NEW information the turn revealed about the user.',
@@ -35,6 +35,13 @@ function buildSystemPrompt(recent) {
     '  theory-of-mind  — an assumption we made that was confirmed or refuted',
     '  correction      — something the user explicitly corrected',
     '',
+    'Theory-of-mind LEVEL (Honcho-style recursion):',
+    '  0 — first-order: what THE USER thinks/wants/knows (DEFAULT for almost everything)',
+    '  1 — second-order: what the user EXPECTS THE AGENT to know/do',
+    '       (only when user explicitly references the agent, e.g. "stop assuming I want X")',
+    '  2 — third-order: user\'s belief ABOUT the agent\'s model of them',
+    '       (rare — only when user calls out the agent\'s mental model itself)',
+    '',
     'Recent diff log (do not re-emit these):',
     recentLines,
     '',
@@ -42,7 +49,8 @@ function buildSystemPrompt(recent) {
     '  • Emit AT MOST 3 entries. Empty {"updates":[]} is fine if nothing was learned.',
     '  • Skip trivial small-talk and acknowledgements.',
     '  • Skip facts the user has clearly stated before (see the log above).',
-    '  • Each entry: {"kind":"...","before":null or "...","after":"<= 200 chars","evidence":"<= 120 chars quote","confidence":0.0..1.0}',
+    '  • Each entry: {"kind":"...","level":0|1|2,"before":null or "...","after":"<= 200 chars","evidence":"<= 120 chars quote","confidence":0.0..1.0}',
+    '  • If unsure about level, use 0.',
     '  • RESPOND WITH RAW JSON ONLY. No prose, no markdown fences.',
   ].join('\n');
 }
