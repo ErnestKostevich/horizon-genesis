@@ -24,6 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fmt } = require('../tty');
+const { renderArt } = require('../banner');
 const { DEFAULT_PROVIDER_MODELS } = require('../../../src/main/runtime/ai-providers');
 
 function row(state, label, detail) {
@@ -224,6 +225,11 @@ async function run({ runtime, args, flags }) {
     process.stdout.write('\n');
   } else {
     process.stdout.write(fmt.green('  all checks passed') + '\n');
+    const art = renderArt('doctorHealthy', {
+      tag: `${findings.length} check${findings.length === 1 ? '' : 's'} passed`,
+      flags,
+    });
+    if (art) process.stdout.write('\n' + art + '\n');
   }
   if (fixed) process.stdout.write(fmt.dim(`  fixed ${fixed} item${fixed > 1 ? 's' : ''}`) + '\n');
   process.stdout.write('\n');

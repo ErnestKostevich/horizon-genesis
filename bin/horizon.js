@@ -16,6 +16,18 @@ process.on('warning', (w) => {
   // Other warnings still surface, just not the deprecation noise.
   process.stderr.write(`(warning) ${w.message}\n`);
 });
+
+// CRITICAL — top-level crash visibility. Without these, an uncaught
+// exception during dispatch() makes the binary vanish back to the
+// shell prompt with no visible error, exactly the failure mode the
+// Windows pkg-bundled splash-then-exit bug presented.
+process.on('uncaughtException', (e) => {
+  process.stderr.write('\n\x1b[31m[fatal]\x1b[0m ' + (e?.stack || e?.message || String(e)) + '\n');
+  process.exit(1);
+});
+process.on('unhandledRejection', (r) => {
+  process.stderr.write('\n\x1b[31m[reject]\x1b[0m ' + (r?.stack || r?.message || String(r)) + '\n');
+});
 //
 // Usage:
 //   horizon                        — launch TUI
@@ -52,7 +64,7 @@ const SPEC = {
   booleans: ['help', 'version', 'json', 'human', 'quiet', 'stream', 'verbose',
              'auto-approve', 'never-approve', 'reflect', 'semantic',
              'list', 'enable-tg', 'enable-discord', 'reveal', 'all',
-             'no-setup'],
+             'no-setup', 'no-art'],
   negatables: ['reflect', 'semantic'],
 };
 
@@ -305,6 +317,7 @@ async function dispatch(argv) {
   const KNOWN = ['agent', 'chat', 'skill', 'mem', 'connect', 'model',
                  'persona', 'version', 'serve', 'tui', 'help',
                  'setup', 'cost', 'doctor', 'profile', 'completion', 'update',
+                 'art',
                  // Phase 10 additions
                  'cron', 'sessions', 'backup', 'status', 'insights',
                  'logs', 'checkpoints', 'hooks', 'agents',
@@ -329,7 +342,11 @@ async function dispatch(argv) {
   if (cmd === 'help') { printHelp({ all: !!flags.all }); return 0; }
   if (cmd === 'tui') {
     const tuiPath = path.join(__dirname, 'horizon-tui.js');
-    require(tuiPath).main({ flags });
+    // CRITICAL — must await. Without await, dispatch returns 0
+    // immediately, the .then(process.exit) below fires, and the
+    // process dies right after the TUI banner renders. This was the
+    // `horizon tui` flavour of the splash-then-exit bug.
+    await require(tuiPath).main({ flags });
     return 0;
   }
   if (cmd === 'serve') {

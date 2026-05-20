@@ -20,7 +20,7 @@
 
 const { fmt, promptYesNo, isTTY, friendlyError } = require('../tty');
 const { renderMarkdown } = require('../markdown');
-const { GradientSpinner } = require('../banner');
+const { GradientSpinner, renderArt } = require('../banner');
 
 function fmtArgs(a) {
   if (!a) return '';
@@ -28,6 +28,16 @@ function fmtArgs(a) {
     const s = JSON.stringify(a);
     return s.length > 60 ? s.slice(0, 57) + '…' : s;
   } catch (_) { return '<unprintable>'; }
+}
+
+// Humanise a ms duration: "850ms" / "12s" / "1m 23s".
+function formatDuration(ms) {
+  if (!ms || ms < 0) ms = 0;
+  if (ms < 1000)   return `${Math.round(ms)}ms`;
+  if (ms < 60000)  return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0).replace(/\.0$/, '')}s`;
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  return `${mins}m ${secs}s`;
 }
 
 async function run({ runtime, args, flags }) {
@@ -41,6 +51,7 @@ async function run({ runtime, args, flags }) {
   const quiet = !!flags.quiet;
   const wantMarkdown = human && !quiet && !flags.plain;
 
+  const startedAt = Date.now();
   let spinner = null;
   if (human && !quiet) {
     spinner = new GradientSpinner('starting…').start();
@@ -70,8 +81,11 @@ async function run({ runtime, args, flags }) {
       case 'plan':
         if (spinner) spinner.stop();
         if (event.plan?.steps?.length) {
-          process.stderr.write('\n' + fmt.bold('plan') + '\n');
-          event.plan.steps.forEach((s, i) => {
+          const steps = event.plan.steps;
+          const ribbon = renderArt('planAccepted', { tag: `${steps.length} step${steps.length === 1 ? '' : 's'}`, flags });
+          if (ribbon) process.stderr.write('\n' + ribbon + '\n');
+          process.stderr.write((ribbon ? '' : '\n') + fmt.bold('plan') + '\n');
+          steps.forEach((s, i) => {
             const txt = typeof s === 'string' ? s : (s.text || JSON.stringify(s));
             process.stderr.write(`  ${fmt.dim((i + 1) + '.')} ${txt}\n`);
           });
@@ -83,6 +97,14 @@ async function run({ runtime, args, flags }) {
         if (spinner) spinner.update(event.message || 'thinking…');
         break;
       case 'executing':
+        if (event.tool === 'spawn_subagent') {
+          if (spinner) spinner.stop();
+          const a = event.args || {};
+          const n = a.count || a.n || (Array.isArray(a.tasks) ? a.tasks.length : 1);
+          const art = renderArt('subagentSpawn', { tag: `spawning ${n} subagent${n === 1 ? '' : 's'}`, flags });
+          if (art) process.stderr.write(art + '\n');
+          spinner = new GradientSpinner('working…').start();
+        }
         if (spinner) spinner.update(`${event.tool}(${fmtArgs(event.args)})`);
         break;
       case 'result':
@@ -153,9 +175,19 @@ async function run({ runtime, args, flags }) {
       process.stdout.write('\n' + (wantMarkdown ? renderMarkdown(result.answer) : result.answer.trim()) + '\n');
     }
     if (human && !quiet) {
+      const duration = Date.now() - startedAt;
+      const steps = result.steps?.length || 0;
       process.stderr.write(
-        '\n' + fmt.dim(`done · ${result.steps?.length || 0} steps · ${result.ok ? 'goal met' : 'partial'}`) + '\n'
+        '\n' + fmt.dim(`done · ${steps} steps · ${result.ok ? 'goal met' : 'partial'}`) + '\n'
       );
+      // Goal-met art — only when the agent actually succeeded with steps.
+      if (result.ok && steps > 0) {
+        const art = renderArt('goalMet', {
+          tag: `goal met in ${formatDuration(duration)} · ${steps} step${steps === 1 ? '' : 's'}`,
+          flags,
+        });
+        if (art) process.stderr.write('\n' + art + '\n');
+      }
     }
   }
   return result.ok ? 0 : 1;
