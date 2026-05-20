@@ -8,10 +8,9 @@
   "tier": "demo",
   "icon": "Music",
   "permissions": [
-    "network:api.spotify.com",
-    "network:accounts.spotify.com",
-    "loopback:127.0.0.1",
-    "storage:tokens"
+    "network.fetch",
+    "filesystem.read",
+    "filesystem.write"
   ],
   "settings": [
     {

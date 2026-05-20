@@ -7,7 +7,7 @@
   "category": "system",
   "tier": "built_in",
   "icon": "Cpu",
-  "permissions": ["system:read", "shell:exec"],
+  "permissions": ["shell.exec"],
   "settings": [],
   "tools": [
     { "name": "status",    "description": "CPU + RAM + uptime snapshot.",                    "params": {} },

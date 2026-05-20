@@ -670,3 +670,156 @@ body::after {
   filter: blur(26px) !important;
   opacity: 0.18 !important;
 }
+
+/* apex-alive declares `--acc: #82ecff !important` etc on :root so the
+   selector chain `:root → [data-theme="light"]` cannot win without an
+   equally weighted !important. Re-tint accent / text vars under light. */
+[data-theme="light"] {
+  --acc:  #7c6df2 !important;
+  --acc2: #a78bfa !important;
+  --acc3: rgba(124,109,242,.10) !important;
+  --tx:   #18181b !important;
+  --t2:   #3f3f46 !important;
+  --t3:   #52525b !important;
+  --b1:   rgba(0,0,0,.08) !important;
+  --b2:   rgba(0,0,0,.14) !important;
+  --b3:   rgba(0,0,0,.22) !important;
+  --usr-bg: linear-gradient(135deg, rgba(124,109,242,.18), rgba(124,109,242,.10)) !important;
+  --usr-b:  rgba(124,109,242,.38) !important;
+  --bg:    #fafafa !important;
+  --bg2:   rgba(255,255,255,.95) !important;
+  --bg3:   rgba(249,250,251,.94) !important;
+  --glow:  0 0 28px rgba(124,109,242,.18), 0 0 80px rgba(167,139,250,.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-3 final pass — apex-alive sets dark glass on .tb, .ic-btn (re-
+   asserts cyan-on-dark), .chip/.mt, .msg.bot .bub gradient, .msg.usr .bub
+   gradient, .ch greeting chip, .inp-wrap, textarea, .btn-mic/.btn-attach,
+   .panel/.fpanel, .ph/.fph — all with !important and no light variant.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .tb {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.85)) !important;
+  border-bottom-color: rgba(0,0,0,.08) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.5), 0 1px 3px rgba(0,0,0,.04);
+}
+[data-theme="light"] .tb-sub {
+  color: #b45309 !important; /* amber→warn → 5.6:1 AA on white pill */
+  border-color: rgba(180,83,9,.28) !important;
+  background: rgba(180,83,9,.08) !important;
+}
+[data-theme="light"] .ic-btn {
+  background: rgba(0,0,0,.03) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6) !important;
+}
+[data-theme="light"] .ic-btn:hover,
+[data-theme="light"] .ic-btn.on {
+  background: rgba(124,109,242,.08) !important;
+  border-color: rgba(124,109,242,.30) !important;
+  color: #4c40ad !important;
+  box-shadow: 0 4px 14px rgba(124,109,242,.10), inset 0 1px 0 rgba(255,255,255,.5);
+}
+
+/* Chip / mt strip on the provider/mode bar. */
+[data-theme="light"] .chip,
+[data-theme="light"] .mt {
+  background: rgba(0,0,0,.03) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .chip:hover,
+[data-theme="light"] .mt:hover,
+[data-theme="light"] .chip.on,
+[data-theme="light"] .mt.on {
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.32) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .chip.special.on {
+  background: linear-gradient(135deg, rgba(124,109,242,.16), rgba(167,139,250,.10)) !important;
+}
+
+/* Assistant + user bubbles — apex-alive painted them dark. */
+[data-theme="light"] .msg.bot .bub {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .msg.usr .bub {
+  background: linear-gradient(135deg, rgba(124,109,242,.18), rgba(124,109,242,.08)) !important;
+  border-color: rgba(124,109,242,.38) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .msg.bot .bub:hover {
+  box-shadow:
+    0 4px 14px rgba(0,0,0,.06),
+    0 0 0 1px rgba(124,109,242,.18),
+    0 0 22px rgba(124,109,242,.08) !important;
+}
+[data-theme="light"] .msg.usr .bub:hover {
+  box-shadow:
+    0 4px 14px rgba(124,109,242,.10),
+    0 0 0 1px rgba(124,109,242,.30) !important;
+}
+[data-theme="light"] .greet p {
+  color: #3f3f46 !important;
+}
+
+/* Greeting chips (.ch) — apex-alive sets `rgba(255,255,255,.045)` bg which
+   on a light shell looks like nothing. */
+[data-theme="light"] .ch {
+  background: rgba(0,0,0,.03) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #18181b !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+}
+[data-theme="light"] .ch:hover {
+  background: rgba(124,109,242,.08) !important;
+  border-color: rgba(124,109,242,.32) !important;
+  color: #4c40ad !important;
+}
+
+/* Input wrap + textarea base apex-alive paints them dark glass. */
+[data-theme="light"] .inp-wrap {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.98)) !important;
+  border-top-color: rgba(0,0,0,.08) !important;
+  box-shadow: 0 -8px 22px rgba(0,0,0,.04) !important;
+}
+[data-theme="light"] textarea {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.12) !important;
+  color: #18181b !important;
+  box-shadow: inset 0 1px 0 rgba(0,0,0,.02) !important;
+}
+[data-theme="light"] textarea:focus {
+  border-color: rgba(124,109,242,.45) !important;
+  box-shadow: 0 0 0 4px rgba(124,109,242,.10), inset 0 1px 0 rgba(0,0,0,.02) !important;
+}
+[data-theme="light"] .btn-mic,
+[data-theme="light"] .btn-attach {
+  background: rgba(0,0,0,.03) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .btn-mic:hover,
+[data-theme="light"] .btn-attach:hover {
+  border-color: rgba(124,109,242,.34) !important;
+  color: #4c40ad !important;
+  background: rgba(124,109,242,.06) !important;
+}
+
+/* Floating + settings panels — apex-alive uses a radial dark gradient. */
+[data-theme="light"] .panel,
+[data-theme="light"] .fpanel {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(124,109,242,.08), transparent 32%),
+    linear-gradient(180deg, #ffffff, #fafafa) !important;
+  color: #18181b !important;
+}
+
+/* Inspector hover already in chat-base via .insp-tab:hover var(--tx),
+   but apex-alive doesn't touch this — no override needed. */

@@ -108,6 +108,17 @@ function filterChats(query) {
   renderChatSidebar();
 }
 async function loadChatList(){
+  // Sprint 4 — Task 4: render a few skeleton rows on the very first load so
+  // the sidebar doesn't show an empty pane while H.chatList() resolves. We
+  // only paint the skeleton when chatsCache is empty (first load); on later
+  // refreshes we keep the existing list visible to avoid flicker.
+  try {
+    const listEl = document.getElementById('chatlist');
+    const firstLoad = !chatsCache || !chatsCache.length;
+    if (listEl && firstLoad && typeof hzSkelRows === 'function') {
+      listEl.innerHTML = hzSkelRows(6, { height: 38, gap: 8 });
+    }
+  } catch (_) {}
   try {
     const list = await H.chatList();
     chatsCache = Array.isArray(list) ? list : [];

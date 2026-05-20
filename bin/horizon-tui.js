@@ -104,6 +104,8 @@ function buildHelp() {
     groupHead('Keyboard shortcuts'),
     '  Enter                 send message',
     '  Shift+Enter           newline (multi-line composer)',
+    '  Tab                   on empty composer: cycle banner sections (else autocomplete)',
+    '  1 / 2 / 3 / 4         on empty composer: toggle Tools / Skills / Prompt / MCP',
     '  Up / Down             history navigation (when on first line)',
     '  ← / →                 move cursor within composer',
     '  Ctrl+A / Ctrl+E       jump start / end of line',
@@ -114,6 +116,7 @@ function buildHelp() {
     '  Page Up / Page Down   scroll through past output',
     '  Esc                   exit scrollback / search',
     '  Mouse wheel           scroll transcript (where supported)',
+    '  Mouse click on ▸/▾    toggle that collapsible section (where mouse supported)',
     '  Ctrl+C / Ctrl+D       exit',
     '',
     fmt.dim('  Try also: /tea  /coffee  /whoami  /art  — a few hidden moments live in here.'),
@@ -219,32 +222,67 @@ function bannerHeader(rt, engine) {
     ? [`${mcpCount} configured · settings → mcpServers`]
     : null;
 
-  const lines = [
-    bannerFramedBox(),
-    '',
-    renderCollapsibleSection(
+  // Build the section blocks with offset tracking so we can register click
+  // regions with the engine. We need the row offset (within the rendered
+  // banner) of EACH section header line — that's what the mouse handler
+  // will compare clicks against.
+  const sectionBlocks = [
+    { id: 'tools', text: renderCollapsibleSection(
       sections.tools.name,
       `${toolCount || 'built-in'} built-in · ${channelCount} channels · ${mcpCount} MCP`,
-      sections.tools.expanded, toolsBody),
-    renderCollapsibleSection(
+      sections.tools.expanded, toolsBody) },
+    { id: 'skills', text: renderCollapsibleSection(
       sections.skills.name,
       `${skillCount} enabled · /skills to manage`,
-      sections.skills.expanded, skillsBody),
-    renderCollapsibleSection(
+      sections.skills.expanded, skillsBody) },
+    { id: 'prompt', text: renderCollapsibleSection(
       sections.prompt.name,
       `${persona} · workspace ${path.basename(rt.workspaceDir)}`,
-      sections.prompt.expanded, promptBody),
-    renderCollapsibleSection(
+      sections.prompt.expanded, promptBody) },
+    { id: 'mcp', text: renderCollapsibleSection(
       sections.mcp.name,
       mcpCount > 0 ? `${mcpCount} connected` : 'none configured',
-      sections.mcp.expanded, mcpBody),
+      sections.mcp.expanded, mcpBody) },
+  ];
+
+  const headLines = [bannerFramedBox(), ''];
+  // Sprint 4 — Task 1: track which line-of-banner each section header sits
+  // at. Each section block may render as 1 line (collapsed) or 1+N lines
+  // (expanded, with body rows). The header is always the FIRST line.
+  const sectionOffsets = [];
+  let lineCursor = headLines.length;
+  const sectionLines = [];
+  for (const b of sectionBlocks) {
+    sectionOffsets.push({ id: b.id, offset: lineCursor });
+    const blockLines = b.text.split('\n');
+    sectionLines.push(...blockLines);
+    lineCursor += blockLines.length;
+  }
+  const tailLines = [
     '',
     '  ' + fmt.dim(buildGreeting(persona)),
     ...(todArt ? [todArt] : []),
-    fmt.dim('  /help · /sections <id> toggle · Tab complete · Shift+Enter newline · Ctrl+F search · /quit to exit'),
+    // Sprint 4 — Task 1: surface click + Tab in the help footer so the user
+    // discovers the new interaction instead of guessing.
+    fmt.dim('  /help · click ▸/▾ to toggle · Tab cycles section · /sections <id> · Ctrl+F search · /quit to exit'),
     '',
   ];
-  return lines.join('\n');
+
+  const lines = [...headLines, ...sectionLines, ...tailLines];
+  const text = lines.join('\n');
+  // Attach metadata so callers (horizon-tui main + /sections + /banner) can
+  // register the click map with the engine in one place.
+  // Returning a plain string keeps backward compatibility — anything that
+  // doesn't read `.sectionOffsets` (tests, search) sees a normal string.
+  /* eslint-disable no-new-wrappers */
+  // String objects coerce to plain strings on concat/print yet still carry
+  // properties. This is the cleanest way to slip metadata through without
+  // touching every call site.
+  const wrapped = new String(text);
+  wrapped.sectionOffsets = sectionOffsets;
+  wrapped.totalLines = lines.length;
+  return wrapped;
+  /* eslint-enable no-new-wrappers */
 }
 
 function fmtArgs(a) {
@@ -596,6 +634,36 @@ async function main({ flags } = {}) {
     },
   });
 
+  // Sprint 4 — Task 1: shared helper that toggles a section AND repaints
+  // the banner in-place. Wired into the engine via setSectionToggleHook so
+  // digit shortcuts (1/2/3/4), Tab cycling, and mouse clicks all share the
+  // same repaint path. opts.force === 'expand' means "set this one to
+  // expanded regardless of current state" (used by Tab cycling so the user
+  // sees the cycled section open even if it was already expanded).
+  const _toggleSectionAndRepaint = (id, opts = {}) => {
+    if (!engine.getSections) return;
+    const sect = engine.getSections()[id];
+    if (!sect) return;
+    if (opts.force === 'expand') sect.expanded = true;
+    else sect.expanded = !sect.expanded;
+    const fresh = bannerHeader(runtime, engine);
+    engine.print(fresh);
+    // Re-register the section click map. engine.print() appended the banner
+    // to the transcript, so the base index of the banner top is exactly
+    // (transcript.length - totalLines).
+    if (fresh && fresh.sectionOffsets && typeof engine.registerSectionRows === 'function') {
+      const base = engine.transcript.length - (fresh.totalLines || 0);
+      const entries = fresh.sectionOffsets.map(s => ({
+        transcriptIdx: base + s.offset,
+        sectionId: s.id,
+      }));
+      engine.registerSectionRows(entries);
+    }
+  };
+  if (typeof engine.setSectionToggleHook === 'function') {
+    engine.setSectionToggleHook(_toggleSectionAndRepaint);
+  }
+
   // Sprint 2.12 — print the Hermes-style banner header AFTER engine creation
   // so it can read the engine's collapsible-section state. Layout:
   //   - clear screen unless this is the first launch (welcomeReveal already
@@ -621,7 +689,18 @@ async function main({ flags } = {}) {
   }
 
   // Seed transcript with the banner so search/scroll see it
-  banner.split('\n').forEach(l => engine.transcript.push(l));
+  String(banner).split('\n').forEach(l => engine.transcript.push(l));
+  // Sprint 4 — Task 1: register section header click regions. The banner
+  // was just appended to the transcript, so the absolute index of each
+  // section header line is (transcript.length - totalLines + offset).
+  if (banner && banner.sectionOffsets && typeof engine.registerSectionRows === 'function') {
+    const base = engine.transcript.length - (banner.totalLines || 0);
+    const entries = banner.sectionOffsets.map(s => ({
+      transcriptIdx: base + s.offset,
+      sectionId: s.id,
+    }));
+    engine.registerSectionRows(entries);
+  }
 
   engine.start();
 
@@ -700,6 +779,22 @@ async function runEasterEgg(eggName, runtime, engine) {
   }
 }
 
+// Sprint 4 — Task 1: shared "print banner + refresh click map" helper, used
+// by /banner, /sections, and the section toggle hook. Keeps the click region
+// registration in lock-step with whatever sections are currently expanded.
+function _reprintBannerAndRegister(runtime, engine) {
+  const fresh = bannerHeader(runtime, engine);
+  engine.print(fresh);
+  if (fresh && fresh.sectionOffsets && typeof engine.registerSectionRows === 'function') {
+    const base = engine.transcript.length - (fresh.totalLines || 0);
+    const entries = fresh.sectionOffsets.map(s => ({
+      transcriptIdx: base + s.offset,
+      sectionId: s.id,
+    }));
+    engine.registerSectionRows(entries);
+  }
+}
+
 async function handleSlash(raw, state, runtime, engine) {
   const tokens = raw.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
   const head = tokens[0];
@@ -710,8 +805,10 @@ async function handleSlash(raw, state, runtime, engine) {
     // Sprint 2.12 — Hermes-style modal overlay. Help renders in the
     // alternate screen buffer; transcript / scrollback are preserved.
     // Falls back to inline print on non-TTY (modalOverlay handles that).
+    // Sprint 4 — Task 2: pass a title so the bordered card shows "Help" in
+    // the top edge gap.
     if (engine && typeof engine.modalOverlay === 'function') {
-      await engine.modalOverlay(buildHelp());
+      await engine.modalOverlay(buildHelp(), { title: 'Horizon · Help' });
     } else {
       engine.print(buildHelp());
     }
@@ -720,10 +817,12 @@ async function handleSlash(raw, state, runtime, engine) {
   if (head === '/clear') {
     process.stdout.write('\x1b[2J\x1b[H');
     engine.transcript = [];
+    // Section row indexes referred into the now-empty transcript.
+    if (typeof engine.registerSectionRows === 'function') engine.registerSectionRows([]);
     return;
   }
   if (head === '/banner') {
-    engine.print(bannerHeader(runtime, engine));
+    _reprintBannerAndRegister(runtime, engine);
     return;
   }
   if (head === '/sections') {
@@ -747,8 +846,9 @@ async function handleSlash(raw, state, runtime, engine) {
       return;
     }
     engine.print(fmt.ok(`${id} → ${result ? 'expanded' : 'collapsed'}`));
-    // Re-render the banner so the user sees the new layout.
-    engine.print(bannerHeader(runtime, engine));
+    // Re-render the banner so the user sees the new layout. Use the shared
+    // helper so the section click map stays in sync with the new headers.
+    _reprintBannerAndRegister(runtime, engine);
     return;
   }
   if (head === '/altscreen') {

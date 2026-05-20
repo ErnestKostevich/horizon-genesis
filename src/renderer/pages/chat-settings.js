@@ -116,6 +116,18 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 async function loadPanel(){
+  // Sprint 4 — Task 4: paint a minimal skeleton on the settings save-status
+  // bar while we hydrate every setting. The "Settings are stored locally"
+  // success line snaps in after loadPanel completes, so the user gets a
+  // shimmer instead of the bare default copy.
+  try {
+    const statusEl = document.getElementById('settings-save-status');
+    if (statusEl && typeof hzSkelRows === 'function' && !statusEl._skelOn) {
+      statusEl._origHTML = statusEl.innerHTML;
+      statusEl._skelOn = true;
+      statusEl.innerHTML = hzSkelRows(1, { height: 14, gap: 0 });
+    }
+  } catch (_) {}
   // Parallel fetch — fast, no sequential bottleneck
   const svcs=['gemini','groq','deepseek','mistral','qwen','grok','claude','openai','perplexity','cohere','openrouter','tavily','elevenlabs','deepgram','localai','github'];
   const [keyFlags, nm, lg, vp, tp, elv, oaitv] = await Promise.all([
@@ -275,6 +287,16 @@ async function loadPanel(){
     await refreshExecutorStatus();
   } catch(_) {}
   await loadSettingsHealth();
+  // Sprint 4 — Task 4: restore the original status line now that all the
+  // async settings have populated. Guarded so re-opening settings keeps
+  // working without double-restoration.
+  try {
+    const statusEl = document.getElementById('settings-save-status');
+    if (statusEl && statusEl._skelOn) {
+      statusEl.innerHTML = statusEl._origHTML || 'Settings are stored locally and restored on launch.';
+      statusEl._skelOn = false;
+    }
+  } catch (_) {}
 }
 
 // Seed a local-provider <select> with the saved model so it stays selected
