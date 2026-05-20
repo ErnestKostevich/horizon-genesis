@@ -34,9 +34,14 @@ function toolAllowedByPersona(toolName, allowedGroups) {
   const groups = {
     'fs.read': [
       'read_file', 'list_dir', 'search_files', 'get_system_info',
-      'get_running_apps', 'get_facts', 'recall', 'get_nutrition'
+      'get_running_apps', 'get_facts', 'recall', 'get_nutrition',
+      // PHASE 28.5 — Self-knowledge tools are read-only introspection.
+      'self_describe', 'self_list_capabilities', 'self_read_skill', 'self_read_persona'
     ],
-    'fs.write': ['write_file', 'remember', 'set_fact', 'log_meal'],
+    // PHASE 28.5 — `self_improve_skill` mutates a SKILL.md on disk so
+    // it lives with the other fs.write tools. Permission is gated via
+    // the same allowedTools mechanism every persona uses.
+    'fs.write': ['write_file', 'remember', 'set_fact', 'log_meal', 'self_improve_skill'],
     shell: ['run_code', 'run_powershell', 'run_shell', 'shell_command', 'skill_run_helper'],
     'web.fetch': ['browser_open', 'open_site', 'get_location', 'get_weather', 'wikipedia'],
     'web.search': ['browser_search', 'web_search', 'wikipedia'],

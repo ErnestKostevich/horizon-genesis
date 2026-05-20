@@ -103,7 +103,9 @@ class Executor {
 
   _settingMode() {
     const v = this.settingsStore?.get?.('executionMode');
-    return ['docker','ssh','modal','daytona','ask'].includes(v) ? v : 'host';
+    // PHASE 28.5 — singularity must be in the whitelist or run() falls
+    // back to host even when the user picked it in Settings.
+    return ['docker','ssh','modal','daytona','singularity','ask'].includes(v) ? v : 'host';
   }
 
   _settingMount() {
