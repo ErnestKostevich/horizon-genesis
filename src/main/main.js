@@ -3065,6 +3065,7 @@ let screenRecorder = null;
 let cronRunner = null;
 let canvasManager = null;
 let memoryReviewer = null;
+let dialecticModel = null;
 let githubConnector = null;
 let mcpRegistry = null;
 let connectionsManager = null;
@@ -3799,6 +3800,24 @@ function loadAgentModules() {
             console.log('[memoryDb] live wire-up skipped:', e.message);
           }
         }, 8000);
+
+        // PHASE 28.4 — Dialectic user model (Honcho-inspired). The 9th
+        // memory layer: a diff log of what we've learned about the user
+        // over time. Lives next to horizon_memory.json as a separate
+        // JSON sidecar so users can inspect / edit it manually.
+        try {
+          const { DialecticModel } = require('./dialecticModel');
+          const dialecticPath = path.join(app.getPath('userData'), 'horizon_dialectic.json');
+          dialecticModel = new DialecticModel(dialecticPath).init();
+          if (typeof agentMemory.setDialecticModel === 'function') {
+            agentMemory.setDialecticModel(dialecticModel);
+          } else {
+            agentMemory.dialectic = dialecticModel;
+          }
+          console.log('✓ DialecticModel loaded (' + dialecticModel.records.length + ' diff records)');
+        } catch (e) {
+          console.log('[dialectic] skipped:', e.message);
+        }
 
         // PHASE 28.3 — agent-curated memory reviewer (Hermes-style
         // periodic nudges). Decays stale memories, merges near-
@@ -5088,6 +5107,40 @@ function _memSqlitePaths() {
 
 // PHASE 28.3 — manual trigger for the memory reviewer (Inspector
 // "Review now" button) + status read-back.
+// PHASE 28.4 — Dialectic user model (Honcho-inspired diff log).
+ipcMain.handle('dialecticSummary', () => {
+  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized' };
+  try { return { ok: true, ...dialecticModel.summary() }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('dialecticRecent', (_, opts) => {
+  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized', records: [] };
+  try {
+    const limit = Math.max(1, Math.min(500, Number(opts?.limit) || 50));
+    return { ok: true, records: dialecticModel.getRecent(limit) };
+  } catch (e) { return { ok: false, error: e.message, records: [] }; }
+});
+ipcMain.handle('dialecticSearch', (_, payload) => {
+  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized', records: [] };
+  try {
+    const limit = Math.max(1, Math.min(500, Number(payload?.limit) || 50));
+    const q = String(payload?.query || '').slice(0, 200);
+    return { ok: true, records: dialecticModel.search(q, limit) };
+  } catch (e) { return { ok: false, error: e.message, records: [] }; }
+});
+ipcMain.handle('dialecticRecord', (_, diff) => {
+  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized' };
+  try {
+    const entry = dialecticModel.record(diff || {});
+    return entry ? { ok: true, entry } : { ok: false, error: 'invalid diff payload' };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('dialecticClear', () => {
+  if (!dialecticModel) return { ok: false, error: 'dialectic model not initialized' };
+  try { return { ok: true, ...dialecticModel.clear() }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
 ipcMain.handle('memoryReviewerStatus', () => {
   if (!memoryReviewer) return { ok: false, error: 'reviewer not initialized' };
   return { ok: true, ...memoryReviewer.status() };

@@ -180,6 +180,15 @@ contextBridge.exposeInMainWorld('H', {
   // PHASE 28 — opt-in SQLite + FTS5 mirror of the JSON memory file.
   memoryDbStatus: ()           => ipcRenderer.invoke('memoryDbStatus'),
   memoryDbMigrate: ()          => ipcRenderer.invoke('memoryDbMigrate'),
+  // PHASE 28.3 — agent-curated memory reviewer (Hermes-style nudges).
+  memoryReviewerStatus: ()     => ipcRenderer.invoke('memoryReviewerStatus'),
+  memoryReviewerRunNow: ()     => ipcRenderer.invoke('memoryReviewerRunNow'),
+  // PHASE 28.4 — Dialectic user model (9th memory layer, Honcho-style).
+  dialecticSummary: ()         => ipcRenderer.invoke('dialecticSummary'),
+  dialecticRecent: (opts)      => ipcRenderer.invoke('dialecticRecent', opts),
+  dialecticSearch: (payload)   => ipcRenderer.invoke('dialecticSearch', payload),
+  dialecticRecord: (diff)      => ipcRenderer.invoke('dialecticRecord', diff),
+  dialecticClear: ()           => ipcRenderer.invoke('dialecticClear'),
   onMemoryEmbeddingProgress: (cb) => {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('memory:embeddingProgress', handler);
