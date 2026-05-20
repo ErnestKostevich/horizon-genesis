@@ -54,7 +54,7 @@ async function findLatestCliRelease() {
   // Filter to cli-v* tags only
   const cliReleases = all.filter(r => /^cli-v\d/.test(r.tag_name || ''));
   if (!cliReleases.length) {
-    return { tag: null, assets: [], note: 'No cli-v* release published yet — push tag `cli-v1.0.0` to trigger release-cli.yml' };
+    return { tag: null, assets: [], note: 'No cli-v* release published yet — push tag `cli-v0.0.1` (or newer) to trigger release-cli.yml' };
   }
   const latest = cliReleases[0]; // GitHub returns newest first
   return {
