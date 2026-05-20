@@ -51,7 +51,7 @@
         <div class="hz-toast-title">${escapeHtml(title)}</div>
         ${desc ? `<div class="hz-toast-desc">${escapeHtml(desc)}</div>` : ''}
       </div>
-      <button class="hz-toast-close" aria-label="Dismiss">✕</button>
+      <button class="hz-toast-close" aria-label="Dismiss"><svg class="licon"><use href="#i-x"/></svg></button>
     `;
     container.appendChild(node);
 

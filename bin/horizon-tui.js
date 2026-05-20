@@ -161,12 +161,14 @@ function fmtDuration(ms) {
 // width is just .replace(/\x1b\[[0-9;]*m/g,'').length.
 function visibleLen(s) { return String(s).replace(/\x1b\[[0-9;]*m/g, '').length; }
 
-// Per-tool category glyph. Themes that read well with emoji get colourful
-// icons; mono / matrix / retro-amber stay ASCII-only to preserve their vibe.
-const EMOJI_THEMES = new Set(['default', 'vapor', 'mocha', 'kawaii']);
+// Per-tool category glyph. Themes that render Unicode geometrics cleanly get
+// coloured single-cell glyphs (no color-emoji font dependency); mono / matrix
+// / retro-amber stay ASCII-only to preserve their monochrome vibe.
+const GLYPH_THEMES = new Set(['default', 'vapor', 'mocha', 'kawaii', 'light']);
 function _toolGlyph(tool, themeName) {
   const t = String(tool || '');
-  const useEmoji = EMOJI_THEMES.has(themeName || 'default');
+  const theme = themeName || 'default';
+  const useGlyph = GLYPH_THEMES.has(theme);
   const cat =
     /^web_|^fetch_/.test(t)                                       ? 'web'  :
     /^(run_code|run_shell|run_python)$|^exec_/.test(t)            ? 'exec' :
@@ -176,8 +178,23 @@ function _toolGlyph(tool, themeName) {
     /^memory_|^recall_/.test(t)                                   ? 'mem'  :
     /^spawn_subagent$/.test(t)                                    ? 'agent':
                                                                     'other';
-  if (useEmoji) {
-    return { web: '🌐', exec: '▶', file: '📄', mouse: '🖱', conn: '💬', mem: '🧠', agent: '🌿', other: '⚙' }[cat];
+  if (useGlyph) {
+    // Clean Unicode geometrics — render in every terminal without color-emoji.
+    const glyphs = { web: '◇', exec: '▸', file: '▤', mouse: '▦', conn: '◈', mem: '◉', agent: '❖', other: '•' };
+    const g = glyphs[cat];
+    // Per-category colour. Each glyph gets a distinct hue so scanning the
+    // transcript is fast. ASCII themes skip colouring (handled below).
+    const colour = {
+      web:   fmt.cyan,
+      exec:  fmt.green,
+      file:  fmt.yellow,
+      mouse: fmt.magenta,
+      conn:  fmt.blue,
+      mem:   fmt.magenta,
+      agent: fmt.green,
+      other: fmt.dim,
+    }[cat];
+    return colour ? colour(g) : g;
   }
   return { web: 'W', exec: '>', file: 'F', mouse: 'M', conn: 'C', mem: 'K', agent: 'A', other: '·' }[cat];
 }

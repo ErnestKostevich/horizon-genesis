@@ -49,8 +49,9 @@ function renderAttachPreview(){
     } else {
       const chip=document.createElement('div');
       chip.className='att-chip';
-      const icon = att.name.endsWith('.zip')?'📦': att.name.endsWith('.pdf')?'📄': att.name.match(/\.(js|ts|py|html|css|json)$/)?'💻': '📝';
-      chip.innerHTML=`<span>${icon}</span><span title="${att.name}">${att.name}</span><button onclick="attachments.splice(${i},1);renderAttachPreview()">×</button>`;
+      // Sprint-2 fix — was emoji, now lucide SVG. File type → symbol id.
+      const iconId = att.name.endsWith('.zip')?'i-puzzle': att.name.endsWith('.pdf')?'i-file-text': att.name.match(/\.(js|ts|py|html|css|json)$/)?'i-code': 'i-file';
+      chip.innerHTML=`<span><svg class="licon" style="vertical-align:-2px"><use href="#${iconId}"/></svg></span><span title="${att.name}">${att.name}</span><button onclick="attachments.splice(${i},1);renderAttachPreview()" aria-label="Remove attachment">×</button>`;
       area.appendChild(chip);
     }
   });

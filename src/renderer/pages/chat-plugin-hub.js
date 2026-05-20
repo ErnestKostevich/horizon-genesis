@@ -49,7 +49,7 @@ async function renderHubBody() {
       const plugins = await H.pluginList();
       hubPluginsCache = plugins;
       if (!plugins.length) {
-        body.innerHTML = `<div class="empty-state"><div class="es-icon">🧩</div><h3>No plugins installed</h3><p>Go to Marketplace to discover and install plugins, or create your own.</p><button class="sc-btn primary" onclick="openStore()">Browse Marketplace</button></div>`;
+        body.innerHTML = `<div class="empty-state"><div class="es-icon"><svg class="licon lg"><use href="#i-puzzle"/></svg></div><h3>No plugins installed</h3><p>Go to Marketplace to discover and install plugins, or create your own.</p><button class="sc-btn primary" onclick="openStore()">Browse Marketplace</button></div>`;
         return;
       }
       body.innerHTML = plugins.map(p => `
@@ -63,12 +63,12 @@ async function renderHubBody() {
             <div class="sw ${p.enabled !== false ? 'on' : ''}" onclick="togglePlugin('${p.id}',this)" title="Enable/Disable"></div>
           </div>
           <div class="hub-plugin-tools">
-            ${(p.toolList || (Array.isArray(p.tools) ? p.tools : [])).map(t => `<div class="hub-tool" onclick="execPluginToolInteractive('${p.id}','${t.name}')" title="${t.description||''}">&#9654; ${t.name}</div>`).join('')}
+            ${(p.toolList || (Array.isArray(p.tools) ? p.tools : [])).map(t => `<div class="hub-tool" onclick="execPluginToolInteractive('${p.id}','${t.name}')" title="${t.description||''}"><svg class="licon" style="vertical-align:-2px"><use href="#i-play"/></svg> ${t.name}</div>`).join('')}
           </div>
           <div class="hub-plugin-footer">
             <div style="font-size:10px;color:var(--t3)">${p.description||''}</div>
             <div class="hub-actions">
-              ${(p.settings && p.settings.length) ? `<button class="hub-btn" onclick="openPluginSettings('${p.id}')">⚙ Settings</button>` : ''}
+              ${(p.settings && p.settings.length) ? `<button class="hub-btn" onclick="openPluginSettings('${p.id}')"><svg class="licon" style="vertical-align:-2px"><use href="#i-settings"/></svg> Settings</button>` : ''}
               <button class="hub-btn share" onclick="sharePlugin('${p.id}')">Share URL</button>
               <button class="hub-btn remove" onclick="removePlugin('${p.id}')">Remove</button>
             </div>
@@ -81,7 +81,7 @@ async function renderHubBody() {
   } else if (hubCurrentTab === 'create') {
     body.innerHTML = `
       <div class="wf-create">
-        <h3>➕ Create Custom Plugin</h3>
+        <h3 style="display:flex;align-items:center;gap:6px"><svg class="licon"><use href="#i-plus"/></svg> Create Custom Plugin</h3>
         <div class="wf-field"><label>Plugin Name</label><input class="wf-input" id="cp-name" placeholder="My Awesome Plugin"/></div>
         <div class="wf-field"><label>Description</label><input class="wf-input" id="cp-desc" placeholder="What does this plugin do?"/></div>
         <div class="wf-field"><label>Icon (emoji)</label><input class="wf-input" id="cp-icon" placeholder="🧩" style="width:80px"/></div>
@@ -217,7 +217,7 @@ async function openPluginSettings(pluginId) {
           <div style="width:32px;height:32px;border-radius:8px;background:var(--acc3);display:flex;align-items:center;justify-content:center;font-size:16px">${pluginIcon(p.icon)}</div>
           <div><div style="font-size:13px;font-weight:700;color:var(--tx)">${p.name}</div><div style="font-size:10px;color:var(--t3)">Settings</div></div>
         </div>
-        <button class="fph-x" onclick="document.getElementById('plugin-settings-modal').classList.remove('show')">✕</button>
+        <button class="fph-x" onclick="document.getElementById('plugin-settings-modal').classList.remove('show')" aria-label="Close"><svg class="licon"><use href="#i-x"/></svg></button>
       </div>
       <div style="padding:16px 20px;max-height:60vh;overflow-y:auto">
         <div id="plugin-settings-err" style="display:none" class="auth-err"></div>
