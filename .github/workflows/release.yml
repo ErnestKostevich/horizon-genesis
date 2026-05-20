@@ -88,6 +88,20 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: ''
 
+      # PHASE 28.5 — better-sqlite3 prebuild ships a Node-ABI binary.
+      # Electron has a different NODE_MODULE_VERSION so without an
+      # explicit rebuild, packaged apps load a binary that can't
+      # `require()` cleanly and the SQLite + FTS5 memory layer
+      # silently falls back to JSON. We force-rebuild here, before
+      # electron-builder packages the asar, so every release ships
+      # working FTS5 on all three platforms.
+      - name: Rebuild native modules for Electron ABI
+        run: npx --yes @electron/rebuild -f -w better-sqlite3 -w node-pty
+        # node-pty is in optionalDependencies — `-w` is best-effort and
+        # won't fail the build if it's not installed for this platform
+        # (Linux without prebuilt binding, etc.).
+        continue-on-error: true
+
       - name: Stamp build-info.json
         shell: bash
         run: |
