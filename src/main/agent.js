@@ -202,6 +202,28 @@ class AgentMemory {
     // mirror). JSON stays the human-editable source of truth — never
     // overwritten by SQLite, only kept in lockstep.
     this.memoryDb = null;
+
+    // PHASE 28.4 — Dialectic user model (9th memory layer, Honcho-style).
+    // Injected by main.js. When set, learnFromTurn calls dialecticExtract
+    // after each non-trivial turn to add belief/desire/knowledge/theory-
+    // of-mind diffs to the file-backed model.
+    this.dialectic = null;
+    this.dialecticExtractor = null; // (user, assistant, recentDiffs) → Promise<updates[]>
+    this._dialecticTurnCount = 0;
+  }
+
+  /** Inject the file-backed dialectic store. main.js boot wires this. */
+  setDialecticModel(model) {
+    this.dialectic = model || null;
+  }
+
+  /** Inject the LLM extractor that returns diff records from a turn.
+   *  Signature: async (user, assistant, recentDiffs, { meta }) → array
+   *  Each returned item should match DialecticModel.record() shape:
+   *  { kind, before?, after, evidence?, confidence? }.
+   *  Without this, dialectic stays empty (record() is never called auto). */
+  setDialecticExtractor(fn) {
+    this.dialecticExtractor = typeof fn === 'function' ? fn : null;
   }
 
   /** PHASE 28.2 — Inject the SQLite + FTS5 MemoryDb wrapper (created
@@ -833,6 +855,34 @@ class AgentMemory {
     stats.learnedItems = (stats.learnedItems || 0) + learned.length;
     stats.lastTurnAt = stamp;
     this._save();
+
+    // PHASE 28.4 — LLM-driven dialectic extraction. Honcho-style:
+    // after each non-trivial turn, ask a small LLM to emit JSON diffs
+    // describing what we just learned about the user. Async + fire-
+    // and-forget so the chat reply isn't delayed; failure is logged
+    // and never thrown.
+    this._dialecticTurnCount = (this._dialecticTurnCount || 0) + 1;
+    const triviallyShort = (user || '').trim().length < 20 || (assistant || '').trim().length < 30;
+    // Sampling: run every turn until we have 20 records, then every
+    // 2nd turn — keeps token cost bounded for chatty users.
+    const haveBootstrap = this.dialectic && this.dialectic.records.length >= 20;
+    const skipBySampling = haveBootstrap && (this._dialecticTurnCount % 2 !== 0);
+    if (this.dialectic && this.dialecticExtractor && !triviallyShort && !skipBySampling) {
+      const recent = this.dialectic.getRecent(5);
+      // Fire-and-forget. Caller doesn't await.
+      Promise.resolve()
+        .then(() => this.dialecticExtractor(user, assistant || '', recent, { meta }))
+        .then(updates => {
+          if (!Array.isArray(updates) || !updates.length) return;
+          for (const u of updates) {
+            try { this.dialectic.record({ ...u, personaId: meta?.persona || u.personaId }); }
+            catch (e) { console.warn('[dialectic] record failed:', e.message); }
+          }
+          console.log(`[dialectic] +${updates.length} update${updates.length === 1 ? '' : 's'} from turn`);
+        })
+        .catch(e => console.warn('[dialectic] extractor failed:', e.message));
+    }
+
     return { ok: true, learned: learned.length, items: learned };
   }
 
