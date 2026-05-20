@@ -172,10 +172,22 @@ const ALLOWED_SETTING_KEYS = new Set([
   'ssh.host', 'ssh.port', 'ssh.keyPath', 'ssh.workdir',
   'modal.tokenId', 'modal.tokenSecret', 'modal.appName', 'modal.endpoint',
   'daytona.serverUrl', 'daytona.apiKey', 'daytona.workspaceId',
+  // Phase 28.3 — Singularity / Apptainer executor for HPC clusters.
+  'singularity.image', 'singularity.bind', 'singularity.binary',
   // Phase 15 — multi-field channel adapters
   'whatsapp.from', 'whatsapp.enabled',
   'signal.url', 'signal.number', 'signal.enabled',
   'imessage.enabled', 'imessage.lastRowid',
+  // Phase 28.3 — Email channel adapter (IMAP inbound + SMTP outbound).
+  'email.enabled',
+  'email.imap.host', 'email.imap.port', 'email.imap.user', 'email.imap.pass',
+  'email.imap.tls', 'email.imap.mailbox', 'email.imap.pollSec',
+  'email.smtp.host', 'email.smtp.port', 'email.smtp.user', 'email.smtp.pass',
+  'email.smtp.from',
+  // Phase 21 — Discord runtime (token stored in keysStore as k_discord,
+  // but the live toggle + allowed-guilds list live in settingsStore).
+  'discord.enabled', 'discord.allowed_guild_ids',
+  'connection.discord.live',
   // Phase 18 — TUI welcome flag (set once on first launch so the
   // animated reveal only plays for new users)
   'tui.welcomedAt',
