@@ -164,19 +164,35 @@ jobs:
           overwrite_files: true
           files: release-cli/*
           body: |
-            ## Horizon CLI ${{ env.RELEASE_TAG }}
+            # ⚡ Horizon CLI ${{ env.RELEASE_TAG }}
 
-            Standalone command-line + TUI + headless HTTP API binaries.
-            No Node.js install required — download one file, run it.
+            Standalone **command-line + TUI + headless server** binary.
+            Same agent the desktop app runs, no Node.js required —
+            download one file, `chmod +x`, go.
 
-            ### Downloads
+            ## Download
 
-            | OS | File |
-            |---|---|
-            | Windows x64        | `horizon-win-x64.exe`        |
-            | macOS Intel x64    | `horizon-macos-x64`          |
-            | macOS Apple Silicon| `horizon-macos-arm64`        |
-            | Linux x64          | `horizon-linux-x64`          |
+            | OS | File | Size¹ |
+            |---|---|---|
+            | 🪟 Windows x64         | [`horizon-win-x64.exe`](#)        | ~85 MB |
+            | 🍎 macOS Intel x64     | [`horizon-macos-x64`](#)          | ~85 MB |
+            | 🍎 macOS Apple Silicon | [`horizon-macos-arm64`](#)        | ~85 MB |
+            | 🐧 Linux x64           | [`horizon-linux-x64`](#)          | ~85 MB |
+
+            ¹ Self-contained — bundles Node + sqlite + every dep.
+
+            ## Three modes in one binary
+
+            ```bash
+            horizon                    # interactive TUI (chat + commands)
+            horizon agent "task"       # single-shot agent run
+            horizon serve --port 18789 # headless HTTP API for VPS / cron / PWA
+            ```
+
+            50+ subcommands inside: `mem`, `dialectic`, `canvas`, `skill`,
+            `connect` (Telegram / Discord / Slack / WhatsApp / Signal /
+            iMessage / Email), `cron`, `mcp`, `cost`, `doctor`, more.
+            Run `horizon help` for the full table.
 
             ### Quick start
 
