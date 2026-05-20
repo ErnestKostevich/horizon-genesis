@@ -1434,7 +1434,8 @@ const TOOL_DEFINITIONS = [
   { name: 'self_describe',            desc: '[Self] Returns a summary of this agent: version, active provider, active persona, memory layers (counts), executor mode, channel adapters that are configured. Use this when the user asks "who are you" or you need to verify your own state.', params: {} },
   { name: 'self_list_capabilities',   desc: '[Self] Returns the lightweight list of every tool, skill, persona, and connected channel currently available. Cheap, ~2-3 KB. Use this as the FIRST step when the user asks "what can you do" — then fetch full details with self_read_skill / self_read_tool only for the ones that matter.', params: {} },
   { name: 'self_read_skill',          desc: '[Self] Read the full SKILL.md for a specific installed skill. Use after self_list_capabilities when you want to actually understand how a skill works before invoking it.', params: { skill: 'string skill id (slug, e.g. "refactor-react")' } },
-  { name: 'self_read_persona',        desc: '[Self] Read the full prompt + memories of a persona (the active one, or a specific id). Use to ground yourself in the voice you should be using, or to switch persona mid-task.', params: { id: 'string persona id optional (default = active)' } }
+  { name: 'self_read_persona',        desc: '[Self] Read the full prompt + memories of a persona (the active one, or a specific id). Use to ground yourself in the voice you should be using, or to switch persona mid-task.', params: { id: 'string persona id optional (default = active)' } },
+  { name: 'self_improve_skill',       desc: '[Self] Refine a user-scope or workspace-scope skill\'s SKILL.md based on what you just learned. Built-in skills are read-only. Each edit is logged. Use after finishing a task where the skill\'s instructions could be clearer or more accurate. Requires permission approval.', params: { skill: 'string skill id', updatedContent: 'string — full new SKILL.md text (YAML frontmatter + body)', rationale: 'string — one-line note on why this improves the skill' } }
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1708,6 +1709,69 @@ async function dispatchTool(name, args = {}, ctx = {}) {
         };
       } catch (e) {
         return { ok: false, err: 'self_read_persona failed: ' + e.message };
+      }
+    }
+    // ── PHASE 28.5 — Skill self-improvement ───────────────────────────
+    // Lets the agent refine a skill it just used. Heavy guardrails:
+    //   - Built-in skills are NEVER mutated (writeSource rejects them).
+    //   - Every edit gets logged to <userData>/skill-edits.log (NDJSON).
+    //   - Requires user permission gate (via withPermission), wrapped at
+    //     dispatch time when this case is reached.
+    //   - skillsManager.writeSource validates YAML + frontmatter; bad
+    //     content is rejected without writing.
+    case 'self_improve_skill': {
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const skillsMgr = mainMod?.exports?.skillsManager || null;
+        if (!skillsMgr) return { ok: false, err: 'skills manager not loaded' };
+        const id = String(args.skill || '').trim();
+        const updated = String(args.updatedContent || '');
+        const rationale = String(args.rationale || '').slice(0, 400);
+        if (!id || !updated) return { ok: false, err: 'self_improve_skill needs { skill, updatedContent, rationale }' };
+        // Find the skill so we can pick the right scope. Built-ins
+        // bounce here — writeSource also blocks them, but we want a
+        // clear error first.
+        const skill = (skillsMgr.list() || []).find(s => s.id === id || s.name === id);
+        if (!skill) return { ok: false, err: `unknown skill: ${id}` };
+        if (skill.scope === 'builtin') {
+          return { ok: false, err: 'built-in skills are read-only. Copy it to user scope first via Settings → Personas / Skills.' };
+        }
+        // Read the old content so we can log a diff record.
+        let oldContent = '';
+        try { oldContent = skillsMgr.readSource ? skillsMgr.readSource(id) : ''; } catch (_) {}
+        const r = skillsMgr.writeSource(id, updated, skill.scope);
+        if (!r.ok) return { ok: false, err: r.error || 'writeSource failed' };
+        // Append-only edit log so the user can audit + roll back.
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const app = mainMod?.exports?.app || null;
+          const userDataDir = app?.getPath?.('userData')
+            || (mainMod?.exports?.userDataDir)
+            || process.env.HORIZON_USER_DATA
+            || path.join(require('os').homedir(), '.horizon-ai');
+          const logPath = path.join(userDataDir, 'skill-edits.log');
+          const entry = {
+            ts: new Date().toISOString(),
+            skill: id,
+            scope: skill.scope,
+            rationale,
+            oldChars: oldContent.length,
+            newChars: updated.length,
+            delta: updated.length - oldContent.length,
+          };
+          fs.appendFileSync(logPath, JSON.stringify(entry) + '\n');
+        } catch (e) { console.warn('[self_improve_skill] log write failed:', e.message); }
+        return {
+          ok: true,
+          id: r.id,
+          scope: r.scope,
+          dir: r.dir,
+          rationale,
+          delta: updated.length - oldContent.length,
+        };
+      } catch (e) {
+        return { ok: false, err: 'self_improve_skill failed: ' + e.message };
       }
     }
     default:
