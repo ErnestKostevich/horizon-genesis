@@ -66,6 +66,10 @@ const THEMES = {
     cyan:    [255, 182, 193],
     magenta: [255, 105, 180],
     spinnerFrames: ['(◕ᴗ◕)', '(◕ᴗ◕✿)', '(✿◕ᴗ◕)', '(◕‿◕✿)'],
+    // Sprint 2.12 — Hermes-style rotating kawaii face palette.
+    // Cycled every ~2.5s so the kawaii theme feels alive even between turns.
+    // Read by GradientSpinner (banner.js) when this theme is active.
+    kawaiiFaces: ['(◕ᴗ◕)', '(◔‿◔)', '(◕▿◕)', '(◠‿◠)', '(◡‿◡)', '(♥ᴗ♥)'],
     banner: '✿',
     description: 'Pink kaomoji spinners, ASCII cuteness.',
   },
