@@ -8,7 +8,10 @@ yarn-error.log*
 dist/
 dist-cli/
 out/
-build/
+# Note: `build/` here is the electron-builder source dir (hooks + icons),
+# NOT installer output. Output goes to dist/ above. The `build/` dir
+# used to be ignored as a catch-all and that broke macOS ad-hoc signing
+# in CI — see commit ae2aaf3+ for the fix.
 *.exe
 *.dmg
 *.deb
