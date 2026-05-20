@@ -2256,10 +2256,15 @@ ipcMain.handle('aiStream', async (event, messages, provider, system, opts = {}) 
   const abort = new AbortController();
   const p = provider || settingsStore.get('provider') || 'gemini';
   const skillsResolved = resolveSkillsForMessages(messages, opts);
-  const sysMsg = appendSkillsToSystemPrompt(
-    String(system || '').trim() || 'You are Horizon AI. Use Markdown.',
-    skillsResolved
-  );
+  // PHASE 28.4 — inject dialectic on streaming path too.
+  let baseSystem = String(system || '').trim() || 'You are Horizon AI. Use Markdown.';
+  try {
+    if (dialecticModel && typeof dialecticModel.injection === 'function') {
+      const dial = dialecticModel.injection(6);
+      if (dial) baseSystem = baseSystem + dial;
+    }
+  } catch (_) {}
+  const sysMsg = appendSkillsToSystemPrompt(baseSystem, skillsResolved);
   let reply = '';
   let reasoning = '';
   let usage = null;
@@ -2430,6 +2435,81 @@ ipcMain.handle('aiImageModels', async () => {
   }
 });
 
+/**
+ * PHASE 28.4 — LLM-driven dialectic extractor.
+ *
+ * Builds a tiny prompt that shows the assistant + user turn plus the
+ * last 5 dialectic entries, asks for a JSON object listing new diffs,
+ * validates the output, and returns an array of records ready for
+ * dialecticModel.record(). Fail-soft: any parse/HTTP error returns [].
+ *
+ * The model is whatever provider the user already configured (we use
+ * runAiCompletion directly, no extra key required). Cost is bounded:
+ * ~150 input + ~80 output tokens per call, and the caller in agent.js
+ * samples to one call per ~2 turns once the model is bootstrapped.
+ */
+async function _extractDialecticDiffs(user, assistant, recent, ctx) {
+  try {
+    if (!user || !assistant) return [];
+    const recentLines = (recent || [])
+      .slice(0, 5)
+      .map(r => `- [${r.kind}] ${r.after}${r.before ? ' (was: ' + r.before + ')' : ''}`)
+      .join('\n') || '(empty — this is one of the first records)';
+
+    const systemPrompt = [
+      'You are a user-model extractor. After each conversation turn, you emit a JSON object describing what NEW information the turn revealed about the user.',
+      '',
+      'Valid kinds:',
+      '  belief          — a new opinion or preference the user revealed',
+      '  desire          — a new goal or want',
+      '  knowledge       — a fact about the user\'s skills / context they just stated',
+      '  theory-of-mind  — an assumption we made that was confirmed or refuted',
+      '  correction      — something the user explicitly corrected',
+      '',
+      'Recent diff log (do not re-emit these):',
+      recentLines,
+      '',
+      'Rules:',
+      '  • Emit AT MOST 3 entries. Empty {"updates":[]} is fine if nothing was learned.',
+      '  • Skip trivial small-talk and acknowledgements.',
+      '  • Skip facts the user has clearly stated before (see the log above).',
+      '  • Each entry: {"kind":"...","before":null or "...","after":"<= 200 chars","evidence":"<= 120 chars quote","confidence":0.0..1.0}',
+      '  • RESPOND WITH RAW JSON ONLY. No prose, no markdown fences.',
+    ].join('\n');
+
+    const messages = [{
+      role: 'user',
+      content: 'TURN:\nUser: ' + String(user).slice(0, 1200) + '\nAssistant: ' + String(assistant).slice(0, 1200),
+    }];
+    // Use the user's active provider so we don't add a new key requirement.
+    const activeProvider = settingsStore.get('provider') || 'gemini';
+    const opts = { temperature: 0.1, maxTokens: 280 };
+    const r = await runAiCompletion(null, messages, activeProvider, systemPrompt, opts);
+    if (!r || r.error || !r.reply) return [];
+    // The model sometimes wraps JSON in ```json fences — strip them.
+    let raw = String(r.reply).trim();
+    raw = raw.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+    // Or it may emit just the array — handle both shapes.
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch (_) {
+      // Fallback: try to extract the first { … } block.
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (!m) return [];
+      try { parsed = JSON.parse(m[0]); } catch (_) { return []; }
+    }
+    const list = Array.isArray(parsed) ? parsed
+               : Array.isArray(parsed?.updates) ? parsed.updates
+               : [];
+    return list
+      .filter(x => x && typeof x === 'object' && x.kind && x.after)
+      .slice(0, 3);
+  } catch (e) {
+    console.warn('[dialectic] extractor exception:', e.message);
+    return [];
+  }
+}
+
 async function runAiCompletion(_, messages, provider, system, opts) {
   const fetch    = require('node-fetch');
   const userName = settingsStore.get('userName') || 'user';
@@ -2488,6 +2568,15 @@ async function runAiCompletion(_, messages, provider, system, opts) {
     sysParts.length = 0;
     sysParts.push(system);
   }
+  // PHASE 28.4 — inject the dialectic snippet so the model sees what
+  // we've learned about this user in past turns. Skipped silently when
+  // the dialectic store is empty or unavailable.
+  try {
+    if (dialecticModel && typeof dialecticModel.injection === 'function') {
+      const dial = dialecticModel.injection(6);
+      if (dial) sysParts.push(dial);
+    }
+  } catch (_) { /* injection is opportunistic */ }
   const skillsResolved = resolveSkillsForMessages(messages, opts || {});
   const sysMsg = appendSkillsToSystemPrompt(sysParts.join('\n\n'), skillsResolved);
 
@@ -3814,7 +3903,16 @@ function loadAgentModules() {
           } else {
             agentMemory.dialectic = dialecticModel;
           }
-          console.log('✓ DialecticModel loaded (' + dialecticModel.records.length + ' diff records)');
+          // Wire the LLM-driven extractor: after every non-trivial turn,
+          // ask a small LLM (current chat provider) for a structured
+          // JSON of new diffs. Cost is ~150 input + ~80 output tokens
+          // per turn, halved by sampling once the user has 20+ records.
+          if (typeof agentMemory.setDialecticExtractor === 'function') {
+            agentMemory.setDialecticExtractor(async (user, assistant, recent, ctx) => {
+              return await _extractDialecticDiffs(user, assistant, recent, ctx);
+            });
+          }
+          console.log('✓ DialecticModel loaded (' + dialecticModel.records.length + ' diff records, LLM extractor active)');
         } catch (e) {
           console.log('[dialectic] skipped:', e.message);
         }
