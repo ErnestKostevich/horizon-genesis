@@ -24,7 +24,7 @@ const { TuiEngine } = require('./lib/tui-engine');
 const { interactiveMenu } = require('./lib/menu');
 
 const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill-show',
-                    '/persona','/persona-list','/model','/model-list','/mem','/agent',
+                    '/persona','/persona-list','/model','/model-list','/models','/mem','/agent',
                     '/chat','/stream','/markdown','/banner','/verbose','/find','/mobile',
                     // Sprint 2.3 — Easter-egg slash commands (discoverable via /help)
                     '/tea','/coffee','/whoami','/secret','/art'];
@@ -63,29 +63,43 @@ function buildHelp() {
   // Small art header above the help table — feels premium without
   // dominating the screen. Falls back to empty string under --no-art.
   const header = renderArt('helpHeader');
+  // Stylised group header — bold accent + a dim divider rule so groups
+  // pop visually without a heavy box.
+  const groupHead = (label) =>
+    fmt.bold(fmt.cyan('▎ ' + label)) + '  ' + fmt.dim('─'.repeat(Math.max(1, 56 - label.length)));
   return [
     '',
     ...(header ? [header, ''] : []),
-    fmt.bold('Slash commands'),
+    groupHead('Slash commands · session'),
     '  /help                 show this list',
     '  /quit                 exit',
     '  /clear                clear screen',
     '  /reset                clear chat history (memory keeps everything)',
-    '  /skills               list installed skills',
-    '  /skill <id>           force-include a skill in the next turn',
-    '  /skill-show <id>      print a skill\'s SKILL.md',
-    '  /persona              show / switch persona (no arg or <id>)',
-    '  /persona-list         list all personas',
-    '  /model                show / switch provider (no arg or <id>)',
-    '  /model-list           list all providers',
-    '  /mem "query"          semantic memory search',
+    '  /banner               re-print the welcome banner',
+    '',
+    groupHead('Slash commands · run'),
     '  /agent <task>         run the full agent loop (multi-step + tools)',
     '  /chat <message>       force single-turn chat',
     '  /stream on|off        toggle streaming',
     '  /markdown on|off      toggle markdown rendering',
+    '',
+    groupHead('Slash commands · skills + personas'),
+    '  /skills               list installed skills (interactive picker)',
+    '  /skill <id>           force-include a skill in the next turn',
+    '  /skill-show <id>      print a skill\'s SKILL.md',
+    '  /persona              show / switch persona (no arg or <id>)',
+    '  /persona-list         list all personas (interactive picker)',
+    '',
+    groupHead('Slash commands · models'),
+    '  /model                show / switch provider (no arg or <id>)',
+    '  /model-list           pick provider, then drill into its models',
+    '  /models [filter]      flat search across every provider/model pair',
+    '',
+    groupHead('Slash commands · misc'),
+    '  /mem "query"          semantic memory search',
     '  /find <query>         same as Ctrl+F',
     '',
-    fmt.bold('Keyboard shortcuts'),
+    groupHead('Keyboard shortcuts'),
     '  Enter                 send message',
     '  Shift+Enter           newline (multi-line composer)',
     '  Up / Down             history navigation (when on first line)',
@@ -659,17 +673,29 @@ async function handleSlash(raw, state, runtime, engine) {
     // Phase 20.3 — interactive picker. Highlighted row uses reverse-video
     // bg ("hover" effect), arrow keys / mouse wheel move the cursor,
     // Enter shows the picked skill, Esc cancels.
+    //
+    // Premium pass: group by enabled/disabled when a skill exposes
+    // `.enabled`; description always visible as sublabel.
     const list = runtime.skillsManager?.list() || [];
     if (!list.length) { engine.print(fmt.dim('no skills installed')); return; }
+    const sorted = list.slice().sort((a, b) => {
+      const ea = a.enabled === false ? 1 : 0;
+      const eb = b.enabled === false ? 1 : 0;
+      if (ea !== eb) return ea - eb;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    const items = sorted.map((s) => ({
+      label: s.id,
+      sublabel: s.description || s.scope || '',
+      aside: s.scope ? '(' + s.scope + ')' : '',
+      value: s,
+      group: s.enabled === false ? 'Disabled' : 'Enabled',
+    }));
     const picked = await interactiveMenu({
       engine,
-      title: `Skills (${list.length})`,
-      items: list.map((s) => ({
-        label: s.id,
-        sublabel: fmt.dim(s.description || s.scope || ''),
-        value: s,
-      })),
-      footer: '↑/↓ move · Enter show SKILL.md · Esc cancel',
+      title: 'Skills',
+      items,
+      footer: '↑/↓ move · Enter show SKILL.md · / filter · Esc cancel',
     });
     if (!picked) { engine.print(fmt.dim('cancelled')); return; }
     const src = runtime.skillsManager?.readSource(picked.id);
@@ -717,16 +743,41 @@ async function handleSlash(raw, state, runtime, engine) {
     const list = runtime.personas?.getAllPersonas?.() || [];
     const active = runtime.settingsStore.get('persona') || 'jarvis';
     if (!list.length) { engine.print(fmt.dim('no personas')); return; }
+    // Premium pass — group by personality archetype using a simple
+    // id-based heuristic. Custom (non-built-in) personas land in
+    // "Custom". The default `getAllPersonas()` doesn't ship taglines,
+    // so we derive a short blurb from the localised greeting where
+    // available.
+    const FORMAL = new Set(['jarvis', 'alfred']);
+    const CASUAL = new Set(['friday', 'pixel']);
+    const ACADEMIC = new Set(['sage']);
+    function archetype(p) {
+      if (!p.builtin) return 'Custom';
+      if (FORMAL.has(p.id))   return 'Formal';
+      if (CASUAL.has(p.id))   return 'Casual';
+      if (ACADEMIC.has(p.id)) return 'Academic';
+      return 'Other';
+    }
+    const order = ['Formal', 'Casual', 'Academic', 'Other', 'Custom'];
+    const sorted = list.slice().sort((a, b) => {
+      const da = order.indexOf(archetype(a));
+      const db = order.indexOf(archetype(b));
+      if (da !== db) return da - db;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    const items = sorted.map((p) => ({
+      label: (p.name || p.id) + (p.id === active ? '  (active)' : ''),
+      sublabel: (p.greeting_en || '').trim().slice(0, 64),
+      aside: p.id,
+      value: p,
+      group: archetype(p),
+    }));
     const picked = await interactiveMenu({
       engine,
       title: 'Pick a persona',
-      initial: Math.max(0, list.findIndex((p) => p.id === active)),
-      items: list.map((p) => ({
-        label: p.id + (p.id === active ? '  (active)' : ''),
-        sublabel: fmt.dim(p.tagline || p.description || ''),
-        value: p,
-      })),
-      footer: '↑/↓ move · Enter activate · Esc cancel',
+      initial: Math.max(0, sorted.findIndex((p) => p.id === active)),
+      items,
+      footer: '↑/↓ move · Enter activate · / filter · Esc cancel',
     });
     if (!picked) { engine.print(fmt.dim('cancelled')); return; }
     runtime.settingsStore.set('persona', picked.id);
@@ -746,28 +797,170 @@ async function handleSlash(raw, state, runtime, engine) {
     return;
   }
   if (head === '/model-list') {
-    const { DEFAULT_PROVIDER_MODELS } = require('../src/main/runtime/ai-providers');
+    // Premium drill-down picker.
+    //
+    // 1. Pick a provider (grouped: Free tier / Local / Cheap paid /
+    //    Premium / Specialised / Aggregators).
+    // 2. Once a provider is chosen, immediately open a SECOND picker
+    //    showing per-model options for that provider.
+    // 3. Enter on a model commits BOTH provider AND `model.<provider>`.
+    // 4. Esc in the model picker returns to the provider picker.
+    // 5. Esc in the provider picker cancels the whole flow.
+    const {
+      DEFAULT_PROVIDER_MODELS, PROVIDER_GROUPS, PROVIDER_LABELS,
+      modelsForProvider,
+    } = require('../src/main/runtime/ai-providers');
     const active = runtime.settingsStore.get('provider') || 'gemini';
-    const entries = Object.entries(DEFAULT_PROVIDER_MODELS);
-    const items = entries.map(([p, m]) => {
+
+    // Build the provider list ordered by PROVIDER_GROUPS so the picker
+    // can render meaningful section headers.
+    function buildProviderItems() {
+      const seen = new Set();
+      const out = [];
+      for (const [group, ids] of Object.entries(PROVIDER_GROUPS)) {
+        for (const p of ids) {
+          if (!DEFAULT_PROVIDER_MODELS[p]) continue;
+          if (seen.has(p)) continue;
+          seen.add(p);
+          const isLocal = ['ollama','lmstudio','localai'].includes(p);
+          const hasKey = isLocal ? null : !!runtime.keysStore.get('k_' + p);
+          const marker = isLocal ? fmt.dim('—') : (hasKey ? fmt.green('✓') : fmt.dim('·'));
+          const storedModel = runtime.settingsStore.get('model.' + p) || DEFAULT_PROVIDER_MODELS[p];
+          const isActive = p === active;
+          out.push({
+            label: p + (isActive ? '  (active)' : ''),
+            sublabel: PROVIDER_LABELS[p] || p,
+            aside: storedModel,
+            marker,
+            value: { id: p },
+            group,
+          });
+        }
+      }
+      // Anything in DEFAULT_PROVIDER_MODELS that didn't fit a group goes
+      // under "Other" — keeps us robust if a provider gets added later.
+      for (const p of Object.keys(DEFAULT_PROVIDER_MODELS)) {
+        if (seen.has(p)) continue;
+        const isLocal = ['ollama','lmstudio','localai'].includes(p);
+        const hasKey = isLocal ? null : !!runtime.keysStore.get('k_' + p);
+        const marker = isLocal ? fmt.dim('—') : (hasKey ? fmt.green('✓') : fmt.dim('·'));
+        out.push({
+          label: p,
+          sublabel: PROVIDER_LABELS[p] || p,
+          aside: DEFAULT_PROVIDER_MODELS[p],
+          marker,
+          value: { id: p },
+          group: 'Other',
+        });
+      }
+      return out;
+    }
+
+    // Drill loop — Esc inside the model picker reopens the provider picker.
+    let providerItems = buildProviderItems();
+    let initialProvider = Math.max(0,
+      providerItems.findIndex((it) => it.value && it.value.id === active));
+
+    while (true) {
+      const pickedProv = await interactiveMenu({
+        engine,
+        title: 'Pick a provider',
+        initial: initialProvider,
+        items: providerItems,
+        footer: '↑/↓ move · Enter drill into models · / filter · Esc cancel · ✓ = key set',
+      });
+      if (!pickedProv) { engine.print(fmt.dim('cancelled')); return; }
+
+      const provId = pickedProv.id;
+      const catalog = modelsForProvider(provId);
+      if (!catalog.length) {
+        // Provider has no catalog (shouldn't happen with the fallback)
+        runtime.settingsStore.set('provider', provId);
+        engine.print(fmt.ok('provider → ' + fmt.cyan(provId)));
+        return;
+      }
+
+      const storedModel = runtime.settingsStore.get('model.' + provId) || catalog[0].id;
+      const modelItems = catalog.map((m) => ({
+        label: m.label || m.id,
+        sublabel: m.tagline || '',
+        aside: m.cost || m.id,
+        marker: m.id === storedModel ? fmt.green('✓') : fmt.dim('·'),
+        value: m,
+      }));
+      const initialModel = Math.max(0, catalog.findIndex((m) => m.id === storedModel));
+      const pickedModel = await interactiveMenu({
+        engine,
+        title: (PROVIDER_LABELS[provId] || provId) + ' · models',
+        initial: initialModel,
+        items: modelItems,
+        footer: '↑/↓ move · Enter commit · / filter · Esc back to providers',
+      });
+      if (!pickedModel) {
+        // Esc inside model picker → re-enter provider picker.
+        initialProvider = Math.max(0,
+          providerItems.findIndex((it) => it.value && it.value.id === provId));
+        continue;
+      }
+
+      runtime.settingsStore.set('provider', provId);
+      runtime.settingsStore.set('model.' + provId, pickedModel.id);
+      engine.print(fmt.ok(
+        'provider → ' + fmt.cyan(provId) +
+        fmt.dim(' · model → ') + fmt.cyan(pickedModel.id)
+      ));
+      return;
+    }
+  }
+  if (head === '/models') {
+    // Flat search across every (provider, model) pair — the Cursor /
+    // Hermes pattern. User can pre-filter by typing after the slash:
+    //   /models claude   → opens with "claude" already typed
+    //   /models opus     → narrows to opus variants across providers
+    const {
+      DEFAULT_PROVIDER_MODELS, PROVIDER_LABELS, modelsForProvider,
+    } = require('../src/main/runtime/ai-providers');
+    const active = runtime.settingsStore.get('provider') || 'gemini';
+    const items = [];
+    for (const p of Object.keys(DEFAULT_PROVIDER_MODELS)) {
       const isLocal = ['ollama','lmstudio','localai'].includes(p);
-      const has = isLocal ? '—' : (runtime.keysStore.get('k_' + p) ? '✓' : '·');
-      return {
-        label: `${has}  ${p}${p === active ? '  (active)' : ''}`,
-        sublabel: fmt.dim(m),
-        value: { id: p, model: m },
-      };
-    });
+      const hasKey = isLocal ? null : !!runtime.keysStore.get('k_' + p);
+      const marker = isLocal ? fmt.dim('—') : (hasKey ? fmt.green('✓') : fmt.dim('·'));
+      const storedModel = runtime.settingsStore.get('model.' + p) || DEFAULT_PROVIDER_MODELS[p];
+      const catalog = modelsForProvider(p);
+      for (const m of catalog) {
+        const isActive = p === active && m.id === storedModel;
+        items.push({
+          label: p + fmt.dim(' / ') + (m.label || m.id),
+          sublabel: m.tagline || (PROVIDER_LABELS[p] || ''),
+          aside: m.cost || m.id,
+          marker,
+          value: { provider: p, model: m },
+          // Group by provider so the flat list still has structure.
+          group: PROVIDER_LABELS[p] || p,
+        });
+        if (isActive) items[items.length - 1].label += '  (active)';
+      }
+    }
+    const preFilter = rest.join(' ').trim().toLowerCase();
     const picked = await interactiveMenu({
       engine,
-      title: `Providers (${entries.length})`,
-      initial: Math.max(0, entries.findIndex(([p]) => p === active)),
+      title: 'All models',
       items,
-      footer: '↑/↓ move · Enter switch · Esc cancel · ✓ = key set',
+      // If the user typed `/models claude`, we don't yet auto-seed
+      // the filter input — but a future helper could. For now we
+      // document the workflow and rely on `/` to open search.
+      footer: preFilter
+        ? `↑/↓ move · Enter commit · / filter (try "${preFilter}") · Esc cancel`
+        : '↑/↓ move · Enter commit · / filter · Esc cancel',
     });
     if (!picked) { engine.print(fmt.dim('cancelled')); return; }
-    runtime.settingsStore.set('provider', picked.id);
-    engine.print(fmt.ok('provider → ' + fmt.cyan(picked.id) + fmt.dim(' (' + picked.model + ')')));
+    runtime.settingsStore.set('provider', picked.provider);
+    runtime.settingsStore.set('model.' + picked.provider, picked.model.id);
+    engine.print(fmt.ok(
+      'provider → ' + fmt.cyan(picked.provider) +
+      fmt.dim(' · model → ') + fmt.cyan(picked.model.id)
+    ));
     return;
   }
   if (head === '/mem') {
