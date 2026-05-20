@@ -11,7 +11,14 @@
 <link rel="stylesheet" href="app.css" />
 </head>
 <body>
-  <!-- Pairing view: shown until token + URL are stored in localStorage -->
+  <!-- Pairing view: shown until token + URL are stored in localStorage.
+       The user lands here when they open the PWA directly (typing the IP,
+       a bookmark, etc.) instead of scanning the QR from `horizon mobile` /
+       Settings → Connect phone. The original 1.0 version asked them to run
+       `horizon serve --token …` from a terminal — most users have no idea
+       what a bearer token is, so the redesign here makes the QR scan path
+       the visual focal point and tucks the manual fields behind a details
+       block. -->
   <section id="pair-view" class="view">
     <div class="hero">
       <div class="logo-pulse"></div>
@@ -19,19 +26,66 @@
       <p class="tagline">Personal AI agent — on your phone</p>
     </div>
     <div class="pair-card">
-      <h2>Connect to your Horizon server</h2>
-      <p class="muted">Run <code>horizon serve --port 18789 --token YOUR_TOKEN</code> on your computer, then enter the URL and token below — or scan a QR with your camera if your server printed one.</p>
-      <label>Server URL
-        <input id="pair-url" type="url" placeholder="https://horizon.example.com or http://192.168.1.10:18789" />
-      </label>
-      <label>Bearer token
-        <input id="pair-token" type="password" placeholder="paste your HORIZON_TOKEN" />
-      </label>
-      <button id="pair-connect" class="btn-primary">Connect</button>
-      <p id="pair-error" class="error hidden"></p>
-      <p class="hint">Token is stored in this device only. No traffic goes through anyone's server.</p>
+      <div class="pair-explainer">
+        <h2>Looks like you opened Horizon directly.</h2>
+        <p class="muted">The fastest way to pair your phone:</p>
+        <ol class="pair-steps">
+          <li>On your computer, open Horizon and go to <strong>Settings → Mobile → Connect phone</strong> (or run <code>horizon mobile</code> in a terminal).</li>
+          <li>A QR code appears on your computer screen.</li>
+          <li>Tap the button below and point your camera at it.</li>
+        </ol>
+        <p class="hint">The QR contains everything — server address and token. You'll be in the chat in about 5 seconds.</p>
+      </div>
+
+      <button id="pair-scan" class="btn-primary btn-scan" type="button">
+        <span class="btn-scan-icon" aria-hidden="true">📷</span>
+        <span>Scan QR with camera</span>
+      </button>
+      <p id="pair-scan-err" class="error hidden"></p>
+
+      <div class="pair-divider"><span>or</span></div>
+
+      <details class="pair-manual">
+        <summary>I already have the URL and token</summary>
+        <p class="muted small">Use this if you scanned the QR with another app and copied the values, or if your server admin gave them to you directly.</p>
+        <label>Server URL
+          <input id="pair-url" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="http://192.168.1.10:18789" />
+        </label>
+        <label>Bearer token
+          <input id="pair-token" type="password" autocomplete="off" placeholder="long random string from the QR" />
+        </label>
+        <button id="pair-connect" class="btn-primary">Connect</button>
+        <p id="pair-error" class="error hidden"></p>
+      </details>
+
+      <p class="hint footnote">Your token is stored on this device only. Horizon never sends traffic through anyone else's server.</p>
     </div>
   </section>
+
+  <!-- Camera scanner modal — only mounted when the user taps "Scan QR".
+       Uses BarcodeDetector where available (Chrome Android, Edge). On
+       iOS Safari (no BarcodeDetector) we fall back to a file-upload
+       picker so the user can take a photo with the camera app and feed
+       it in. Either way the URL with the embedded ?token=… is extracted,
+       saved, and we land straight in the chat. -->
+  <div id="qr-scan-modal" class="qr-scan-modal hidden" role="dialog" aria-modal="true" aria-label="Scan QR code">
+    <div class="qr-scan-frame">
+      <video id="qr-scan-video" playsinline muted></video>
+      <div class="qr-scan-reticle" aria-hidden="true"></div>
+      <button id="qr-scan-close" class="qr-scan-close" type="button" aria-label="Close scanner">✕</button>
+      <div class="qr-scan-hint">Point your camera at the QR on your computer.</div>
+      <div class="qr-scan-fallback hidden" id="qr-scan-fallback">
+        <p>Live scanning isn't supported on this browser.</p>
+        <p class="muted small">Open your camera app, scan the QR, then tap the link — or pick a photo of the QR here:</p>
+        <label class="btn-primary btn-scan" for="qr-file-input">
+          <span class="btn-scan-icon" aria-hidden="true">🖼️</span>
+          <span>Choose QR photo</span>
+        </label>
+        <input id="qr-file-input" type="file" accept="image/*" capture="environment" hidden />
+        <p id="qr-scan-fallback-err" class="error hidden"></p>
+      </div>
+    </div>
+  </div>
 
   <!-- Main app shell: chat + composer + drawer -->
   <section id="app-view" class="view hidden">
