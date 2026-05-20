@@ -25,7 +25,7 @@ const { interactiveMenu } = require('./lib/menu');
 
 const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill-show',
                     '/persona','/persona-list','/model','/model-list','/mem','/agent',
-                    '/chat','/stream','/markdown','/banner','/verbose','/find',
+                    '/chat','/stream','/markdown','/banner','/verbose','/find','/mobile',
                     // Sprint 2.3 — Easter-egg slash commands (discoverable via /help)
                     '/tea','/coffee','/whoami','/secret','/art'];
 
@@ -783,6 +783,23 @@ async function handleSlash(raw, state, runtime, engine) {
   }
   if (head === '/verbose') {
     engine.print(fmt.dim('verbose toggle: restart with --verbose'));
+    return;
+  }
+  if (head === '/mobile') {
+    // Pair a phone — same flow as `horizon mobile` from the shell.
+    // The handler prints its own QR + instructions, then blocks on the
+    // server until Ctrl+C. We can't host that long-running server inside
+    // the TUI's event loop without confusing the renderer, so we point
+    // the user at the standalone command.
+    engine.print('');
+    engine.print('  ' + fmt.bold('Phone pairing'));
+    engine.print('  ' + fmt.dim('The mobile companion needs a long-running server, which would conflict'));
+    engine.print('  ' + fmt.dim('with this TUI session. Open a second terminal and run:'));
+    engine.print('');
+    engine.print('    ' + fmt.cyan('horizon mobile'));
+    engine.print('');
+    engine.print('  ' + fmt.dim('That will show a QR code your phone\'s camera can scan.'));
+    engine.print('');
     return;
   }
   engine.print(fmt.err('unknown slash command: ' + head));

@@ -191,10 +191,14 @@ function customPrompt(title, defaultValue) {
       const card = document.createElement('div');
       card.className = 'perm-card';
       card.style.maxWidth = '420px';
+      // Sprint-2.4 — input bg was hardcoded `rgba(0,0,0,.4)` (dark slab on
+      // dark theme; near-black opaque box on light theme that hid the text).
+      // `var(--bg2)` resolves to #0f1117 (dark) / #f4f4f5 (light) for proper
+      // contrast in either palette.
       card.innerHTML =
         '<div class="perm-eyebrow">'+_escHtml(lang==='ru'?'Ввод':'Input')+'</div>'+
         '<div class="perm-title">'+_escHtml(title || '')+'</div>'+
-        '<input type="text" class="cprompt-input" style="width:100%;background:rgba(0,0,0,.4);border:1px solid var(--b1);border-radius:7px;padding:10px 12px;color:var(--tx);font:13px var(--font);margin-bottom:18px;outline:none;box-sizing:border-box" />'+
+        '<input type="text" class="cprompt-input" style="width:100%;background:var(--bg2,#0f1117);border:1px solid var(--b1);border-radius:7px;padding:10px 12px;color:var(--tx);font:13px var(--font);margin-bottom:18px;outline:none;box-sizing:border-box" />'+
         '<div class="perm-actions">'+
           '<button class="perm-btn deny" data-act="cancel">'+_escHtml(lang==='ru'?'Отмена':'Cancel')+'</button>'+
           '<button class="perm-btn allow" data-act="ok">'+_escHtml(lang==='ru'?'Сохранить':'Save')+' ⏎</button>'+

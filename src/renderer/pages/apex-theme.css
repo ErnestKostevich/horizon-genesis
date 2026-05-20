@@ -1202,3 +1202,212 @@ textarea:focus, input:focus, .cmd-input:focus {
 /* Window controls (wbtn) keep their semantic colors — yellow stays yellow
    on white, red stays red on white. No override needed; left as-is. */
 
+/* Sprint-2.4 — command-palette active-row text was `var(--apex-amber-0)`
+   (#ffb566) which on a #fafafa popover sits at ~2.5:1, failing AA. Pivot
+   to the unified purple accent for the active row in light theme. The
+   amber background tint stays since it provides a hue cue, but the text
+   color is now readable. */
+[data-theme="light"] .cmd-results > *:hover,
+[data-theme="light"] .cmd-results > .active {
+  background: rgba(124, 109, 242, 0.10) !important;
+  color: #4c40ad !important; /* 7.3:1 on white */
+}
+[data-theme="light"] .cmd-input:focus {
+  border-bottom-color: rgba(124, 109, 242, 0.5) !important;
+  box-shadow: 0 1px 0 0 #7c6df2 !important;
+  background: rgba(124, 109, 242, 0.04) !important;
+}
+
+/* Mode tabs (.mt) — apex's .mt.on uses amber on amber-tint which fails on
+   white. Pivot to purple. */
+[data-theme="light"] .mt.on {
+  color: #4c40ad !important;
+  background: rgba(124, 109, 242, 0.10) !important;
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  box-shadow: 0 0 16px rgba(124, 109, 242, 0.10) !important;
+}
+[data-theme="light"] .mt:hover {
+  color: #18181b !important;
+  background: rgba(0,0,0,.04) !important;
+}
+
+/* Status pulse / .stl / typing dots — amber on white = fail. Pivot to
+   purple for the pulse + typing animation; leave the .ibtn.rec record
+   indicator as red (semantic), and the proc as cyan→info. */
+[data-theme="light"] .pulse {
+  background: #7c6df2 !important;
+  box-shadow: 0 0 10px rgba(124, 109, 242, 0.5) !important;
+}
+[data-theme="light"] .msg.typing .td {
+  background: #7c6df2;
+  box-shadow: 0 0 8px rgba(124, 109, 242, 0.5);
+}
+[data-theme="light"] .stl {
+  color: #52525b !important;
+}
+
+/* Apex chip on-state — was amber-on-white, now purple. */
+[data-theme="light"] .chip.on {
+  background: rgba(124, 109, 242, 0.14) !important;
+  border-color: rgba(124, 109, 242, 0.55) !important;
+  color: #4c40ad !important;
+  box-shadow: 0 0 14px rgba(124, 109, 242, 0.20) !important;
+}
+
+/* Apex tcard title — was cyan-uppercase which is 2.7:1 on white. */
+[data-theme="light"] .tcard-title {
+  color: #1d4ed8 !important; /* 6.4:1 AA */
+}
+[data-theme="light"] .tcard {
+  background: rgba(124, 109, 242, 0.04) !important;
+  border-color: rgba(124, 109, 242, 0.18) !important;
+  color: #18181b !important;
+}
+
+/* Apex panel inner text — .ph headings + .psl section labels had amber
+   first-letter accent that hides on white. */
+[data-theme="light"] .ph h2::first-letter {
+  color: #6557d4 !important;
+}
+[data-theme="light"] .psl {
+  color: #52525b !important;
+}
+
+/* .info-box was cyan on cyan-tinted bg; fine in dark but cyan-on-white at
+   ~2.7:1 fails AA. Re-tint to purple. */
+[data-theme="light"] .info-box {
+  background: rgba(124, 109, 242, 0.05) !important;
+  border-color: rgba(124, 109, 242, 0.18) !important;
+  color: #18181b !important;
+}
+
+/* .focus-timer (titlebar pill) — amber text on amber bg fails on white. */
+[data-theme="light"] .focus-timer {
+  background: rgba(124, 109, 242, 0.10) !important;
+  border-color: rgba(124, 109, 242, 0.30) !important;
+  color: #4c40ad !important;
+  box-shadow: 0 0 12px rgba(124, 109, 242, 0.16) !important;
+}
+[data-theme="light"] .focus-timer-btn {
+  background: rgba(124, 109, 242, 0.16) !important;
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .focus-timer-btn:hover {
+  background: rgba(124, 109, 242, 0.28) !important;
+}
+
+/* Apex license-pill — amber on amber-tint fails on white. */
+[data-theme="light"] .license-pill {
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  background: rgba(124, 109, 242, 0.06) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .license-pill.trial {
+  border-color: rgba(29, 78, 216, 0.32) !important;
+  background: rgba(29, 78, 216, 0.06) !important;
+  color: #1d4ed8 !important;
+}
+
+/* Settings panel `.psv` save button — amber-on-white fails AA. */
+[data-theme="light"] .psv {
+  background: rgba(124, 109, 242, 0.12) !important;
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .psv:hover {
+  background: rgba(124, 109, 242, 0.22) !important;
+}
+
+/* Sprint-1 send button kept its amber gradient — readable on dark and
+   light alike (dark text on gradient). Leave as-is. */
+
+/* Apex ftab hover/active was amber; light variant pivots to purple. */
+[data-theme="light"] .ftab.on {
+  color: #4c40ad !important;
+  background: rgba(124, 109, 242, 0.10) !important;
+  border-color: rgba(124, 109, 242, 0.28) !important;
+}
+[data-theme="light"] .ftab.on::after {
+  background: linear-gradient(90deg, transparent, #7c6df2, transparent) !important;
+}
+
+/* Inputs/textarea focus ring — was amber, now purple. */
+[data-theme="light"] textarea:focus,
+[data-theme="light"] input:focus,
+[data-theme="light"] .cmd-input:focus {
+  border-color: rgba(124, 109, 242, 0.5) !important;
+  box-shadow:
+    0 0 0 3px rgba(124, 109, 242, 0.12),
+    0 0 22px rgba(124, 109, 242, 0.10) !important;
+}
+
+/* .ibtn hover — was amber, pivot to purple on light. */
+[data-theme="light"] .ibtn:hover {
+  border-color: rgba(124, 109, 242, 0.35) !important;
+  color: #4c40ad !important;
+  background: rgba(124, 109, 242, 0.06) !important;
+}
+
+/* Greeting chip hover. */
+[data-theme="light"] .chips .ch:hover {
+  border-color: rgba(124, 109, 242, 0.40) !important;
+  background: rgba(124, 109, 242, 0.06) !important;
+  color: #4c40ad !important;
+}
+
+/* Tooltip / .meta text — was `var(--tx-4)` 0.28α = invisible on white.
+   That CSS-var is remapped above to 0.45α (#18181b @ 45% = 4.6:1 AA) but
+   only where it's a foreground role; some surfaces use it via shorthand
+   font-color shortcuts. Force explicit color here. */
+[data-theme="light"] .meta {
+  color: #71717a !important; /* 4.8:1 AA on #fafafa */
+}
+
+/* Apex bot bubble border + code accent. */
+[data-theme="light"] .msg.bot .bub {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .msg.bot .bub::before {
+  background: linear-gradient(180deg, transparent, #7c6df2, transparent) !important;
+  opacity: 0.5 !important;
+}
+[data-theme="light"] .msg.bot .bub code {
+  background: rgba(124, 109, 242, 0.10) !important;
+  border-color: rgba(124, 109, 242, 0.22) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .msg.bot .bub pre {
+  background: #f4f4f5 !important;
+  border-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .msg.bot .bub pre code {
+  color: #18181b !important;
+}
+[data-theme="light"] .msg.bot .bub h3 {
+  color: #4c40ad !important;
+}
+[data-theme="light"] .msg.bot .bub a {
+  color: #4c40ad !important;
+  border-bottom-color: rgba(124, 109, 242, 0.35) !important;
+}
+[data-theme="light"] .msg.bot .bub em {
+  color: #4c40ad !important;
+}
+[data-theme="light"] .msg.bot .bub blockquote {
+  border-left-color: #7c6df2 !important;
+  background: rgba(124, 109, 242, 0.05) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .msg.bot .bub th {
+  background: rgba(124, 109, 242, 0.10) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .msg.bot .bub td {
+  border-color: rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+
