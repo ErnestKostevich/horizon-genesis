@@ -37,8 +37,69 @@ const C = {
   grey:   '\x1b[90m',
 };
 
+// Fix 8 — theme lookup. The active theme overrides the default colour table
+// for truecolor terminals. We read the theme name from a settings file
+// without depending on the runtime (so tty.js stays usable from any
+// loading order — even before headless runtime is constructed).
+let _activeTheme = null;
+function _loadActiveTheme() {
+  if (_activeTheme !== null) return _activeTheme;
+  try {
+    const themes = require('./themes');
+    // Best-effort: peek at the user's stored cliTheme without a full
+    // runtime. We read from the same conf file the settingsStore uses.
+    const fs = require('fs');
+    const path = require('path');
+    const { defaultUserDataDir } = require('../../src/main/runtime/store-shim');
+    const baseDir = defaultUserDataDir();
+    // settingsStore is named 'settings' (see headless.js); conf uses
+    // <name>.json by default. Active profile may live under profiles/<n>.
+    const candidates = [
+      path.join(baseDir, 'settings.json'),
+    ];
+    // active-profile.txt may override
+    try {
+      const f = path.join(baseDir, 'active-profile.txt');
+      if (fs.existsSync(f)) {
+        const name = fs.readFileSync(f, 'utf8').trim();
+        if (name && name !== 'default' && /^[a-z0-9][a-z0-9-_]{0,30}$/i.test(name)) {
+          candidates.unshift(path.join(baseDir, 'profiles', name, 'settings.json'));
+        }
+      }
+    } catch (_) {}
+    for (const file of candidates) {
+      try {
+        if (fs.existsSync(file)) {
+          const txt = fs.readFileSync(file, 'utf8');
+          const data = JSON.parse(txt);
+          const name = data.cliTheme;
+          if (name) {
+            _activeTheme = themes.getTheme(name);
+            return _activeTheme;
+          }
+        }
+      } catch (_) {}
+    }
+    _activeTheme = themes.getTheme('default');
+  } catch (_) {
+    _activeTheme = false;  // sentinel — themes module unavailable
+  }
+  return _activeTheme;
+}
+
 function paint(color, txt) {
   if (!supportsColor) return txt;
+  // Theme-aware override for the common semantic colours used by fmt.
+  const theme = _loadActiveTheme();
+  if (theme && supportsTruecolor) {
+    const map = { green: 'success', yellow: 'warn', red: 'err', dim: 'dim',
+                  cyan: 'cyan', magenta: 'magenta' };
+    const key = map[color];
+    if (key && theme[key]) {
+      const [r, g, b] = theme[key];
+      return rgb(r, g, b) + txt + C.reset;
+    }
+  }
   const c = C[color];
   if (!c) return txt;
   return c + txt + C.reset;

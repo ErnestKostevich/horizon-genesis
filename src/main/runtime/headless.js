@@ -333,11 +333,41 @@ function createHorizonRuntime(opts = {}) {
     return settingsStore.get('provider') || 'gemini';
   }
 
+  // Fix 9 — failover handling: after retries are exhausted inside
+  // ai-providers.js, if the user has set settings.fallbackProvider, try
+  // the fallback once with a brief notice via opts.onNotice (if provided).
+  function _isRetryableError(err) {
+    if (!err) return false;
+    const s = String(err).toLowerCase();
+    return /\b(429|5\d\d|rate.?limit|timeout|fetch failed|econnrefused|econnreset|epipe)\b/i.test(s);
+  }
+  async function _tryFallback(fn, opts, primary) {
+    const fallback = settingsStore.get('fallbackProvider');
+    if (!fallback || fallback === primary) return null;
+    try {
+      if (typeof opts.onNotice === 'function') {
+        opts.onNotice(`Retrying with ${fallback}...`);
+      }
+      const r = await fn({ ...opts, provider: fallback, _isFallback: true });
+      return r;
+    } catch (_) { return null; }
+  }
+
   // Wrap aiClient.complete + completeStream to record usage automatically.
   const _origComplete = aiClient.complete;
   aiClient.complete = async (messages, opts = {}) => {
     if (opts.provider === 'auto') opts = { ...opts, provider: resolveAutoProvider() };
-    const r = await _origComplete(messages, opts);
+    const primary = opts.provider || settingsStore.get('provider') || 'gemini';
+    let r = await _origComplete(messages, opts);
+    // Fix 9 — automatic failover if primary still fails after retries
+    if (r && r.error && !opts._isFallback && _isRetryableError(r.error)) {
+      const alt = await _tryFallback(
+        (o) => _origComplete(messages, o),
+        opts,
+        primary,
+      );
+      if (alt && !alt.error) r = alt;
+    }
     if (r && r.usage) {
       try {
         costTracker.record({
@@ -353,7 +383,16 @@ function createHorizonRuntime(opts = {}) {
   const _origStream = aiClient.completeStream;
   aiClient.completeStream = async (messages, opts = {}, onToken) => {
     if (opts.provider === 'auto') opts = { ...opts, provider: resolveAutoProvider() };
-    const r = await _origStream(messages, opts, onToken);
+    const primary = opts.provider || settingsStore.get('provider') || 'gemini';
+    let r = await _origStream(messages, opts, onToken);
+    if (r && r.error && !opts._isFallback && _isRetryableError(r.error)) {
+      const alt = await _tryFallback(
+        (o) => _origStream(messages, o, onToken),
+        opts,
+        primary,
+      );
+      if (alt && !alt.error) r = alt;
+    }
     if (r && r.usage) {
       try {
         costTracker.record({
@@ -417,7 +456,7 @@ function createHorizonRuntime(opts = {}) {
     const lang = opts.lang || settingsStore.get('lang') || 'en';
 
     // Build per-call wrappers ───────────────────────────────────────────
-    const aiFn = aiClient.asAgentAiFn({ provider, model: opts.model });
+    const aiFn = aiClient.asAgentAiFn({ provider, model: opts.model, onNotice: opts.onNotice });
 
     // Skills block — pick relevant skills for the task and inject as the
     // big "Skills available right now" markdown chunk.
@@ -530,6 +569,7 @@ function createHorizonRuntime(opts = {}) {
     const messages = [...history, { role: 'user', content: message }];
     const r = await aiClient.complete(messages, {
       provider, model: opts.model, system,
+      onNotice: opts.onNotice,
     });
     if (r.ok !== false && r.reply && !opts.skipLearn) {
       try {
@@ -555,6 +595,7 @@ function createHorizonRuntime(opts = {}) {
     const messages = [...history, { role: 'user', content: message }];
     const r = await aiClient.completeStream(messages, {
       provider, model: opts.model, system,
+      onNotice: opts.onNotice,
     }, onToken);
     if (r.reply && !opts.skipLearn) {
       try {

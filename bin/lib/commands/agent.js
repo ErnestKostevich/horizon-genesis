@@ -114,9 +114,18 @@ async function run({ runtime, args, flags }) {
     }
   };
 
+  // Fix 9 — show failover notice to user (e.g. "Retrying with claude...")
+  const onNotice = (msg) => {
+    if (flags.quiet || flags.json) return;
+    if (spinner) spinner.stop();
+    process.stderr.write(fmt.dim('  ' + msg) + '\n');
+    if (human && !quiet) spinner = new GradientSpinner('working…').start();
+  };
+
   const result = await runtime.runAgent(task, {
     onStep,
     askPermission,
+    onNotice,
     maxSteps: flags['max-steps'] ? Number(flags['max-steps']) : 8,
     reflect: flags.reflect !== false,
     provider: flags.provider,

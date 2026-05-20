@@ -22,7 +22,30 @@
 <link rel="stylesheet" href="chat-settings-redesign.css"/>
 </head>
 <body>
-<canvas id="fractalBg" aria-hidden="true"></canvas>
+<!-- Sprint-1 fix: theme bootstrap. Restore the user's last theme from
+     localStorage BEFORE the page paints so we don't flash dark-then-light.
+     Toggle function is defined here so the title-bar button can call it
+     without waiting for the main inline <script> at the bottom of <body>. -->
+<script>
+  (function(){
+    try {
+      var saved = localStorage.getItem('horizonTheme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch (_) { /* localStorage may be blocked in some sandbox modes */ }
+    window.toggleHorizonTheme = function () {
+      var cur = document.documentElement.getAttribute('data-theme');
+      var next = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('horizonTheme', next); } catch (_) {}
+    };
+  })();
+</script>
+<!-- Sprint-1 fix: <canvas id="fractalBg"> + fractal-bg.js removed. The animated
+     WebGL fractal was constant-GPU draw with no readable benefit; replaced by
+     static SVG-noise + 2 fixed radial gradients applied to body in chat-base.css.
+     The fractal-bg.js file is kept on disk but no longer loaded. -->
 
 <!-- ═══════════ ICON LIBRARY (lucide.dev) ═══════════
      Inline SVG <symbol> definitions reused across the title bar, mode
@@ -86,6 +109,18 @@
     <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
     <symbol id="i-trending-up" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></symbol>
+    <!-- Sprint-1 fix — additional Lucide symbols for emoji→icon swap. -->
+    <symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.8 5.8 21 7 14 2 9.3 9 8.5 12 2"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6.7 3L3 13"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/><line x1="14" y1="8" x2="14" y2="8"/><line x1="18" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="6" y2="12"/><line x1="10" y1="12" x2="10" y2="12"/><line x1="14" y1="12" x2="14" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></symbol>
+    <symbol id="i-square" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
   </defs>
 </svg>
 
@@ -103,7 +138,7 @@
   </div>
   <div class="cs-search">
     <div class="cs-search-wrap">
-      <span class="cs-search-icon">⚡</span>
+      <span class="cs-search-icon"><svg class="licon"><use href="#i-search"/></svg></span>
       <input class="cs-search-input" id="cs-search" placeholder="Search chats…" oninput="filterChats(this.value)" />
     </div>
   </div>
@@ -151,8 +186,8 @@
     <button class="cs-util" onclick="openPanel()" title="Settings"><svg class="licon"><use href="#i-settings"/></svg><span>Settings</span></button>
   </div>
   <div class="cs-stats" id="cs-stats">
-    <div class="cs-stat"><span>✉</span> <span class="cs-stat-val" id="stat-msgs">0</span> msgs</div>
-    <div class="cs-stat"><span>⭐</span> <span class="cs-stat-val" id="stat-tokens">0</span> tokens</div>
+    <div class="cs-stat"><svg class="licon"><use href="#i-mail"/></svg> <span class="cs-stat-val" id="stat-msgs">0</span> msgs</div>
+    <div class="cs-stat"><svg class="licon"><use href="#i-star"/></svg> <span class="cs-stat-val" id="stat-tokens">0</span> tokens</div>
     <div class="cs-stat"><span>Usage</span> <span class="cs-stat-val" id="stat-usage">estimated</span></div>
   </div>
 </aside>
@@ -168,7 +203,7 @@
          header so the user always has a clear escape route, even when
          the top-right ×  is hidden behind Windows native overlay. -->
     <button class="ph-back" onclick="closePanel()" title="Back to chat (Esc)">← Back</button>
-    <h2>◈ Settings — Horizon AI</h2>
+    <h2><svg class="licon" style="vertical-align:-2px"><use href="#i-settings"/></svg> Settings — Horizon AI</h2>
     <!-- Phase 20.3 — search bar filters .pf rows by label text across all
          panes. Empty input = no filter. -->
     <div class="ps-search-wrap">
@@ -872,6 +907,11 @@
       <button class="focus-timer-btn" onclick="stopFocusTimer()">x</button>
     </div>
     <button class="ic-btn" onclick="openCmdPalette()" title="Ctrl+K"><svg class="licon"><use href="#i-command"/></svg></button>
+    <!-- Sprint-1 fix: light/dark theme toggle, persists via localStorage.horizonTheme. -->
+    <button class="theme-toggle" onclick="window.toggleHorizonTheme&&window.toggleHorizonTheme()" title="Toggle light / dark theme" aria-label="Toggle theme">
+      <svg class="licon theme-toggle-moon"><use href="#i-moon"/></svg>
+      <svg class="licon theme-toggle-sun"><use href="#i-sun"/></svg>
+    </button>
     <button class="ic-btn" onclick="openPanel()" title="Settings"><svg class="licon"><use href="#i-settings"/></svg></button>
     <div style="width:6px"></div>
     <button class="wbtn wy" onclick="H.minimize()"></button>
@@ -1218,8 +1258,8 @@
     </div>
     <textarea class="code-editor" id="code-editor" spellcheck="false" placeholder="Open a file from the workspace." style="display:none"></textarea>
     <div class="code-toolbar">
-      <button class="code-btn primary" onclick="saveCodeFile()" title="Save current file (asks for permission)">💾 Save</button>
-      <button class="code-btn" onclick="runCodeSelection()">▶ Run selection</button>
+      <button class="code-btn primary" onclick="saveCodeFile()" title="Save current file (asks for permission)"><svg class="licon"><use href="#i-save"/></svg> Save</button>
+      <button class="code-btn" onclick="runCodeSelection()"><svg class="licon"><use href="#i-play"/></svg> Run selection</button>
       <span class="code-toolbar-sep"></span>
       <button class="code-btn" onclick="askCodeAi('explain')">Explain</button>
       <button class="code-btn" onclick="askCodeAi('refactor')">Refactor</button>
@@ -1233,9 +1273,9 @@
            commit (only if the workspace is a git repo, with a one-time
            permission gate). All three are no-ops when no edits exist /
            no workspace open. -->
-      <button class="code-btn" id="cek-history-btn" onclick="cekHistoryToggle(event)" title="Last 10 ⌘K edits">🕐 ⌘K <span id="cek-history-count" style="opacity:.6">(0)</span></button>
-      <button class="code-btn" id="cek-undo-btn" onclick="cekUndoLast()" title="Undo last AI edit (restores files from snapshot)">↶ Undo AI</button>
-      <button class="code-btn" id="cek-autocommit-btn" onclick="cekToggleAutoCommit()" title="Auto-commit accepted ⌘K edits (git workspaces only)">⚙ auto-commit: off</button>
+      <button class="code-btn" id="cek-history-btn" onclick="cekHistoryToggle(event)" title="Last 10 ⌘K edits"><svg class="licon"><use href="#i-clock"/></svg> ⌘K <span id="cek-history-count" style="opacity:.6">(0)</span></button>
+      <button class="code-btn" id="cek-undo-btn" onclick="cekUndoLast()" title="Undo last AI edit (restores files from snapshot)"><svg class="licon"><use href="#i-undo"/></svg> Undo AI</button>
+      <button class="code-btn" id="cek-autocommit-btn" onclick="cekToggleAutoCommit()" title="Auto-commit accepted ⌘K edits (git workspaces only)"><svg class="licon"><use href="#i-settings"/></svg> auto-commit: off</button>
       <span class="code-toolbar-sep"></span>
       <span class="code-toolbar-status" id="code-editor-status">Workspace edits ask for permission before writing.</span>
     </div>
@@ -1248,7 +1288,7 @@
   <!-- Terminal: collapsed by default, toggles via top bar Terminal button -->
   <section class="code-terminal-pane" id="code-terminal-pane">
     <div class="code-terminal-head">
-      <span class="code-terminal-title">⌨ Workspace terminal</span>
+      <span class="code-terminal-title"><svg class="licon"><use href="#i-keyboard"/></svg> Workspace terminal</span>
       <span style="flex:1"></span>
       <button class="code-btn" onclick="restartWorkspaceTerminal()" title="Restart shell">↻ restart</button>
       <button class="code-btn" onclick="toggleCodeTerminal()" title="Hide terminal">−</button>
@@ -1564,15 +1604,15 @@
   <div class="mode-popover" id="mode-popover"></div>
   <div class="irow">
     <input type="file" id="file-input" accept="image/*,.txt,.md,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.csv,.xml,.yaml,.yml,.sh,.sql,.zip,.pdf" multiple onchange="onFilesSelected(event)"/>
-    <button class="ibtn btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл или фото">📎</button>
+    <button class="ibtn btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл или фото"><svg class="licon"><use href="#i-paperclip"/></svg></button>
     <button class="ibtn btn-mic" id="btn-mic" onclick="toggleVoice()">
-      🎤<span class="mlbl">VOICE</span>
+      <svg class="licon"><use href="#i-mic"/></svg><span class="mlbl">VOICE</span>
     </button>
     <button class="ibtn btn-mic" id="btn-dictate" onmousedown="startDictate()" onmouseup="stopDictate()" onmouseleave="stopDictate()" ontouchstart="startDictate()" ontouchend="stopDictate()" title="Удерживай для диктовки">
-      ✋<span class="mlbl">HOLD</span>
+      <svg class="licon"><use href="#i-hand"/></svg><span class="mlbl">HOLD</span>
     </button>
-    <textarea id="inp" rows="1" placeholder="Спроси Хорайзон… или прикрепи 📎 файл/фото" onkeydown="kd(event)" oninput="ar(this)" style="-webkit-app-region:no-drag"></textarea>
-    <button class="ibtn btn-send" id="btn-send" onclick="sendMsg()">↑</button>
+    <textarea id="inp" rows="1" placeholder="Спроси Хорайзон… или прикрепи файл/фото" onkeydown="kd(event)" oninput="ar(this)" style="-webkit-app-region:no-drag"></textarea>
+    <button class="ibtn btn-send" id="btn-send" onclick="sendMsg()"><svg class="licon"><use href="#i-arrow-up"/></svg></button>
   </div>
   <!-- PR-U-MEGA — cost preview + agent activity strip below the input.
        Replaces the noisy chat-status-bar above. Updates live as the
@@ -1979,8 +2019,10 @@ function detectPC(text){
 function showGreeting(){
   const w=document.getElementById('msgs');w.innerHTML='';
   const d=document.createElement('div');d.id='greet';d.className='greet';
-  const greet=userName&&userName!=='user'?(lang==='ru'?`Привет, ${userName}! ◈`:`Hello, ${userName}! ◈`):t('hello');
-  d.innerHTML=`<div class="g-mark">◈</div><h3>${greet}</h3><p>${t('sub').replace(/\n/g,'<br>')}</p><div class="chips">${TX[lang].chips.map(c=>`<div class="ch" onclick="q('${c.replace(/'/g,"\\'")}')">${c}</div>`).join('')}</div>`;
+  const greet=userName&&userName!=='user'?(lang==='ru'?`Привет, ${userName}!`:`Hello, ${userName}!`):t('hello');
+  // Sprint-1 fix: replaced the ◈ diamond glyph (which never rendered on every
+  // font fallback) with a Lucide sparkles SVG in accent color.
+  d.innerHTML=`<div class="g-mark"><svg class="licon" style="width:36px;height:36px;color:var(--accent,#7c6df2)"><use href="#i-sparkles"/></svg></div><h3>${greet}</h3><p>${t('sub').replace(/\n/g,'<br>')}</p><div class="chips">${TX[lang].chips.map(c=>`<div class="ch" onclick="q('${c.replace(/'/g,"\\'")}')">${c}</div>`).join('')}</div>`;
   w.appendChild(d);
 }
 
@@ -4123,7 +4165,7 @@ H.onMarketAuthenticated?.(async (user) => {
 // chat-code-workspace.js (where opRender lives, and where
 // ensureOperatorAgentListener calls opLog directly).
 </script>
-<script src="fractal-bg.js"></script>
+<!-- Sprint-1 fix: fractal-bg.js unloaded (file kept on disk for backward compat). -->
 <!-- PR-V Phase 2 — slash command dispatcher extracted from inline.
      Loaded AFTER the main inline script so window.* globals it reads
      (prov, history, MODEL_PICKER_REGISTRY, setMode, setPersona, etc.)

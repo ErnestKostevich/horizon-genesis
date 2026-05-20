@@ -19,10 +19,17 @@ async function run({ runtime, args, flags }) {
     return 2;
   }
 
+  // Fix 9 — surface failover/retry notices to the user
+  const onNotice = (msg) => {
+    if (flags.quiet) return;
+    process.stderr.write(fmt.dim('  ' + msg) + '\n');
+  };
+
   const opts = {
     provider: flags.provider,
     model: flags.model,
     persona: flags.persona,
+    onNotice,
   };
 
   const wantStream = flags.stream !== false && !flags.json && !flags.plain && process.stdout.isTTY;

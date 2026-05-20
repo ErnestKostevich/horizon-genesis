@@ -19,7 +19,7 @@ const path = require('path');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
 const { fmt, isTTY, friendlyError } = require('./lib/tty');
 const { renderMarkdown } = require('./lib/markdown');
-const { bannerBig, GradientSpinner, welcomeReveal, personaPickerInteractive } = require('./lib/banner');
+const { bannerBig, GradientSpinner, welcomeReveal } = require('./lib/banner');
 const { TuiEngine } = require('./lib/tui-engine');
 const { interactiveMenu } = require('./lib/menu');
 
@@ -95,14 +95,12 @@ function bannerHeader(rt) {
   const skillCount = rt.skillsManager?.list().length || 0;
   const lang = rt.settingsStore.get('lang') || 'en';
 
+  // Compact one-line wordmark + one line of vitals + one hint line.
   const lines = [
-    '',
     bannerBig(),
     '',
-    `  ${fmt.dim('provider')} ${fmt.cyan(provider)}   ${fmt.dim('persona')} ${fmt.cyan(persona)}   ${fmt.dim('lang')} ${fmt.cyan(lang)}`,
-    `  ${fmt.dim('memory')} ${fmt.green(memCount + '')}   ${fmt.dim('skills')} ${fmt.green(skillCount + '')}   ${fmt.dim('workspace')} ${fmt.cyan(path.basename(rt.workspaceDir))}`,
-    '',
-    fmt.dim('  Type /help · Tab to complete · Shift+Enter newline · Ctrl+F search · /quit to exit'),
+    `  ${fmt.dim('provider')} ${fmt.cyan(provider)}   ${fmt.dim('persona')} ${fmt.cyan(persona)}   ${fmt.dim('lang')} ${fmt.cyan(lang)}   ${fmt.dim('memory')} ${fmt.green(memCount + '')}   ${fmt.dim('skills')} ${fmt.green(skillCount + '')}   ${fmt.dim('workspace')} ${fmt.cyan(path.basename(rt.workspaceDir))}`,
+    fmt.dim('  Type /help · Tab complete · Shift+Enter newline · Ctrl+F search · /quit to exit'),
     '',
   ];
   return lines.join('\n');
@@ -171,25 +169,24 @@ async function main({ flags } = {}) {
 
   if (!isTTY) process.stderr.write(fmt.warn('TUI works best in an interactive terminal') + '\n');
 
-  // Phase 18 — first-launch reveal: if there's no conversation history
-  // yet (first time the TUI ever boots), play the animated welcome.
-  // Subsequent launches print the compact banner header immediately.
+  // Fix 2 — welcome reveal is now OPT-IN. Default first launch is silent.
+  // Trigger the animated reveal only when:
+  //   - HORIZON_REVEAL=1 environment variable is set, OR
+  //   - --reveal flag is passed on the CLI
+  // The forced persona picker is gone — persona stays default ('jarvis'),
+  // user picks one later via `/persona` or `horizon persona <id>`.
   const FIRST_LAUNCH_FLAG = 'tui.welcomedAt';
   const isFirstLaunch = !runtime.settingsStore.get(FIRST_LAUNCH_FLAG)
                      && !(runtime.agentMemory?._data?.conversations?.length);
-  if (isFirstLaunch && isTTY) {
+  const wantReveal = !!(flags?.reveal) || process.env.HORIZON_REVEAL === '1';
+  if (wantReveal && isTTY) {
     await welcomeReveal({
       provider: runtime.settingsStore.get('provider'),
       persona: runtime.settingsStore.get('persona'),
       lang: runtime.settingsStore.get('lang'),
     });
-    // Phase 20.3 — interactive persona picker after the reveal. Lets a
-    // first-time user pick from 5 personas with a single keypress.
-    try {
-      const current = runtime.settingsStore.get('persona') || 'jarvis';
-      const picked = await personaPickerInteractive(current);
-      if (picked && picked !== current) runtime.settingsStore.set('persona', picked);
-    } catch (_) {}
+  }
+  if (isFirstLaunch) {
     try { runtime.settingsStore.set(FIRST_LAUNCH_FLAG, new Date().toISOString()); } catch (_) {}
   }
 
@@ -221,6 +218,7 @@ async function main({ flags } = {}) {
   };
 
   const engine = new TuiEngine({
+    runtime,  // Fix 3 — engine reads provider/persona/cost/etc. for the status line
     completer: (line) => {
       if (!line.startsWith('/')) return [[], line];
       const hits = SLASH_LIST.filter(c => c.startsWith(line));
