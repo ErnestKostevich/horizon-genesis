@@ -19,13 +19,15 @@ const path = require('path');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
 const { fmt, isTTY, friendlyError } = require('./lib/tty');
 const { renderMarkdown } = require('./lib/markdown');
-const { bannerBig, GradientSpinner, welcomeReveal, renderArt, buildGreetingBase, timeOfDayArt } = require('./lib/banner');
+const { bannerBig, bannerFramedBox, renderCollapsibleSection, GradientSpinner, welcomeReveal, renderArt, buildGreetingBase, timeOfDayArt } = require('./lib/banner');
 const { TuiEngine } = require('./lib/tui-engine');
 const { interactiveMenu } = require('./lib/menu');
 
 const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill-show',
                     '/persona','/persona-list','/model','/model-list','/models','/mem','/agent',
                     '/chat','/stream','/markdown','/banner','/verbose','/find','/mobile',
+                    // Sprint 2.12 — Hermes-style upgrades.
+                    '/altscreen','/sections',
                     // Sprint 2.3 — Easter-egg slash commands (discoverable via /help)
                     '/tea','/coffee','/whoami','/secret','/art'];
 
@@ -158,24 +160,88 @@ function buildGreeting(persona) {
   return base + suffix;
 }
 
-function bannerHeader(rt) {
+/**
+ * Sprint 2.12 — Hermes-style banner header.
+ * Renders the framed wordmark box, four collapsible startup sections
+ * (Tools / Skills / System prompt / MCP servers), a persona greeting,
+ * and a hint footer. Sections read their expanded state from the engine
+ * when one is supplied (so /sections <id> toggles persist across reprints).
+ */
+function bannerHeader(rt, engine) {
   const provider = rt.settingsStore.get('provider') || 'gemini';
   const persona = rt.settingsStore.get('persona') || 'jarvis';
   const memCount = rt.agentMemory?._data?.memories?.length || 0;
   const skillCount = rt.skillsManager?.list().length || 0;
   const lang = rt.settingsStore.get('lang') || 'en';
 
-  // Sprint 2 — wordmark + vitals + greeting + hint line.
-  // Sprint 2.3 — sprinkle a small time-of-day art marker when off-hours.
+  // Section summaries — short, factual, scannable.
+  // Tools — best-effort count from runtime if available, else hardcoded baseline.
+  let toolCount = 0, channelCount = 0, mcpCount = 0;
+  try {
+    if (rt.toolsRegistry && typeof rt.toolsRegistry.list === 'function') {
+      toolCount = rt.toolsRegistry.list().length || 0;
+    }
+  } catch (_) {}
+  try { channelCount = (rt.channels?.list?.() || []).length || 0; } catch (_) {}
+  try {
+    if (rt.mcpServers && typeof rt.mcpServers.list === 'function') {
+      mcpCount = rt.mcpServers.list().length || 0;
+    } else if (Array.isArray(rt.settingsStore.get('mcpServers'))) {
+      mcpCount = rt.settingsStore.get('mcpServers').length || 0;
+    }
+  } catch (_) {}
+
+  const sections = (engine && engine.getSections && engine.getSections())
+    || {
+      tools:  { expanded: true,  name: 'Tools' },
+      skills: { expanded: false, name: 'Skills' },
+      prompt: { expanded: false, name: 'System prompt' },
+      mcp:    { expanded: false, name: 'MCP servers' },
+    };
+
   const todName = timeOfDayArt(new Date());
   const todArt = todName ? renderArt(todName) : '';
+
+  // Section body (only rendered when expanded). Kept short — 1-3 lines.
+  const toolsBody = sections.tools.expanded
+    ? [
+        `built-in: ${toolCount || '—'}  ·  channels: ${channelCount || '—'}  ·  mcp tools: ${mcpCount || '—'}`,
+        'agent loop + tool calls available — /agent <task> to run',
+      ]
+    : null;
+  const skillsBody = sections.skills.expanded
+    ? [`${skillCount} installed · /skills to manage · /skill <id> to force-include`]
+    : null;
+  const promptBody = sections.prompt.expanded
+    ? [`persona: ${persona} · lang: ${lang} · workspace: ${path.basename(rt.workspaceDir)}`]
+    : null;
+  const mcpBody = sections.mcp.expanded
+    ? [`${mcpCount} configured · settings → mcpServers`]
+    : null;
+
   const lines = [
-    bannerBig(),
+    bannerFramedBox(),
     '',
-    `  ${fmt.dim('provider')} ${fmt.cyan(provider)}   ${fmt.dim('persona')} ${fmt.cyan(persona)}   ${fmt.dim('lang')} ${fmt.cyan(lang)}   ${fmt.dim('memory')} ${fmt.green(memCount + '')}   ${fmt.dim('skills')} ${fmt.green(skillCount + '')}   ${fmt.dim('workspace')} ${fmt.cyan(path.basename(rt.workspaceDir))}`,
+    renderCollapsibleSection(
+      sections.tools.name,
+      `${toolCount || 'built-in'} built-in · ${channelCount} channels · ${mcpCount} MCP`,
+      sections.tools.expanded, toolsBody),
+    renderCollapsibleSection(
+      sections.skills.name,
+      `${skillCount} enabled · /skills to manage`,
+      sections.skills.expanded, skillsBody),
+    renderCollapsibleSection(
+      sections.prompt.name,
+      `${persona} · workspace ${path.basename(rt.workspaceDir)}`,
+      sections.prompt.expanded, promptBody),
+    renderCollapsibleSection(
+      sections.mcp.name,
+      mcpCount > 0 ? `${mcpCount} connected` : 'none configured',
+      sections.mcp.expanded, mcpBody),
+    '',
     '  ' + fmt.dim(buildGreeting(persona)),
     ...(todArt ? [todArt] : []),
-    fmt.dim('  Type /help · Tab complete · Shift+Enter newline · Ctrl+F search · /quit to exit'),
+    fmt.dim('  /help · /sections <id> toggle · Tab complete · Shift+Enter newline · Ctrl+F search · /quit to exit'),
     '',
   ];
   return lines.join('\n');
@@ -469,26 +535,6 @@ async function main({ flags } = {}) {
     try { runtime.settingsStore.set(FIRST_LAUNCH_FLAG, new Date().toISOString()); } catch (_) {}
   }
 
-  // Print initial banner — write directly so it's part of the transcript too.
-  const banner = bannerHeader(runtime);
-  process.stdout.write((isFirstLaunch ? '' : '\x1b[2J\x1b[H') + banner);
-
-  // v0.0.2 — explicit "you can type now" line so users don't sit at
-  // a blank composer thinking it's broken. The v0.0.1 splash gave no
-  // indication that the next thing to do was type a message.
-  const hasKey = _runtimeHasAnyKey(runtime);
-  if (!hasKey) {
-    process.stdout.write(
-      '\n  \x1b[33m⚠\x1b[0m  \x1b[97mNo API key set yet.\x1b[0m  ' +
-      '\x1b[90mType\x1b[0m \x1b[36m/quit\x1b[0m\x1b[90m, then run\x1b[0m \x1b[36mhorizon setup\x1b[0m \x1b[90mto add one.\x1b[0m\n'
-    );
-  } else {
-    process.stdout.write(
-      '\n  \x1b[90m▌ Type a message and press \x1b[97mEnter\x1b[90m to send.\x1b[0m  ' +
-      '\x1b[90m\x1b[36m/help\x1b[90m for commands · \x1b[36m/quit\x1b[90m to exit.\x1b[0m\n'
-    );
-  }
-
   const state = {
     history: [],
     mode: 'chat',
@@ -508,6 +554,8 @@ async function main({ flags } = {}) {
   const engine = new TuiEngine({
     runtime,  // Fix 3 — engine reads provider/persona/cost/etc. for the status line
     verbose: !!flags?.verbose,
+    altScreen: !!flags?.['alt-screen'],  // /altscreen toggle (or --alt-screen)
+    yolo: !!flags?.['auto-approve'] || process.env.HORIZON_YOLO === '1',
     onExit: () => { if (exitResolver) { const r = exitResolver; exitResolver = null; r(); } },
     completer: (line) => {
       if (!line.startsWith('/')) return [[], line];
@@ -547,6 +595,30 @@ async function main({ flags } = {}) {
       }
     },
   });
+
+  // Sprint 2.12 — print the Hermes-style banner header AFTER engine creation
+  // so it can read the engine's collapsible-section state. Layout:
+  //   - clear screen unless this is the first launch (welcomeReveal already
+  //     painted there)
+  //   - framed banner box
+  //   - collapsible sections (Tools / Skills / System prompt / MCP)
+  //   - greeting line
+  //   - "▌ Type a message…" prompt hint
+  const banner = bannerHeader(runtime, engine);
+  process.stdout.write((isFirstLaunch ? '' : '\x1b[2J\x1b[H') + banner);
+
+  const hasKey = _runtimeHasAnyKey(runtime);
+  if (!hasKey) {
+    process.stdout.write(
+      '\n  \x1b[33m⚠\x1b[0m  \x1b[97mNo API key set yet.\x1b[0m  ' +
+      '\x1b[90mType\x1b[0m \x1b[36m/quit\x1b[0m\x1b[90m, then run\x1b[0m \x1b[36mhorizon setup\x1b[0m \x1b[90mto add one.\x1b[0m\n'
+    );
+  } else {
+    process.stdout.write(
+      '\n  \x1b[90m▌ Type a message and press \x1b[97mEnter\x1b[90m to send.\x1b[0m  ' +
+      '\x1b[90m\x1b[36m/help\x1b[90m for commands · \x1b[36m/quit\x1b[90m to exit.\x1b[0m\n'
+    );
+  }
 
   // Seed transcript with the banner so search/scroll see it
   banner.split('\n').forEach(l => engine.transcript.push(l));
@@ -634,14 +706,64 @@ async function handleSlash(raw, state, runtime, engine) {
   const rest = tokens.slice(1).map(t => t.replace(/^"|"$/g, ''));
 
   if (head === '/quit' || head === '/exit') { engine.close(); process.exit(0); return; }
-  if (head === '/help') { engine.print(buildHelp()); return; }
+  if (head === '/help') {
+    // Sprint 2.12 — Hermes-style modal overlay. Help renders in the
+    // alternate screen buffer; transcript / scrollback are preserved.
+    // Falls back to inline print on non-TTY (modalOverlay handles that).
+    if (engine && typeof engine.modalOverlay === 'function') {
+      await engine.modalOverlay(buildHelp());
+    } else {
+      engine.print(buildHelp());
+    }
+    return;
+  }
   if (head === '/clear') {
     process.stdout.write('\x1b[2J\x1b[H');
     engine.transcript = [];
     return;
   }
   if (head === '/banner') {
-    engine.print(bannerHeader(runtime));
+    engine.print(bannerHeader(runtime, engine));
+    return;
+  }
+  if (head === '/sections') {
+    // Toggle one of the startup-banner collapsible sections.
+    //   /sections          → list current state
+    //   /sections tools    → toggle tools section
+    const id = rest[0];
+    const sections = engine.getSections ? engine.getSections() : {};
+    if (!id) {
+      engine.print(fmt.dim('sections:'));
+      for (const [k, v] of Object.entries(sections)) {
+        const chevron = v.expanded ? '▾' : '▸';
+        engine.print(`  ${chevron} ${k.padEnd(10)} ${fmt.dim(v.expanded ? 'expanded' : 'collapsed')}`);
+      }
+      engine.print(fmt.dim('usage: /sections <tools|skills|prompt|mcp>'));
+      return;
+    }
+    const result = engine.toggleSection(id);
+    if (result === null) {
+      engine.print(fmt.err('unknown section: ' + id));
+      return;
+    }
+    engine.print(fmt.ok(`${id} → ${result ? 'expanded' : 'collapsed'}`));
+    // Re-render the banner so the user sees the new layout.
+    engine.print(bannerHeader(runtime, engine));
+    return;
+  }
+  if (head === '/altscreen') {
+    // Toggle alternate-screen rendering for the live view.
+    //   /altscreen on    → alt screen on (no scrollback pollution)
+    //   /altscreen off   → alt screen off
+    //   /altscreen       → toggle
+    let want;
+    if (rest[0] === 'on')  want = true;
+    else if (rest[0] === 'off') want = false;
+    else                   want = !engine._altScreen;
+    if (typeof engine.setAltScreen === 'function') {
+      engine.setAltScreen(want);
+      engine.print(fmt.dim('alt-screen: ') + (want ? fmt.green('on') : fmt.red('off')));
+    }
     return;
   }
   if (head === '/reset') {
