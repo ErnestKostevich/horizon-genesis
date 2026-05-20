@@ -922,7 +922,39 @@ ipcMain.on('quit',     () => { isQuitting = true; app.quit(); });
 ipcMain.handle('go',   (_, p) => { createWindow(p); return true; });
 
 // ── IPC: Keys & Settings ──────────────────────────────────────────────────────
-ipcMain.handle('saveKey',   (_, s, k) => { assertAllowedKey(s); keysStore.set(`k_${s}`, k); return true; });
+ipcMain.handle('saveKey',   (_, s, k) => {
+  assertAllowedKey(s);
+  keysStore.set(`k_${s}`, k);
+  // PHASE 28.3 — when the user adds their first OpenAI / Gemini key,
+  // kick off an embeddings backfill so existing memories become
+  // semantically searchable without waiting for the next app reboot.
+  // Best-effort + debounced (the key-save IPC fires per character on
+  // some inputs, so we wait 1.5s after the latest write).
+  if ((s === 'openai' || s === 'gemini') && k && k.length > 10) {
+    try {
+      clearTimeout(global.__hzEmbedBackfillTimer);
+      global.__hzEmbedBackfillTimer = setTimeout(() => {
+        try {
+          loadAgentModules();
+          if (!agentMemory || !agentMemory.embeddings) return;
+          if (!agentMemory.embeddings.isAvailable()) return;
+          if (!agentMemory._data?.memories?.length) return;
+          console.log('[embeddings] key saved — kicking off backfill for', agentMemory._data.memories.length, 'memories');
+          agentMemory.embedAllPending(progress => {
+            try {
+              const wins = BrowserWindow.getAllWindows();
+              for (const w of wins) {
+                if (w && !w.isDestroyed() && w.webContents) w.webContents.send('memory:embeddingProgress', progress);
+              }
+            } catch (_) {}
+          }).then(r => console.log('[embeddings] post-key-save backfill:', r))
+            .catch(e => console.warn('[embeddings] post-key-save backfill failed:', e.message));
+        } catch (e) { console.warn('[embeddings] backfill trigger failed:', e.message); }
+      }, 1500);
+    } catch (_) {}
+  }
+  return true;
+});
 ipcMain.handle('getKey',    (_, s)    => { assertAllowedKey(s); return keysStore.get(`k_${s}`, null); });
 ipcMain.handle('hasKey',    (_, s)    => { assertAllowedKey(s); return !!keysStore.get(`k_${s}`); });
 ipcMain.handle('deleteKey', (_, s)    => { assertAllowedKey(s); keysStore.delete(`k_${s}`); return true; });
@@ -3020,6 +3052,7 @@ let workflowEngine = null;
 let screenRecorder = null;
 let cronRunner = null;
 let canvasManager = null;
+let memoryReviewer = null;
 let githubConnector = null;
 let mcpRegistry = null;
 let connectionsManager = null;
@@ -3754,6 +3787,29 @@ function loadAgentModules() {
             console.log('[memoryDb] live wire-up skipped:', e.message);
           }
         }, 8000);
+
+        // PHASE 28.3 — agent-curated memory reviewer (Hermes-style
+        // periodic nudges). Decays stale memories, merges near-
+        // duplicates by embedding cosine, and forgets long-untouched
+        // low-importance entries. Runs first pass ~1h after boot, then
+        // every 12h.
+        try {
+          const { MemoryReviewer } = require('./memoryReviewer');
+          memoryReviewer = new MemoryReviewer(agentMemory, {
+            onChange: (stats) => {
+              try {
+                const wins = BrowserWindow.getAllWindows();
+                for (const w of wins) {
+                  if (w && !w.isDestroyed() && w.webContents) w.webContents.send('memory:reviewerPass', stats);
+                }
+              } catch (_) {}
+            },
+          });
+          memoryReviewer.start();
+          console.log('✓ MemoryReviewer scheduled (first pass in ~1h, then every 12h)');
+        } catch (e) {
+          console.log('[memoryReviewer] skipped:', e.message);
+        }
       } catch (e) {
         console.log('[memoryDb] mirror setup skipped:', e.message);
       }
@@ -5017,6 +5073,20 @@ function _memSqlitePaths() {
     dbPath: path.join(ud, 'memory.sqlite'),
   };
 }
+
+// PHASE 28.3 — manual trigger for the memory reviewer (Inspector
+// "Review now" button) + status read-back.
+ipcMain.handle('memoryReviewerStatus', () => {
+  if (!memoryReviewer) return { ok: false, error: 'reviewer not initialized' };
+  return { ok: true, ...memoryReviewer.status() };
+});
+ipcMain.handle('memoryReviewerRunNow', async () => {
+  if (!memoryReviewer) return { ok: false, error: 'reviewer not initialized' };
+  try {
+    const r = await memoryReviewer.reviewNow();
+    return r;
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 
 ipcMain.handle('memoryDbStatus', () => {
   const paths = _memSqlitePaths();

@@ -126,6 +126,31 @@ horizon
 horizon serve --port 18789 --token mysecret
 ```
 
+### Server-agent mode (Hermes-style, all-in-one)
+
+The same binary runs as a 24/7 server agent. Deploy on a VPS, enable the
+messaging channels you want, and the agent answers from Telegram /
+Discord / Slack / WhatsApp / Signal / iMessage / Email without a desktop
+in the loop:
+
+```bash
+# On the VPS — install the CLI binary, set your keys, then:
+horizon serve \
+  --port 18789 \
+  --token $HORIZON_TOKEN \
+  --enable-telegram \
+  --enable-discord \
+  --enable-email
+
+# Now message your Telegram bot, mention it in Discord, or email it —
+# the agent loop runs on the server, uses your provider keys, and the
+# memory file lives next to it.
+```
+
+Same agent, same memory, same skills the desktop app uses — just no
+window. You can still hit the HTTP API from your laptop, point a PWA
+at it, or schedule cron jobs against it.
+
 ## vs Hermes vs OpenClaw
 
 |  | **Horizon AI** | Hermes Agent | OpenClaw |
@@ -156,11 +181,11 @@ horizon serve --port 18789 --token mysecret
 | **Tools**                 | 50+ | 70+ | ~20 |
 | MCP server support        | ✅ | ❌ | ❌ |
 | Subagents (parallel)      | ✅ `spawn_subagent` | ✅ | ❌ |
-| **Sandbox backends**      | host + docker | host/docker/SSH/Daytona/Singularity/Modal | host + docker |
+| **Sandbox backends**      | host + Docker + SSH + Modal + Daytona + **Singularity** | host/docker/SSH/Daytona/Singularity/Modal | host + docker |
 | Computer use (vision)     | ✅ wake/click/screenshot | ❌ | 🔸 |
 | Wake word                 | ✅ Deepgram + Groq | ❌ | ✅ |
 | Continuous talk mode      | ✅ | ❌ | ✅ |
-| **Channels**              | 5 (TG / Discord / Slack / Notion / Linear) | 20+ | 10+ (WhatsApp/iMessage/Signal/Teams/...) |
+| **Channels**              | 7 (TG / Discord / Slack / WhatsApp / Signal / iMessage / Email) | 20+ | 10+ (WhatsApp/iMessage/Signal/Teams/...) |
 | Telegram bot runtime      | ✅ | ✅ | ✅ |
 | Discord Gateway WS        | ✅ | ✅ | ✅ |
 | Cron-driven workflows     | ✅ `workflowEngine` | ✅ | ❌ |
