@@ -206,6 +206,13 @@ contextBridge.exposeInMainWorld('H', {
   connectionsTest:  (id)       => ipcRenderer.invoke('connectionsTest', id),
   connectionsSetLive: (id, enabled) => ipcRenderer.invoke('connectionsSetLive', id, enabled),
   connectionsRuntimeStatus: (id) => ipcRenderer.invoke('connectionsRuntimeStatus', id),
+  // PHASE 28.3 — Email outbound (agent tool) + inbound listener.
+  emailSend: (payload) => ipcRenderer.invoke('emailSend', payload),
+  onEmailIncoming: (cb) => {
+    const handler = (_, msg) => cb(msg);
+    ipcRenderer.on('email:incoming', handler);
+    return () => ipcRenderer.removeListener('email:incoming', handler);
+  },
   // Telegram chat viewer — read history persisted in settingsStore (same
   // userData dir as keys), send outbound from the desktop UI, listen for
   // live message events from the bot runtime.

@@ -198,6 +198,24 @@ const CONNECTIONS = [
         params: { to: 'string +1234567890 or name@icloud.com', text: 'string message body' }
       }
     ]
+  },
+  // PHASE 28.3 — Email channel (IMAP inbound + SMTP outbound, BYOK).
+  // Config is multi-field (email.imap.host, email.smtp.host, etc.) so
+  // keyId is null — has() checks the imap.host setting as a proxy for
+  // "configured". The live runtime is owned by EmailAdapter inside
+  // src/main/channelAdapters/email.js.
+  {
+    id: 'email',
+    keyId: null,
+    name: 'Email',
+    envHint: 'IMAP + SMTP (BYOK)',
+    tools: [
+      {
+        name: 'conn_email_send',
+        desc: '[Connection: Email] Send an email via the user\'s SMTP server. Requires permission approval.',
+        params: { to: 'string recipient', subject: 'string', body: 'string', inReplyTo: 'string optional Message-ID for threading' }
+      }
+    ]
   }
 ];
 
