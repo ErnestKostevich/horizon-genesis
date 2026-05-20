@@ -1,0 +1,134 @@
+{
+  "id": "weekly-retrospective",
+  "name": "Weekly Retrospective",
+  "description": "Friday 6pm GTD-style retrospective: aggregates the week's commits, completed tickets, and journal entries, then runs weekly-review skill for reflection prompts.",
+  "category": "productivity",
+  "tier": "built_in",
+  "trigger": "schedule:18:00",
+  "schedule": {
+    "dayOfWeek": "friday",
+    "note": "Engine schedule:HH:MM fires daily. Step 0 short-circuits on non-Friday days; remove that step if you prefer Tuesday/Monday cadence instead."
+  },
+  "enabled": false,
+  "steps": [
+    {
+      "type": "run_code",
+      "action": "guard_day_of_week",
+      "params": {
+        "language": "node",
+        "code": "const day = new Date().getDay(); if (day !== 5) { console.log('skip: not Friday'); process.exit(2); } console.log('proceed');"
+      },
+      "stopOnError": true
+    },
+    {
+      "type": "plugin",
+      "action": "fetch_week_commits",
+      "params": {
+        "pluginId": "git",
+        "tool": "log_since",
+        "args": {
+          "repos": "{{settings.trackedRepos}}",
+          "since": "7 days ago",
+          "format": "short"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "fetch_completed_tickets",
+      "params": {
+        "pluginId": "linear",
+        "tool": "completed_since",
+        "args": {
+          "since": "7 days ago",
+          "assignee": "me"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "fetch_journal_entries",
+      "params": {
+        "pluginId": "memory",
+        "tool": "search",
+        "args": {
+          "query": "journal",
+          "since": "7 days ago",
+          "limit": 50
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "summarize-anything",
+      "params": {
+        "skill": "summarize-anything",
+        "args": {
+          "inputs": [
+            "{{steps.fetch_week_commits.output}}",
+            "{{steps.fetch_completed_tickets.output}}",
+            "{{steps.fetch_journal_entries.output}}"
+          ],
+          "format": "weekly_digest"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "weekly-review",
+      "params": {
+        "skill": "weekly-review",
+        "args": {
+          "digest": "{{steps.summarize-anything.output}}",
+          "mode": "gtd",
+          "promptForReflection": true
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "save_to_memory",
+      "params": {
+        "pluginId": "memory",
+        "tool": "write_note",
+        "args": {
+          "path": "retros/{{date.iso}}-weekly.md",
+          "content": "{{steps.weekly-review.output}}",
+          "tags": ["retro", "weekly", "auto"]
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "deliver_retro",
+      "params": {
+        "pluginId": "telegram",
+        "tool": "send_message",
+        "args": {
+          "chatId": "{{settings.telegramChatId}}",
+          "text": "{{steps.weekly-review.output}}",
+          "parseMode": "Markdown"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "notify",
+      "action": "Retro ready",
+      "params": {
+        "title": "Weekly Retrospective",
+        "body": "Your weekly review is saved to memory and delivered."
+      }
+    }
+  ],
+  "outputs": {
+    "primaryChannel": "telegram",
+    "persistence": "memory/retros/"
+  }
+}

@@ -7,7 +7,7 @@
   "category": "finance",
   "tier": "built_in",
   "icon": "TrendingUp",
-  "permissions": ["network:api.coingecko.com"],
+  "permissions": ["network.fetch"],
   "settings": [],
   "tools": [
     {

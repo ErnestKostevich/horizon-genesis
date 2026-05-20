@@ -34,8 +34,6 @@
 <link rel="stylesheet" href="apex-alive.css"/>
 <link rel="stylesheet" href="/vendor/xterm/css/xterm.css"/>
 <link rel="stylesheet" href="chat-shell-polish.css"/>
-<link rel="stylesheet" href="chat-cursor-v2.css"/>
-<link rel="stylesheet" href="chat-cursor-v3.css"/>
 <link rel="stylesheet" href="chat-emergency-dock.css"/>
 <!-- Phase 17 redesign pass — skeleton loaders, toasts, modal animation,
      input focus rings, animated bg, sidebar hover. Layered last so it
@@ -46,11 +44,6 @@
 <link rel="stylesheet" href="chat-settings-redesign.css"/>
 </head>
 <body>
-<!-- Sprint-1 fix: <canvas id="fractalBg"> + fractal-bg.js removed. The animated
-     WebGL fractal was constant-GPU draw with no readable benefit; replaced by
-     static SVG-noise + 2 fixed radial gradients applied to body in chat-base.css.
-     The fractal-bg.js file is kept on disk but no longer loaded. -->
-
 <!-- ═══════════ ICON LIBRARY (lucide.dev) ═══════════
      Inline SVG <symbol> definitions reused across the title bar, mode
      chips, settings sidebar, and inline chips. Replaces the prior
@@ -1656,7 +1649,12 @@
     <button class="composer-chip strong" onclick="openModelPicker(event)" title="Choose model">
       <span>Model</span><b id="composer-model-chip">Gemini</b>
     </button>
-    <button class="composer-chip" onclick="openPersonaPicker(event)" title="Choose persona">
+    <!-- Sprint 4 — Task 3: persona pill with small avatar glyph. The
+         persona-chip class adds an accent tint so the pill reads as
+         clickable + distinct from the rest of the toolbar. The avatar
+         span is populated by setPersona() from the persona's .icon. -->
+    <button class="composer-chip persona-chip" onclick="openPersonaPicker(event)" title="Choose persona">
+      <span class="persona-chip-avatar" id="composer-persona-avatar" aria-hidden="true">P</span>
       <span>Persona</span><b id="composer-persona-chip">Default</b>
     </button>
     <!-- PR-LAYOUT-V3 — Mode chip was cycle-on-click (clicked through
@@ -2375,6 +2373,43 @@ function _escHtml(s){
     .replace(/'/g, '&#39;');
 }
 var esc = _escHtml;
+
+// Sprint 4 — Task 4: shared skeleton helpers. The .hz-skel* classes live in
+// chat-redesign.css and were defined but unused in JS. These helpers emit
+// markup for the surfaces that have to do async fetches before they can show
+// real content: Settings panels, Marketplace, Plugin Hub, Skills, Chat list,
+// Inspector. Pattern:  el.innerHTML = hzSkelRows(n)  →  populate later.
+function hzSkelRows(n, opts) {
+  n = Math.max(1, n | 0);
+  opts = opts || {};
+  const widths = opts.widths || ['78%', '92%', '60%', '85%', '70%'];
+  const rowGap = opts.gap || 10;
+  const rowHeight = opts.height || 14;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const w = widths[i % widths.length];
+    out.push('<div class="hz-skel hz-skel-line" style="width:' + w + ';height:' + rowHeight + 'px;margin-bottom:' + rowGap + 'px"></div>');
+  }
+  return '<div class="hz-skel-rows" aria-busy="true" aria-label="loading">' + out.join('') + '</div>';
+}
+function hzSkelBlock() {
+  return '<div class="hz-skel hz-skel-block" aria-busy="true"></div>';
+}
+function hzSkelCardGrid(n) {
+  n = Math.max(1, n | 0);
+  const cards = [];
+  for (let i = 0; i < n; i++) {
+    cards.push(
+      '<div class="hz-skel-card" style="padding:14px;border:1px solid rgba(255,255,255,.06);border-radius:10px">' +
+        '<div class="hz-skel hz-skel-line" style="width:62%;margin-bottom:8px"></div>' +
+        '<div class="hz-skel hz-skel-line" style="width:88%;margin-bottom:8px"></div>' +
+        '<div class="hz-skel hz-skel-line" style="width:42%"></div>' +
+      '</div>'
+    );
+  }
+  return '<div class="hz-skel-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px" aria-busy="true">' + cards.join('') + '</div>';
+}
+
 function _shortTs(iso){
   if (!iso) return '';
   try {
@@ -4075,6 +4110,21 @@ async function setPersona(id, opts = {}) {
     if (p) {
       const chip = document.getElementById('composer-persona-chip');
       if (chip) chip.textContent = p.name || id;
+      // Sprint 4 — Task 3: render the persona avatar in the chip. Falls
+      // back to first 1-2 initials of the name when the persona has no
+      // .icon (custom personas often skip it).
+      const av = document.getElementById('composer-persona-avatar');
+      if (av) {
+        if (p.icon) {
+          av.textContent = p.icon;
+          av.classList.add('has-emoji');
+        } else {
+          const initials = String(p.name || id || 'P')
+            .split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
+          av.textContent = initials || 'P';
+          av.classList.remove('has-emoji');
+        }
+      }
       if (opts.announce === true) {
         const greeting = lang === 'ru' ? p.greeting?.ru : p.greeting?.en;
         if (greeting) {
@@ -4444,7 +4494,6 @@ H.onMarketAuthenticated?.(async (user) => {
 // chat-code-workspace.js (where opRender lives, and where
 // ensureOperatorAgentListener calls opLog directly).
 </script>
-<!-- Sprint-1 fix: fractal-bg.js unloaded (file kept on disk for backward compat). -->
 <!-- PR-V Phase 2 — slash command dispatcher extracted from inline.
      Loaded AFTER the main inline script so window.* globals it reads
      (prov, history, MODEL_PICKER_REGISTRY, setMode, setPersona, etc.)

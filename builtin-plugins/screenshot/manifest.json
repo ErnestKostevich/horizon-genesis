@@ -7,7 +7,7 @@
   "category": "system",
   "tier": "built_in",
   "icon": "Camera",
-  "permissions": ["screen:read", "fs:write:userdata"],
+  "permissions": ["screen.read", "filesystem.write"],
   "settings": [],
   "tools": [
     {
