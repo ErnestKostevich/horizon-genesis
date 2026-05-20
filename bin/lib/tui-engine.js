@@ -55,6 +55,30 @@ const ANSI = {
 
 const PROMPT = '› ';
 
+// Fix 6 — descriptions for slash-command autocomplete menu
+const SLASH_DESCRIPTIONS = {
+  '/help':         'show available slash commands',
+  '/quit':         'exit the TUI',
+  '/exit':         'exit the TUI',
+  '/clear':        'clear screen',
+  '/reset':        'clear chat history (memory retained)',
+  '/skills':       'list installed skills (interactive)',
+  '/skill':        'force-include a skill in next turn',
+  '/skill-show':   'print a skill\'s SKILL.md',
+  '/persona':      'show / switch persona',
+  '/persona-list': 'pick a persona (interactive)',
+  '/model':        'show / switch provider',
+  '/model-list':   'pick a provider (interactive)',
+  '/mem':          'semantic memory search',
+  '/agent':        'full agent loop (multi-step + tools)',
+  '/chat':         'force single-turn chat',
+  '/stream':       'toggle streaming on|off',
+  '/markdown':     'toggle markdown rendering on|off',
+  '/banner':       'reprint the banner header',
+  '/verbose':      'restart with --verbose for diagnostics',
+  '/find':         'search transcript (same as Ctrl+F)',
+};
+
 class TuiEngine {
   constructor(opts = {}) {
     this.completer = opts.completer || null;
@@ -83,6 +107,24 @@ class TuiEngine {
     this._lastDrawHeight = 0;
     this._closed = false;
     this._sending = false;
+
+    // Fix 3 — optional runtime handle for the persistent status line.
+    // Set via engine.runtime = rt after construction; we read provider,
+    // persona, lang, cost (best-effort) from it on every render.
+    this.runtime = opts.runtime || null;
+    this._sessionStartMs = Date.now();
+
+    // Fix 5 — render throttling. engine.print() may be called once per
+    // streamed token (200+/sec); we throttle redraws to ~20fps so the
+    // input bar doesn't flicker.
+    this._pendingFrame = false;
+    this._lastFrameAt = 0;
+    this._frameTimer = null;
+
+    // Fix 6 — floating autocomplete menu state.
+    this._completionHits = null;   // array of slash commands or null
+    this._completionIdx = 0;       // currently-highlighted hit
+    this._completionPrefix = '';   // the prefix the hits were computed from
   }
 
   // ── public API ──────────────────────────────────────────────────────
@@ -133,6 +175,11 @@ class TuiEngine {
    * Print a line to the transcript. Goes both to stdout and to the
    * in-memory buffer so search + scrollback can find it later.
    * Pass `noAppend: true` for ephemeral status messages.
+   *
+   * Fix 5 — throttle input-bar redraws to ~20fps. When tokens arrive at
+   * 200/sec (typical streaming rate) we'd otherwise redraw the input
+   * bar 200 times/sec which causes visible flicker. We coalesce redraws
+   * inside a 50ms window with a trailing-edge setTimeout.
    */
   print(text, { noAppend = false } = {}) {
     const lines = String(text).split('\n');
@@ -150,9 +197,37 @@ class TuiEngine {
       // Just append silently; they'll see new lines once they scroll back.
       return;
     }
-    // Clear current input bar, write content, redraw input bar.
+    // Always clear input bar and write content immediately so output
+    // appears live. Only the *redraw* of the input bar is throttled.
     this._eraseInputBar();
     process.stdout.write(text + '\n');
+
+    const now = Date.now();
+    if (now - this._lastFrameAt < 50) {
+      // Too soon — schedule a trailing redraw.
+      this._pendingFrame = true;
+      if (!this._frameTimer) {
+        this._frameTimer = setTimeout(() => {
+          this._frameTimer = null;
+          if (this._pendingFrame && !this._closed) {
+            this._pendingFrame = false;
+            this._renderInputBar();
+          }
+        }, 50);
+      }
+      return;
+    }
+    this._renderInputBar();
+  }
+
+  /**
+   * Fix 5 — force a redraw bypassing the throttle. Call after stream end
+   * so the final frame always reflects the latest state (e.g. when
+   * setSending(false) needs to immediately repaint).
+   */
+  _forceRedraw() {
+    if (this._frameTimer) { clearTimeout(this._frameTimer); this._frameTimer = null; }
+    this._pendingFrame = false;
     this._renderInputBar();
   }
 
@@ -196,7 +271,9 @@ class TuiEngine {
   /** Mark composer as "sending" so we ignore Enter until reply comes back. */
   setSending(on) {
     this._sending = !!on;
-    if (!on && process.stdin.isTTY && !this._closed) this._renderInputBar();
+    // Fix 5 — force-redraw on completion so the final frame reflects state
+    // even if a throttled token redraw was pending.
+    if (!on && process.stdin.isTTY && !this._closed) this._forceRedraw();
   }
 
   // ── key handling ────────────────────────────────────────────────────
@@ -249,11 +326,19 @@ class TuiEngine {
     if (key.ctrl && key.name === 'k') { this.lines[this.lineIdx] = this.lines[this.lineIdx].slice(0, this.col); this._renderInputBar(); return; }
     if (key.ctrl && key.name === 'w') { this._deleteWordBack(); return; }
 
-    if (key.name === 'backspace') { this._backspace(); return; }
-    if (key.name === 'delete')    { this._delete(); return; }
+    if (key.name === 'backspace') { this._cancelCompletion(); this._backspace(); return; }
+    if (key.name === 'delete')    { this._cancelCompletion(); this._delete(); return; }
     if (key.name === 'tab')       { this._autocomplete(); return; }
 
+    // Fix 6 — Esc closes autocomplete menu if open
+    if (key.name === 'escape' && this._completionHits) { this._cancelCompletion(); return; }
+
     if (key.name === 'return' || key.name === 'enter') {
+      // Fix 6 — Enter accepts highlighted autocomplete if menu is open
+      if (this._completionHits && this._completionHits.length > 1) {
+        this._acceptCompletion();
+        return;
+      }
       // Shift+Enter = newline; Enter alone = submit
       if (key.shift || key.alt) { this._insertNewline(); return; }
       this._submit();
@@ -262,6 +347,7 @@ class TuiEngine {
 
     // Printable character
     if (ch && !key.ctrl && !key.meta && ch.length === 1 && ch >= ' ') {
+      this._cancelCompletion();
       this._insertChar(ch);
       return;
     }
@@ -381,22 +467,63 @@ class TuiEngine {
     else if (this.lineIdx < this.lines.length - 1) { this.lineIdx++; this.col = 0; }
     this._renderInputBar();
   }
+  /**
+   * Fix 6 — floating autocomplete menu.
+   * Tab on a new prefix: compute hits, show menu with first highlighted.
+   * Tab while menu is open: cycle highlight.
+   * Enter while menu is open: accept highlighted.
+   * Esc closes the menu (handled in _handleKey).
+   * Single-hit case still completes immediately (no menu needed).
+   */
   _autocomplete() {
     if (!this.completer) return;
     const line = this.lines[this.lineIdx];
     const before = line.slice(0, this.col);
     const after  = line.slice(this.col);
-    const [hits, prefix] = this.completer(before);
-    if (!hits || !hits.length) return;
+    // If menu is already open and prefix matches, cycle.
+    if (this._completionHits && this._completionHits.length > 1
+        && before === this._completionPrefix) {
+      this._completionIdx = (this._completionIdx + 1) % this._completionHits.length;
+      this._renderInputBar();
+      return;
+    }
+    const [hits] = this.completer(before);
+    if (!hits || !hits.length) {
+      this._completionHits = null;
+      this._renderInputBar();
+      return;
+    }
     if (hits.length === 1) {
       this.lines[this.lineIdx] = hits[0] + after;
       this.col = hits[0].length;
-    } else {
-      // Print options + redraw composer
-      this._eraseInputBar();
-      process.stdout.write(fmt.dim('  ' + hits.join('   ') + '\n'));
+      this._completionHits = null;
+      this._renderInputBar();
+      return;
     }
+    // Multiple — open the floating menu.
+    this._completionHits = hits;
+    this._completionIdx = 0;
+    this._completionPrefix = before;
     this._renderInputBar();
+  }
+
+  _acceptCompletion() {
+    if (!this._completionHits || !this._completionHits.length) return false;
+    const picked = this._completionHits[this._completionIdx] || this._completionHits[0];
+    const line = this.lines[this.lineIdx];
+    const after = line.slice(this.col);
+    this.lines[this.lineIdx] = picked + after;
+    this.col = picked.length;
+    this._completionHits = null;
+    this._renderInputBar();
+    return true;
+  }
+
+  _cancelCompletion() {
+    if (!this._completionHits) return false;
+    this._completionHits = null;
+    this._renderInputBar();
+    return true;
   }
   _submit() {
     if (this._sending) return;
@@ -533,9 +660,56 @@ class TuiEngine {
     this._lastDrawHeight = 0;
   }
 
+  /**
+   * Fix 3 — render a single status line above the composer.
+   * Format: ⌁ <provider>:<model>  ·  <persona>  ·  <tokens>/<ctx>  ·  $<cost>  ·  <mm:ss>
+   * Fails gracefully to a minimal line if runtime fields are missing.
+   * Returns the formatted line (ANSI-coloured) without trailing newline.
+   */
+  _statusLine() {
+    const rt = this.runtime;
+    if (!rt || !rt.settingsStore) return '';
+    let provider = '—', persona = '—', modelStr = '';
+    try {
+      provider = rt.settingsStore.get('provider') || 'gemini';
+      persona = rt.settingsStore.get('persona') || 'jarvis';
+      const m = rt.settingsStore.get('model.' + provider);
+      modelStr = m ? (':' + String(m).split('/').pop().slice(0, 22)) : '';
+    } catch (_) {}
+
+    // Session time mm:ss
+    const elapsed = Math.floor((Date.now() - this._sessionStartMs) / 1000);
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const ss = String(elapsed % 60).padStart(2, '0');
+
+    // Cost (best-effort — fail silently if costTracker is absent)
+    let costStr = '';
+    let tokensStr = '';
+    try {
+      if (rt.costTracker && typeof rt.costTracker.summary === 'function') {
+        const s = rt.costTracker.summary({ days: 1 });
+        if (s?.totals) {
+          const c = s.totals.costUsd || 0;
+          if (c > 0) costStr = '$' + c.toFixed(c < 0.01 ? 4 : 2);
+          const t = s.totals.tokens || 0;
+          if (t > 0) tokensStr = t > 1000 ? (Math.round(t / 100) / 10) + 'k' : String(t);
+        }
+      }
+    } catch (_) {}
+
+    const parts = [];
+    parts.push(fmt.cyan('⌁ ') + fmt.bold(provider + modelStr));
+    parts.push(fmt.dim('  ·  ') + fmt.cyan(persona));
+    if (tokensStr) parts.push(fmt.dim('  ·  ') + fmt.dim(tokensStr + ' tok'));
+    if (costStr) parts.push(fmt.dim('  ·  ') + fmt.green(costStr));
+    parts.push(fmt.dim('  ·  ' + mm + ':' + ss));
+    return parts.join('');
+  }
+
   _renderInputBar() {
     if (!process.stdin.isTTY || this._closed) return;
     this._eraseInputBar();
+    this._lastFrameAt = Date.now();
 
     if (this.searchActive) {
       // Single-line: " 🔍 query · 3/12 matches "
@@ -548,11 +722,43 @@ class TuiEngine {
     }
 
     if (this._sending) {
+      // Show status line above the sending indicator if runtime is set.
+      const status = this._statusLine();
+      let height = 0;
+      if (status) { process.stdout.write(status + '\n'); height++; }
       const bar = fmt.dim('  …sending — press Ctrl+C to interrupt');
       process.stdout.write(bar);
-      this._lastDrawHeight = 1;
+      this._lastDrawHeight = height + 1;
       return;
     }
+
+    // Fix 6 — floating autocomplete menu above composer
+    let menuHeight = 0;
+    if (this._completionHits && this._completionHits.length > 1) {
+      const hits = this._completionHits.slice(0, 6);
+      for (let i = 0; i < hits.length; i++) {
+        const h = hits[i];
+        const desc = SLASH_DESCRIPTIONS[h] || '';
+        const padded = h.padEnd(16);
+        let line;
+        if (i === this._completionIdx) {
+          // Highlighted row — bright text on dim bg
+          line = '\x1b[48;5;235m\x1b[97m  ' + padded + '  ' + (desc ? '\x1b[2m' + desc + '\x1b[22m' : '') + '\x1b[0m';
+        } else {
+          line = '  ' + fmt.cyan(padded) + '  ' + (desc ? fmt.dim(desc) : '');
+        }
+        process.stdout.write(line + '\n');
+        menuHeight++;
+      }
+      // Footer hint
+      process.stdout.write(fmt.dim('  Tab=next · Enter=accept · Esc=cancel') + '\n');
+      menuHeight++;
+    }
+
+    // Status line (above composer)
+    const status = this._statusLine();
+    let statusHeight = 0;
+    if (status) { process.stdout.write(status + '\n'); statusHeight++; }
 
     // Composer — print each line
     const lineCount = this.lines.length;
@@ -561,7 +767,7 @@ class TuiEngine {
       process.stdout.write(prefix + this.lines[i]);
       if (i < lineCount - 1) process.stdout.write('\n');
     }
-    this._lastDrawHeight = lineCount;
+    this._lastDrawHeight = menuHeight + statusHeight + lineCount;
 
     // Position cursor on (lineIdx, col)
     if (this.lineIdx < lineCount - 1) {

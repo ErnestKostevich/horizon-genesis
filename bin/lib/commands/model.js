@@ -11,6 +11,34 @@ const { DEFAULT_PROVIDER_MODELS } = require('../../../src/main/runtime/ai-provid
 async function run({ runtime, args, flags }) {
   const { settingsStore, keysStore } = runtime;
 
+  // Fix 9 — set a fallback provider used when the primary fails after
+  // retries: `horizon model --fallback claude` or
+  // `horizon model --fallback none` to clear.
+  if (flags.fallback !== undefined) {
+    if (flags.fallback === 'none' || flags.fallback === false || flags.fallback === '') {
+      settingsStore.set('fallbackProvider', '');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify({ ok: true, fallback: null }) + '\n');
+      } else {
+        process.stdout.write(fmt.ok('fallback cleared') + '\n');
+      }
+      return 0;
+    }
+    const fb = String(flags.fallback);
+    if (!DEFAULT_PROVIDER_MODELS[fb]) {
+      process.stderr.write(fmt.err('unknown provider: ' + fb) + '\n');
+      process.stderr.write(fmt.dim('  try --list to see options\n'));
+      return 2;
+    }
+    settingsStore.set('fallbackProvider', fb);
+    if (flags.json) {
+      process.stdout.write(JSON.stringify({ ok: true, fallback: fb }) + '\n');
+    } else {
+      process.stdout.write(fmt.ok('fallback → ' + fmt.cyan(fb)) + '\n');
+    }
+    return 0;
+  }
+
   if (flags.list) {
     const list = Object.entries(DEFAULT_PROVIDER_MODELS).map(([p, m]) => {
       const stored = settingsStore.get('model.' + p);

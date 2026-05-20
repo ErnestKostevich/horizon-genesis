@@ -65,7 +65,7 @@
         color: var(--t2, #9aa0a6);
       ">
         <span style="display:flex;align-items:center;gap:6px">
-          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#06b6d4,#8b5cf6);"></span>
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent-grad,linear-gradient(135deg,#7c6df2,#a78bfa));"></span>
           Live canvas
         </span>
         <span class="lc-meta" style="margin-left:auto;color:var(--t3,#7a808a);font-size:9.5px"></span>

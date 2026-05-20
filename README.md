@@ -21,7 +21,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#what-it-does">Features</a> ·
-  <a href="#vs-hermes-vs-openclaw">Comparison</a> ·
+  <a href="#vs-hermes-agent">Comparison</a> ·
   <a href="https://github.com/ErnestKostevich/Horizon-Agent-Docs">User Docs</a> ·
   <a href="https://horizonaai.dev/docs">Hosted Docs</a>
 </p>
@@ -36,6 +36,45 @@
 <p align="center">
   <em>Want to use Horizon? Start at the <a href="https://github.com/ErnestKostevich/Horizon-Agent-Docs">User Docs</a> or <a href="https://github.com/ErnestKostevich/horizon-genesis/releases/latest">download the latest release</a>. This README is the source-code overview.</em>
 </p>
+
+## Install
+
+```bash
+# CLI — Linux / macOS (one line, no Node.js required):
+curl -L https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-linux-x64 \
+  -o /usr/local/bin/horizon && chmod +x /usr/local/bin/horizon && horizon setup
+```
+
+```powershell
+# CLI — Windows PowerShell:
+iwr https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-win-x64.exe -OutFile horizon.exe; .\horizon.exe setup
+```
+
+<details>
+<summary><strong>Desktop app downloads (Windows / macOS / Linux)</strong></summary>
+
+Grab the official installer from
+[the latest release](https://github.com/ErnestKostevich/horizon-genesis/releases/latest):
+
+| Platform | File |
+|---|---|
+| Windows x64 (installer) | `Horizon-AI-Setup-x.y.z.exe` |
+| Windows x64 (portable)  | `Horizon-AI-Portable-x.y.z.exe` |
+| macOS (Intel + Apple Silicon) | `Horizon-AI-x.y.z.dmg` |
+| Linux x64 (AppImage)    | `Horizon-AI-x.y.z.AppImage` |
+| Linux x64 (Debian/Ubuntu) | `horizon-ai_x.y.z_amd64.deb` |
+
+</details>
+
+<details>
+<summary><strong>Build from source (Node 22+)</strong></summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scripts/install-cli.sh | bash      # Linux/macOS
+iwr https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scripts/install-cli.ps1 | iex             # Windows
+```
+
+</details>
 
 ## What it does
 
@@ -62,43 +101,6 @@
 - **Plugin SDK** in TypeScript with a CLI scaffolder
   ([`horizon-plugin-sdk`](https://github.com/ErnestKostevich/horizon-plugin-sdk)) +
   a real **marketplace** with crypto payouts to authors via NOWPayments.
-
-## Install
-
-### Desktop app (Electron — Windows / macOS / Linux)
-
-Grab the official installer from
-[the latest release](https://github.com/ErnestKostevich/horizon-genesis/releases/latest):
-
-| Platform | File |
-|---|---|
-| Windows x64 (installer) | `Horizon-AI-Setup-x.y.z.exe` |
-| Windows x64 (portable)  | `Horizon-AI-Portable-x.y.z.exe` |
-| macOS (Intel + Apple Silicon) | `Horizon-AI-x.y.z.dmg` |
-| Linux x64 (AppImage)    | `Horizon-AI-x.y.z.AppImage` |
-| Linux x64 (Debian/Ubuntu) | `horizon-ai_x.y.z_amd64.deb` |
-
-### Terminal CLI (standalone — no Node.js required)
-
-```bash
-# macOS / Linux
-curl -L https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-linux-x64 -o /usr/local/bin/horizon
-chmod +x /usr/local/bin/horizon
-horizon setup
-```
-
-```powershell
-# Windows
-iwr https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-win-x64.exe -OutFile horizon.exe
-.\horizon.exe setup
-```
-
-### CLI from source (if you have Node 22+)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scripts/install-cli.sh | bash      # Linux/macOS
-iwr https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scripts/install-cli.ps1 | iex             # Windows
-```
 
 ## Quick taste
 
@@ -151,7 +153,23 @@ Same agent, same memory, same skills the desktop app uses — just no
 window. You can still hit the HTTP API from your laptop, point a PWA
 at it, or schedule cron jobs against it.
 
-## vs Hermes vs OpenClaw
+## vs Hermes Agent
+
+Horizon and Hermes solve overlapping problems with different bets.
+
+| What we lead with | What they lead with |
+|---|---|
+| Desktop GUI (Electron) + Mobile PWA | Terminal + 20+ messaging channels |
+| Computer use — wake word, screen, smart_click | A 691-skill community marketplace |
+| 5 personas + per-persona memory + voice | A single self-improving `SOUL.md` |
+| Crypto-payout marketplace (70/30 to authors) | Free open hub |
+| 25 direct AI providers + OpenRouter (300+) | LiteLLM wrapper across ~200 |
+
+Pick Hermes if you want maximum messaging coverage and a mature skill ecosystem.
+Pick Horizon if you want a polished desktop app, voice + computer use, and personas.
+
+<details>
+<summary><strong>Full by-feature comparison vs Hermes &amp; OpenClaw</strong> (40+ rows)</summary>
 
 |  | **Horizon AI** | Hermes Agent | OpenClaw |
 |---|:---:|:---:|:---:|
@@ -195,6 +213,8 @@ at it, or schedule cron jobs against it.
 | Standalone CLI binaries   | ✅ 4 platforms | ✅ | ✅ |
 
 > Legend: ✅ first-class · 🔸 partial / planned · ❌ not present
+
+</details>
 
 ## Architecture
 
@@ -380,24 +400,7 @@ design that drives the CLI tracks.
 - macOS:   `~/Library/Application Support/horizon-ai/`
 - Linux:   `~/.config/horizon-ai/`
 
-## Why BUSL-1.1?
-
-Hermes and OpenClaw ship under MIT. Horizon ships under
-Business Source License 1.1 — source-visible, free for personal /
-educational / internal-evaluation use; commercial deployments need a
-written licence agreement with the author.
-
-- **Free for evaluation, personal use, and contributing back.** Run
-  it on your own machine, audit the source, send PRs.
-- **Commercial resale of Horizon itself** (hosted service, paid
-  redistribution) requires a licence. Building plugins / workflows
-  on top of Horizon and selling them through the marketplace is
-  fully supported and does not require a separate licence.
-- Same pattern HashiCorp's Terraform Enterprise, Sentry, and
-  Mattermost use.
-
-Reach out to Ernest at the address in [`SECURITY.md`](SECURITY.md) for
-commercial questions.
+License: BUSL-1.1 — free for personal use, paid commercial. See [details below](#license).
 
 <details>
 <summary><strong>Repo layout</strong> (click to expand — for contributors and curious readers)</summary>
@@ -440,3 +443,21 @@ ernest2011kostevich@gmail.com
 
 If you find Horizon useful, the easiest support is a ⭐ on this repo and
 a follow on the marketplace.
+
+## License
+
+Horizon ships under **Business Source License 1.1** — source-visible,
+free for personal / educational / internal-evaluation use; commercial
+deployments need a written licence agreement with the author.
+
+- **Free for evaluation, personal use, and contributing back.** Run
+  it on your own machine, audit the source, send PRs.
+- **Commercial resale of Horizon itself** (hosted service, paid
+  redistribution) requires a licence. Building plugins / workflows
+  on top of Horizon and selling them through the marketplace is
+  fully supported and does not require a separate licence.
+- Same pattern HashiCorp's Terraform Enterprise, Sentry, and
+  Mattermost use.
+
+Reach out to Ernest at the address in [`SECURITY.md`](SECURITY.md) for
+commercial questions. Full text in [`LICENSE`](LICENSE).
