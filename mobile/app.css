@@ -52,7 +52,7 @@ body { display: flex; flex-direction: column; }
 
 .pair-card {
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  padding: 20px; display: flex; flex-direction: column; gap: 14px;
 }
 .pair-card h2 { margin: 0 0 6px; font-size: 17px; }
 .pair-card label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--t2); }
@@ -63,7 +63,124 @@ body { display: flex; flex-direction: column; }
 }
 .pair-card input:focus { border-color: var(--accent); }
 .hint { font-size: 11px; color: var(--t3); margin: 4px 0 0; }
+.hint.footnote { text-align: center; margin-top: 4px; }
 .error { color: var(--bad); font-size: 13px; margin: 0; }
+.muted { color: var(--t2); margin: 0; }
+.muted.small { font-size: 12px; }
+
+/* Explainer block: "Looks like you opened Horizon directly" + 3-step list.
+   This is the new primary content of the pair view — sells the QR path
+   before the user sees any of the form fields. */
+.pair-explainer { display: flex; flex-direction: column; gap: 8px; }
+.pair-explainer h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.pair-steps {
+  margin: 4px 0 6px; padding-left: 20px; font-size: 13px; color: var(--fg);
+  display: flex; flex-direction: column; gap: 6px; line-height: 1.45;
+}
+.pair-steps code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px;
+  font-size: 12px;
+}
+@media (prefers-color-scheme: light) {
+  .pair-steps code { background: rgba(0,0,0,0.05); }
+}
+
+/* Big "Scan QR" button — the visual focal point of the pair view. */
+.btn-scan {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; padding: 16px 20px; font-size: 16px;
+  text-align: center;
+}
+.btn-scan-icon { font-size: 22px; line-height: 1; }
+
+/* Divider between the QR path and the manual fallback. */
+.pair-divider {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--t3); font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  margin: 2px 0;
+}
+.pair-divider::before, .pair-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
+
+/* Manual entry — collapsed by default. */
+.pair-manual {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 0 14px; background: rgba(255,255,255,0.02);
+}
+@media (prefers-color-scheme: light) {
+  .pair-manual { background: rgba(0,0,0,0.02); }
+}
+.pair-manual > summary {
+  cursor: pointer; padding: 12px 0;
+  font-size: 13px; font-weight: 600; color: var(--fg);
+  list-style: none; user-select: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.pair-manual > summary::marker, .pair-manual > summary::-webkit-details-marker { display: none; }
+.pair-manual > summary::after {
+  content: '▾'; margin-left: auto;
+  color: var(--t3); transition: transform 0.15s;
+}
+.pair-manual[open] > summary::after { transform: rotate(180deg); }
+.pair-manual[open] {
+  padding-bottom: 14px;
+}
+.pair-manual > summary + p,
+.pair-manual > label,
+.pair-manual > .btn-primary,
+.pair-manual > .error {
+  margin-top: 10px;
+}
+.pair-manual > label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--t2); }
+
+/* Camera scanner modal — fullscreen overlay with a reticle. */
+.qr-scan-modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,0.94);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.qr-scan-frame {
+  position: relative; width: 100%; max-width: 480px; aspect-ratio: 3/4;
+  display: flex; flex-direction: column;
+  background: #000; border-radius: var(--radius); overflow: hidden;
+}
+#qr-scan-video {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  background: #000;
+}
+#qr-scan-video.hidden { display: none; }
+.qr-scan-reticle {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 60%; aspect-ratio: 1/1;
+  border: 2px solid rgba(255,255,255,0.85);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+  pointer-events: none;
+}
+.qr-scan-hint {
+  position: absolute; bottom: 16px; left: 16px; right: 16px;
+  color: #fff; text-align: center; font-size: 13px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+}
+.qr-scan-close {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(0,0,0,0.55); color: #fff; border: 1px solid rgba(255,255,255,0.25);
+  width: 36px; height: 36px; border-radius: 50%;
+  font-size: 16px; cursor: pointer; line-height: 1;
+}
+.qr-scan-fallback {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  padding: 24px; text-align: center; color: var(--fg);
+  background: var(--bg-2);
+}
+.qr-scan-fallback.hidden { display: none; }
+.qr-scan-fallback p { margin: 0; font-size: 14px; }
+.qr-scan-fallback .btn-scan { cursor: pointer; }
 
 .btn-primary {
   font: inherit; font-weight: 600; padding: 12px 20px; border-radius: 10px;
