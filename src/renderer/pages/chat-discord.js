@@ -72,7 +72,7 @@ function dcRenderList() {
   if (!dcChatsCache.length) {
     list.innerHTML = `
       <div class="tg-empty">
-        <div style="font-size:32px;opacity:.5;margin-bottom:8px">🎮</div>
+        <div style="opacity:.5;margin-bottom:8px"><svg class="licon lg"><use href="#i-gamepad"/></svg></div>
         <strong>No Discord channels yet</strong>
         <p>Enable the Discord bot runtime in Settings → Connections, invite the bot to a server with MESSAGE_CONTENT intent, then send it a message in any text channel.</p>
       </div>`;

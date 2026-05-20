@@ -81,7 +81,7 @@ function tgRenderList() {
   if (!tgChatsCache.length) {
     list.innerHTML = `
       <div class="tg-empty">
-        <div style="font-size:32px;opacity:.5;margin-bottom:8px">💬</div>
+        <div style="opacity:.5;margin-bottom:8px"><svg class="licon lg"><use href="#i-message"/></svg></div>
         <strong>No Telegram chats yet</strong>
         <p>Enable the Telegram bot runtime in Settings → Connections, then send your bot a message. Conversations appear here.</p>
       </div>`;

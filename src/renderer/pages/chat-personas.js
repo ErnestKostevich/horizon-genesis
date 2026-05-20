@@ -106,7 +106,7 @@ async function _renderPeBody() {
   const detail = document.getElementById('pe-detail');
   if (!detail) return;
   if (!_peActiveId) {
-    detail.innerHTML = '<div class="pe-detail-empty"><div class="pe-detail-empty-icon">🎭</div><div class="pe-detail-empty-text">Pick a persona on the left.</div></div>';
+    detail.innerHTML = '<div class="pe-detail-empty"><div class="pe-detail-empty-icon"><svg class="licon lg"><use href="#i-drama"/></svg></div><div class="pe-detail-empty-text">Pick a persona on the left.</div></div>';
     return;
   }
   let full = _peCache.full[_peActiveId];
@@ -115,7 +115,7 @@ async function _renderPeBody() {
     if (full) _peCache.full[_peActiveId] = full;
   }
   if (!full) {
-    detail.innerHTML = '<div class="pe-detail-empty"><div class="pe-detail-empty-icon">⚠️</div><div class="pe-detail-empty-text">Failed to load this persona.</div></div>';
+    detail.innerHTML = '<div class="pe-detail-empty"><div class="pe-detail-empty-icon">!</div><div class="pe-detail-empty-text">Failed to load this persona.</div></div>';
     return;
   }
   const allowed = Array.isArray(full.allowedTools) ? full.allowedTools : null; // null = all allowed
@@ -167,7 +167,7 @@ async function _renderPeBody() {
         ? '<div style="color:var(--t3);font-size:12px;padding:6px 0">No memories yet. Add facts the persona should always remember.</div>'
         : memories.map(m => `
           <div class="pe-mem" data-mid="${m.id || ''}">
-            <div class="pe-mem-icon">📌</div>
+            <div class="pe-mem-icon"><svg class="licon"><use href="#i-bookmark"/></svg></div>
             <div class="pe-mem-text">${(m.text || '').replace(/[<>]/g,'')}</div>
             <button class="pe-mem-x" onclick="peRemoveMem('${(m.id || '').replace(/'/g,"\\'")}')">×</button>
           </div>

@@ -113,7 +113,7 @@ const THEMES = {
     dim:     [127, 132, 156],   // Catppuccin overlay-0
     cyan:    [148, 226, 213],   // Catppuccin teal
     magenta: [245, 194, 231],   // Catppuccin pink
-    spinnerFrames: ['☕','✦','♥','✦'],
+    spinnerFrames: ['◐','◓','◑','◒'],
     banner: '❀',
     description: 'Catppuccin Mocha. Warm cream tones.',
   },

@@ -272,7 +272,7 @@ async function renderWfOverview(body) {
       <!-- All-workflows table -->
       <div class="wfp-table">
         <div class="wfp-table-h">
-          <h3>⚡ All workflows</h3>
+          <h3 style="display:flex;align-items:center;gap:6px"><svg class="licon"><use href="#i-zap"/></svg> All workflows</h3>
           <span class="wfp-count">${allWfs.length} TOTAL</span>
         </div>
         ${allWfs.length === 0
@@ -337,8 +337,8 @@ function renderWfRow(wf) {
         }
       </div>
       <div class="wfp-row-actions">
-        <button class="wfp-btn run" onclick="runWorkflowById('${wfId}')" title="Run now">▶ Run</button>
-        <button class="wfp-btn del" onclick="deleteWorkflowById('${wfId}')" title="Delete">×</button>
+        <button class="wfp-btn run" onclick="runWorkflowById('${wfId}')" title="Run now"><svg class="licon" style="vertical-align:-2px"><use href="#i-play"/></svg> Run</button>
+        <button class="wfp-btn del" onclick="deleteWorkflowById('${wfId}')" title="Delete" aria-label="Delete"><svg class="licon" style="vertical-align:-2px"><use href="#i-x"/></svg></button>
       </div>
     </div>
   `;
@@ -401,7 +401,7 @@ async function renderWfBody() {
     if (!allWfs.length) {
       body.innerHTML = `
         <div class="empty-state">
-          <div class="es-icon">⚡</div>
+          <div class="es-icon"><svg class="licon lg"><use href="#i-zap"/></svg></div>
           <h3>${lang === 'ru' ? 'Нет workflow' : 'No workflows yet'}</h3>
           <p>${lang === 'ru' ? 'Создай свой первый workflow или опиши его чату — AI создаст его автоматически.' : 'Create your first workflow or describe it in chat — AI will build it automatically.'}</p>
           <div class="wf-examples">
@@ -428,7 +428,7 @@ async function renderWfBody() {
         <div class="wf-footer">
           <div class="wf-trigger">Trigger: <span class="wf-trigger-badge">${wf.trigger || 'manual'}</span></div>
           <div class="wf-actions">
-            <button class="wf-btn run" onclick="runWorkflowById('${wf.id}')">&#9654; Run</button>
+            <button class="wf-btn run" onclick="runWorkflowById('${wf.id}')"><svg class="licon" style="vertical-align:-2px"><use href="#i-play"/></svg> Run</button>
             <button class="wf-btn" onclick="shareWorkflow('${wf.id}')">Share</button>
             <button class="wf-btn del" onclick="deleteWorkflowById('${wf.id}')">Delete</button>
           </div>
@@ -438,12 +438,12 @@ async function renderWfBody() {
   } else if (wfCurrentTab === 'create') {
     body.innerHTML = `
       <div class="wf-create">
-        <h3>✨ Create Workflow with AI</h3>
+        <h3 style="display:flex;align-items:center;gap:6px"><svg class="licon"><use href="#i-sparkles"/></svg> Create Workflow with AI</h3>
         <div class="wf-field">
           <label>Describe what you want to automate</label>
           <textarea class="wf-textarea" id="wf-desc-input" placeholder="e.g. Open YouTube, wait 5 seconds, then close it"></textarea>
         </div>
-        <button class="wf-ai-btn" id="wf-generate-btn" onclick="createWfFromAI()">&#129302; Generate with AI</button>
+        <button class="wf-ai-btn" id="wf-generate-btn" onclick="createWfFromAI()"><svg class="licon" style="vertical-align:-2px"><use href="#i-bot"/></svg> Generate with AI</button>
         <div style="font-size:10px;color:var(--t3);margin-bottom:14px">Or create manually:</div>
         <div class="wf-field"><label>Workflow Name</label><input class="wf-input" id="wf-name-input" placeholder="My Workflow"/></div>
         <div class="wf-field">
@@ -635,7 +635,7 @@ async function createWfFromAI() {
     wfTab('list');
   } else {
     descEl.disabled = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = '&#129302; Generate with AI'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="licon" style="vertical-align:-2px"><use href="#i-bot"/></svg> Generate with AI'; }
   }
 }
 

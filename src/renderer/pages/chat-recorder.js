@@ -49,20 +49,20 @@ function renderRecorderBody() {
       <div class="rec-time" id="rec-time">${formatRecTime(screenRecSeconds)}</div>
       <div class="rec-status" id="rec-status">${isScreenRecording ? (lang==='ru'?'Запись экрана...':'Recording screen...') : (lang==='ru'?'Нажми ‣ чтобы начать запись':'Click ‣ to start recording')}</div>
       <div class="rec-controls">
-        <button class="rec-btn ${isScreenRecording ? 'stop' : 'start'}" onclick="toggleRecording()">${isScreenRecording ? '⏹ Stop' : '⏺ Start Recording'}</button>
+        <button class="rec-btn ${isScreenRecording ? 'stop' : 'start'}" onclick="toggleRecording()">${isScreenRecording ? '<svg class="licon" style="vertical-align:-2px"><use href="#i-square"/></svg> Stop' : '<svg class="licon" style="vertical-align:-2px"><use href="#i-circle-dot"/></svg> Start Recording'}</button>
         ${isScreenRecording ? '<button class="rec-btn" onclick="cancelRecording()">Cancel</button>' : ''}
       </div>
       <div class="rec-recordings" id="rec-recordings">
         ${screenRecordings.length ? `<div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:10px">${lang==='ru'?'Записи':'Recordings'}</div>` : ''}
         ${screenRecordings.map((r,i) => `
           <div class="rec-item">
-            <div class="rec-item-icon">🎥</div>
+            <div class="rec-item-icon"><svg class="licon"><use href="#i-video"/></svg></div>
             <div class="rec-item-info">
               <div class="rec-item-name">${r.name}</div>
               <div class="rec-item-meta">${r.duration} · ${r.date}</div>
             </div>
             <div class="rec-item-actions">
-              <button class="rec-narrate-btn" onclick="narrateRecording(${i})">&#129302; AI Narrate</button>
+              <button class="rec-narrate-btn" onclick="narrateRecording(${i})"><svg class="licon" style="vertical-align:-2px"><use href="#i-bot"/></svg> AI Narrate</button>
               <button class="rec-btn" style="padding:4px 10px;font-size:10px" onclick="playRecording(${i})">Play</button>
             </div>
           </div>

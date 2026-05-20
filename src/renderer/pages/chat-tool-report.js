@@ -42,7 +42,11 @@ function _attachToolReport(step){
     }
     const pill = document.createElement('span');
     pill.className = 'tool-report-inline';
-    const icon = ({read_file:'📖',write_file:'✎',list_dir:'📁',run_code:'⚡',shell:'❯',screenshot:'📷',analyze_screen:'👁',websearch:'🔎',open:'↗'})[step.tool] || '⚙';
+    // Sprint-2 fix — emoji icons swapped for lucide SVG symbols, same
+    // mapping but rendered via <use href="#…"/> so the agent step UI is
+    // visually consistent with the rest of the icon library.
+    const iconId = ({read_file:'i-book',write_file:'i-edit',list_dir:'i-file',run_code:'i-zap',shell:'i-terminal',screenshot:'i-eye',analyze_screen:'i-eye',websearch:'i-search',open:'i-arrow-up'})[step.tool] || 'i-settings';
+    const icon = '<svg class="licon"><use href="#'+iconId+'"/></svg>';
     const detail = step.detail || (step.args ? JSON.stringify(step.args).slice(0,40) : '');
     const ms = step.duration_ms != null ? (step.duration_ms < 1000 ? step.duration_ms+'ms' : (step.duration_ms/1000).toFixed(1)+'s') : '';
     pill.innerHTML = '<span class="tri-icon">'+icon+'</span><span>'+_escHtml(step.tool)+'</span>'+(detail?'<span>· '+_escHtml(detail)+'</span>':'')+(ms?'<span class="tri-time">· '+_escHtml(ms)+'</span>':'');
