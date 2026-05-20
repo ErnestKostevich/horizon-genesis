@@ -764,6 +764,113 @@ async function toggleTelegramLive(){
 window.saveTelegramAllowedUsers = saveTelegramAllowedUsers;
 window.loadTelegramAllowedUsers = loadTelegramAllowedUsers;
 
+// ── PHASE 28.3 — Discord + Email connection handlers ──────────────────────
+async function saveDiscordAllowedGuilds() {
+  const inp = document.getElementById('pi-discord-allowed-guilds');
+  const st = document.getElementById('discord-allowed-status');
+  const ids = String(inp?.value || '')
+    .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{15,25}$/.test(s));
+  try {
+    await H.set?.('discord.allowed_guild_ids', ids);
+    if (st) {
+      st.textContent = ids.length
+        ? `Allowed guilds: ${ids.length}.`
+        : 'No allowed guilds set — every server the bot is in can talk to Horizon.';
+      st.classList.remove('bad');
+    }
+  } catch (e) {
+    if (st) { st.textContent = e?.message || 'Could not save Discord allowed guilds.'; st.classList.add('bad'); }
+  }
+}
+
+async function refreshDiscordRuntimeStatus() {
+  const st = document.getElementById('discord-live-status');
+  const btn = document.getElementById('discord-live-toggle');
+  try {
+    const r = await H.connectionsRuntimeStatus?.('discord');
+    if (btn) btn.textContent = r?.enabled ? (r.running ? 'Stop Discord bot' : 'Disable Discord bot') : 'Start Discord bot';
+    if (st) {
+      const parts = [];
+      if (!r?.connected) parts.push('Discord token not saved.');
+      else if (r?.running) parts.push('Discord bot online — listening for mentions + DMs.');
+      else if (r?.enabled) parts.push('Discord bot enabled but not connected. Check token + intents.');
+      else parts.push('Discord runtime is off.');
+      if (r?.lastError) parts.push('Last error: ' + r.lastError);
+      st.textContent = parts.join(' ');
+      st.classList.toggle('ok', !!r?.running);
+      st.classList.toggle('bad', !!r?.lastError);
+    }
+    return r;
+  } catch (e) {
+    if (st) st.textContent = e?.message || 'Could not read Discord runtime status.';
+    return null;
+  }
+}
+
+async function toggleDiscordLive() {
+  const current = await refreshDiscordRuntimeStatus();
+  const next = !current?.enabled;
+  try {
+    const r = await H.connectionsSetLive?.('discord', next);
+    await refreshDiscordRuntimeStatus();
+    return r;
+  } catch (e) {
+    const st = document.getElementById('discord-live-status');
+    if (st) st.textContent = e?.message || 'Could not change Discord runtime state.';
+  }
+}
+
+// Generic save for email.* fields — keeps each input independent.
+async function saveEmailField(key, value) {
+  try {
+    const v = value == null ? '' : String(value).trim();
+    await H.set?.(key, v);
+  } catch (e) { console.warn('saveEmailField failed:', key, e?.message); }
+}
+
+async function refreshEmailRuntimeStatus() {
+  const st = document.getElementById('email-live-status');
+  const btn = document.getElementById('email-live-toggle');
+  try {
+    const r = await H.connectionsRuntimeStatus?.('email');
+    if (btn) btn.textContent = r?.running ? 'Stop email bot' : 'Start email bot';
+    if (st) {
+      const parts = [];
+      if (!r?.imap && !r?.smtp) parts.push('IMAP + SMTP not configured.');
+      if (r?.running) parts.push('Polling INBOX every ' + (r.pollSec || 60) + ' s.');
+      else if (r?.enabled === false) parts.push('Email runtime is off.');
+      if (r?.lastError) parts.push('Last error: ' + r.lastError);
+      st.textContent = parts.join(' ') || st.textContent;
+      st.classList.toggle('ok', !!r?.running);
+      st.classList.toggle('bad', !!r?.lastError);
+    }
+    return r;
+  } catch (e) {
+    if (st) st.textContent = e?.message || 'Could not read Email runtime status.';
+    return null;
+  }
+}
+
+async function toggleEmailLive() {
+  const current = await refreshEmailRuntimeStatus();
+  const next = !current?.enabled;
+  try {
+    await H.set?.('email.enabled', !!next);
+    await H.connectionsSetLive?.('email', next);
+    await refreshEmailRuntimeStatus();
+  } catch (e) {
+    const st = document.getElementById('email-live-status');
+    if (st) st.textContent = e?.message || 'Could not change Email runtime state.';
+  }
+}
+
+window.saveDiscordAllowedGuilds = saveDiscordAllowedGuilds;
+window.refreshDiscordRuntimeStatus = refreshDiscordRuntimeStatus;
+window.toggleDiscordLive = toggleDiscordLive;
+window.saveEmailField = saveEmailField;
+window.refreshEmailRuntimeStatus = refreshEmailRuntimeStatus;
+window.toggleEmailLive = toggleEmailLive;
+
 try {
   H.onConnectionsUpdated?.((payload) => {
     const tg = (payload?.connections || []).find(c => c.id === 'telegram_bot');
@@ -885,10 +992,10 @@ async function saveSubagentModel(value) {
 
 async function saveExecutionMode(value) {
   try {
-    // Phase 15 — accept the 3 new BYOK remote backends in addition to
-    // host/docker/ask. main.js still validates against the same
+    // Phase 28.3 — Singularity / Apptainer added for HPC clusters where
+    // Docker isn't available. main.js validates against the same
     // allow-list before persisting, so a stray value here is a no-op.
-    const ALLOWED = new Set(['host', 'docker', 'ssh', 'modal', 'daytona', 'ask']);
+    const ALLOWED = new Set(['host', 'docker', 'ssh', 'modal', 'daytona', 'singularity', 'ask']);
     const safe = ALLOWED.has(value) ? value : 'host';
     await H.set('executionMode', safe);
     toggleExecBackendFields(safe);
@@ -897,12 +1004,11 @@ async function saveExecutionMode(value) {
 }
 
 /**
- * Phase 15 — hide SSH / Modal / Daytona credential rows when not active
- * so the panel stays tidy. Called from saveExecutionMode + from the
- * panel-init loader.
+ * Hide credential rows for every executor except the active one.
+ * Called from saveExecutionMode + from the panel-init loader.
  */
 function toggleExecBackendFields(mode) {
-  for (const cls of ['ms-ssh-only', 'ms-modal-only', 'ms-daytona-only']) {
+  for (const cls of ['ms-ssh-only', 'ms-modal-only', 'ms-daytona-only', 'ms-singularity-only']) {
     const want = (cls === 'ms-' + mode + '-only');
     document.querySelectorAll('.' + cls).forEach(el => {
       el.style.display = want ? '' : 'none';

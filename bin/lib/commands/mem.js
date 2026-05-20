@@ -9,6 +9,7 @@
 //   horizon mem stats                      — summary counts + embedding state
 //   horizon mem migrate                    — mirror JSON memory to SQLite+FTS5
 //   horizon mem sqlite-status              — show row counts in the SQLite mirror
+//   horizon mem review                     — agent-curated pass (decay/dedupe/forget)
 
 const { fmt } = require('../tty');
 
@@ -21,11 +22,39 @@ async function run({ runtime, args, flags }) {
   if (sub === 'forget')  return forget(runtime, flags);
   if (sub === 'migrate') return migrate(runtime, flags);
   if (sub === 'sqlite-status') return sqliteStatus(runtime, flags);
+  if (sub === 'review')  return review(runtime, flags);
   if (sub === 'stats' || !sub) return stats(runtime, flags);
 
   process.stderr.write(fmt.err(`Unknown mem subcommand: ${sub}`) + '\n');
-  process.stderr.write('Try: search | dump | profile | forget | stats | migrate | sqlite-status\n');
+  process.stderr.write('Try: search | dump | profile | forget | stats | migrate | sqlite-status | review\n');
   return 2;
+}
+
+async function review(runtime, flags) {
+  let MemoryReviewer;
+  try { ({ MemoryReviewer } = require('../../../src/main/memoryReviewer')); }
+  catch (e) {
+    process.stderr.write(fmt.err('memoryReviewer module unavailable: ' + e.message) + '\n');
+    return 2;
+  }
+  const rev = new MemoryReviewer(runtime.agentMemory);
+  const result = await rev.reviewNow();
+  if (flags.json) { process.stdout.write(JSON.stringify(result, null, 2) + '\n'); return result.ok ? 0 : 1; }
+  if (!result.ok) {
+    process.stderr.write(fmt.err('Review failed: ' + (result.error || 'unknown')) + '\n');
+    return 1;
+  }
+  if (result.skipped) {
+    process.stdout.write(fmt.dim(`Skipped — ${result.skipped} (memories: ${result.count || 0})\n`));
+    return 0;
+  }
+  process.stdout.write(fmt.bold('Memory review pass') + '\n');
+  process.stdout.write(`  reviewed   ${result.reviewed}\n`);
+  process.stdout.write(`  decayed    ${result.decayed}\n`);
+  process.stdout.write(`  merged     ${result.merged}\n`);
+  process.stdout.write(`  forgotten  ${result.forgotten}\n`);
+  process.stdout.write(`  survivors  ${result.survivors}\n`);
+  return 0;
 }
 
 async function search(runtime, rest, flags) {
