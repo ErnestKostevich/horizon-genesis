@@ -312,7 +312,8 @@
 /* ── Form spacing inside the executor-backend sub-fields ─────────────── */
 #panel .ms-ssh-only,
 #panel .ms-modal-only,
-#panel .ms-daytona-only {
+#panel .ms-daytona-only,
+#panel .ms-singularity-only {
   padding-left: 14px;
   border-left: 2px solid rgba(139, 92, 246, 0.25);
   margin-left: 8px;
@@ -447,6 +448,7 @@
 #panel .ms-ssh-only,
 #panel .ms-modal-only,
 #panel .ms-daytona-only,
+#panel .ms-singularity-only,
 #panel .ms-docker-only {
   position: relative;
   margin-top: 10px;
@@ -459,23 +461,26 @@
     transparent 70%);
   animation: ps-cond-reveal 0.3s ease-out;
 }
-#panel .ms-ssh-only      { border-left-color: rgba(6, 182, 212, 0.55); }
-#panel .ms-modal-only    { border-left-color: rgba(139, 92, 246, 0.55); }
-#panel .ms-daytona-only  { border-left-color: rgba(236, 72, 153, 0.55); }
-#panel .ms-docker-only   { border-left-color: rgba(244, 201, 93, 0.55); }
+#panel .ms-ssh-only          { border-left-color: rgba(6, 182, 212, 0.55); }
+#panel .ms-modal-only        { border-left-color: rgba(139, 92, 246, 0.55); }
+#panel .ms-daytona-only      { border-left-color: rgba(236, 72, 153, 0.55); }
+#panel .ms-singularity-only  { border-left-color: rgba(16, 185, 129, 0.55); }
+#panel .ms-docker-only       { border-left-color: rgba(244, 201, 93, 0.55); }
 @keyframes ps-cond-reveal {
   from { opacity: 0; transform: translateX(-4px); }
   to   { opacity: 1; transform: translateX(0);   }
 }
 
 /* Inline backend-specific badge prefix */
-#panel .ms-ssh-only::before     { content: 'SSH'; }
-#panel .ms-modal-only::before   { content: 'MODAL'; }
-#panel .ms-daytona-only::before { content: 'DAYTONA'; }
-#panel .ms-docker-only::before  { content: 'DOCKER'; }
+#panel .ms-ssh-only::before          { content: 'SSH'; }
+#panel .ms-modal-only::before        { content: 'MODAL'; }
+#panel .ms-daytona-only::before      { content: 'DAYTONA'; }
+#panel .ms-singularity-only::before  { content: 'SINGULARITY'; }
+#panel .ms-docker-only::before       { content: 'DOCKER'; }
 #panel .ms-ssh-only::before,
 #panel .ms-modal-only::before,
 #panel .ms-daytona-only::before,
+#panel .ms-singularity-only::before,
 #panel .ms-docker-only::before {
   position: absolute;
   top: 8px;
