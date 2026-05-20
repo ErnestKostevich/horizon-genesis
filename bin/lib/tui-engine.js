@@ -136,6 +136,8 @@ class TuiEngine {
     this._lastDrawHeight = 0;
     this._closed = false;
     this._sending = false;
+    this._verbose = !!opts.verbose;
+    this._keepaliveInterval = null;
 
     // Fix 3 — optional runtime handle for the persistent status line.
     // Set via engine.runtime = rt after construction; we read provider,
@@ -182,8 +184,23 @@ class TuiEngine {
     // visible feedback (that was the v0.0.1 Windows splash-then-exit
     // bug). Keypress events + raw input are nice-to-have; line-based
     // readline is the always-available fallback.
+    //
+    // CRITICAL — event-loop keepalive (added v0.0.3):
+    //   On Windows pkg-bundled binaries, stdin in raw mode sometimes
+    //   doesn't keep the libuv loop alive even though listeners are
+    //   attached. The process saw "no work to do" and exited right
+    //   after the banner rendered. We hold the loop open with an
+    //   un-unref'd setInterval(noop, 30s) until close() is called.
+    this._keepaliveInterval = setInterval(() => {}, 30000);
+
+    let rawApplied = false;
     const canRaw = !!(process.stdin.isTTY && typeof process.stdin.setRawMode === 'function');
     if (!canRaw) {
+      if (this._verbose) {
+        process.stderr.write('[tui] isTTY=' + !!process.stdin.isTTY
+          + ' setRawMode-available=' + (typeof process.stdin.setRawMode === 'function')
+          + ' raw-mode: SKIPPED — entering plain mode\n');
+      }
       this._fallbackPlainMode();
       return;
     }
@@ -191,6 +208,7 @@ class TuiEngine {
       readline.emitKeypressEvents(process.stdin);
       process.stdin.setRawMode(true);
       process.stdin.resume();
+      rawApplied = true;
     } catch (e) {
       process.stderr.write('\n(tui) raw-mode unavailable (' + e.message + ') — falling back to plain readline.\n');
       this._fallbackPlainMode();
@@ -203,7 +221,22 @@ class TuiEngine {
     process.stdin.on('keypress', this._onKey);
     process.stdin.on('data', this._onData);
 
+    // Belt-and-suspenders: some Windows terminals send a spurious EOF
+    // on startup that would otherwise terminate the stream and let the
+    // process exit. We swallow EOF — the only legitimate exit paths are
+    // /quit, Ctrl+C, or Ctrl+D on an empty composer.
+    this._onEnd = () => { /* intentional no-op — wait for explicit exit */ };
+    process.stdin.on('end', this._onEnd);
+
     this._installExit();
+
+    if (this._verbose) {
+      process.stderr.write('[tui] raw-mode: ' + (rawApplied ? 'ENABLED' : 'FAILED') + '\n');
+      process.stderr.write('[tui] isTTY=' + !!process.stdin.isTTY
+        + ' setRawMode-applied=' + rawApplied + '\n');
+      process.stderr.write('[tui] keepalive=' + (this._keepaliveInterval ? 'on' : 'off') + '\n');
+    }
+
     setTimeout(() => {
       if (!this._mouseSeen && !this._closed) {
         // No mouse events received — likely a terminal without forwarding.
@@ -314,12 +347,20 @@ class TuiEngine {
       if (process.stdin.isTTY) {
         process.stdout.write(ANSI.mouseOff);
         process.stdout.write(ANSI.cursorShow);
-        process.stdin.setRawMode(false);
+        try { process.stdin.setRawMode(false); } catch (_) {}
       }
-      process.stdin.off('keypress', this._onKey);
-      process.stdin.off('data', this._onData);
+      if (this._onKey)  process.stdin.off('keypress', this._onKey);
+      if (this._onData) process.stdin.off('data',     this._onData);
+      if (this._onEnd)  process.stdin.off('end',      this._onEnd);
       process.stdin.pause();
     } catch (_) {}
+    // Release the libuv keepalive timer so the process can finally exit.
+    if (this._keepaliveInterval) {
+      clearInterval(this._keepaliveInterval);
+      this._keepaliveInterval = null;
+    }
+    // Clear any pending throttled redraw — it would re-paint after close.
+    if (this._frameTimer) { clearTimeout(this._frameTimer); this._frameTimer = null; }
     if (this.onExit) this.onExit();
   }
 
@@ -1067,6 +1108,20 @@ class TuiEngine {
     //
     // Visible prompt + welcome line so users don't sit at a blank
     // screen wondering what to type — that was the v0.0.1 trap.
+    //
+    // v0.0.3 — keep the libuv loop alive even if readline silently
+    // closes on Windows ConPTY for pkg-bundled binaries. The
+    // `_keepaliveInterval` is set in start() before we get here.
+    if (!this._keepaliveInterval) {
+      this._keepaliveInterval = setInterval(() => {}, 30000);
+    }
+    if (this._verbose) {
+      process.stderr.write('[tui] mode: PLAIN (readline fallback)\n');
+      process.stderr.write('[tui] keepalive=' + (this._keepaliveInterval ? 'on' : 'off') + '\n');
+    }
+
+    this._installExit();
+
     process.stdout.write('\n\x1b[97mPlain-mode TUI active\x1b[0m \x1b[90m(raw input unavailable on this terminal — type your message and press Enter; /quit to exit, /help for commands).\x1b[0m\n\n');
     const rl = readline.createInterface({
       input: process.stdin,
@@ -1074,13 +1129,19 @@ class TuiEngine {
       prompt: '\x1b[36m›\x1b[0m ',
       terminal: false,  // makes readline echo input + handle Ctrl+C cleanly
     });
+    this._rl = rl;
     rl.prompt();
     rl.on('line', async (l) => {
       try { await this.onLine(l); }
       catch (e) { process.stdout.write('\x1b[31merror:\x1b[0m ' + (e?.message || String(e)) + '\n'); }
-      rl.prompt();
+      if (!this._closed) rl.prompt();
     });
     rl.on('close', () => {
+      // Some Windows terminals fire 'close' spuriously at startup
+      // before any user input. Only treat it as exit if we've actually
+      // been running long enough to have processed something, OR if
+      // the engine was explicitly closed.
+      if (this._closed) return;
       process.stdout.write('\n\x1b[90mGoodbye.\x1b[0m\n');
       this._exit();
     });

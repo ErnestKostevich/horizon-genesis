@@ -3,6 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <title>Horizon AI - Upgrade</title>
+<!-- Sprint-2.2 fix: theme bootstrap (matches chat.html). -->
+<script>
+  (function(){
+    try {
+      var saved = localStorage.getItem('horizonTheme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch (_) {}
+    window.toggleHorizonTheme = function () {
+      var cur = document.documentElement.getAttribute('data-theme');
+      var next = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('horizonTheme', next); } catch (_) {}
+    };
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -27,6 +44,34 @@
   --glow-soft: 0 18px 50px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04) inset;
   --font:'Plus Jakarta Sans',-apple-system,'Segoe UI',system-ui,sans-serif;
   --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+}
+/* Sprint-2.2 fix: light-mode overrides for progate. Same var-remap pattern
+   as setup.html — keep the page's own vars, just change their values. */
+[data-theme="light"] {
+  --bg-0:#fafafa;  --bg-1:#f4f4f5;  --bg-2:#ffffff;
+  --tx-0:#18181b;  --tx-1:#52525b;  --tx-2:#71717a;  --tx-3:#a1a1aa;
+  --line-1:rgba(0,0,0,.06);
+  --line-2:rgba(0,0,0,.10);
+  --line-3:rgba(0,0,0,.18);
+  --glass-0: rgba(255,255,255,.85);
+  --glass-1: rgba(255,255,255,.78);
+  --glow-soft: 0 18px 50px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.04) inset;
+}
+[data-theme="light"] body { background: #fafafa; color: #18181b; }
+[data-theme="light"] #fractal { opacity: .12; filter: invert(.9) hue-rotate(180deg); }
+[data-theme="light"] .wash {
+  background:
+    radial-gradient(ellipse 60% 50% at 25% 20%, rgba(124,109,242,.08), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 80% 85%, rgba(167,139,250,.06), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.5) 70%, rgba(255,255,255,.9) 100%);
+}
+[data-theme="light"] .grain { opacity: .025; filter: invert(1); }
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: #ffffff;
+  color: #18181b;
+  border-color: rgba(0,0,0,.10);
 }
 html,body{height:100%;overflow:hidden;user-select:none;-webkit-user-select:none}
 body{
@@ -292,6 +337,9 @@ h1 .acc{
 <div class="grain"></div>
 
 <div class="wctrl">
+  <!-- Sprint-2.2 fix: theme toggle parity. Inline-styled to avoid touching
+       the existing .wctrl tight layout. -->
+  <button onclick="window.toggleHorizonTheme&&window.toggleHorizonTheme()" title="Toggle light / dark theme" aria-label="Toggle theme" style="-webkit-app-region:no-drag;background:rgba(255,255,255,.04);border:1px solid var(--line-2);color:var(--tx-1);width:22px;height:22px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1;margin-right:6px">◐</button>
   <button class="wbtn min" id="win-min" title="Minimize"></button>
   <button class="wbtn cls" id="win-cls" title="Close"></button>
 </div>

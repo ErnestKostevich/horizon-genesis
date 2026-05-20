@@ -317,3 +317,43 @@ body.code-mode-active:not(.code-terminal-collapsed) .apex-right-pane.code-shell 
   .tb-sub { display:none; }
   .tb-center { justify-content:flex-start; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-2.2 fix: LIGHT MODE overrides for cursor-v2 shell.
+   This file mostly handles compositional layout; the visual values it
+   hardcodes (rgba(15,23,42,...)) are tinted slate panels. Light variants
+   keep the structure and only re-tint the substrate.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] body.os-win .wbtn:hover {
+  background: rgba(0,0,0,.06) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .model-provider-models,
+[data-theme="light"] .model-provider-row,
+[data-theme="light"] .model-provider-card {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .persona-popover {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,.12) !important;
+}
+[data-theme="light"] .persona-picker-row {
+  background: transparent !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .persona-picker-row:hover {
+  background: rgba(124,109,242,.08) !important;
+}
+[data-theme="light"] .apex-right-pane {
+  background: #ffffff !important;
+  border-left: 1px solid rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .code-terminal-pane {
+  background: #fafafa !important;
+  border-top: 1px solid rgba(0,0,0,.08) !important;
+}

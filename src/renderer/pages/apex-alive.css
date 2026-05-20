@@ -607,3 +607,66 @@ body::after {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-2.2 fix: LIGHT MODE for apex-alive.
+   ───────────────────────────────────────────────────────────────────────
+   This file styles the wake-bar / sb / modes strip, panel headers (.ph,
+   .fph), store/workflow/plugin cards, and license pill — all with
+   hardcoded dark rgba behind `!important`. Light variants below.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .wake-bar,
+[data-theme="light"] .sb,
+[data-theme="light"] .modes {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+[data-theme="light"] .ph,
+[data-theme="light"] .fph {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .ps,
+[data-theme="light"] .store-card,
+[data-theme="light"] .wf-card,
+[data-theme="light"] .contact,
+[data-theme="light"] .pf,
+[data-theme="light"] .trow {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .store-card {
+  background:
+    linear-gradient(180deg, #ffffff, #fafafa) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(0,0,0,0.02) !important;
+}
+[data-theme="light"] .store-card:hover {
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 0 34px rgba(124, 109, 242, 0.06) !important;
+}
+[data-theme="light"] .sc-icon {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(124, 109, 242, 0.18), transparent 42%),
+    linear-gradient(135deg, rgba(124, 109, 242, 0.10), rgba(167, 139, 250, 0.08)) !important;
+  border-color: rgba(124, 109, 242, 0.18) !important;
+}
+[data-theme="light"] .license-pill {
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: #4c40ad;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(0,0,0,0.02) !important;
+}
+[data-theme="light"] .license-pill .lp-cta {
+  background: var(--accent-grad, linear-gradient(135deg, #7c6df2, #a78bfa)) !important;
+  color: #ffffff !important;
+}
+[data-theme="light"] .license-pill .lp-cta:hover {
+  filter: brightness(1.06);
+}
+/* Body::before noise overlay is filtered+inverted globally in chat-base
+   light block; this file's `filter: blur(26px) opacity: 0.52` would smear
+   the inverted noise. Tone it down on light. */
+[data-theme="light"] body::before,
+[data-theme="light"] body::after {
+  filter: blur(26px) !important;
+  opacity: 0.18 !important;
+}

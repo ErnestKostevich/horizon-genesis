@@ -290,3 +290,61 @@ textarea#inp {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-2.2 fix: LIGHT MODE for the cursor-v3 shell pass.
+   Mirrors every hardcoded dark rgba above with a paper-tinted variant.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .tb {
+  border-bottom-color: rgba(0,0,0,.08) !important;
+  background: rgba(255,255,255,.82) !important;
+}
+[data-theme="light"] .shell-chip {
+  background: rgba(0,0,0,.04) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .shell-chip.primary {
+  color: #ffffff !important;
+  border-color: rgba(124,109,242,.40) !important;
+  background: linear-gradient(180deg, #7c6df2, #6557d4) !important;
+}
+[data-theme="light"] .tb-r {
+  border-color: rgba(0,0,0,.08) !important;
+  background: rgba(0,0,0,.025) !important;
+}
+[data-theme="light"] .ic-btn {
+  color: #52525b !important;
+}
+[data-theme="light"] .ic-btn:hover {
+  background: rgba(124,109,242,.08) !important;
+  border-color: rgba(124,109,242,.18) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .chatside {
+  background: #ffffff !important;
+  border-right-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .cs-new {
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.30) !important;
+}
+[data-theme="light"] .btn-attach,
+[data-theme="light"] .btn-mic,
+[data-theme="light"] .btn-dictate {
+  background: rgba(0,0,0,.04) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #52525b !important;
+}
+[data-theme="light"] .inp-wrap {
+  background: linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.96) 70%) !important;
+  border-top-color: rgba(0,0,0,.06) !important;
+  box-shadow: 0 -16px 48px rgba(0,0,0,.05) !important;
+}
+[data-theme="light"] .inp-wrap .irow {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.10) !important;
+}
+[data-theme="light"] .composer-chip > b {
+  color: #18181b !important;
+}

@@ -567,3 +567,155 @@ body.settings-scroll .ps-toc {
   body.settings-scroll .psview { padding-right: 32px !important; }
   body.settings-scroll .ps-toc { display: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-2.2 fix: LIGHT MODE for Settings panel.
+   ───────────────────────────────────────────────────────────────────────
+   The card grid, inputs, buttons, toc, status badges — all defined above
+   with `rgba(255,255,255,…)` over a dark page assumption. Light variants
+   here flip the substrate to white/zinc and keep the accent gradient.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Section cards become true paper-white cards with a hairline border. */
+[data-theme="light"] #panel .ps {
+  background: linear-gradient(180deg,
+    rgba(0, 0, 0, 0.018) 0%,
+    rgba(0, 0, 0, 0.006) 100%);
+  border-color: rgba(0, 0, 0, 0.08);
+  background-color: #ffffff;
+}
+[data-theme="light"] #panel .ps:hover {
+  border-color: rgba(124, 109, 242, 0.32);
+  box-shadow:
+    0 0 0 1px rgba(124, 109, 242, 0.08) inset,
+    0 8px 24px -12px rgba(124, 109, 242, 0.20);
+}
+[data-theme="light"] #panel .psl {
+  color: #18181b;
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] #panel .pf {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] #panel .pf > label { color: #52525b; }
+[data-theme="light"] #panel .pf > label small { color: #71717a; }
+
+/* Inputs */
+[data-theme="light"] #panel .pf .pr input,
+[data-theme="light"] #panel .pf .pr select,
+[data-theme="light"] #panel .pf .pr textarea,
+[data-theme="light"] #panel .pf .pi {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.10);
+  color: #18181b;
+}
+[data-theme="light"] #panel .pf .pi:focus {
+  background: #fafafa;
+  border-color: rgba(124, 109, 242, 0.55);
+  box-shadow: 0 0 0 3px rgba(124, 109, 242, 0.15);
+}
+[data-theme="light"] #panel .pf .pi::placeholder {
+  color: rgba(113, 113, 122, 0.65);
+}
+
+/* Buttons */
+[data-theme="light"] #panel .pf .psv,
+[data-theme="light"] #panel .ps .psv {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.10);
+  color: #18181b;
+}
+[data-theme="light"] #panel .pf .psv:hover,
+[data-theme="light"] #panel .ps .psv:hover {
+  background: rgba(124, 109, 242, 0.10);
+  border-color: rgba(124, 109, 242, 0.35);
+}
+
+/* Status / help banners */
+[data-theme="light"] #panel .local-status {
+  background: rgba(0, 0, 0, 0.025);
+  color: #52525b;
+  border-left-color: rgba(0, 0, 0, 0.10);
+}
+[data-theme="light"] #panel .local-status.ok {
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+}
+[data-theme="light"] #panel .local-status.bad {
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
+}
+
+/* Subsection blockquote */
+[data-theme="light"] #panel .psview-sub {
+  color: #52525b;
+  background: rgba(0, 0, 0, 0.025);
+  border-left-color: rgba(124, 109, 242, 0.45);
+}
+[data-theme="light"] #panel .psview-sub code {
+  background: rgba(124, 109, 242, 0.14);
+  color: #4c40ad;
+}
+
+/* Settings sidebar tabs */
+[data-theme="light"] #panel .settings-nav,
+[data-theme="light"] #panel [class*="settings-tab"] {
+  background: #f9fafb;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Search bar */
+[data-theme="light"] .ps-search-input {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.10);
+  color: #18181b;
+}
+[data-theme="light"] .ps-search-input::placeholder { color: rgba(113, 113, 122, 0.60); }
+[data-theme="light"] .ps-search-input:focus {
+  background: #fafafa;
+  border-color: rgba(124, 109, 242, 0.55);
+}
+[data-theme="light"] .ps-search-clear { color: #71717a; }
+[data-theme="light"] .ps-search-clear:hover {
+  color: #18181b;
+  background: rgba(0, 0, 0, 0.04);
+}
+[data-theme="light"] .ps-search-empty {
+  background: #f9fafb;
+  border-color: rgba(0, 0, 0, 0.10);
+  color: #52525b;
+}
+
+/* Conditional-group reveal blocks */
+[data-theme="light"] #panel .ms-ssh-only,
+[data-theme="light"] #panel .ms-modal-only,
+[data-theme="light"] #panel .ms-daytona-only,
+[data-theme="light"] #panel .ms-singularity-only,
+[data-theme="light"] #panel .ms-docker-only {
+  background: linear-gradient(90deg,
+    rgba(124, 109, 242, 0.06),
+    transparent 70%);
+}
+[data-theme="light"] #panel .ms-ssh-only::before,
+[data-theme="light"] #panel .ms-modal-only::before,
+[data-theme="light"] #panel .ms-daytona-only::before,
+[data-theme="light"] #panel .ms-singularity-only::before,
+[data-theme="light"] #panel .ms-docker-only::before {
+  background: rgba(0, 0, 0, 0.06);
+  color: #52525b;
+}
+
+/* psnav tab gradient — keep accent but with paper substrate */
+[data-theme="light"] #panel .psnav-tab.on {
+  background: linear-gradient(90deg,
+    rgba(124, 109, 242, 0.10),
+    rgba(167, 139, 250, 0.10));
+  border-color: rgba(124, 109, 242, 0.35) !important;
+}
+
+/* TOC sticky sidebar */
+[data-theme="light"] body.settings-scroll .ps-toc {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.08);
+}

@@ -2,6 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><title>Horizon Genesis</title>
+<!-- Sprint-2.2 fix: theme bootstrap MOVED to <head>, BEFORE any CSS link.
+     Previously this lived inside <body> which meant the browser had already
+     parsed every <link rel=stylesheet> + started applying dark default
+     vars to <html> before the script flipped data-theme. Result: brief
+     dark-flash on first paint + on slow IPC the attribute sometimes never
+     stuck. Running here guarantees data-theme is set on <html> before any
+     stylesheet matches against it, so light mode applies on first paint
+     with zero flash. -->
+<script>
+  (function(){
+    try {
+      var saved = localStorage.getItem('horizonTheme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch (_) { /* localStorage may be blocked in some sandbox modes */ }
+    window.toggleHorizonTheme = function () {
+      var cur = document.documentElement.getAttribute('data-theme');
+      var next = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('horizonTheme', next); } catch (_) {}
+    };
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -22,26 +46,6 @@
 <link rel="stylesheet" href="chat-settings-redesign.css"/>
 </head>
 <body>
-<!-- Sprint-1 fix: theme bootstrap. Restore the user's last theme from
-     localStorage BEFORE the page paints so we don't flash dark-then-light.
-     Toggle function is defined here so the title-bar button can call it
-     without waiting for the main inline <script> at the bottom of <body>. -->
-<script>
-  (function(){
-    try {
-      var saved = localStorage.getItem('horizonTheme');
-      if (saved === 'light' || saved === 'dark') {
-        document.documentElement.setAttribute('data-theme', saved);
-      }
-    } catch (_) { /* localStorage may be blocked in some sandbox modes */ }
-    window.toggleHorizonTheme = function () {
-      var cur = document.documentElement.getAttribute('data-theme');
-      var next = cur === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('horizonTheme', next); } catch (_) {}
-    };
-  })();
-</script>
 <!-- Sprint-1 fix: <canvas id="fractalBg"> + fractal-bg.js removed. The animated
      WebGL fractal was constant-GPU draw with no readable benefit; replaced by
      static SVG-noise + 2 fixed radial gradients applied to body in chat-base.css.

@@ -100,6 +100,121 @@ function _pkgVersion() {
 function bannerBig()     { return _wordmark(); }
 function bannerCompact() { return _wordmark(); }
 
+// ────────────────────────────────────────────────────────────────────────
+// Hermes-style ASCII art moments — small tasteful illustrations shown at
+// earned moments (first launch, setup intro, agent goal-met, doctor clean
+// bill of health). Inspired by Hermes' "art at the right moment" feel.
+//
+// Design rules:
+//   - 3-6 lines, max ~40 chars wide (fits narrow terminals)
+//   - Box-drawing + geometric Unicode only (no emoji; renders everywhere)
+//   - Rendered in the active theme's accent colour
+//   - Always opt-out: HORIZON_NO_ART=1, --no-art flag, or --quiet skip
+//   - ALWAYS additive — never replaces functional output
+// ────────────────────────────────────────────────────────────────────────
+const ART = {
+  welcome: [
+    '   ╭─────────────╮',
+    '   │  ⌁ HORIZON  │',
+    '   ╰─────────────╯',
+  ],
+  setupIntro: [
+    '   ◆ ◆ ◆',
+    '   ───────',
+  ],
+  goalMet: [
+    '   ╭─ DONE ─╮',
+    '   │   ✓    │',
+    '   ╰────────╯',
+  ],
+  doctorHealthy: [
+    '   ♥ ♥ ♥',
+    '   ─────',
+  ],
+  helpHeader: [
+    '   ⌁ horizon · help',
+    '   ─────────────────',
+  ],
+  subagentSpawn: [
+    '   ❖ → ❖ ❖',
+  ],
+  planAccepted: [
+    '   ┃ plan',
+  ],
+  skillActive: [
+    '   ▸',
+  ],
+};
+
+// Pull the active theme's accent RGB without forcing a runtime construction.
+// Falls back to the default theme accent (#7c6df2) when nothing is set.
+function _accentRgb() {
+  try {
+    const themes = require('./themes');
+    const fs = require('fs');
+    const path = require('path');
+    const { defaultUserDataDir } = require('../../src/main/runtime/store-shim');
+    const baseDir = defaultUserDataDir();
+    const candidates = [path.join(baseDir, 'settings.json')];
+    try {
+      const f = path.join(baseDir, 'active-profile.txt');
+      if (fs.existsSync(f)) {
+        const name = fs.readFileSync(f, 'utf8').trim();
+        if (name && name !== 'default' && /^[a-z0-9][a-z0-9-_]{0,30}$/i.test(name)) {
+          candidates.unshift(path.join(baseDir, 'profiles', name, 'settings.json'));
+        }
+      }
+    } catch (_) {}
+    for (const file of candidates) {
+      try {
+        if (fs.existsSync(file)) {
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const name = data.cliTheme;
+          if (name) {
+            const t = themes.getTheme(name);
+            if (t && Array.isArray(t.accent)) return t.accent;
+          }
+        }
+      } catch (_) {}
+    }
+    const def = themes.getTheme('default');
+    if (def && Array.isArray(def.accent)) return def.accent;
+  } catch (_) {}
+  return [124, 109, 242];
+}
+
+// Should we suppress art? Honours global env knobs + caller-supplied flags.
+// `flags` is the same shape commands already pass around (argv-parsed).
+function artSuppressed(flags) {
+  if (process.env.HORIZON_NO_ART === '1') return true;
+  if (process.env.HORIZON_FAST === '1')   return true;
+  if (flags && (flags['no-art'] || flags.quiet || flags.json)) return true;
+  return false;
+}
+
+// Render a named art piece. Returns '' when art is suppressed or the
+// terminal can't render colour — the caller can unconditionally concatenate
+// the result without worrying about layout.
+//
+//   renderArt('goalMet', { tag: '12s · 3 steps' })
+//
+// `tag` is a dim right-side label appended to the middle line.
+function renderArt(name, opts) {
+  opts = opts || {};
+  if (artSuppressed(opts.flags)) return '';
+  const lines = ART[name];
+  if (!lines) return '';
+  const [r, g, b] = opts.accent || _accentRgb();
+  const COLOR = supportsTruecolor ? rgb(r, g, b) : (supportsColor ? '\x1b[35m' : '');
+  const R = supportsColor ? '\x1b[0m' : '';
+  const tagAt = Math.floor(lines.length / 2);
+  return lines.map((l, i) => {
+    const painted = COLOR + l + R;
+    if (opts.tag && i === tagAt) return painted + '  ' + fmt.dim(opts.tag);
+    return painted;
+  }).join('\n');
+}
+
 // Phase-aware glyph sets. setPhase(phase) swaps the spinner frames while
 // keeping the timer/cycle alive. The default ('default') is the classic
 // braille loop. If the active theme has its own spinnerFrames the theme
@@ -261,6 +376,14 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
   process.stdout.write('\x1b[2J\x1b[H');
   if (!fast) process.stdout.write('\x1b[?25l');
 
+  // Welcome art — small framed box rendered in the active accent colour.
+  // Always opt-out via HORIZON_NO_ART=1.
+  const art = renderArt('welcome');
+  if (art) {
+    process.stdout.write('\n' + art + '\n\n');
+    if (!fast) await new Promise(r => setTimeout(r, 60));
+  }
+
   // Fix 2 — quick 1-second flash, not 4 seconds. 30ms/line instead of 90.
   const lines = bannerBig().split('\n');
   for (const line of lines) {
@@ -407,4 +530,4 @@ async function personaPickerInteractive(currentPersona) {
   });
 }
 
-module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen };
+module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen, renderArt, ART, artSuppressed };
