@@ -524,8 +524,8 @@ async function refreshInspectorLearned(){
             </div>
             <div class="mem-row-val" title="${esc(f.value)}">${esc((f.value || '').toString().slice(0, 200))}${f.seen > 1 ? ` <span class="mem-row-seen">×${f.seen}</span>` : ''}</div>
             <div class="mem-row-actions">
-              <button class="mem-btn" onclick="_inspEditFact('${esc(f.key)}', this)" title="Edit value">✎</button>
-              <button class="mem-btn mem-btn-danger" onclick="_inspForgetFact('${esc(f.key)}', this)" title="Forget this fact">✕</button>
+              <button class="mem-btn" onclick="_inspEditFact('${esc(f.key)}', this)" title="Edit value" aria-label="Edit value"><svg class="licon"><use href="#i-edit"/></svg></button>
+              <button class="mem-btn mem-btn-danger" onclick="_inspForgetFact('${esc(f.key)}', this)" title="Forget this fact" aria-label="Forget this fact"><svg class="licon"><use href="#i-x"/></svg></button>
             </div>
           </div>
         `).join('');
@@ -552,8 +552,8 @@ async function refreshInspectorLearned(){
             <div class="mem-row-body">${esc((m.content || '').toString().slice(0, 300))}</div>
             ${personaBadges ? `<div class="mem-personas">${personaBadges}</div>` : ''}
             <div class="mem-row-actions">
-              <button class="mem-btn" onclick="_inspEditMemory('${esc(String(m.id))}', this)" title="Edit content">✎</button>
-              <button class="mem-btn mem-btn-danger" onclick="_inspForgetMemory('${esc(String(m.id))}', this)" title="Forget this memory">✕</button>
+              <button class="mem-btn" onclick="_inspEditMemory('${esc(String(m.id))}', this)" title="Edit content" aria-label="Edit content"><svg class="licon"><use href="#i-edit"/></svg></button>
+              <button class="mem-btn mem-btn-danger" onclick="_inspForgetMemory('${esc(String(m.id))}', this)" title="Forget this memory" aria-label="Forget this memory"><svg class="licon"><use href="#i-x"/></svg></button>
             </div>
           </div>
           `;

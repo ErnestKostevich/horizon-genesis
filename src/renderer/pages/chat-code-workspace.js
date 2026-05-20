@@ -2476,7 +2476,7 @@ function filterQuickOpen(query){
     }
     results.innerHTML = items.map((it, i) => `
       <div class="cmd-item${i===0?' active':''}" data-rel="${esc(it.rel)}" onclick="quickOpenSelect(this.dataset.rel)">
-        <span class="cmd-item-icon">📄</span>
+        <span class="cmd-item-icon"><svg class="licon"><use href="#i-file-text"/></svg></span>
         <span class="cmd-item-text">${esc(it.rel)}</span>
         <span class="cmd-item-hint">${esc(it.hint)}</span>
       </div>`).join('');
@@ -2498,7 +2498,7 @@ function filterQuickOpen(query){
     }
     results.innerHTML = files.map((f, i) => `
       <div class="cmd-item${i===0?' active':''}" data-rel="${esc(f.rel)}" onclick="quickOpenSelect(this.dataset.rel)">
-        <span class="cmd-item-icon">📄</span>
+        <span class="cmd-item-icon"><svg class="licon"><use href="#i-file-text"/></svg></span>
         <span class="cmd-item-text">${esc(f.rel)}</span>
         <span class="cmd-item-hint">${esc(f.match || '')}</span>
       </div>`).join('');

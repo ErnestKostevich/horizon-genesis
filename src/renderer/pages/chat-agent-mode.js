@@ -23,20 +23,24 @@
   const CONSENT_KEY = 'agentMode.consented';
   const BANNER_ID = 'agent-mode-banner';
 
+  // Sprint-2 fix — was emoji icons (🖥️ 🖱️ ⌨️ 📂 🐚 🌐 🔁). Now each
+  // capability row pulls a lucide symbol from the icon library
+  // defined at the top of chat.html. The consent modal is rendered
+  // into the same document, so #i-… references resolve normally.
   const CAPABILITIES = [
-    { icon: '🖥️', label: 'See your screen',
+    { iconId: 'i-eye',       label: 'See your screen',
       detail: 'Screenshots + screen analysis on demand or automatically when your task mentions the UI.' },
-    { icon: '🖱️', label: 'Move the mouse & click',
+    { iconId: 'i-target',    label: 'Move the mouse & click',
       detail: 'computer.click, smart_click (vision-guided), drag, scroll.' },
-    { icon: '⌨️', label: 'Type on the keyboard',
+    { iconId: 'i-keyboard',  label: 'Type on the keyboard',
       detail: 'computer.type, keyboard.press for any key combination.' },
-    { icon: '📂', label: 'Read & write files',
+    { iconId: 'i-file-text', label: 'Read & write files',
       detail: 'fs.read, fs.write, search_files. Every write goes through the per-call permission gate.' },
-    { icon: '🐚', label: 'Run shell commands',
+    { iconId: 'i-terminal',  label: 'Run shell commands',
       detail: 'run_code (Python, Node, shell, PowerShell). Each command prompts unless --auto-approve.' },
-    { icon: '🌐', label: 'Browse the web',
+    { iconId: 'i-globe',     label: 'Browse the web',
       detail: 'web.fetch, web.search, plus any connector tools you have keys for (Slack, Notion, Linear, …).' },
-    { icon: '🔁', label: 'Self-reflect & retry',
+    { iconId: 'i-undo',      label: 'Self-reflect & retry',
       detail: 'Up to 8 multi-step iterations per task, each one observing the previous result.' },
   ];
 
@@ -84,7 +88,7 @@
                   0 0 30px rgba(124,109,242,0.18);
     `;
 
-    const title = isRu ? '⚡ Включить режим Агента?' : '⚡ Enable Agent mode?';
+    const title = isRu ? 'Включить режим Агента?' : 'Enable Agent mode?';
     const intro = isRu
       ? 'В этом режиме Хорайзон сможет действовать на вашем ПК. Все опасные операции (запуск кода, запись файлов, клики мышью, отправка сообщений) запрашивают подтверждение на каждом шаге.'
       : 'In this mode Horizon can act on your machine. Every destructive operation (running code, writing files, mouse clicks, sending messages) still asks for confirmation on each call.';
@@ -92,7 +96,9 @@
     const cancelLabel = isRu ? 'Отмена' : 'Cancel';
 
     dialog.innerHTML = `
-      <h2 style="margin:0 0 8px;font-size:18px;font-weight:700;letter-spacing:.3px;">${title}</h2>
+      <h2 style="margin:0 0 8px;font-size:18px;font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:8px;">
+        <svg class="licon"><use href="#i-zap"/></svg>${title}
+      </h2>
       <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--t2,#9aa0a6);">${intro}</p>
       <div id="agent-consent-caps" style="display:grid;gap:8px;margin:0 0 18px;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -111,7 +117,7 @@
         background: rgba(255,255,255,0.02);
       `;
       row.innerHTML = `
-        <div style="font-size:18px;line-height:1;">${c.icon}</div>
+        <div style="line-height:1;color:var(--accent,#7c6df2);"><svg class="licon"><use href="#${c.iconId}"/></svg></div>
         <div>
           <div style="font-weight:600;font-size:13px;">${c.label}</div>
           <div style="font-size:11px;color:var(--t3,#7a808a);line-height:1.45;">${c.detail}</div>
@@ -161,7 +167,7 @@
     const lang = (typeof window !== 'undefined' && window.lang) || 'en';
     const isRu = lang === 'ru';
     banner.innerHTML = `
-      <span style="font-size:16px;">⚡</span>
+      <svg class="licon" style="width:16px;height:16px"><use href="#i-zap"/></svg>
       <span>${isRu ? 'АГЕНТ УПРАВЛЯЕТ ПК' : 'AGENT IN CONTROL'}</span>
       <span style="opacity:.65;font-weight:400;font-size:11px;">
         ${isRu ? 'экран · мышь · клавиатура · файлы · shell · сеть' : 'screen · mouse · keyboard · files · shell · network'}

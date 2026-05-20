@@ -86,7 +86,9 @@ function renderChatSidebar(){
       const renBtn = document.createElement('button');
       renBtn.className = 'cs-act-btn';
       renBtn.title = t('renameChat');
-      renBtn.textContent = '✎';
+      renBtn.setAttribute('aria-label', t('renameChat'));
+      // Sprint-2 fix — was textContent '✎', now lucide SVG.
+      renBtn.innerHTML = '<svg class="licon"><use href="#i-edit"/></svg>';
       renBtn.addEventListener('click', (e) => { e.stopPropagation(); renameChatPrompt(c.id); });
       actions.appendChild(renBtn);
       const delBtn = document.createElement('button');

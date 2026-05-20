@@ -328,7 +328,7 @@ function _renderSkillSuggestionBanner(suggestion) {
   const samples = (suggestion.sampleQueries || []).map(q => `<li>${esc(q)}</li>`).join('');
   card.innerHTML = `
     <div class="sk-sugg-head">
-      <span class="sk-sugg-icon">💡</span>
+      <span class="sk-sugg-icon"><svg class="licon"><use href="#i-lightbulb"/></svg></span>
       <strong>Skill suggestion: <code>${esc(suggestion.draft.name)}</code></strong>
       <span class="sk-sugg-meta">${suggestion.occurrences || 3}× similar requests${suggestion.partials ? ` · ${suggestion.partials} partial` : ''}</span>
     </div>
