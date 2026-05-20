@@ -169,6 +169,55 @@ function createHorizonRuntime(opts = {}) {
     log('SQLite hybrid unavailable:', e.message);
   }
 
+  // PHASE 28.4 — DialecticModel (9th memory layer, Honcho-style). The
+  // CLI gets the same store as Electron; extractor uses whatever AI
+  // provider the user already configured. Sampling caps token cost so
+  // a `horizon agent "long task"` doesn't 2× its bill.
+  let dialecticModel = null;
+  try {
+    const { DialecticModel } = require('../dialecticModel');
+    const path = require('path');
+    const dialecticPath = path.join(userDataDir, 'horizon_dialectic.json');
+    dialecticModel = new DialecticModel(dialecticPath).init();
+    if (typeof agentMemory.setDialecticModel === 'function') {
+      agentMemory.setDialecticModel(dialecticModel);
+    } else {
+      agentMemory.dialectic = dialecticModel;
+    }
+    // CLI extractor: skip when AGENT_NO_DIALECTIC=1 (test runs, batch
+    // scripts that don't want a 2nd LLM call per turn).
+    if (!process.env.AGENT_NO_DIALECTIC && typeof agentMemory.setDialecticExtractor === 'function') {
+      agentMemory.setDialecticExtractor(async (user, assistant, recent) => {
+        // Defer to the same helper the Electron path uses. We require it
+        // lazily so the CLI doesn't depend on Electron's main.js.
+        try {
+          const extract = require('./dialecticExtractor');
+          return await extract({ user, assistant, recent, settingsStore, keysStore });
+        } catch (e) {
+          log('dialectic extractor unavailable:', e.message);
+          return [];
+        }
+      });
+    }
+    log(`dialectic loaded (${dialecticModel.records.length} records${process.env.AGENT_NO_DIALECTIC ? ', extractor off' : ', extractor on'})`);
+  } catch (e) {
+    log('dialectic unavailable:', e.message);
+  }
+
+  // PHASE 28.3 — Memory reviewer (Hermes-style periodic curation).
+  // CLI starts it the same way Electron does. For short-lived `horizon
+  // chat` invocations it won't fire (1h first-run delay), but `horizon
+  // serve` running 24/7 benefits.
+  let memoryReviewer = null;
+  try {
+    const { MemoryReviewer } = require('../memoryReviewer');
+    memoryReviewer = new MemoryReviewer(agentMemory);
+    memoryReviewer.start();
+    log('memory reviewer scheduled (first pass in ~1h, then every 12h)');
+  } catch (e) {
+    log('memory reviewer unavailable:', e.message);
+  }
+
   // ── Workspace memory ──────────────────────────────────────────────────
   let workspaceMemory = null;
   try {
