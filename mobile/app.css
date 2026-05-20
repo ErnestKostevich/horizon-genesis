@@ -8,8 +8,12 @@
   --fg:    #d6d8db;
   --t2:    #9aa0a6;
   --t3:    #7a808a;
-  --accent:#8b5cf6;
-  --accent-2:#ec4899;
+  /* Sprint 4 — Task 8: unify with desktop accent palette. Replaces the old
+     purple→pink combo (#8b5cf6 / #ec4899) with the indigo→violet pair used
+     across the desktop Electron app + marketplace site so the PWA reads as
+     "same product" instead of a third visual identity. */
+  --accent:#7c6df2;
+  --accent-2:#a78bfa;
   --good:  #10b981;
   --bad:   #ef4444;
   --warn:  #f59e0b;

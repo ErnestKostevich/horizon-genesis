@@ -79,7 +79,10 @@ async function renderSkillsBody() {
   if (!body) return;
 
   if (skillsCurrentTab === 'installed') {
-    body.innerHTML = '<div style="color:var(--t3);font-size:11px;margin-bottom:12px">Loading skills...</div>';
+    // Sprint 4 — Task 4: skeleton card rows while H.skillsList() resolves.
+    body.innerHTML = (typeof hzSkelRows === 'function')
+      ? hzSkelRows(5, { height: 48, gap: 14 })
+      : '<div style="color:var(--t3);font-size:11px;margin-bottom:12px">Loading skills...</div>';
     try {
       const skills = await H.skillsList();
       skillsCache = skills || [];

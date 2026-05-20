@@ -1,0 +1,117 @@
+{
+  "id": "inbox-zero",
+  "name": "Inbox Zero",
+  "description": "Fetches unread email, classifies each via email-triage skill (archive/reply/snooze), extracts action items, adds them to your todo list, and sends a digest summary.",
+  "category": "productivity",
+  "tier": "built_in",
+  "trigger": "interval:60",
+  "alternateTriggers": ["manual"],
+  "enabled": false,
+  "steps": [
+    {
+      "type": "plugin",
+      "action": "fetch_unread",
+      "params": {
+        "pluginId": "email",
+        "tool": "fetch_unread",
+        "args": {
+          "account": "{{settings.emailAccount}}",
+          "folder": "INBOX",
+          "limit": 100
+        }
+      },
+      "stopOnError": true
+    },
+    {
+      "type": "run_code",
+      "action": "skip_if_empty",
+      "params": {
+        "language": "node",
+        "code": "const data = JSON.parse(process.env.STEP_OUTPUT || '{\"messages\":[]}'); if (!data.messages || data.messages.length === 0) { console.log('inbox_empty'); process.exit(2); } console.log(JSON.stringify({ count: data.messages.length }));"
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "email-triage",
+      "params": {
+        "skill": "email-triage",
+        "args": {
+          "messages": "{{steps.fetch_unread.output.messages}}",
+          "classify": ["archive", "reply", "snooze", "action"],
+          "autoArchive": true
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "action-item-extractor",
+      "params": {
+        "skill": "action-item-extractor",
+        "args": {
+          "messages": "{{steps.email-triage.output.action}}",
+          "format": "todo_items",
+          "extractDueDates": true
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "add_todos",
+      "params": {
+        "pluginId": "notes",
+        "tool": "append_todos",
+        "args": {
+          "list": "inbox-actions",
+          "items": "{{steps.action-item-extractor.output.items}}",
+          "tags": ["email", "inbox-zero"]
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "compose_digest",
+      "params": {
+        "skill": "summarize-anything",
+        "args": {
+          "inputs": [
+            "{{steps.email-triage.output.summary}}",
+            "{{steps.action-item-extractor.output.summary}}"
+          ],
+          "format": "inbox_digest",
+          "template": "## Inbox digest\n\n**{{steps.skip_if_empty.output.count}} messages processed**\n\n### Classification\n{{email-triage}}\n\n### Action items added\n{{action-item-extractor}}"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "deliver_digest",
+      "params": {
+        "pluginId": "telegram",
+        "tool": "send_message",
+        "args": {
+          "chatId": "{{settings.telegramChatId}}",
+          "text": "{{steps.compose_digest.output}}",
+          "parseMode": "Markdown"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "notify",
+      "action": "Inbox processed",
+      "params": {
+        "title": "Inbox Zero",
+        "body": "{{steps.skip_if_empty.output.count}} messages triaged."
+      }
+    }
+  ],
+  "outputs": {
+    "primaryChannel": "telegram",
+    "todoListId": "inbox-actions"
+  }
+}

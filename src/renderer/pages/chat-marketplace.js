@@ -253,7 +253,11 @@ function storeTab(tab) {
 async function renderStoreBody() {
   const body = document.getElementById('store-body');
   if (storeCurrentTab === 'plugins') {
-    body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading marketplace...</div>';
+    // Sprint 4 — Task 4: skeleton card grid while the marketplace fetch is
+    // in flight. Replaced when items arrive (or on error).
+    body.innerHTML = (typeof hzSkelCardGrid === 'function')
+      ? hzSkelCardGrid(8)
+      : '<div style="color:var(--t3);font-size:11px">Loading marketplace...</div>';
     try {
       // Pass `type: 'plugin'` so the Plugins tab only shows plugins. Without
       // this, items published as workflows on the marketplace bled into the
@@ -300,7 +304,10 @@ async function renderStoreBody() {
 }
 
 async function renderStoreWorkflows(body) {
-  body.innerHTML = '<div style="color:var(--t3);font-size:11px">Loading workflows...</div>';
+  // Sprint 4 — Task 4: skeleton cards while we fetch local + market workflows.
+  body.innerHTML = (typeof hzSkelCardGrid === 'function')
+    ? hzSkelCardGrid(6)
+    : '<div style="color:var(--t3);font-size:11px">Loading workflows...</div>';
   let items = [];
   let activeRuns = [];
   let marketWorkflows = [];

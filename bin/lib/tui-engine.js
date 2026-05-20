@@ -35,6 +35,13 @@ const readline = require('readline');
 const { fmt } = require('./tty');
 const { ctxFor } = require('./themes');
 
+// Sprint 4 — themes that render emoji + Unicode geometrics cleanly. Anything
+// outside this set (mono / matrix / retro-amber, etc.) gets ASCII substitutes
+// in the status bar — the colourful glyphs look like garbage on a 6-colour
+// CRT-style theme. Mirrors the GLYPH_THEMES set in horizon-tui.js; duplicated
+// here to avoid a circular require (tui-engine ← horizon-tui depends on us).
+const STATUS_GLYPH_THEMES = new Set(['default', 'vapor', 'mocha', 'kawaii', 'light']);
+
 // Sprint 2.12 — git branch detection for the Hermes-style status bar.
 // Walks UP from `cwd` looking for a `.git/HEAD` file; returns the branch
 // name (e.g. "main", "claude/cli-tui-serve") or a 7-char SHA prefix for
@@ -177,6 +184,8 @@ const SLASH_DESCRIPTIONS = {
   '/verbose':      'restart with --verbose for diagnostics',
   '/find':         'search transcript (same as Ctrl+F)',
   '/mobile':       'pair a phone via QR code',
+  '/altscreen':    'toggle alternate-screen TUI mode on|off',
+  '/sections':     'expand/collapse banner sections (tools|skills|prompt|mcp)',
 };
 
 // Sprint 2 — short live-hint descriptions for the dim grey hint line that
@@ -205,6 +214,8 @@ const SLASH_HINTS = {
   '/mobile':       'pair a phone via QR code',
   '/theme':        'switch CLI theme',
   '/voice':        'toggle voice input/output',
+  '/altscreen':    'toggle alt-screen TUI on/off',
+  '/sections':     'collapse/expand banner sections',
 };
 const SLASH_HINT_KEYS = Object.keys(SLASH_HINTS);
 
@@ -365,6 +376,16 @@ class TuiEngine {
       prompt:  { expanded: false, name: 'System prompt' },
       mcp:     { expanded: false, name: 'MCP servers' },
     };
+
+    // Sprint 4 — Task 1: click-to-toggle for collapsible sections.
+    // _sectionRowMap is an array of { transcriptIdx, sectionId } records
+    // registered by horizon-tui every time the banner is reprinted. The
+    // mouse handler maps an absolute terminal row → transcript line index
+    // (using terminal height + last input bar draw height) and toggles the
+    // section if the clicked transcript line is a registered header row.
+    this._sectionRowMap = [];
+    // Tab cycle order — matches the displayed section order in the banner.
+    this._sectionCycleOrder = ['tools', 'skills', 'prompt', 'mcp'];
   }
 
   // ── public API ──────────────────────────────────────────────────────
@@ -457,7 +478,33 @@ class TuiEngine {
     // piece when the user steps away. Reset by any keypress/mouse/send.
     this._resetIdleTimer();
 
+    // Sprint 4 — Task 6: kawaii face rotator. When the active theme is
+    // kawaii, redraw the status bar every 2.5s so the face at the end of
+    // row 1 cycles in lock-step with the spinner palette. Cheap — only
+    // fires when nothing is happening, and only when the theme is kawaii.
+    this._armKawaiiTicker();
+
     this._renderInputBar();
+  }
+
+  _armKawaiiTicker() {
+    if (this._kawaiiTicker) return;
+    try {
+      const themeName = this.runtime?.settingsStore?.get?.('cliTheme') || 'default';
+      if (themeName !== 'kawaii') return;
+    } catch (_) { return; }
+    this._kawaiiTicker = setInterval(() => {
+      // Don't fight the streaming renderer or a sub-picker that has paused us.
+      if (this._closed || this._sending || this._streamActive
+          || this.searchActive || !this._onKey) return;
+      if (this.scrollOffset > 0) return;
+      if (!process.stdin.isTTY) return;
+      this._forceRedraw();
+    }, 2500);
+    // Don't pin libuv on this ticker — the keepalive interval already does
+    // that job. Without unref(), a tab-away terminal would never let the
+    // process exit.
+    if (this._kawaiiTicker.unref) this._kawaiiTicker.unref();
   }
 
   /**
@@ -583,6 +630,8 @@ class TuiEngine {
     if (this._frameTimer) { clearTimeout(this._frameTimer); this._frameTimer = null; }
     // Sprint 2.3 — drop the idle timer so it can't fire after exit.
     if (this._idleTimer) { clearTimeout(this._idleTimer); this._idleTimer = null; }
+    // Sprint 4 — Task 6: drop the kawaii face ticker on close.
+    if (this._kawaiiTicker) { clearInterval(this._kawaiiTicker); this._kawaiiTicker = null; }
     if (this.onExit) this.onExit();
   }
 
@@ -721,15 +770,87 @@ class TuiEngine {
   getSections() { return this._collapsibleSections; }
 
   /**
+   * Sprint 4 — Task 1: hook for the digit-key short-shortcut (1=tools,
+   * 2=skills, 3=prompt, 4=mcp). horizon-tui.js registers a closure here that
+   * toggles the section AND repaints the banner in-place — keeping the
+   * engine layer free of bannerHeader knowledge.
+   */
+  setSectionToggleHook(fn) {
+    this._sectionToggleHook = (typeof fn === 'function') ? fn : null;
+  }
+
+  /**
+   * Sprint 4 — Task 1: register clickable section-header row positions.
+   * horizon-tui calls this immediately AFTER printing the banner. We snapshot
+   * the current transcript length, then for each {sectionId, offset} entry
+   * record the absolute transcript line index where that section header sits.
+   * On mouse click we map terminal row → transcript index → sectionId.
+   *
+   * Pass null / empty to clear the map (e.g. when /clear is run).
+   */
+  registerSectionRows(entries) {
+    if (!entries || !entries.length) { this._sectionRowMap = []; return; }
+    // Each entry is { sectionId, lineOffset } where lineOffset is the
+    // row offset of the section header WITHIN the just-printed banner.
+    // Banner top sits at transcript index (transcript.length - bannerLineCount).
+    // We need the caller to also pass the total banner line count so we
+    // can compute the absolute transcript index per header.
+    const out = [];
+    for (const e of entries) {
+      if (typeof e?.transcriptIdx === 'number' && e.sectionId) {
+        out.push({ transcriptIdx: e.transcriptIdx, sectionId: String(e.sectionId) });
+      }
+    }
+    this._sectionRowMap = out;
+  }
+
+  /**
+   * Sprint 4 — Task 1: cycle through the section list, expanding the next
+   * one and collapsing the rest. Wired to Tab (when composer is empty).
+   * Returns the id that is now expanded, or null on no-op.
+   */
+  cycleSectionExpansion() {
+    const order = this._sectionCycleOrder;
+    const map = this._collapsibleSections;
+    // Find currently expanded one (first in order); next slot wraps.
+    let currentIdx = -1;
+    for (let i = 0; i < order.length; i++) {
+      if (map[order[i]]?.expanded) { currentIdx = i; break; }
+    }
+    const nextIdx = (currentIdx + 1) % order.length;
+    for (let i = 0; i < order.length; i++) {
+      const id = order[i];
+      if (map[id]) map[id].expanded = (i === nextIdx);
+    }
+    return order[nextIdx];
+  }
+
+  /** Sprint 4 — Task 1 helper. Composer is "empty" when there's one blank line. */
+  _isComposerEmpty() {
+    return this.lines.length === 1 && (this.lines[0] || '').length === 0;
+  }
+
+  /**
    * Sprint 2.12 — modal overlay rendering. Enters the terminal's alternate
    * screen buffer, prints `content` (string or array of strings), then
    * waits for Esc/q to leave. On exit we restore the original screen
    * untouched — search, scrollback, and the streaming buffer all survive.
    *
+   * Sprint 4 — Task 2: upgraded to a centered, bordered, scrollable card.
+   *   - rounded box (╭─ Help ─...─╮) with a title in the top edge
+   *   - centered horizontally on the screen (left-padded by available space)
+   *   - vertical scrolling via Up/Down + PgUp/PgDn when content exceeds the
+   *     viewport; the body re-paints on each key press so the user gets the
+   *     same feel as the in-chat scrollback view
+   *   - footer hint shows scroll bindings + Esc to close
+   *
+   * @param {string|string[]} content
+   * @param {object} [opts]
+   *   - title:   short string drawn in the top-edge gap (defaults to "Help")
    * Returns a Promise that resolves to true if dismissed, or false if the
    * call was a no-op (non-TTY / engine closed).
    */
-  modalOverlay(content) {
+  modalOverlay(content, opts = {}) {
     return new Promise((resolve) => {
       if (!process.stdin.isTTY || this._closed) {
         // Non-TTY fall-through — print inline.
@@ -737,31 +858,124 @@ class TuiEngine {
         process.stdout.write(text + '\n');
         return resolve(false);
       }
-      const text = Array.isArray(content) ? content.join('\n') : String(content || '');
+      const title = String(opts.title || 'Help');
+      // Normalise the body into an array of logical lines.
+      const allLines = (Array.isArray(content)
+        ? content
+        : String(content || '').split('\n'));
+
       // Pause input handlers so we don't fight the keypress decoder.
       this.pause();
       // Enter alternate screen + hide cursor while modal is open.
       process.stdout.write(ANSI.altOn);
-      process.stdout.write(ANSI.cursorHome);
-      process.stdout.write(ANSI.clearScreen);
-      process.stdout.write(text + '\n');
-      // Footer hint.
-      const footer = '\n' + fmt.dim('  Esc / q to close');
-      process.stdout.write(footer + '\n');
+      process.stdout.write(ANSI.cursorHide);
+
+      // Scroll state.
+      let scrollOffset = 0;  // index of first body line currently visible
+
+      // Strip CSI escapes for width math — borders care about display
+      // columns, not raw byte length.
+      const visibleLen = (s) => String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').length;
+
+      const paint = () => {
+        const cols = Math.max(40, process.stdout.columns || 80);
+        const rows = Math.max(10, process.stdout.rows || 24);
+
+        // Inner card width — leave 4 cells of gutter on each side, capped
+        // at 96 chars so very wide terminals don't stretch the help into
+        // an unreadable rectangle.
+        const cardWidth = Math.min(96, cols - 8);
+        const innerWidth = cardWidth - 4;        // minus border + 1-cell pad each side
+        // Inner card height — reserve 4 rows for top + bottom borders and
+        // a footer line, capped at 30 logical rows so the card always fits.
+        const cardHeight = Math.min(30, rows - 4);
+        const innerHeight = cardHeight - 4;      // minus top/bottom border + footer + 1 spacer
+
+        // Clamp scroll offset to valid range after a resize.
+        const maxOffset = Math.max(0, allLines.length - innerHeight);
+        if (scrollOffset > maxOffset) scrollOffset = maxOffset;
+        if (scrollOffset < 0) scrollOffset = 0;
+        const visible = allLines.slice(scrollOffset, scrollOffset + innerHeight);
+
+        const leftPad = ' '.repeat(Math.max(0, Math.floor((cols - cardWidth) / 2)));
+        const topPad  = Math.max(0, Math.floor((rows - cardHeight) / 2));
+
+        // Clear screen and move home before re-drawing.
+        process.stdout.write(ANSI.clearScreen);
+        for (let i = 0; i < topPad; i++) process.stdout.write('\n');
+
+        // Top border: ╭─ <title> ─────────...─╮
+        const titleFrag = ' ' + title + ' ';
+        const titleDash = '─'.repeat(Math.max(2, cardWidth - 4 - titleFrag.length));
+        const topBorder = leftPad + fmt.dim('╭─') + fmt.cyan(fmt.bold(titleFrag))
+                        + fmt.dim('─' + titleDash + '─╮');
+        process.stdout.write(topBorder + '\n');
+
+        // Body rows. Each row is padded to innerWidth columns then framed.
+        for (let i = 0; i < innerHeight; i++) {
+          const raw = visible[i] != null ? String(visible[i]) : '';
+          // Hard-truncate logical-line content to innerWidth using visible
+          // width to avoid wrap-on-wrap rendering glitches.
+          let body = raw;
+          if (visibleLen(body) > innerWidth) {
+            // Crude visible-aware truncate: walk forward stripping CSIs.
+            // Hot path so we keep it simple — escape stripping for width
+            // only; the truncated copy keeps original ANSI for what fits.
+            const stripped = body.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+            if (stripped.length > innerWidth) {
+              // Best effort: drop all ANSI in this case so the truncation
+              // boundary stays clean. (Help body is mostly plain text.)
+              body = stripped.slice(0, Math.max(0, innerWidth - 1)) + '…';
+            }
+          }
+          const pad = ' '.repeat(Math.max(0, innerWidth - visibleLen(body)));
+          process.stdout.write(leftPad + fmt.dim('│ ') + body + pad + fmt.dim(' │') + '\n');
+        }
+
+        // Spacer row above footer.
+        process.stdout.write(leftPad + fmt.dim('│ ') + ' '.repeat(innerWidth) + fmt.dim(' │') + '\n');
+
+        // Footer hint inside the card. Position indicator on the right.
+        const scrolled = allLines.length > innerHeight;
+        const hint = scrolled
+          ? '↑↓/PgUp/PgDn to scroll · Esc to close'
+          : 'Esc to close';
+        const posText = scrolled
+          ? `${Math.min(allLines.length, scrollOffset + innerHeight)}/${allLines.length}`
+          : '';
+        const footLeft = ' ' + fmt.dim(hint);
+        const footRight = posText ? fmt.dim(posText) + ' ' : '';
+        const gap = Math.max(1, innerWidth - visibleLen(footLeft) - visibleLen(footRight));
+        process.stdout.write(leftPad + fmt.dim('│') + footLeft
+          + ' '.repeat(gap) + footRight + fmt.dim('│') + '\n');
+
+        const bottomBorder = leftPad + fmt.dim('╰' + '─'.repeat(cardWidth - 2) + '╯');
+        process.stdout.write(bottomBorder);
+      };
 
       const onKey = (ch, key) => {
         if (!key) return;
-        // Any of Esc, q, Ctrl+C dismisses; never crash the modal.
         if (key.name === 'escape' || key.name === 'q'
             || (key.ctrl && (key.name === 'c' || key.name === 'd'))) {
           cleanup();
           return resolve(true);
         }
+        // Scrolling — only meaningful when content exceeds viewport.
+        if (key.name === 'up')       { scrollOffset -= 1; paint(); return; }
+        if (key.name === 'down')     { scrollOffset += 1; paint(); return; }
+        if (key.name === 'pageup')   { scrollOffset -= 10; paint(); return; }
+        if (key.name === 'pagedown') { scrollOffset += 10; paint(); return; }
+        if (key.name === 'home')     { scrollOffset = 0; paint(); return; }
+        if (key.name === 'end')      { scrollOffset = 999_999; paint(); return; }
       };
       const cleanup = () => {
         try { process.stdin.off('keypress', onKey); } catch (_) {}
         try { process.stdout.write(ANSI.altOff); } catch (_) {}
         try { process.stdout.write(ANSI.cursorShow); } catch (_) {}
+        if (this._resizeHandler) {
+          try { process.stdout.off('resize', this._resizeHandler); } catch (_) {}
+          this._resizeHandler = null;
+        }
         // Restore input handlers + repaint the live view.
         this.resume();
       };
@@ -770,6 +984,10 @@ class TuiEngine {
         process.stdin.on('keypress', onKey);
         try { process.stdin.setRawMode(true); } catch (_) {}
         process.stdin.resume();
+        // Re-paint on terminal resize so the card stays centered.
+        this._resizeHandler = () => { try { paint(); } catch (_) {} };
+        try { process.stdout.on('resize', this._resizeHandler); } catch (_) {}
+        paint();
       } catch (e) {
         cleanup();
         resolve(false);
@@ -923,7 +1141,36 @@ class TuiEngine {
 
     if (key.name === 'backspace') { this._cancelCompletion(); this._backspace(); return; }
     if (key.name === 'delete')    { this._cancelCompletion(); this._delete(); return; }
+    // Sprint 4 — Task 1: Tab on an empty composer cycles the expanded
+    // section in the banner. Inside a non-empty composer Tab still does
+    // its old job (slash autocomplete) so muscle memory survives.
+    if (key.name === 'tab' && this._isComposerEmpty() && this._sectionToggleHook) {
+      const id = this.cycleSectionExpansion();
+      // Reuse the same hook that the digit shortcuts use — keeps the banner
+      // repaint logic out of the engine layer.
+      if (id) {
+        try { this._sectionToggleHook(id, { force: 'expand' }); } catch (_) {}
+      }
+      return;
+    }
     if (key.name === 'tab')       { this._autocomplete(); return; }
+
+    // Sprint 4 — Task 1: Hermes-style digit shortcuts. When the composer is
+    // empty, pressing 1/2/3/4 toggles the matching startup-banner section
+    // (Tools / Skills / System prompt / MCP). Lets the user collapse +
+    // expand quick-look info without typing `/sections tools` every time.
+    // Disabled the instant any composer content exists so the keys still
+    // work as normal text when typing.
+    if (ch && this._isComposerEmpty()
+        && !key.ctrl && !key.meta && !key.alt
+        && ['1', '2', '3', '4'].includes(ch)) {
+      const map = { '1': 'tools', '2': 'skills', '3': 'prompt', '4': 'mcp' };
+      const id = map[ch];
+      if (id && this._sectionToggleHook) {
+        try { this._sectionToggleHook(id); } catch (_) {}
+      }
+      return;
+    }
 
     // Fix 6 — Esc closes autocomplete menu if open
     if (key.name === 'escape' && this._completionHits) { this._cancelCompletion(); return; }
@@ -1142,6 +1389,22 @@ class TuiEngine {
     this._resetIdleTimer();
     if (button === 64) { this._scrollBy(-3); return; }
     if (button === 65) { this._scrollBy(3);  return; }
+    // Sprint 4 — Task 1: section header click-to-toggle. Map the click row
+    // (1-indexed terminal row) to a transcript line index. In live view, the
+    // bottom of the transcript sits at row (termRows - inputBarHeight); the
+    // line at terminal row R corresponds to transcript[len-1 - (bottomRow-R)].
+    if (button === 0 && this._sectionRowMap.length && this.scrollOffset === 0) {
+      const termRows = process.stdout.rows || 24;
+      const bottomRow = termRows - (this._lastDrawHeight || 1);
+      // Banner is upstream in transcript; map this click row to its index.
+      const rowsBelow = bottomRow - row;
+      const clickedIdx = (this.transcript.length - 1) - rowsBelow;
+      const hit = this._sectionRowMap.find(s => s.transcriptIdx === clickedIdx);
+      if (hit && this._sectionToggleHook) {
+        try { this._sectionToggleHook(hit.sectionId); } catch (_) {}
+        return;
+      }
+    }
     // Click anywhere → ensure input bar is active (no real focus model in
     // our single-panel UI, but we can reset scroll to 0 to bring user
     // back to live view).
@@ -1423,14 +1686,24 @@ class TuiEngine {
     const rt = this.runtime;
     if (!rt || !rt.settingsStore) return '';
 
-    let provider = '—', persona = '—', modelName = '';
+    let provider = '—', persona = '—', modelName = '', themeName = 'default';
     try {
       provider = rt.settingsStore.get('provider') || 'gemini';
       persona = rt.settingsStore.get('persona') || 'jarvis';
       modelName = rt.settingsStore.get('model.' + provider)
         || this.sessionStats.lastModel
         || '';
+      themeName = rt.settingsStore.get('cliTheme') || 'default';
     } catch (_) {}
+
+    // Sprint 4 — theme-aware emoji gating. Mono / matrix / retro-amber and
+    // any other non-emoji theme falls back to ASCII so we don't print
+    // half-rendered "🗜" boxes onto a CRT-style palette. The substitutes
+    // (≡ ▸ ·) are picked to be visually similar to the originals.
+    const useGlyphs = STATUS_GLYPH_THEMES.has(themeName);
+    const G_COMPRESS = useGlyphs ? '🗜' : '≡';
+    const G_BG      = useGlyphs ? '▶' : '▸';
+    const G_TIMER   = useGlyphs ? '⏱' : '·';
 
     const modelShort = modelName ? String(modelName).split('/').pop().slice(0, 28) : '';
     const modelStr   = modelShort ? (':' + modelShort) : '';
@@ -1463,9 +1736,9 @@ class TuiEngine {
     const totalSecs = Math.floor(totalElapsedMs / 1000);
     let timeStr;
     if (!curSecs && !totalSecs) {
-      timeStr = '⏱ —';
+      timeStr = G_TIMER + ' —';
     } else {
-      timeStr = '⏱ ' + fmtSec(curSecs || totalSecs)
+      timeStr = G_TIMER + ' ' + fmtSec(curSecs || totalSecs)
               + (totalSecs && curSecs && totalSecs !== curSecs ? '/' + fmtSec(totalSecs) : '');
     }
 
@@ -1536,24 +1809,50 @@ class TuiEngine {
     // YOLO flag.
     const yoloPart = this._yoloMode ? '  ' + fmt.yellow('⚠ YOLO') : '';
 
-    // Row 1 — state + provider + persona + cwd (branch) + YOLO
+    // Sprint 4 — Task 6: live kawaii face when theme=kawaii and we're idle.
+    // Spinner already swaps faces on the 2.5s cadence during sends; the
+    // status bar gets the same treatment so the kawaii feel stays "alive"
+    // between turns instead of going dead the moment the spinner stops.
+    // The face index walks forward in lock-step with wall-clock time so a
+    // bunch of redraws inside one 2.5s slot all show the same face.
+    let kawaiiFace = '';
+    if (themeName === 'kawaii' && (state === 'ready' || !this._sending)) {
+      try {
+        const themes = require('./themes');
+        const t = themes.getTheme && themes.getTheme('kawaii');
+        const faces = (t && Array.isArray(t.kawaiiFaces) && t.kawaiiFaces.length)
+          ? t.kawaiiFaces
+          : null;
+        if (faces) {
+          const slot = Math.floor(Date.now() / 2500);
+          kawaiiFace = '  ' + fmt.magenta(faces[slot % faces.length]);
+        }
+      } catch (_) {}
+    }
+
+    // Row 1 — state + provider + persona + cwd (branch) + YOLO + kawaii face
     const sep2 = '  ';
     const row1 = ribbon + statePainted + sep2 + head + sep2 + personaPart
-               + sep2 + cwdPart + yoloPart;
+               + sep2 + cwdPart + yoloPart + kawaiiFace;
 
     // Row 2 — tokens/ctx [bar] pct%  $cost  ⏱ time  🗜 N  ▶ N
     const tokensPart = fmt.dim(tokensStr);
     const barPart    = '[' + barColored + '] ' + barFn(pctStr);
     const costPart   = fmt.green(costStr);
-    const compPart   = fmt.dim('🗜 ' + this._compressionCount);
-    const bgPart     = fmt.dim('▶ ' + this._bgTaskCount);
+    const compPart   = fmt.dim(G_COMPRESS + ' ' + this._compressionCount);
+    const bgPart     = fmt.dim(G_BG + ' ' + this._bgTaskCount);
     const timePart   = fmt.dim(timeStr);
     const row2parts  = [tokensPart, barPart, costPart, timePart];
     if (wantFull) {
       row2parts.push(compPart);
       row2parts.push(bgPart);
     }
-    const row2 = ribbon + row2parts.join(sep2);
+    // Sprint 4 — Task 8: the "▎" ribbon on row 2 read as a stray vertical
+    // colour bar floating under the status, with no obvious owner. We now
+    // emit it only on row 1 (where it pairs with the agent-state word) and
+    // indent row 2 by two spaces so the columns still align visually under
+    // the state label.
+    const row2 = '  ' + row2parts.join(sep2);
 
     return row1 + '\n' + row2;
   }

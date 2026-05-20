@@ -1,18 +1,36 @@
 'use strict';
 /**
- * Horizon Plugin Manager — v2.1 (fixed & honest)
+ * Horizon Plugin Manager — v2.2 (Sprint-3 canonical contract)
  *
- * Changes vs the previous version:
- *  - Built-in templates now only ship CORE utilities that belong inside Horizon
- *    (system-monitor, quick-notes, file-organizer, app-launcher, timer, weather).
- *  - Fake "community-looking" plugins are REMOVED from built-ins. They belong
- *    in the real user-generated marketplace instead.
- *  - The Spotify Control plugin is now a REAL PKCE OAuth implementation
- *    (loopback 127.0.0.1, safeStorage-encrypted tokens, refresh flow).
- *  - Added a `tier` field on every plugin so the UI can visually separate
- *    built-in / demo / community (as required by the Marketplace spec).
- *  - `installFromShareUrl` is stricter: rejects plugins trying to impersonate
- *    a Horizon Team name.
+ * ── CANONICAL PLUGIN CONTRACT ──────────────────────────────────────────────
+ *  Entry file:    `handler.js` (canonical) — `main.js` also accepted (legacy)
+ *  Export form:   `module.exports = { async execute(toolName, args, ctx) { ... } }`
+ *                  (preferred — used by every Horizon built-in plugin)
+ *                 — OR —
+ *                  `module.exports = { [toolName]: async (args, ctx) => ... }`
+ *                  (per-tool form — also accepted by `executeTool` below)
+ *  Permissions:   dotted form (`network.fetch`, `clipboard.read`, `shell.exec`,
+ *                 `filesystem.read`, `filesystem.write`, `notifications`,
+ *                 `screen.read`, `mouse.control`, `keyboard.control`).
+ *                 Legacy `colon:form` is coerced to dotted on load + install.
+ *  Context:       `ctx = { settings, fetch, logger, storage }`
+ *                   settings — `Readonly<manifest.config>` (user-editable)
+ *                   fetch    — node-fetch wrapped with the plugin's
+ *                              `network.fetch` permission check (throws
+ *                              `PermissionError` if not granted)
+ *                   logger   — `{ info(msg, …), warn(msg, …), error(msg, …) }`
+ *                              writes to <userData>/plugin-logs/<id>.log
+ *                              (1 MiB rotation, last-write-wins)
+ *                   storage  — `{ get(k), set(k, v), all(), delete(k) }`
+ *                              backed by <userData>/plugin-storage/<id>.json
+ *
+ * Return shape (recommended):
+ *   `{ ok: true,  out: '...', ... }`     for success
+ *   `{ ok: false, error: '...' }`        for failure
+ *
+ * See horizon-plugin-sdk/packages/types/src/index.ts for the TypeScript
+ * mirror of this contract.
+ * ───────────────────────────────────────────────────────────────────────────
  */
 
 const fs = require('fs');
@@ -22,6 +40,85 @@ const electron = require('electron');
 const shell = electron.shell || { openExternal: async () => { throw new Error('Electron shell is not available'); } };
 const Notification = electron.Notification || class { constructor() {} show() {} };
 const COMMUNITY_PLUGINS_ENABLED = process.env.HORIZON_ENABLE_COMMUNITY_PLUGINS === '1';
+
+// node-fetch is already a runtime dependency (see package.json); fall back
+// to the global `fetch` (Node 20+) if node-fetch fails to resolve for any
+// reason (e.g. pkg snapshot).
+let _nodeFetch;
+function _resolveFetch() {
+  if (_nodeFetch) return _nodeFetch;
+  try { _nodeFetch = require('node-fetch'); }
+  catch (_) { _nodeFetch = (...a) => globalThis.fetch(...a); }
+  return _nodeFetch;
+}
+
+class PermissionError extends Error {
+  constructor(permission, target) {
+    super(`Permission denied: ${permission}${target ? ' (' + target + ')' : ''}`);
+    this.name = 'PermissionError';
+    this.permission = permission;
+    this.target = target || null;
+  }
+}
+
+// Sprint-3 — permission string normalisation. SDK canonical form is
+// dotted (`network.fetch`, `clipboard.read`). Older built-in manifests
+// and a handful of community zips ship the legacy `colon:form`
+// (`network:*`, `clipboard:read`, `fs:write:userdata`). We accept both
+// at load time, emit a single deprecation warning per plugin, and store
+// the dotted form on the manifest so the UI shows a consistent string.
+const LEGACY_PERM_MAP = {
+  'network:*':                   'network.fetch',
+  'network:fetch':               'network.fetch',
+  'clipboard:read':              'clipboard.read',
+  'clipboard:write':             'clipboard.write',
+  'screen:read':                 'screen.read',
+  'screen:capture':              'screen.read',
+  'shell:exec':                  'shell.exec',
+  'shell:execute':               'shell.exec',
+  'fs:read':                     'filesystem.read',
+  'fs:write':                    'filesystem.write',
+  'fs:write:userdata':           'filesystem.write',
+  'system:read':                 'shell.exec',
+  'storage:tokens':              'filesystem.write',
+  'loopback:127.0.0.1':          'network.fetch',
+  'notifications':               'notifications',
+  'notification':                'notifications',
+  'mouse:control':               'mouse.control',
+  'keyboard:control':            'keyboard.control',
+};
+const PERM_WARNED = new Set();
+function normalisePermissions(rawList, pluginId) {
+  if (!Array.isArray(rawList)) return [];
+  const out = [];
+  let changed = false;
+  for (const raw of rawList) {
+    if (typeof raw !== 'string') continue;
+    if (raw.includes('.')) { out.push(raw); continue; }
+    if (raw.includes(':')) {
+      const direct = LEGACY_PERM_MAP[raw];
+      if (direct) { out.push(direct); changed = true; continue; }
+      // Pattern fallback — strip everything after the first colon, then
+      // map the scope. Covers `network:api.coingecko.com` →
+      // `network.fetch`, etc.
+      const scope = raw.split(':')[0];
+      const fallback = LEGACY_PERM_MAP[scope + ':*'] || LEGACY_PERM_MAP[scope + ':read'] || null;
+      if (fallback) { out.push(fallback); changed = true; continue; }
+      // Unknown legacy scope — keep the raw string so we don't silently
+      // drop intent, but mark as changed for the deprecation log.
+      out.push(raw);
+      changed = true;
+      continue;
+    }
+    out.push(raw);
+  }
+  if (changed && pluginId && !PERM_WARNED.has(pluginId)) {
+    PERM_WARNED.add(pluginId);
+    console.warn(`[plugin:${pluginId}] DEPRECATED legacy "colon:form" permission strings — switch to dotted form (e.g. "network.fetch"). See horizon-plugin-sdk/docs/manifest.md.`);
+  }
+  // De-duplicate preserving order.
+  return Array.from(new Set(out));
+}
 
 class PluginManager {
   constructor(pluginsDir) {
@@ -33,6 +130,143 @@ class PluginManager {
     if (!fs.existsSync(pluginsDir)) {
       fs.mkdirSync(pluginsDir, { recursive: true });
     }
+
+    // Sprint-3 — per-plugin storage + logs live next to the plugins dir
+    // (siblings: plugin-storage/, plugin-logs/). Keeps the user's plugin
+    // bundles immutable.
+    this.storageDir = path.join(path.dirname(pluginsDir), 'plugin-storage');
+    this.logsDir    = path.join(path.dirname(pluginsDir), 'plugin-logs');
+    try { fs.mkdirSync(this.storageDir, { recursive: true }); } catch (_) {}
+    try { fs.mkdirSync(this.logsDir,    { recursive: true }); } catch (_) {}
+
+    // Per-plugin storage cache so frequent get()/set() don't hit disk for
+    // every call. The on-disk JSON is the source of truth — cache is
+    // discarded if the file is modified externally (mtime check).
+    this._storageCache = new Map(); // pluginId → { mtime, data }
+  }
+
+  // ─── Sprint-3 ctx helpers (fetch / logger / storage) ────────────────────
+  // These are constructed fresh per executeTool() call so per-call state
+  // (such as the resolved permission set) is captured in closure.
+
+  _hasPermission(manifest, perm) {
+    const perms = manifest && Array.isArray(manifest.permissions) ? manifest.permissions : [];
+    return perms.includes(perm);
+  }
+
+  _makeCtxFetch(manifest) {
+    const fetchImpl = _resolveFetch();
+    const pluginId = manifest._id || manifest.id || 'unknown';
+    return async (input, init) => {
+      if (!this._hasPermission(manifest, 'network.fetch')) {
+        throw new PermissionError('network.fetch', String(input || ''));
+      }
+      try {
+        return await fetchImpl(input, init);
+      } catch (e) {
+        // Tag the error so plugin authors can distinguish "wrong URL" from
+        // "no permission".
+        const err = new Error(`[plugin:${pluginId}] fetch failed: ${e.message}`);
+        err.cause = e;
+        throw err;
+      }
+    };
+  }
+
+  _makeCtxLogger(manifest) {
+    const pluginId = manifest._id || manifest.id || 'unknown';
+    const logPath = path.join(this.logsDir, `${pluginId}.log`);
+    const write = (level, msg, ...rest) => {
+      const ts = new Date().toISOString();
+      const tail = rest.length
+        ? ' ' + rest.map(r => {
+            try { return typeof r === 'string' ? r : JSON.stringify(r); }
+            catch (_) { return String(r); }
+          }).join(' ')
+        : '';
+      const line = `[${ts}] ${level.toUpperCase()} ${msg}${tail}\n`;
+      try {
+        // Naive 1 MiB rotation: if file > 1 MiB, truncate to last 512 KiB.
+        let st;
+        try { st = fs.statSync(logPath); } catch (_) { st = null; }
+        if (st && st.size > 1024 * 1024) {
+          try {
+            const fd = fs.openSync(logPath, 'r');
+            const half = Buffer.alloc(512 * 1024);
+            fs.readSync(fd, half, 0, half.length, st.size - half.length);
+            fs.closeSync(fd);
+            fs.writeFileSync(logPath, half);
+          } catch (_) { try { fs.truncateSync(logPath, 0); } catch (_) {} }
+        }
+        fs.appendFileSync(logPath, line);
+      } catch (_) { /* swallow — logging must never throw */ }
+      // Also mirror to the host console so devs see plugin activity in
+      // electron's stdout without tailing the file.
+      if (level === 'error') console.error(`[plugin:${pluginId}]`, msg, ...rest);
+      else if (level === 'warn') console.warn(`[plugin:${pluginId}]`, msg, ...rest);
+      else console.log(`[plugin:${pluginId}]`, msg, ...rest);
+    };
+    return {
+      info:  (msg, ...rest) => write('info',  msg, ...rest),
+      warn:  (msg, ...rest) => write('warn',  msg, ...rest),
+      error: (msg, ...rest) => write('error', msg, ...rest),
+    };
+  }
+
+  _readStorage(pluginId) {
+    const p = path.join(this.storageDir, `${pluginId}.json`);
+    let st = null;
+    try { st = fs.statSync(p); } catch (_) {}
+    const cached = this._storageCache.get(pluginId);
+    if (cached && st && cached.mtime === st.mtimeMs) return cached.data;
+    if (!st) return {};
+    try {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8')) || {};
+      this._storageCache.set(pluginId, { mtime: st.mtimeMs, data });
+      return data;
+    } catch (_) { return {}; }
+  }
+
+  _writeStorage(pluginId, data) {
+    const p = path.join(this.storageDir, `${pluginId}.json`);
+    try {
+      fs.writeFileSync(p, JSON.stringify(data, null, 2));
+      const st = fs.statSync(p);
+      this._storageCache.set(pluginId, { mtime: st.mtimeMs, data });
+      return true;
+    } catch (_) { return false; }
+  }
+
+  _makeCtxStorage(manifest) {
+    const pluginId = manifest._id || manifest.id || 'unknown';
+    return {
+      get: (key) => {
+        const data = this._readStorage(pluginId);
+        return key == null ? undefined : data[key];
+      },
+      set: (key, value) => {
+        if (typeof key !== 'string' || !key) return false;
+        const data = this._readStorage(pluginId);
+        data[key] = value;
+        return this._writeStorage(pluginId, data);
+      },
+      delete: (key) => {
+        const data = this._readStorage(pluginId);
+        if (!(key in data)) return false;
+        delete data[key];
+        return this._writeStorage(pluginId, data);
+      },
+      all: () => ({ ...this._readStorage(pluginId) }),
+    };
+  }
+
+  _buildCtx(manifest) {
+    return {
+      settings: Object.freeze({ ...(manifest.config || {}) }),
+      fetch:    this._makeCtxFetch(manifest),
+      logger:   this._makeCtxLogger(manifest),
+      storage:  this._makeCtxStorage(manifest),
+    };
   }
 
   loadAll() {
@@ -62,10 +296,20 @@ class PluginManager {
           }
           manifest._dir = pluginPath;
           manifest._id = dir;
+          // Sprint-3 — coerce legacy colon:form permissions to dotted form
+          // and log one deprecation per plugin.
+          if (Array.isArray(manifest.permissions)) {
+            manifest.permissions = normalisePermissions(manifest.permissions, dir);
+          }
           this.plugins.set(dir, manifest);
           const trusted = this.isTrusted(manifest);
           if (manifest.enabled !== false && trusted) this.enabled.add(dir);
-          const handlerPath = path.join(pluginPath, 'handler.js');
+          // Sprint-3 — accept handler.js (canonical) OR main.js (SDK <0.1.2 bundles).
+          let handlerPath = path.join(pluginPath, 'handler.js');
+          if (!fs.existsSync(handlerPath)) {
+            const mainPath = path.join(pluginPath, 'main.js');
+            if (fs.existsSync(mainPath)) handlerPath = mainPath;
+          }
           if (fs.existsSync(handlerPath) && trusted) {
             try {
               delete require.cache[require.resolve(handlerPath)];
@@ -116,7 +360,9 @@ class PluginManager {
         tools: plugin.tools || [],
         settings: plugin.settings || [],
         config: plugin.config || {},
-        permissions: plugin.permissions || [],
+        // Sprint-3 — normalise on install so the persisted manifest uses
+        // the canonical dotted form, not whatever the user shipped.
+        permissions: normalisePermissions(plugin.permissions || [], plugin.id),
         price: plugin.price || 0,
         rating: plugin.rating || 0,
         downloads: plugin.downloads || 0,
@@ -220,7 +466,9 @@ class PluginManager {
       return { ok: false, error: 'Community plugin execution is disabled until sandboxing ships.' };
     }
     const handler = this.handlers.get(pluginId);
-    const ctx = { settings: manifest.config || {} };
+    // Sprint-3 — full ctx with fetch/logger/storage (was `{ settings }` only,
+    // which made the SDK types lie). See header doc-comment for the contract.
+    const ctx = this._buildCtx(manifest);
     if (handler) {
       if (typeof handler.execute === 'function') {
         try { return await handler.execute(toolName, args, ctx); }
@@ -340,13 +588,10 @@ class PluginManager {
     return { ok: false, error: `Unsupported manifest action: ${action}` };
   }
 
-  setConfig(pluginId, config) {
-    const manifest = this.plugins.get(pluginId);
-    if (!manifest) return { ok: false, error: 'Plugin not found' };
-    manifest.config = { ...(manifest.config || {}), ...config };
-    try { fs.writeFileSync(path.join(this.pluginsDir, pluginId, 'manifest.json'), JSON.stringify(manifest, null, 2)); } catch {}
-    return { ok: true };
-  }
+  // Note: a second `setConfig(pluginId, config)` definition was removed
+  // here in Sprint-3 — it shadowed the earlier method (above) and silently
+  // wrote `_dir`/`_id` into the on-disk manifest. The kept implementation
+  // is the one near line 417.
 
   generateShareUrl(pluginId) {
     const manifest = this.plugins.get(pluginId);
@@ -429,7 +674,11 @@ class PluginManager {
         icon: manifest.icon,
         tools: manifest.tools,
         settings: manifest.settings || [],
-        permissions: manifest.permissions || [],
+        // Sprint-3 — bundled built-ins now ship dotted-form perms, but
+        // some installs are upgrading from older app versions where the
+        // on-disk manifest still has colon-form. Normalise on every
+        // install so the persisted manifest converges to dotted form.
+        permissions: normalisePermissions(manifest.permissions || [], pluginId),
         price: existing.price || 0,
         rating: existing.rating || 5,
         downloads: existing.downloads || 0,

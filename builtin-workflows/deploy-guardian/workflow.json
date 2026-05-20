@@ -1,0 +1,104 @@
+{
+  "id": "deploy-guardian",
+  "name": "Deploy Guardian",
+  "description": "Every 5 minutes, checks configured endpoint health. On failure, runs log-analyzer skill on the latest logs and posts a diagnosis alert to your channel.",
+  "category": "ops",
+  "tier": "built_in",
+  "trigger": "interval:5",
+  "enabled": false,
+  "steps": [
+    {
+      "type": "skill",
+      "action": "server-health",
+      "params": {
+        "skill": "server-health",
+        "args": {
+          "endpoints": "{{settings.healthEndpoints}}",
+          "timeoutMs": 8000,
+          "expectStatus": [200, 204]
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "run_code",
+      "action": "branch_on_health",
+      "params": {
+        "language": "node",
+        "code": "const health = JSON.parse(process.env.STEP_OUTPUT || '{}'); const failures = (health.results || []).filter(r => !r.ok); if (failures.length === 0) { console.log('all_ok'); process.exit(2); } console.log(JSON.stringify({ failures }));"
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "fetch_recent_logs",
+      "params": {
+        "pluginId": "logs",
+        "tool": "tail",
+        "args": {
+          "source": "{{settings.logSource}}",
+          "lines": 500,
+          "since": "10 minutes ago"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "log-analyzer",
+      "params": {
+        "skill": "log-analyzer",
+        "args": {
+          "logs": "{{steps.fetch_recent_logs.output}}",
+          "failingEndpoints": "{{steps.branch_on_health.output.failures}}",
+          "mode": "diagnose"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "post_alert",
+      "params": {
+        "pluginId": "telegram",
+        "tool": "send_message",
+        "args": {
+          "chatId": "{{settings.alertChatId}}",
+          "text": "ALERT Deploy Guardian\n\nFailing endpoints:\n{{steps.branch_on_health.output.failures}}\n\nDiagnosis:\n{{steps.log-analyzer.output}}",
+          "parseMode": "Markdown"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "log_history",
+      "params": {
+        "pluginId": "memory",
+        "tool": "append",
+        "args": {
+          "path": "ops/deploy-guardian-history.jsonl",
+          "line": {
+            "ts": "{{date.iso}}",
+            "ok": false,
+            "failures": "{{steps.branch_on_health.output.failures}}",
+            "diagnosis": "{{steps.log-analyzer.output}}"
+          }
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "notify",
+      "action": "Alert sent",
+      "params": {
+        "title": "Deploy Guardian",
+        "body": "Endpoint failure detected. Alert posted."
+      }
+    }
+  ],
+  "outputs": {
+    "primaryChannel": "telegram",
+    "persistence": "memory/ops/deploy-guardian-history.jsonl"
+  }
+}

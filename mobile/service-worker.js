@@ -5,7 +5,10 @@
 // Bumped to v2 when the pair-view UX was redesigned (QR scan primary,
 // manual fields collapsed). Old clients pick up the new shell on next
 // load instead of being stuck on the cached v1 form.
-const CACHE_NAME = 'horizon-pwa-v2';
+// Sprint 4 — Task 8: bumped to v3 so the indigo→violet accent palette
+// (--accent / --accent-2 swap in app.css) takes effect immediately
+// instead of waiting for the user to manually clear caches.
+const CACHE_NAME = 'horizon-pwa-v3';
 const APP_SHELL = [
   './',
   'index.html',

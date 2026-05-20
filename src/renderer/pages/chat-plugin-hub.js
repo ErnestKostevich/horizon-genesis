@@ -44,7 +44,10 @@ function hubTab(tab) {
 async function renderHubBody() {
   const body = document.getElementById('hub-body');
   if (hubCurrentTab === 'installed') {
-    body.innerHTML = '<div style="color:var(--t3);font-size:11px;margin-bottom:12px">Loading plugins...</div>';
+    // Sprint 4 — Task 4: skeleton rows while H.pluginList() resolves.
+    body.innerHTML = (typeof hzSkelRows === 'function')
+      ? hzSkelRows(4, { height: 56, gap: 12 })
+      : '<div style="color:var(--t3);font-size:11px;margin-bottom:12px">Loading plugins...</div>';
     try {
       const plugins = await H.pluginList();
       hubPluginsCache = plugins;

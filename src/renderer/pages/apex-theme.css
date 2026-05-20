@@ -1411,3 +1411,165 @@ textarea:focus, input:focus, .cmd-input:focus {
   color: #18181b !important;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-3 final pass — additional apex-theme selectors that hardcoded
+   amber-on-amber, cyan-on-dark or dark glass and skipped a light variant.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* .ic-btn was painted amber-on-amber on hover; the BASE state had a dark
+   transparent bg + tx-2 text which on white = invisible. */
+[data-theme="light"] .ic-btn {
+  background: rgba(0,0,0,.03) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .ic-btn:hover {
+  background: rgba(124,109,242,.08) !important;
+  border-color: rgba(124,109,242,.32) !important;
+  color: #4c40ad !important;
+  box-shadow: 0 4px 14px rgba(124,109,242,.10) !important;
+}
+
+/* .ph (settings panel header) — amber first-letter accent already covered;
+   the body bg was dark amber gradient. Re-paint white on light. */
+[data-theme="light"] .ph {
+  background: linear-gradient(180deg, rgba(124,109,242,.04), transparent) !important;
+}
+[data-theme="light"] .ph h2 {
+  color: #18181b !important;
+}
+[data-theme="light"] .ph-x,
+[data-theme="light"] .fph-x {
+  background: rgba(0,0,0,.04) !important;
+  border-color: rgba(0,0,0,.12) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .ph-x:hover,
+[data-theme="light"] .fph-x:hover {
+  background: rgba(220,38,38,.10) !important;
+  border-color: rgba(220,38,38,.32) !important;
+  color: #b91c1c !important;
+}
+
+/* Floating-panel header — apex paints with amber subtle bg. */
+[data-theme="light"] .fph {
+  background: linear-gradient(180deg, rgba(124,109,242,.04), transparent) !important;
+}
+[data-theme="light"] .fph h2,
+[data-theme="light"] .fph h3 {
+  color: #18181b !important;
+}
+
+/* .ftabs background uses dark bd-1 spec but the row needs a hairline. */
+[data-theme="light"] .ftabs {
+  border-bottom-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .ftab:hover {
+  color: #18181b !important;
+  background: rgba(0,0,0,.04) !important;
+}
+
+/* .ps (provider settings card) — was rgba(255,255,255,.02), invisible. */
+[data-theme="light"] .ps {
+  background: rgba(0,0,0,.02) !important;
+  border-color: rgba(0,0,0,.08) !important;
+}
+
+/* .pi / .sel inputs in settings panel. */
+[data-theme="light"] .pi,
+[data-theme="light"] .sel {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.12) !important;
+  color: #18181b !important;
+}
+
+/* .pf label color */
+[data-theme="light"] .pf label {
+  color: #18181b !important;
+}
+[data-theme="light"] .pf label a {
+  color: #4c40ad !important;
+}
+
+/* Toggle row borders + text */
+[data-theme="light"] .trow {
+  border-bottom-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .tinfo {
+  color: #18181b !important;
+}
+[data-theme="light"] .tinfo small {
+  color: #52525b !important;
+}
+
+/* Switch (.sw) — track + thumb */
+[data-theme="light"] .sw {
+  background: rgba(0,0,0,.08) !important;
+  border-color: rgba(0,0,0,.12) !important;
+}
+[data-theme="light"] .sw::after {
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18);
+}
+[data-theme="light"] .sw.on {
+  background: rgba(124,109,242,.30) !important;
+  border-color: rgba(124,109,242,.55) !important;
+  box-shadow: 0 0 14px rgba(124,109,242,.16) !important;
+}
+[data-theme="light"] .sw.on::after {
+  background: #7c6df2 !important;
+  box-shadow: 0 0 6px rgba(124,109,242,.4);
+}
+
+/* mic-test + dbtn (delete buttons) */
+[data-theme="light"] .mic-test-btn,
+[data-theme="light"] .dbtn {
+  background: rgba(0,0,0,.03) !important;
+  border-color: rgba(0,0,0,.12) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .mic-test-btn:hover {
+  border-color: rgba(124,109,242,.35) !important;
+  color: #4c40ad !important;
+  background: rgba(124,109,242,.06) !important;
+}
+[data-theme="light"] .dbtn:hover {
+  border-color: rgba(220,38,38,.40) !important;
+  color: #b91c1c !important;
+  background: rgba(220,38,38,.08) !important;
+}
+
+/* .os-footer + .os-badge */
+[data-theme="light"] .os-footer {
+  border-top-color: rgba(0,0,0,.08) !important;
+  background: rgba(0,0,0,.015);
+}
+[data-theme="light"] .os-badge {
+  background: rgba(34,197,94,.10) !important;
+  border-color: rgba(34,197,94,.30) !important;
+  color: #047857 !important;
+}
+
+/* Wake bar — cyan on cyan tint fails on white. */
+[data-theme="light"] .wake-bar {
+  background: #ffffff !important;
+  border-color: rgba(29,78,216,.28) !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,.06), 0 0 18px rgba(29,78,216,.10);
+}
+[data-theme="light"] .wb-txt {
+  color: #1d4ed8 !important;
+}
+[data-theme="light"] .vb {
+  background: rgba(29,78,216,.06) !important;
+  border-color: rgba(29,78,216,.22) !important;
+}
+
+/* .sb (status bar) — apex base has dark glass bg. */
+[data-theme="light"] .sb {
+  background: rgba(255,255,255,.85) !important;
+  border-bottom-color: rgba(0,0,0,.06) !important;
+}
+[data-theme="light"] .sp {
+  background: rgba(0,0,0,.08) !important;
+}
+
