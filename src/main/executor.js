@@ -135,9 +135,10 @@ class Executor {
     const lang = String(language || 'shell').toLowerCase();
     const requestedMode = opts.executionMode || this._settingMode();
 
-    if (requestedMode === 'ssh')     return this._runSsh(code, lang, opts);
-    if (requestedMode === 'modal')   return this._runModal(code, lang, opts);
-    if (requestedMode === 'daytona') return this._runDaytona(code, lang, opts);
+    if (requestedMode === 'ssh')         return this._runSsh(code, lang, opts);
+    if (requestedMode === 'modal')       return this._runModal(code, lang, opts);
+    if (requestedMode === 'daytona')     return this._runDaytona(code, lang, opts);
+    if (requestedMode === 'singularity') return this._runSingularity(code, lang, opts);
 
     const wantDocker = requestedMode === 'docker' && this.dockerAvailable() && DOCKER_IMAGES[lang];
     if (wantDocker) {
@@ -280,6 +281,86 @@ class Executor {
     } catch (e) {
       return { ok: false, mode: 'daytona', err: 'daytona call failed: ' + (e.message || String(e)) };
     }
+  }
+
+  /**
+   * Singularity / Apptainer — HPC container runtime, common on clusters
+   * where Docker is blocked. Same idea as Docker mode but spawns
+   * `singularity exec <image> sh -c "<runner>"`. Falls back to
+   * `apptainer` if `singularity` isn't on PATH (Apptainer is the
+   * post-fork name; many distros ship both).
+   *
+   * Settings (all optional, but at least one is required):
+   *   singularity.image   — image URI ("docker://python:3.12-slim",
+   *                          "library://sylabs/python", or local .sif)
+   *   singularity.bind    — comma-separated host:container bind mounts
+   *   singularity.binary  — override binary name (default: auto-detect)
+   *
+   * Use case: research clusters, HPC grids, anywhere rootless containers
+   * are required but Docker isn't allowed.
+   */
+  async _runSingularity(code, language, opts) {
+    const { spawn } = require('child_process');
+    const image = this.settingsStore?.get?.('singularity.image');
+    if (!image) {
+      return {
+        ok: false, mode: 'singularity',
+        err: 'Singularity image not configured. Set settings: singularity.image = "docker://python:3.12-slim" (or a local .sif path).',
+        hint: 'Singularity / Apptainer must be installed. On a cluster: `module load singularity` or `apptainer` is usually pre-loaded.',
+      };
+    }
+    const binary = this.settingsStore?.get?.('singularity.binary')
+      || (this._cmdAvailable('singularity') ? 'singularity' : 'apptainer');
+    if (!this._cmdAvailable(binary)) {
+      return {
+        ok: false, mode: 'singularity',
+        err: `${binary} not found on PATH. Install Singularity or Apptainer first.`,
+      };
+    }
+    const cmd = DOCKER_CMDS[language] || DOCKER_CMDS.shell;
+    const lang = String(language || 'shell').toLowerCase();
+    const inlineFlag = (lang === 'python' || lang === 'py') ? '-c'
+                    : (lang === 'node' || lang === 'javascript' || lang === 'js') ? '-e'
+                    : (lang === 'shell' || lang === 'bash' || lang === 'sh') ? '-c'
+                    : '-c';
+    const args = ['exec'];
+    const bindList = String(this.settingsStore?.get?.('singularity.bind') || '').trim();
+    if (bindList) { for (const m of bindList.split(',').map(s => s.trim()).filter(Boolean)) args.push('--bind', m); }
+    args.push(image, cmd, inlineFlag, code);
+    const timeoutMs = Math.max(1000, opts.timeout || 60000);
+    return new Promise((resolve) => {
+      let out = '', err = '';
+      let killed = false;
+      const child = spawn(binary, args, { windowsHide: true });
+      const t = setTimeout(() => { killed = true; try { child.kill('SIGKILL'); } catch (_) {} }, timeoutMs);
+      child.stdout.on('data', d => { out += d.toString(); });
+      child.stderr.on('data', d => { err += d.toString(); });
+      child.on('error', (e) => {
+        clearTimeout(t);
+        resolve({ ok: false, mode: 'singularity', err: `${binary} spawn failed: ${e.message}` });
+      });
+      child.on('close', (exitCode) => {
+        clearTimeout(t);
+        resolve({
+          ok: !killed && exitCode === 0,
+          mode: 'singularity',
+          image,
+          out: out.slice(0, 50_000),
+          err: err.slice(0, 50_000),
+          exitCode,
+          timedOut: killed,
+        });
+      });
+    });
+  }
+
+  _cmdAvailable(cmd) {
+    try {
+      const { execSync } = require('child_process');
+      const which = process.platform === 'win32' ? 'where' : 'which';
+      execSync(`${which} ${cmd}`, { stdio: 'ignore' });
+      return true;
+    } catch (_) { return false; }
   }
 
   /**
