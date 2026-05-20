@@ -138,6 +138,9 @@
     <button class="cs-act" data-shell-target="marketplace" onclick="openStore()" title="Marketplace">
       <svg class="licon"><use href="#i-store"/></svg><span>Store</span>
     </button>
+    <button class="cs-act" data-shell-target="canvas" id="canvas-mode-btn" onclick="window.toggleCanvas?.()" title="Live Canvas — shared editable surface with the agent">
+      <svg class="licon"><use href="#i-file-text"/></svg><span>Canvas</span>
+    </button>
     <button class="cs-act" data-shell-target="inspector" id="inspector-mode-btn" onclick="toggleInspectorMode()" title="Context, Tools, Cost, Log">
       <svg class="licon"><use href="#i-sidebar"/></svg><span>Inspect</span>
     </button>
@@ -1384,6 +1387,21 @@
       <div class="insp-h">User profile · Big Five + communication style</div>
       <div id="insp-learned-profile"><div class="insp-empty">Loading profile…</div></div>
     </div>
+    <!-- PHASE 28.4 — Dialectic user model (Honcho-inspired 9th layer).
+         Big Five gives the static snapshot; this shows the diff log of
+         what we've learned over time — beliefs, desires, knowledge,
+         theory-of-mind updates, corrections. -->
+    <div class="insp-section">
+      <div class="insp-h">Dialectic model · what we have learned</div>
+      <div id="insp-learned-dialectic" class="insp-empty" style="line-height:1.6;padding:8px 0">
+        <div id="insp-dialectic-summary" style="font-size:11px;color:var(--t2)">Loading…</div>
+        <div id="insp-dialectic-list" style="margin-top:8px;max-height:240px;overflow-y:auto;font-size:11px"></div>
+        <div class="insp-row" style="justify-content:flex-end;padding-top:8px;gap:6px">
+          <button class="hub-btn" onclick="window._inspDialecticRefresh?.(this)" title="Reload dialectic records">Refresh</button>
+          <button class="hub-btn mem-btn-danger" onclick="window._inspDialecticClear?.(this)" title="Wipe all dialectic records (Big Five profile stays)">Forget all</button>
+        </div>
+      </div>
+    </div>
     <div class="insp-section">
       <div class="insp-h">Known facts about you</div>
       <div id="insp-learned-facts"><div class="insp-empty">No facts yet — Horizon learns from your conversations.</div></div>
@@ -1397,6 +1415,27 @@
     <div class="insp-section">
       <div class="insp-h">Workspace memory · .horizon/memory.json</div>
       <div id="insp-learned-workspace"><div class="insp-empty">Open a workspace to see committable team memory (conventions / glossary / decisions).</div></div>
+    </div>
+    <!-- PHASE 28.3 — agent-curated memory reviewer (Hermes-style nudges).
+         Runs every 12h in the background; this section gives you the
+         "Review now" button + last-pass stats. -->
+    <div class="insp-section">
+      <div class="insp-h">Agent-curated review</div>
+      <div id="insp-learned-reviewer" class="insp-empty" style="line-height:1.6;padding:8px 0">
+        <div style="font-size:11px;color:var(--t2)">
+          Every 12 hours the agent walks its own memory and:
+          <ul style="margin:6px 0 0 18px;padding:0">
+            <li><strong>Decays</strong> importance on memories not surfaced in 7+ days</li>
+            <li><strong>Merges</strong> near-duplicates (embedding cosine ≥ 0.94)</li>
+            <li><strong>Forgets</strong> importance ≤ 2 + inactive 60+ days</li>
+          </ul>
+        </div>
+        <div id="insp-reviewer-stats" style="margin-top:8px;font-size:10px;color:var(--t3)">No pass yet — first one runs ~1h after launch.</div>
+        <div class="insp-row" style="justify-content:flex-end;padding-top:8px;gap:6px">
+          <button class="hub-btn" onclick="window._inspMemoryReviewerStatus?.(this)" title="Show when the reviewer last ran">Status</button>
+          <button class="hub-btn" onclick="window._inspMemoryReviewerRunNow?.(this)" title="Trigger a review pass right now">Review now</button>
+        </div>
+      </div>
     </div>
     <!-- PHASE 28.2 — Hybrid Storage v2 (matches the architecture
          diagram). SQLite handles searchable + structured data, JSON
