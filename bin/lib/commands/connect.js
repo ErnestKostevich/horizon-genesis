@@ -21,11 +21,11 @@ const KEY_NAMES = {
 
 // Executor backends — multi-field configs stored in settingsStore, not
 // keysStore. Handled separately because each one needs different fields.
-const EXECUTOR_BACKENDS = new Set(['ssh', 'modal', 'daytona']);
+const EXECUTOR_BACKENDS = new Set(['ssh', 'modal', 'daytona', 'singularity']);
 
 // Phase 14 — multi-field channel adapters (separate from KEY_NAMES
 // because they need more than just a single token).
-const MULTI_FIELD_CHANNELS = new Set(['whatsapp', 'signal', 'imessage']);
+const MULTI_FIELD_CHANNELS = new Set(['whatsapp', 'signal', 'imessage', 'email']);
 
 async function run({ runtime, args, flags }) {
   const sub = args[0];
@@ -38,8 +38,8 @@ async function run({ runtime, args, flags }) {
 
   process.stderr.write(fmt.err('Unknown channel: ' + sub) + '\n');
   process.stderr.write(fmt.dim('try: list | test | telegram | discord | slack | notion | linear | github\n'));
-  process.stderr.write(fmt.dim('     | whatsapp | signal | imessage\n'));
-  process.stderr.write(fmt.dim('     | ssh | modal | daytona\n'));
+  process.stderr.write(fmt.dim('     | whatsapp | signal | imessage | email\n'));
+  process.stderr.write(fmt.dim('     | ssh | modal | daytona | singularity\n'));
   return 2;
 }
 
@@ -89,6 +89,39 @@ function saveMultiFieldChannel(runtime, channel, flags) {
     ss.set('imessage.enabled', true);
     process.stdout.write(fmt.ok('imessage adapter enabled (macOS Messages.app via osascript)') + '\n');
     process.stdout.write(fmt.dim('  Grant Terminal automation access to Messages in System Settings → Privacy.') + '\n');
+    return 0;
+  }
+
+  if (channel === 'email') {
+    // Two halves: IMAP for incoming, SMTP for outgoing. We accept both
+    // at once but you can also call this twice to configure them
+    // separately.
+    const imapHost = flags['imap-host'];
+    const smtpHost = flags['smtp-host'];
+    if (!imapHost && !smtpHost) {
+      process.stderr.write(fmt.err('Need at least --imap-host or --smtp-host') + '\n');
+      process.stderr.write(fmt.dim('Usage: horizon connect email --imap-host imap.gmail.com --imap-user you@gmail.com --imap-pass <app-password>') + '\n');
+      process.stderr.write(fmt.dim('       --smtp-host smtp.gmail.com --smtp-port 587') + '\n');
+      process.stderr.write(fmt.dim('Gmail: create an app password at myaccount.google.com → Security → App passwords') + '\n');
+      return 2;
+    }
+    if (imapHost) {
+      ss.set('email.imap.host', imapHost);
+      if (flags['imap-port']) ss.set('email.imap.port', Number(flags['imap-port']) || 993);
+      if (flags['imap-user']) ss.set('email.imap.user', flags['imap-user']);
+      if (flags['imap-pass']) ss.set('email.imap.pass', flags['imap-pass']);
+      if (flags['imap-mailbox']) ss.set('email.imap.mailbox', flags['imap-mailbox']);
+    }
+    if (smtpHost) {
+      ss.set('email.smtp.host', smtpHost);
+      if (flags['smtp-port']) ss.set('email.smtp.port', Number(flags['smtp-port']) || 587);
+      if (flags['smtp-user']) ss.set('email.smtp.user', flags['smtp-user']);
+      if (flags['smtp-pass']) ss.set('email.smtp.pass', flags['smtp-pass']);
+      if (flags.from) ss.set('email.smtp.from', flags.from);
+    }
+    ss.set('email.enabled', true);
+    process.stdout.write(fmt.ok(`email configured · IMAP ${imapHost || '(skipped)'} · SMTP ${smtpHost || '(skipped)'}`) + '\n');
+    process.stdout.write(fmt.dim('  inbound polling starts when you launch `horizon serve --enable-email`') + '\n');
     return 0;
   }
   return 2;
@@ -146,6 +179,21 @@ function saveExecutorBackend(runtime, backend, flags) {
     ss.set('daytona.workspaceId', flags.workspace);
     process.stdout.write(fmt.ok(`daytona configured → ${flags.workspace}`) + '\n');
     process.stdout.write(fmt.dim('  enable with: settings → executionMode = daytona') + '\n');
+    return 0;
+  }
+  if (backend === 'singularity') {
+    if (!flags.image) {
+      process.stderr.write(fmt.err('Need --image <uri>') + '\n');
+      process.stderr.write(fmt.dim('Examples: --image docker://python:3.12-slim, --image library://sylabs/python, --image ./mycontainer.sif') + '\n');
+      process.stderr.write(fmt.dim('Optional: --bind /data:/data,/scratch:/scratch  --binary apptainer') + '\n');
+      return 2;
+    }
+    ss.set('singularity.image', flags.image);
+    if (flags.bind)   ss.set('singularity.bind', flags.bind);
+    if (flags.binary) ss.set('singularity.binary', flags.binary);
+    process.stdout.write(fmt.ok(`singularity configured → ${flags.image}`) + '\n');
+    process.stdout.write(fmt.dim('  enable with: settings → executionMode = singularity') + '\n');
+    process.stdout.write(fmt.dim('  HPC clusters: make sure `singularity` or `apptainer` is loaded on PATH') + '\n');
     return 0;
   }
   return 2;
