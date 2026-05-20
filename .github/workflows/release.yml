@@ -192,18 +192,82 @@ jobs:
             release-assets/mac/*
             release-assets/linux/*
           body: |
-            ## Horizon Genesis ${{ env.RELEASE_TAG }}
+            # ⚡ Horizon AI ${{ env.RELEASE_TAG }}
 
-            Desktop AI agent - local-first, BSL 1.1 source-visible, bring-your-own-keys.
+            Your **desktop AI agent** — runs on your machine, talks to whichever
+            provider you choose, learns over time. BSL 1.1, source-visible,
+            bring-your-own-keys. No cloud, no subscription.
 
-            ### Downloads
+            ## Download
 
-            - **Windows:** `Horizon AI Setup *.exe` (x64, NSIS)
-            - **Windows portable:** `Horizon AI *.exe` (x64, no installer)
-            - **macOS:** `Horizon AI-*.dmg` (Intel + Apple Silicon, unsigned; right-click Open if Gatekeeper warns)
-            - **Linux:** `Horizon AI-*.AppImage` (x64, portable) or `horizon-ai_*.deb` (Debian/Ubuntu)
+            | Platform | File | Notes |
+            |---|---|---|
+            | 🪟 **Windows 10/11** | `Horizon-AI-Setup-*.exe` | NSIS installer, per-user |
+            | 🪟 Windows (portable) | `Horizon-AI-Portable-*.exe` | No install, runs from anywhere |
+            | 🍎 **macOS** | `Horizon AI-*.dmg` | Intel + Apple Silicon, ad-hoc signed¹ |
+            | 🐧 **Linux** AppImage | `Horizon AI-*.AppImage` | Needs `libfuse2`² |
+            | 🐧 Linux (Debian/Ubuntu) | `horizon-ai_*.deb` | `sudo dpkg -i ...` |
 
-            Auto-generated release notes below.
+            ¹ macOS: first launch right-click → **Open** → Open Anyway.
+              Apple Developer ID ($99/yr) is the first thing Horizon's
+              revenue will pay for.
+
+            ² `sudo apt install libfuse2` on Ubuntu 22.04+. The .deb
+              package doesn't need this.
+
+            ## What's inside
+
+            - **9-layer memory** — facts, episodic memories, conversations,
+              semantic embeddings, FTS5 keyword index, Big Five user profile,
+              persona memory, workspace memory (`.horizon/memory.json` you
+              commit to git), and **Honcho-style dialectic** diff log of
+              what the agent has learned about you over time.
+            - **Hybrid storage** — JSON (human-readable, edit in any editor)
+              + SQLite + FTS5 (queryable bm25) + 256-dim embeddings sidecar.
+              Same files Electron + CLI + headless server all read.
+            - **25 AI providers** direct (Claude / OpenAI / Gemini / Groq /
+              DeepSeek / Mistral / Qwen / Grok / Perplexity / Cohere / 14 more)
+              + OpenRouter for 300+ models. Auto-routing picks free/local first.
+            - **7 live messaging channels** — Telegram, Discord, Slack, WhatsApp
+              (Twilio), Signal (signal-cli bridge), iMessage (macOS), Email
+              (IMAP+SMTP). Full inbound runtime, not just send tools.
+            - **6 sandbox backends** — Host, Docker, SSH, Modal, Daytona,
+              Singularity/Apptainer for HPC. BYOK for the remote ones.
+            - **Computer use** — wake word ("Horizon" / "Хорайзон"), continuous
+              talk mode, smart click via vision, screen capture, type/scroll/keys.
+            - **Marketplace** — install plugins + skills from horizonaai.dev,
+              crypto-only payouts to authors via NOWPayments.
+            - **Mobile PWA companion** — QR-pair your phone to the desktop
+              app, chat from anywhere on your LAN.
+            - **Server mode** — same binary runs as `horizon serve` on a VPS
+              with `--enable-telegram --enable-discord --enable-email` and
+              becomes your 24/7 bot.
+
+            ## After install — what to do first
+
+            1. Open the app, hit **Settings → Providers**, paste at least one
+               API key (Gemini Studio is free for testing).
+            2. Optional: **Settings → Voice** if you want wake word ("Horizon").
+            3. Start chatting. Memory builds automatically — open the
+               **Inspector → Learned** tab to watch the agent learn about you.
+
+            ## Standalone CLI
+
+            The CLI ships separately at the `cli-${{ env.RELEASE_TAG }}` release.
+            Three binaries (`horizon`, `horizon-tui`, `horizon-serve`) for
+            shell power-users and headless deployments.
+
+            ## License & contact
+
+            BSL 1.1 source-visible. Free for non-commercial + small-team use.
+            See [LICENSE](https://github.com/ErnestKostevich/horizon-genesis/blob/main/LICENSE).
+
+            **Reports / questions:** [open an issue](https://github.com/ErnestKostevich/horizon-genesis/issues),
+            [Discord](https://discord.gg/eEq4PCPMEm), or
+            [@Ernest_Kostevich](https://t.me/Ernest_Kostevich) on Telegram.
+
+            ---
+            Auto-generated changelog below.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
