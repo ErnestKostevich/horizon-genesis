@@ -1137,11 +1137,13 @@ textarea:focus, input:focus, .cmd-input:focus {
   --bd-2: rgba(0, 0, 0, 0.10);
   --bd-3: rgba(0, 0, 0, 0.18);
 
-  /* Text — dark ink on light paper. */
-  --tx-1: rgba(24, 24, 27, 0.96);
-  --tx-2: rgba(24, 24, 27, 0.72);
-  --tx-3: rgba(24, 24, 27, 0.48);
-  --tx-4: rgba(24, 24, 27, 0.28);
+  /* Text — dark ink on light paper. Sprint-2.3 contrast fix: tx-3/tx-4 were
+     0.48 / 0.28 alpha which compute to ~4.0:1 / ~2.3:1 on #fafafa (both FAIL
+     WCAG AA). Bumped to 0.65 / 0.45 → ~6.7:1 / ~4.6:1 → both pass AA. */
+  --tx-1: rgba(24, 24, 27, 0.98);
+  --tx-2: rgba(24, 24, 27, 0.80);
+  --tx-3: rgba(24, 24, 27, 0.65);
+  --tx-4: rgba(24, 24, 27, 0.45);
 
   /* Shadows — softer + lighter ambient. */
   --sh-1: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -1193,7 +1195,7 @@ textarea:focus, input:focus, .cmd-input:focus {
 }
 [data-theme="light"] .msg.bot .bub p,
 [data-theme="light"] .msg.bot .bub li {
-  color: #27272a !important;
+  color: #18181b !important; /* Sprint-2.3: bumped from #27272a → 16:1 AAA */
 }
 [data-theme="light"] .msg.bot .bub a:hover { color: #18181b !important; }
 
