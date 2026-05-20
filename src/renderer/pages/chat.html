@@ -280,6 +280,7 @@
         <option value="ssh">SSH (run on a remote machine)</option>
         <option value="modal">Modal (serverless, BYOK)</option>
         <option value="daytona">Daytona (dev workspaces, BYOK)</option>
+        <option value="singularity">Singularity / Apptainer (HPC clusters)</option>
       </select></div>
       <div class="local-status" id="ms-executor-status" style="margin-top:6px;font-size:10.5px">Loading…</div></div>
       <div class="pf"><label>Docker workspace mount</label><div class="pr"><select class="pi ms-sel" id="ms-docker-mount" onchange="saveDockerWorkspaceMount(this.value)">
@@ -336,6 +337,21 @@
         <label>Daytona workspace id</label>
         <div class="pr"><input class="pi" id="ms-daytona-workspace" placeholder="my-workspace" onchange="saveExecBackendField('daytona.workspaceId', this.value)"></div>
         <div class="local-status" style="margin-top:6px;font-size:10.5px">Self-host Daytona or use their managed cloud (<strong>daytona.io</strong>), create a workspace, generate an API key.</div>
+      </div>
+
+      <!-- Singularity / Apptainer executor fields — visible only when executionMode = singularity -->
+      <div class="pf ms-singularity-only" style="display:none">
+        <label>Singularity image <small style="color:var(--t3);font-weight:400">docker://, library://, or a local .sif path</small></label>
+        <div class="pr"><input class="pi" id="ms-singularity-image" placeholder="docker://python:3.12-slim" onchange="saveExecBackendField('singularity.image', this.value)"></div>
+      </div>
+      <div class="pf ms-singularity-only" style="display:none">
+        <label>Bind mounts <small style="color:var(--t3);font-weight:400">comma-separated host:container pairs, optional</small></label>
+        <div class="pr"><input class="pi" id="ms-singularity-bind" placeholder="/data:/data,/scratch:/scratch" onchange="saveExecBackendField('singularity.bind', this.value)"></div>
+      </div>
+      <div class="pf ms-singularity-only" style="display:none">
+        <label>Binary override <small style="color:var(--t3);font-weight:400">auto-detects singularity / apptainer if blank</small></label>
+        <div class="pr"><input class="pi" id="ms-singularity-binary" placeholder="apptainer" onchange="saveExecBackendField('singularity.binary', this.value)"></div>
+        <div class="local-status" style="margin-top:6px;font-size:10.5px">For HPC clusters where Docker is blocked. Make sure <code>singularity</code> or <code>apptainer</code> is on PATH (often via <code>module load apptainer</code>).</div>
       </div>
       <div class="pf"><label>Image generation (BYOK)</label><div class="pr"><select class="pi ms-sel" id="ms-image-provider" onchange="saveImageGenerationSetting('provider', this.value)">
         <option value="auto">Auto from active provider/key</option>
@@ -548,6 +564,48 @@
             </div>
             <div class="local-status" id="telegram-live-status">Live bot is off. Start it to make Telegram messages wake Horizon and receive replies.</div>
             <div class="local-status" id="telegram-live-log" style="margin-top:6px;max-height:110px;overflow:auto;font-family:var(--mono);font-size:10px"></div>
+          </div>
+          <!-- Phase 28.3: Discord Gateway WS — bot token + allowed guilds. -->
+          <div class="pf"><label><span class="d2" id="pd-discord-conn"></span>Discord Bot Token <span style="color:var(--t3);font-size:10px">Gateway WebSocket — mention/DM replies</span></label>
+            <div class="pr"><input class="pi" type="password" id="pi-discord-conn" placeholder="MTI1..." /><button class="psv" onclick="saveTokenConnection('discord')">Save</button><button class="psv" onclick="testTokenConnection('discord')">Test</button></div>
+            <div class="local-status" id="conn-discord-status">Not saved. Create at <strong>discord.com/developers/applications</strong> → New Application → Bot → Token. Enable <code>MESSAGE CONTENT INTENT</code> in the bot's Privileged Gateway Intents section.</div>
+            <div class="pf" style="margin-top:10px;padding:10px;background:rgba(10,18,28,.55)">
+              <label>Allowed Discord guild (server) IDs <small style="color:var(--t3);font-weight:400">optional — leave blank to allow every server the bot is in</small></label>
+              <div class="pr">
+                <input class="pi" type="text" id="pi-discord-allowed-guilds" placeholder="123456789012345678, 987654321098765432" />
+                <button class="psv" onclick="saveDiscordAllowedGuilds()">Save guilds</button>
+              </div>
+              <div class="local-status" id="discord-allowed-status">Right-click a server icon → Copy Server ID (Developer Mode must be on in Discord settings).</div>
+            </div>
+            <div class="pr" style="margin-top:8px">
+              <button class="psv" id="discord-live-toggle" onclick="toggleDiscordLive()">Start Discord bot</button>
+              <button class="psv" onclick="refreshDiscordRuntimeStatus()">Refresh status</button>
+            </div>
+            <div class="local-status" id="discord-live-status">Discord runtime is off. Start it to have your bot respond to mentions + DMs.</div>
+          </div>
+          <!-- Phase 28.3: Email — IMAP inbound + SMTP outbound (BYOK). -->
+          <div class="pf"><label><span class="d2" id="pd-email-conn"></span>Email <span style="color:var(--t3);font-size:10px">IMAP inbound + SMTP outbound (BYOK)</span></label>
+            <div class="local-status" id="conn-email-status">Not saved. Gmail / Yahoo / Fastmail / your own server — Horizon polls INBOX and lets the agent reply.</div>
+            <div class="pf" style="margin-top:10px;padding:10px;background:rgba(10,18,28,.55)">
+              <label>IMAP (incoming)</label>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="text" id="pi-email-imap-host" placeholder="imap.gmail.com" onchange="saveEmailField('email.imap.host', this.value)"/></div>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="number" id="pi-email-imap-port" placeholder="993" onchange="saveEmailField('email.imap.port', this.value)"/></div>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="text" id="pi-email-imap-user" placeholder="you@example.com" onchange="saveEmailField('email.imap.user', this.value)"/></div>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="password" id="pi-email-imap-pass" placeholder="app-specific password" onchange="saveEmailField('email.imap.pass', this.value)"/></div>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="text" id="pi-email-imap-mailbox" placeholder="INBOX (default)" onchange="saveEmailField('email.imap.mailbox', this.value)"/></div>
+            </div>
+            <div class="pf" style="margin-top:10px;padding:10px;background:rgba(10,18,28,.55)">
+              <label>SMTP (outgoing)</label>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="text" id="pi-email-smtp-host" placeholder="smtp.gmail.com" onchange="saveEmailField('email.smtp.host', this.value)"/></div>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="number" id="pi-email-smtp-port" placeholder="587" onchange="saveEmailField('email.smtp.port', this.value)"/></div>
+              <div class="pr" style="margin-top:6px"><input class="pi" type="text" id="pi-email-smtp-from" placeholder="Horizon &lt;you@example.com&gt; (optional)" onchange="saveEmailField('email.smtp.from', this.value)"/></div>
+              <div class="local-status" style="margin-top:6px">SMTP user / pass default to the IMAP values above unless you set them explicitly.</div>
+            </div>
+            <div class="pr" style="margin-top:8px">
+              <button class="psv" id="email-live-toggle" onclick="toggleEmailLive()">Start email bot</button>
+              <button class="psv" onclick="testTokenConnection('email')">Test</button>
+            </div>
+            <div class="local-status" id="email-live-status">Email runtime is off. For Gmail, generate an app-specific password at <strong>myaccount.google.com → Security → App passwords</strong>.</div>
           </div>
         </div>
         <div class="ps">

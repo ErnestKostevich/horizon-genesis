@@ -172,10 +172,22 @@ const ALLOWED_SETTING_KEYS = new Set([
   'ssh.host', 'ssh.port', 'ssh.keyPath', 'ssh.workdir',
   'modal.tokenId', 'modal.tokenSecret', 'modal.appName', 'modal.endpoint',
   'daytona.serverUrl', 'daytona.apiKey', 'daytona.workspaceId',
+  // Phase 28.3 — Singularity / Apptainer executor for HPC clusters.
+  'singularity.image', 'singularity.bind', 'singularity.binary',
   // Phase 15 — multi-field channel adapters
   'whatsapp.from', 'whatsapp.enabled',
   'signal.url', 'signal.number', 'signal.enabled',
   'imessage.enabled', 'imessage.lastRowid',
+  // Phase 28.3 — Email channel adapter (IMAP inbound + SMTP outbound).
+  'email.enabled',
+  'email.imap.host', 'email.imap.port', 'email.imap.user', 'email.imap.pass',
+  'email.imap.tls', 'email.imap.mailbox', 'email.imap.pollSec',
+  'email.smtp.host', 'email.smtp.port', 'email.smtp.user', 'email.smtp.pass',
+  'email.smtp.from',
+  // Phase 21 — Discord runtime (token stored in keysStore as k_discord,
+  // but the live toggle + allowed-guilds list live in settingsStore).
+  'discord.enabled', 'discord.allowed_guild_ids',
+  'connection.discord.live',
   // Phase 18 — TUI welcome flag (set once on first launch so the
   // animated reveal only plays for new users)
   'tui.welcomedAt',
@@ -5311,6 +5323,7 @@ ipcMain.handle('connectionsSetLive', async (_, id, enabled) => {
   try {
     if (String(id || '') === 'telegram_bot') return await connectionsManager.setTelegramLive(!!enabled);
     if (String(id || '') === 'discord') return await connectionsManager.setDiscordLive(!!enabled);
+    if (String(id || '') === 'email') return await _emailSetLive(!!enabled);
     return { ok: false, error: `Live runtime is not available for ${id}` };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -5323,10 +5336,78 @@ ipcMain.handle('connectionsRuntimeStatus', async (_, id) => {
   try {
     if (String(id || '') === 'telegram_bot') return connectionsManager.telegramStatus();
     if (String(id || '') === 'discord') return connectionsManager.discordStatus();
+    if (String(id || '') === 'email') return _emailStatus();
     return { ok: false, error: `Runtime status is not available for ${id}` };
   } catch (e) {
     return { ok: false, error: e.message };
   }
+});
+
+// PHASE 28.3 — Email runtime adapter lifecycle. Lives outside
+// connectionsManager because the EmailAdapter has its own start/stop
+// loop and emits 'incoming' events we wire into the agent loop.
+let emailAdapter = null;
+function _emailStatus() {
+  if (!emailAdapter) return { connected: false, running: false, enabled: !!settingsStore.get('email.enabled') };
+  return { connected: true, ...emailAdapter.status() };
+}
+async function _emailSetLive(enabled) {
+  try {
+    settingsStore.set('email.enabled', !!enabled);
+    if (enabled) {
+      if (!emailAdapter) {
+        const { EmailAdapter } = require('./channelAdapters/email');
+        emailAdapter = new EmailAdapter({ settingsStore, keysStore });
+        emailAdapter.on('incoming', (msg) => {
+          try {
+            const wins = BrowserWindow.getAllWindows();
+            for (const w of wins) {
+              if (w && !w.isDestroyed() && w.webContents) w.webContents.send('email:incoming', msg);
+            }
+          } catch (_) {}
+          // Hand the message to the agent loop. Reply is sent back via
+          // a follow-up email_send tool call if the agent decides to.
+          try {
+            loadAgentModules();
+            const fakeMsg = { role: 'user', content: `From: ${msg.from}\nSubject: ${msg.subject}\n\n${msg.text}` };
+            // Fire-and-forget — no await; mail is async by nature.
+            if (typeof connectionsManager?.replyFn === 'function') {
+              connectionsManager.replyFn({ messages: [fakeMsg], source: 'email', chatId: msg.messageId }).catch(() => {});
+            }
+          } catch (e) { console.warn('[email] inbound → agent dispatch failed:', e.message); }
+        });
+      }
+      const r = await emailAdapter.start();
+      return r;
+    } else {
+      if (emailAdapter) { await emailAdapter.stop(); }
+      return { ok: true, running: false };
+    }
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Outbound `email_send` tool — let the agent send mail.
+ipcMain.handle('emailSend', async (_, payload) => {
+  if (!emailAdapter) {
+    try {
+      const { EmailAdapter } = require('./channelAdapters/email');
+      emailAdapter = new EmailAdapter({ settingsStore, keysStore });
+    } catch (e) { return { ok: false, error: 'email adapter unavailable: ' + e.message }; }
+  }
+  // Lazy start the transporter without polling.
+  if (!emailAdapter.transporter) {
+    try {
+      const nodemailer = require('nodemailer');
+      const cfg = emailAdapter._cfg();
+      if (!cfg?.smtp) return { ok: false, error: 'SMTP not configured' };
+      emailAdapter.transporter = nodemailer.createTransport({
+        host: cfg.smtp.host, port: cfg.smtp.port, secure: cfg.smtp.secure, auth: cfg.smtp.auth,
+      });
+    } catch (e) { return { ok: false, error: 'nodemailer unavailable: ' + e.message }; }
+  }
+  return emailAdapter.send(payload || {});
 });
 
 // ── Discord chat viewer ─────────────────────────────────────────────────
