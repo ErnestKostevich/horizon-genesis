@@ -1395,6 +1395,9 @@
       <div class="insp-h">Dialectic model · what we have learned</div>
       <div id="insp-learned-dialectic" class="insp-empty" style="line-height:1.6;padding:8px 0">
         <div id="insp-dialectic-summary" style="font-size:11px;color:var(--t2)">Loading…</div>
+        <div class="insp-row" style="padding-top:6px;gap:6px;align-items:stretch">
+          <input class="pi" id="insp-dialectic-search" placeholder="Search dialectic…" style="flex:1;height:28px;font-size:11px" oninput="window._inspDialecticSearch?.(this.value)"/>
+        </div>
         <div id="insp-dialectic-list" style="margin-top:8px;max-height:240px;overflow-y:auto;font-size:11px"></div>
         <div class="insp-row" style="justify-content:flex-end;padding-top:8px;gap:6px">
           <button class="hub-btn" onclick="window._inspDialecticRefresh?.(this)" title="Reload dialectic records">Refresh</button>

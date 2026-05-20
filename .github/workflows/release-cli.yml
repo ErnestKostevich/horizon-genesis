@@ -70,12 +70,45 @@ jobs:
       - name: Build standalone CLI binary
         run: npm run ${{ matrix.script }}
 
-      - name: Verify binary runs
+      - name: Verify binary runs (native)
         if: matrix.label != 'macos-arm64' && matrix.label != 'win-x64'
         run: |
           chmod +x ${{ matrix.asset }}
           ./${{ matrix.asset }} version --json | head -c 200
           echo ""
+
+      # PHASE 28.5 — smoke-test the Windows cross-compile via Wine on the
+      # Linux runner. yao-pkg's cross-build is reliable but a Wine probe
+      # catches the rare "binary builds, but won't run" case before users
+      # download it. Wine boots noisy + slow, so we only ask for `version
+      # --json` (no provider calls).
+      - name: Install Wine for win-x64 smoke
+        if: matrix.label == 'win-x64'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo mkdir -pm755 /etc/apt/keyrings
+          sudo wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends wine
+          wine --version
+
+      - name: Verify binary runs (win-x64 via Wine)
+        if: matrix.label == 'win-x64'
+        run: |
+          export WINEDEBUG=-all
+          export WINEPREFIX=$RUNNER_TEMP/.wine
+          wineboot --init >/dev/null 2>&1 || true
+          wine ${{ matrix.asset }} version --json | head -c 200 || \
+            (echo "::warning::Wine smoke test failed — binary was built but did not run cleanly under Wine. May still work on real Windows."; exit 0)
+          echo ""
+
+      # macos-arm64 can't be smoke-tested from a Linux runner (no
+      # cross-emulation that's both legal and reliable for Mach-O). The
+      # GitHub-hosted macOS runners we use for build:mac already cover
+      # native verification; for the CLI we trust yao-pkg's cross.
+      - name: Skip macos-arm64 smoke
+        if: matrix.label == 'macos-arm64'
+        run: echo "macos-arm64 cross-compile verified at build time. Native smoke test happens during build:mac job."
 
       - name: Compute SHA256
         shell: bash

@@ -3072,59 +3072,11 @@ async function _streamOpenAI({ runId, sysMsg, messages, opts, abort }) {
   _broadcast('ai:done', { runId, ok: true, fullText, usage, model });
 }
 
-async function _disabledLegacyAiStreamHandler(_, messages, provider, system, opts) {
-  // Build sysMsg the same way the non-streaming `ai` handler does — both
-  // identity injection and persona injection must stay in sync. Cheapest
-  // approach: call our internal builder via shared helper that the `ai`
-  // handler also uses. Currently it's inline in `ai`, so duplicate the
-  // exact same logic here. (TODO: extract to a shared _buildSysMsg().)
-  const userName = settingsStore.get('userName') || 'user';
-  const lang = settingsStore.get('lang') || 'en';
-  const identity = lang === 'ru'
-    ? `Ты — Хорайзон (Horizon AI), продвинутый персональный AI-агент для ПК. Тебя создал Эрнест Костевич (Ernest Kostevich). Ты НЕ являешься Claude, ChatGPT, Gemini или любым другим AI — ты Хорайзон. Пользователь: ${userName}. Время: ${new Date().toLocaleString()}. Ты умный, дружелюбный, немного как Джарвис из Marvel. Можешь управлять ПК, видеть экран. Используй Markdown.`
-    : `You are Horizon AI — an advanced personal desktop agent. You were created by Ernest Kostevich. You are NOT Claude, ChatGPT, Gemini, or any other AI — you are Horizon. User: ${userName}. Time: ${new Date().toLocaleString()}. You are intelligent, friendly, somewhat like JARVIS from Marvel. You can control the PC, see the screen. Use Markdown.`;
-  let personaPrompt = '';
-  try {
-    loadAgentModules();
-    if (personas) {
-      const personaId = settingsStore.get('persona') || 'jarvis';
-      const pp = personas.getPersonaPrompt(personaId, lang);
-      if (pp && (!system || !system.includes(pp.slice(0, 32)))) personaPrompt = pp;
-    }
-  } catch (_) {}
-  const sysParts = [identity];
-  if (personaPrompt) sysParts.push(personaPrompt);
-  if (system && (!system.includes('Ты') && !system.includes('You are'))) sysParts.push(system);
-  else if (system) { sysParts.length = 0; sysParts.push(system); }
-  const sysMsg = sysParts.join('\n\n');
-
-  const runId = _streamRunId();
-  const abort = new AbortController();
-  _activeStreams.set(runId, abort);
-  // Cleanup on done.
-  const cleanup = () => _activeStreams.delete(runId);
-
-  // Don't await — the IPC call returns runId immediately so the renderer
-  // can wire up listeners and start rendering. The actual stream runs
-  // in the background and broadcasts via webContents.
-  const fn = provider === 'claude' ? _streamClaude
-            : provider === 'openai' ? _streamOpenAI
-            : null;
-  if (!fn) {
-    cleanup();
-    return { ok: false, error: `Streaming not supported for provider "${provider}". Use H.ai for non-streaming providers.` };
-  }
-  setImmediate(async () => {
-    try {
-      await fn({ runId, sysMsg, messages, opts: opts || {}, abort });
-    } catch (e) {
-      _broadcast('ai:done', { runId, ok: false, error: e?.message || String(e) });
-    } finally {
-      cleanup();
-    }
-  });
-  return { ok: true, runId };
-}
+// PHASE 28.5 — removed `_disabledLegacyAiStreamHandler` (was a 53-line
+// dead-code function from an earlier refactor, never registered as an
+// IPC handler). Active streaming lives in the `aiStream` handler near
+// line 2253 and the non-streaming path in `runAiCompletion`. Both
+// inject identity + persona + dialectic the same way.
 
 ipcMain.handle('aiAbort', (_, runId) => {
   const ctl = _activeStreams.get(runId);
@@ -6375,17 +6327,35 @@ ipcMain.handle('licenseOpenUpgradePage', async () => {
   const url = `${base}/pricing?src=desktop&intent=upgrade`;
   return openExternalReliable(url, 'Horizon Pro');
 });
+// PHASE 28.5 — owner contact links pulled from env so corporate forks
+// or hand-offs to a future maintainer don't require a code edit. The
+// defaults stay the project owner so a fresh checkout works out of
+// the box.
+const OWNER_EMAIL_PRIMARY   = String(process.env.HORIZON_OWNER_EMAIL   || 'ernest2011kostevich@gmail.com');
+const OWNER_EMAIL_SECONDARY = String(process.env.HORIZON_OWNER_EMAIL_2 || 'ernestkostevich@gmail.com');
+const OWNER_TG_PRIMARY      = String(process.env.HORIZON_OWNER_TG     || 'Ernest_Kostevich');
+const OWNER_TG_SECONDARY    = String(process.env.HORIZON_OWNER_TG_2   || 'ernest0kostevich');
+
 ipcMain.handle('licenseOpenContactLink', (_, channel) => {
   const links = {
-    telegram_primary:   'https://t.me/Ernest_Kostevich',
-    telegram_secondary: 'https://t.me/ernest0kostevich',
-    email_primary:      'mailto:ernest2011kostevich@gmail.com',
-    email_secondary:    'mailto:ernestkostevich@gmail.com',
+    telegram_primary:   `https://t.me/${OWNER_TG_PRIMARY}`,
+    telegram_secondary: `https://t.me/${OWNER_TG_SECONDARY}`,
+    email_primary:      `mailto:${OWNER_EMAIL_PRIMARY}`,
+    email_secondary:    `mailto:${OWNER_EMAIL_SECONDARY}`,
   };
   const url = links[channel];
   if (!url) return { ok: false, url };
   return openExternalReliable(url, 'Horizon Support');
 });
+
+// PHASE 28.5 — expose contacts so the renderer (progate.html etc.) can
+// render the live values instead of baking them into HTML.
+ipcMain.handle('ownerContacts', () => ({
+  emailPrimary:   OWNER_EMAIL_PRIMARY,
+  emailSecondary: OWNER_EMAIL_SECONDARY,
+  tgPrimary:      OWNER_TG_PRIMARY,
+  tgSecondary:    OWNER_TG_SECONDARY,
+}));
 // Wipe the license cache when the user logs out of the marketplace account,
 // so the next login forces a fresh server check.
 const _origLogout = marketClient.logout.bind(marketClient);
