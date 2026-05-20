@@ -51,6 +51,224 @@ const DEFAULT_PROVIDER_MODELS = {
                                   // when you pass model="provider/model"
 };
 
+// Per-provider model catalog. Keys = provider id, values = ordered list
+// of {id, label, tagline?, cost?} for that provider's notable models.
+// First entry should match DEFAULT_PROVIDER_MODELS for that provider.
+//
+// User picks from this list in /model-list (drill-down) and /models
+// (flat search) inside the TUI. Catalog is curated, not exhaustive;
+// the TUI lets the user fall back to typing a model id directly.
+//
+// Empty array = the provider's model is locally configured (Ollama /
+// LM Studio / LocalAI) or driver-specific (Azure deployment, custom
+// OpenAI-compat URL) and we ask the user to set it elsewhere.
+const PROVIDER_MODELS = {
+  claude: [
+    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', tagline: 'balanced flagship', cost: '$3 / $15 per M' },
+    { id: 'claude-opus-4-7',   label: 'Opus 4.7',   tagline: 'most capable, deep reasoning', cost: '$15 / $75 per M' },
+    { id: 'claude-haiku-4-5',  label: 'Haiku 4.5',  tagline: 'fastest, cheapest', cost: '$0.80 / $4 per M' },
+    { id: 'claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet', tagline: 'legacy stable', cost: '$3 / $15 per M' },
+    { id: 'claude-3-5-haiku-latest',  label: 'Claude 3.5 Haiku',  tagline: 'legacy fast',   cost: '$0.80 / $4 per M' },
+  ],
+  openai: [
+    { id: 'gpt-5.4',         label: 'GPT-5.4',         tagline: 'flagship',           cost: '$1.25 / $10 per M' },
+    { id: 'gpt-5.4-mini',    label: 'GPT-5.4 mini',    tagline: 'cheaper, fast',      cost: '$0.15 / $0.60 per M' },
+    { id: 'gpt-5.3-codex',   label: 'GPT-5.3 Codex',   tagline: 'code-specialised' },
+    { id: 'gpt-5.2',         label: 'GPT-5.2',         tagline: 'reliable older flagship' },
+    { id: 'o4-mini',         label: 'o4-mini',         tagline: 'reasoning, cheaper' },
+    { id: 'o3',              label: 'o3',              tagline: 'deep reasoning' },
+    { id: 'gpt-4o',          label: 'GPT-4o',          tagline: 'multimodal legacy' },
+    { id: 'gpt-4o-mini',     label: 'GPT-4o mini',     tagline: 'cheap legacy' },
+  ],
+  gemini: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', tagline: 'free tier, fast', cost: 'free tier' },
+    { id: 'gemini-3.1-pro',   label: 'Gemini 3.1 Pro',   tagline: 'flagship' },
+    { id: 'gemini-3.1-flash', label: 'Gemini 3.1 Flash', tagline: 'fast, cheaper' },
+    { id: 'gemini-3.0-pro',   label: 'Gemini 3.0 Pro' },
+    { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro',   tagline: '2M context' },
+    { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro',   tagline: 'legacy 2M context' },
+    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', tagline: 'legacy fast' },
+  ],
+  groq: [
+    { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', tagline: 'flagship open' },
+    { id: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B Instant',    tagline: 'free tier, very fast' },
+    { id: 'openai/gpt-oss-120b',     label: 'GPT-OSS 120B',            tagline: 'open weights' },
+    { id: 'moonshotai/kimi-k2-instruct', label: 'Kimi K2 Instruct',    tagline: 'long-context' },
+    { id: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B' },
+  ],
+  deepseek: [
+    { id: 'deepseek-chat',     label: 'DeepSeek Chat',     tagline: 'general-purpose', cost: '$0.14 / $0.28 per M' },
+    { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner', tagline: 'reasoning-tuned' },
+  ],
+  grok: [
+    { id: 'grok-4',         label: 'Grok 4',          tagline: 'flagship' },
+    { id: 'grok-4-fast',    label: 'Grok 4 Fast',     tagline: 'fast variant' },
+    { id: 'grok-code-fast', label: 'Grok Code Fast',  tagline: 'code-specialised' },
+    { id: 'grok-3',         label: 'Grok 3',          tagline: 'legacy' },
+  ],
+  mistral: [
+    { id: 'mistral-large-latest',   label: 'Mistral Large',   tagline: 'flagship' },
+    { id: 'mistral-medium-latest',  label: 'Mistral Medium',  tagline: 'balanced' },
+    { id: 'mistral-small-latest',   label: 'Mistral Small',   tagline: 'fast, cheap' },
+    { id: 'codestral-latest',       label: 'Codestral',       tagline: 'code-specialised' },
+    { id: 'ministral-8b-latest',    label: 'Ministral 8B',    tagline: 'tiny, edge' },
+  ],
+  qwen: [
+    { id: 'qwen-plus',       label: 'Qwen Plus',     tagline: 'balanced flagship' },
+    { id: 'qwen-max',        label: 'Qwen Max',      tagline: 'most capable' },
+    { id: 'qwen-turbo',      label: 'Qwen Turbo',    tagline: 'fast, cheap' },
+    { id: 'qwen2.5-coder-32b-instruct', label: 'Qwen2.5 Coder 32B', tagline: 'code-specialised' },
+  ],
+  perplexity: [
+    { id: 'sonar-pro',           label: 'Sonar Pro',           tagline: 'with web search' },
+    { id: 'sonar',               label: 'Sonar',               tagline: 'cheaper, with web search' },
+    { id: 'sonar-reasoning-pro', label: 'Sonar Reasoning Pro', tagline: 'reasoning + search' },
+  ],
+  cohere: [
+    { id: 'command-a-03-2025',   label: 'Command A',     tagline: 'flagship' },
+    { id: 'command-r-plus',      label: 'Command R+',    tagline: 'RAG-tuned' },
+    { id: 'command-r',           label: 'Command R',     tagline: 'cheaper, RAG' },
+  ],
+  openrouter: [
+    { id: 'openai/gpt-5.4-mini',                        label: 'GPT-5.4 mini',          tagline: 'router default' },
+    { id: 'anthropic/claude-sonnet-4-6',                label: 'Claude Sonnet 4.6 (via OR)' },
+    { id: 'anthropic/claude-opus-4-7',                  label: 'Claude Opus 4.7 (via OR)' },
+    { id: 'google/gemini-3.1-pro',                      label: 'Gemini 3.1 Pro (via OR)' },
+    { id: 'meta-llama/llama-3.3-70b-instruct',          label: 'Llama 3.3 70B (via OR)' },
+    { id: 'deepseek/deepseek-chat',                     label: 'DeepSeek Chat (via OR)' },
+    { id: 'x-ai/grok-4',                                label: 'Grok 4 (via OR)' },
+  ],
+  ollama: [
+    { id: 'llama3.1',          label: 'Llama 3.1',          tagline: 'local default' },
+    { id: 'llama3.2',          label: 'Llama 3.2',          tagline: 'newer small' },
+    { id: 'qwen2.5-coder',     label: 'Qwen2.5 Coder',      tagline: 'local code-specialised' },
+    { id: 'deepseek-r1',       label: 'DeepSeek R1',        tagline: 'local reasoning' },
+    { id: 'gemma2',            label: 'Gemma 2',            tagline: 'small, fast' },
+  ],
+  lmstudio: [
+    { id: 'local-model',  label: 'Local model', tagline: 'set in LM Studio UI' },
+  ],
+  localai: [
+    { id: 'local-model',  label: 'Local model', tagline: 'set in LocalAI config' },
+  ],
+  together: [
+    { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',     label: 'Llama 3.3 70B Turbo',  tagline: 'fast, cheap' },
+    { id: 'meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo', label: 'Llama 3.1 405B Turbo', tagline: 'massive open' },
+    { id: 'mistralai/Mixtral-8x22B-Instruct-v0.1',       label: 'Mixtral 8x22B',         tagline: 'MoE' },
+    { id: 'Qwen/Qwen2.5-72B-Instruct-Turbo',             label: 'Qwen2.5 72B Turbo' },
+  ],
+  fireworks: [
+    { id: 'accounts/fireworks/models/llama-v3p3-70b-instruct', label: 'Llama 3.3 70B', tagline: 'flagship open' },
+    { id: 'accounts/fireworks/models/deepseek-v3',             label: 'DeepSeek V3',   tagline: 'open MoE' },
+    { id: 'accounts/fireworks/models/qwen2p5-coder-32b-instruct', label: 'Qwen2.5 Coder 32B', tagline: 'code' },
+  ],
+  deepinfra: [
+    { id: 'meta-llama/Llama-3.3-70B-Instruct',           label: 'Llama 3.3 70B',  tagline: 'cheap',    cost: '$0.23 / M' },
+    { id: 'meta-llama/Meta-Llama-3.1-405B-Instruct',     label: 'Llama 3.1 405B', tagline: 'massive' },
+    { id: 'Qwen/Qwen2.5-72B-Instruct',                   label: 'Qwen2.5 72B' },
+    { id: 'deepseek-ai/DeepSeek-V3',                     label: 'DeepSeek V3' },
+  ],
+  cerebras: [
+    { id: 'llama-3.3-70b', label: 'Llama 3.3 70B', tagline: 'extremely fast inference' },
+    { id: 'llama3.1-8b',   label: 'Llama 3.1 8B',  tagline: 'free tier, fastest' },
+  ],
+  sambanova: [
+    { id: 'Meta-Llama-3.3-70B-Instruct',  label: 'Llama 3.3 70B',  tagline: 'flagship' },
+    { id: 'Meta-Llama-3.1-405B-Instruct', label: 'Llama 3.1 405B', tagline: 'massive' },
+    { id: 'Meta-Llama-3.1-8B-Instruct',   label: 'Llama 3.1 8B',   tagline: 'fast, cheap' },
+  ],
+  moonshot: [
+    { id: 'kimi-k2-0905-preview', label: 'Kimi K2',     tagline: 'flagship long-context' },
+    { id: 'moonshot-v1-128k',     label: 'Moonshot v1', tagline: '128k context' },
+    { id: 'moonshot-v1-8k',       label: 'Moonshot v1', tagline: '8k context, cheaper' },
+  ],
+  zai: [
+    { id: 'glm-4-plus',  label: 'GLM-4 Plus',  tagline: 'flagship' },
+    { id: 'glm-4',       label: 'GLM-4' },
+    { id: 'glm-4-flash', label: 'GLM-4 Flash', tagline: 'fast, cheap' },
+  ],
+  nebius: [
+    { id: 'meta-llama/Meta-Llama-3.1-70B-Instruct',  label: 'Llama 3.1 70B' },
+    { id: 'meta-llama/Meta-Llama-3.1-405B-Instruct', label: 'Llama 3.1 405B', tagline: 'massive' },
+    { id: 'Qwen/Qwen2.5-72B-Instruct',               label: 'Qwen2.5 72B' },
+  ],
+  azure: [
+    { id: 'gpt-5.4',   label: 'gpt-5.4',   tagline: 'set via Azure deployment name' },
+    { id: 'gpt-4o',    label: 'gpt-4o',    tagline: 'common deployment' },
+    { id: 'gpt-4o-mini', label: 'gpt-4o-mini', tagline: 'cheaper deployment' },
+  ],
+  custom: [
+    { id: 'gpt-4o-mini', label: 'Set in customModel', tagline: 'depends on your endpoint' },
+  ],
+  litellm: [
+    { id: 'openai/gpt-4o-mini',         label: 'openai/gpt-4o-mini',         tagline: 'OpenAI via router' },
+    { id: 'anthropic/claude-sonnet-4-6', label: 'anthropic/claude-sonnet-4-6', tagline: 'Anthropic via router' },
+    { id: 'gemini/gemini-3.1-pro',      label: 'gemini/gemini-3.1-pro',      tagline: 'Gemini via router' },
+    { id: 'groq/llama-3.3-70b-versatile', label: 'groq/llama-3.3-70b',       tagline: 'Groq via router' },
+  ],
+};
+
+// Static categorisation of providers for grouped picker rendering.
+// Keys map to the rough commercial tier so the picker can lay out the
+// 25 providers in three skim-able blocks (free / cheap / premium / local).
+const PROVIDER_GROUPS = {
+  // Free tier or fast/cheap entrypoints
+  'Free tier': ['gemini', 'groq', 'cerebras'],
+  // Local self-hosted (no key, runs on user's machine)
+  'Local': ['ollama', 'lmstudio', 'localai'],
+  // Cheap paid hosts for open models
+  'Cheap paid (open models)': ['deepseek', 'deepinfra', 'fireworks', 'together', 'sambanova', 'nebius', 'qwen', 'moonshot', 'zai'],
+  // Premium proprietary frontier models
+  'Premium': ['claude', 'openai', 'grok', 'mistral'],
+  // Specialised — RAG / web search
+  'Specialised': ['cohere', 'perplexity'],
+  // Aggregators / configurable
+  'Aggregators / custom': ['openrouter', 'litellm', 'azure', 'custom'],
+};
+
+// Human-readable provider labels (capitalised vendor name where it differs
+// from the lower-cased id). Used as the second column in pickers.
+const PROVIDER_LABELS = {
+  claude: 'Anthropic Claude',
+  openai: 'OpenAI',
+  gemini: 'Google Gemini',
+  groq: 'Groq',
+  deepseek: 'DeepSeek',
+  grok: 'xAI Grok',
+  mistral: 'Mistral',
+  qwen: 'Alibaba Qwen',
+  perplexity: 'Perplexity',
+  cohere: 'Cohere',
+  openrouter: 'OpenRouter',
+  ollama: 'Ollama (local)',
+  lmstudio: 'LM Studio (local)',
+  localai: 'LocalAI (local)',
+  together: 'Together AI',
+  fireworks: 'Fireworks AI',
+  deepinfra: 'DeepInfra',
+  cerebras: 'Cerebras',
+  sambanova: 'SambaNova',
+  moonshot: 'Moonshot (Kimi)',
+  zai: 'Z.AI (GLM)',
+  nebius: 'Nebius AI',
+  azure: 'Azure OpenAI',
+  custom: 'Custom (OpenAI-compat)',
+  litellm: 'LiteLLM router',
+};
+
+/**
+ * Return the catalog of {id,label,tagline?,cost?} models for a provider.
+ * Falls back to a single-entry list using DEFAULT_PROVIDER_MODELS so the
+ * caller never has to special-case a missing entry.
+ */
+function modelsForProvider(provider) {
+  const list = PROVIDER_MODELS[provider];
+  if (Array.isArray(list) && list.length) return list;
+  const def = DEFAULT_PROVIDER_MODELS[provider];
+  if (def) return [{ id: def, label: def }];
+  return [];
+}
+
 const OPENAI_COMPAT_ENDPOINTS = {
   // Original 8
   openai: 'https://api.openai.com/v1/chat/completions',
@@ -790,4 +1008,8 @@ function normaliseGeminiMessages(messages) {
 module.exports = {
   createAiClient,
   DEFAULT_PROVIDER_MODELS,
+  PROVIDER_MODELS,
+  PROVIDER_GROUPS,
+  PROVIDER_LABELS,
+  modelsForProvider,
 };
