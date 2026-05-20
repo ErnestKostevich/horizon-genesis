@@ -415,8 +415,31 @@ function interactiveMenu({ engine, title, items, footer, initial = 0, search = t
       stdin.removeListener('keypress', onKey);
       stdin.removeListener('data', onData);
       try { stdin.setRawMode(wasRaw); } catch (_) {}
-      process.stdout.write(ANSI.show + ANSI.mouseOff + '\n');
+      // Sprint 2.11 fix — erase the picker box BEFORE we restore the
+      // cursor / engine. Without this, the rows we drew remain in
+      // scrollback and the caller's success line lands BELOW a stale
+      // box. menuStartLine tracks how many lines we wrote on the last
+      // draw() pass (top border + body + bottom border + trailing \n).
+      try {
+        const linesDrawn = menuStartLine || 0;
+        if (linesDrawn > 0) {
+          // Cursor is currently just below the last line we wrote.
+          // Move up to the first line of the picker and clear-to-end.
+          process.stdout.write('\r' + ANSI.cursorUp(linesDrawn) + '\x1b[J');
+        }
+      } catch (_) {}
+      process.stdout.write(ANSI.show + ANSI.mouseOff);
       stdin.pause();
+      // Defensive — guarantee the engine returns to normal-input mode.
+      // If anything ever sets state flags during pause() that block the
+      // composer, clear them here before we resume. _mouseSwallowUntil
+      // is a boolean flag in tui-engine (truthy = swallow, false = pass).
+      try {
+        if (engine) {
+          if (typeof engine._inPicker !== 'undefined') engine._inPicker = false;
+          if (typeof engine._mouseSwallowUntil !== 'undefined') engine._mouseSwallowUntil = false;
+        }
+      } catch (_) {}
       if (engine && typeof engine.resume === 'function') engine.resume();
       try {
         if (engine && typeof engine._forceRedraw === 'function') {

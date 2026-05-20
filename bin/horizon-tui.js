@@ -905,6 +905,14 @@ async function handleSlash(raw, state, runtime, engine) {
 
       runtime.settingsStore.set('provider', provId);
       runtime.settingsStore.set('model.' + provId, pickedModel.id);
+      // Sprint 2.11 fix — the status bar reads provider/model from
+      // settingsStore on each render, but the engine's input bar is
+      // already painted with the OLD values. Force a redraw so the bar
+      // reflects the new selection BEFORE we print the success line —
+      // that way the user sees both update together.
+      try {
+        if (engine && typeof engine._forceRedraw === 'function') engine._forceRedraw();
+      } catch (_) {}
       engine.print(fmt.ok(
         'provider → ' + fmt.cyan(provId) +
         fmt.dim(' · model → ') + fmt.cyan(pickedModel.id)

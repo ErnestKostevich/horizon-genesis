@@ -1213,8 +1213,12 @@ class TuiEngine {
     try {
       provider = rt.settingsStore.get('provider') || 'gemini';
       persona = rt.settingsStore.get('persona') || 'jarvis';
-      modelName = this.sessionStats.lastModel
-        || rt.settingsStore.get('model.' + provider)
+      // Sprint 2.11 fix — user's saved choice (settingsStore) wins over
+      // the cached `lastModel` from the most recent reply. Otherwise
+      // swapping models via /model-list shows the OLD model in the bar
+      // until the next chat completion lands.
+      modelName = rt.settingsStore.get('model.' + provider)
+        || this.sessionStats.lastModel
         || '';
     } catch (_) {}
 
