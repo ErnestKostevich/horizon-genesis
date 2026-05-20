@@ -1425,7 +1425,16 @@ const TOOL_DEFINITIONS = [
   // Persisted at <userData>/horizon-canvas.json; user can also edit
   // through the /canvas surface in the renderer.
   { name: 'canvas_read',  desc: 'Read the current Live Canvas content. Returns { ok, content, version, updatedAt }. Use this before writing so you can patch around existing content rather than overwriting.', params: {} },
-  { name: 'canvas_write', desc: 'Write to the Live Canvas (shared surface with the user). Modes: append (default, adds to end), prepend (top), replace (overwrite). The user sees your write live and can edit on top. Don\'t use replace unless the user asked to start over.', params: { content: 'string — what to write', mode: 'string optional — append | prepend | replace (default append)' } }
+  { name: 'canvas_write', desc: 'Write to the Live Canvas (shared surface with the user). Modes: append (default, adds to end), prepend (top), replace (overwrite). The user sees your write live and can edit on top. Don\'t use replace unless the user asked to start over.', params: { content: 'string — what to write', mode: 'string optional — append | prepend | replace (default append)' } },
+  // ── Self-knowledge tools (PHASE 28.5, Hermes-style progressive disclosure) ──
+  // Let the agent introspect: what version am I, what tools/skills/personas/
+  // channels do I have, what does my own persona prompt say. Useful when
+  // user asks "what can you do" or the agent wants to verify a capability
+  // before promising one. Cheap — all return cached metadata, no LLM call.
+  { name: 'self_describe',            desc: '[Self] Returns a summary of this agent: version, active provider, active persona, memory layers (counts), executor mode, channel adapters that are configured. Use this when the user asks "who are you" or you need to verify your own state.', params: {} },
+  { name: 'self_list_capabilities',   desc: '[Self] Returns the lightweight list of every tool, skill, persona, and connected channel currently available. Cheap, ~2-3 KB. Use this as the FIRST step when the user asks "what can you do" — then fetch full details with self_read_skill / self_read_tool only for the ones that matter.', params: {} },
+  { name: 'self_read_skill',          desc: '[Self] Read the full SKILL.md for a specific installed skill. Use after self_list_capabilities when you want to actually understand how a skill works before invoking it.', params: { skill: 'string skill id (slug, e.g. "refactor-react")' } },
+  { name: 'self_read_persona',        desc: '[Self] Read the full prompt + memories of a persona (the active one, or a specific id). Use to ground yourself in the voice you should be using, or to switch persona mid-task.', params: { id: 'string persona id optional (default = active)' } }
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1576,6 +1585,129 @@ async function dispatchTool(name, args = {}, ctx = {}) {
         return { ok: true, mode, version: snap.version, bytesWritten: content.length };
       } catch (e) {
         return { ok: false, err: 'canvas_write failed: ' + e.message };
+      }
+    }
+    // ── PHASE 28.5 — Self-knowledge tools ─────────────────────────────
+    // Hermes-style progressive disclosure: cheap list first, full read
+    // only when actually needed. Lets the agent answer "what can you
+    // do?" honestly + verify capabilities before promising them.
+    case 'self_describe': {
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const mem = memoryInstance || mainMod?.exports?.agentMemory || null;
+        const personasMod = (() => { try { return require('./personas'); } catch (_) { return null; } })();
+        const settingsStore = mainMod?.exports?.settingsStore || null;
+        const dialecticTotal = mem?.dialectic?.records?.length || 0;
+        const stats = {
+          memories: mem?._data?.memories?.length || 0,
+          facts: Object.keys(mem?._data?.facts || {}).length,
+          conversations: mem?._data?.conversations?.length || 0,
+          dialectic: dialecticTotal,
+        };
+        let pkg = {};
+        try { pkg = require('../../package.json'); } catch (_) {}
+        const personaId = settingsStore?.get?.('persona') || 'jarvis';
+        const personaName = personasMod?.getPersona?.(personaId)?.name || personaId;
+        const provider = settingsStore?.get?.('provider') || 'gemini';
+        const exec = settingsStore?.get?.('executionMode') || 'host';
+        const channels = ['telegram_bot', 'discord', 'slack', 'whatsapp', 'signal', 'imessage', 'email']
+          .filter(id => {
+            const live = settingsStore?.get?.(`connection.${id}.live`) === true || settingsStore?.get?.(`${id}.enabled`) === true;
+            return live;
+          });
+        return {
+          ok: true,
+          name: 'Horizon AI',
+          version: pkg.version || 'unknown',
+          provider,
+          activePersona: { id: personaId, name: personaName },
+          executor: exec,
+          memory: { backend: 'JSON + SQLite + FTS5 + embeddings', layers: 9, ...stats },
+          channelsLive: channels,
+          author: pkg.author?.name || 'Ernest Kostevich',
+          license: pkg.license || 'BUSL-1.1',
+        };
+      } catch (e) {
+        return { ok: false, err: 'self_describe failed: ' + e.message };
+      }
+    }
+    case 'self_list_capabilities': {
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const personasMod = (() => { try { return require('./personas'); } catch (_) { return null; } })();
+        const skillsMgr = mainMod?.exports?.skillsManager || null;
+        const tools = TOOL_DEFINITIONS.map(t => ({ name: t.name, desc: t.desc.slice(0, 140) }));
+        let skills = [];
+        if (skillsMgr && typeof skillsMgr.list === 'function') {
+          try {
+            const all = skillsMgr.list() || [];
+            skills = all.slice(0, 60).map(s => ({ id: s.id, name: s.name, desc: (s.description || '').slice(0, 140), scope: s.scope }));
+          } catch (_) {}
+        }
+        const personas = (personasMod?.getAllPersonas?.() || []).map(p => ({ id: p.id, name: p.name, builtin: p.builtin }));
+        return {
+          ok: true,
+          tools,
+          skills,
+          personas,
+          channels: ['telegram_bot', 'discord', 'slack', 'whatsapp', 'signal', 'imessage', 'email', 'notion', 'linear'],
+          executors: ['host', 'docker', 'ssh', 'modal', 'daytona', 'singularity'],
+          note: 'For full details on any skill, call self_read_skill. For full persona prompt, call self_read_persona.',
+        };
+      } catch (e) {
+        return { ok: false, err: 'self_list_capabilities failed: ' + e.message };
+      }
+    }
+    case 'self_read_skill': {
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const skillsMgr = mainMod?.exports?.skillsManager || null;
+        if (!skillsMgr) return { ok: false, err: 'skills manager not loaded' };
+        const id = String(args.skill || '').trim();
+        if (!id) return { ok: false, err: 'self_read_skill needs { skill: <id> }' };
+        const skill = (skillsMgr.list() || []).find(s => s.id === id || s.name === id);
+        if (!skill) return { ok: false, err: `unknown skill: ${id}` };
+        const fs = require('fs');
+        const path = require('path');
+        const md = skill.path ? path.join(skill.path, 'SKILL.md') : null;
+        let content = '';
+        if (md && fs.existsSync(md)) content = fs.readFileSync(md, 'utf8');
+        return {
+          ok: true,
+          id: skill.id,
+          name: skill.name,
+          scope: skill.scope,
+          description: skill.description || '',
+          path: skill.path || null,
+          content: content.slice(0, 12000),
+        };
+      } catch (e) {
+        return { ok: false, err: 'self_read_skill failed: ' + e.message };
+      }
+    }
+    case 'self_read_persona': {
+      try {
+        const mainMod = require.cache[require.resolve('./main')];
+        const personasMod = (() => { try { return require('./personas'); } catch (_) { return null; } })();
+        if (!personasMod) return { ok: false, err: 'personas module unavailable' };
+        const settingsStore = mainMod?.exports?.settingsStore || null;
+        const id = String(args.id || '').trim() || (settingsStore?.get?.('persona') || 'jarvis');
+        const persona = personasMod.getPersonaFull?.(id);
+        if (!persona) return { ok: false, err: `unknown persona: ${id}` };
+        return {
+          ok: true,
+          id: persona.id,
+          name: persona.name,
+          icon: persona.icon || null,
+          builtin: !!persona.builtin,
+          allowedTools: persona.allowedTools || null,
+          prompt: persona.prompt || {},
+          memories: (persona.memories || []).slice(0, 40),
+          memoriesCount: (persona.memories || []).length,
+          wakeResponses: persona.wakeResponses || {},
+        };
+      } catch (e) {
+        return { ok: false, err: 'self_read_persona failed: ' + e.message };
       }
     }
     default:
