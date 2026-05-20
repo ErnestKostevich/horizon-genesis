@@ -87,13 +87,30 @@ class TuiEngine {
 
   // ── public API ──────────────────────────────────────────────────────
   start() {
-    if (!process.stdin.isTTY) {
+    // v0.0.2 — defensive boot. Two real-world failure modes:
+    //   1. Non-TTY stdin (piped input, headless CI, some pkg-bundled
+    //      binaries on Windows) → no setRawMode available.
+    //   2. setRawMode throws despite isTTY being truthy (broken
+    //      terminal driver, ConPTY glitches, Windows pkg quirks).
+    // Either way, fall through to plain-readline mode instead of
+    // letting the error bubble up and crash the binary with no
+    // visible feedback (that was the v0.0.1 Windows splash-then-exit
+    // bug). Keypress events + raw input are nice-to-have; line-based
+    // readline is the always-available fallback.
+    const canRaw = !!(process.stdin.isTTY && typeof process.stdin.setRawMode === 'function');
+    if (!canRaw) {
       this._fallbackPlainMode();
       return;
     }
-    readline.emitKeypressEvents(process.stdin);
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
+    try {
+      readline.emitKeypressEvents(process.stdin);
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+    } catch (e) {
+      process.stderr.write('\n(tui) raw-mode unavailable (' + e.message + ') — falling back to plain readline.\n');
+      this._fallbackPlainMode();
+      return;
+    }
     process.stdout.write(ANSI.mouseOn);
 
     this._onKey = (ch, key) => this._handleKey(ch, key);
@@ -574,10 +591,31 @@ class TuiEngine {
   }
 
   _fallbackPlainMode() {
-    // Non-TTY (piped input) — just read lines via readline.
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.on('line', (l) => this.onLine(l));
-    rl.on('close', () => this._exit());
+    // v0.0.2 — plain readline path for non-TTY stdin OR when raw mode
+    // can't be entered (typical on pkg-bundled binaries running in
+    // certain Windows terminal hosts). This mode loses the multi-line
+    // composer, mouse, history navigation, and search overlay, but
+    // the user gets a working chat loop with the same slash commands.
+    //
+    // Visible prompt + welcome line so users don't sit at a blank
+    // screen wondering what to type — that was the v0.0.1 trap.
+    process.stdout.write('\n\x1b[97mPlain-mode TUI active\x1b[0m \x1b[90m(raw input unavailable on this terminal — type your message and press Enter; /quit to exit, /help for commands).\x1b[0m\n\n');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      prompt: '\x1b[36m›\x1b[0m ',
+      terminal: false,  // makes readline echo input + handle Ctrl+C cleanly
+    });
+    rl.prompt();
+    rl.on('line', async (l) => {
+      try { await this.onLine(l); }
+      catch (e) { process.stdout.write('\x1b[31merror:\x1b[0m ' + (e?.message || String(e)) + '\n'); }
+      rl.prompt();
+    });
+    rl.on('close', () => {
+      process.stdout.write('\n\x1b[90mGoodbye.\x1b[0m\n');
+      this._exit();
+    });
   }
 }
 

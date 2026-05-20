@@ -17,7 +17,7 @@
 
 const path = require('path');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
-const { fmt, isTTY } = require('./lib/tty');
+const { fmt, isTTY, friendlyError } = require('./lib/tty');
 const { renderMarkdown } = require('./lib/markdown');
 const { bannerBig, GradientSpinner, welcomeReveal, personaPickerInteractive } = require('./lib/banner');
 const { TuiEngine } = require('./lib/tui-engine');
@@ -65,6 +65,27 @@ function buildHelp() {
     '  Ctrl+C / Ctrl+D       exit',
     '',
   ].join('\n');
+}
+
+// v0.0.2 — does any provider have a key, OR is any local-provider URL
+// set? Mirrors the same check bin/horizon.js uses for the no-args
+// first-run trigger. Inlined here so horizon-tui can decide what hint
+// to print without depending on a sibling module.
+function _runtimeHasAnyKey(rt) {
+  const KEYED = ['gemini','groq','cerebras','openai','claude','deepseek',
+                 'deepinfra','fireworks','together','sambanova','nebius',
+                 'openrouter','mistral','qwen','moonshot','zai','perplexity',
+                 'cohere','grok','azure','custom'];
+  try {
+    for (const id of KEYED) {
+      const v = rt.keysStore?.get?.(`k_${id}`);
+      if (v && String(v).trim()) return true;
+    }
+    if (rt.settingsStore?.get?.('ollamaUrl')   ||
+        rt.settingsStore?.get?.('lmStudioUrl') ||
+        rt.settingsStore?.get?.('localAiUrl')) return true;
+  } catch (_) {}
+  return false;
 }
 
 function bannerHeader(rt) {
@@ -175,6 +196,22 @@ async function main({ flags } = {}) {
   // Print initial banner — write directly so it's part of the transcript too.
   const banner = bannerHeader(runtime);
   process.stdout.write((isFirstLaunch ? '' : '\x1b[2J\x1b[H') + banner);
+
+  // v0.0.2 — explicit "you can type now" line so users don't sit at
+  // a blank composer thinking it's broken. The v0.0.1 splash gave no
+  // indication that the next thing to do was type a message.
+  const hasKey = _runtimeHasAnyKey(runtime);
+  if (!hasKey) {
+    process.stdout.write(
+      '\n  \x1b[33m⚠\x1b[0m  \x1b[97mNo API key set yet.\x1b[0m  ' +
+      '\x1b[90mType\x1b[0m \x1b[36m/quit\x1b[0m\x1b[90m, then run\x1b[0m \x1b[36mhorizon setup\x1b[0m \x1b[90mto add one.\x1b[0m\n'
+    );
+  } else {
+    process.stdout.write(
+      '\n  \x1b[90m▌ Type a message and press \x1b[97mEnter\x1b[90m to send.\x1b[0m  ' +
+      '\x1b[90m\x1b[36m/help\x1b[90m for commands · \x1b[36m/quit\x1b[90m to exit.\x1b[0m\n'
+    );
+  }
 
   const state = {
     history: [],
@@ -411,7 +448,7 @@ async function runChat(runtime, state, engine, message) {
       if (!firstToken) {
         engine.transcript.push(fmt.bold('Horizon: ') + (r.reply || ''));
       }
-      if (r.error) engine.print(fmt.err(r.error));
+      if (r.error) engine.print(fmt.err(friendlyError(r.error)));
       else if (firstToken && r.reply) {
         engine.print(fmt.bold('Horizon: ') + (state.markdown ? renderMarkdown(r.reply) : r.reply));
       } else if (state.markdown && r.reply && /[*_`#>-]/.test(r.reply)) {
@@ -429,7 +466,7 @@ async function runChat(runtime, state, engine, message) {
         state.history.push({ role: 'user', content: message });
         state.history.push({ role: 'assistant', content: r.reply });
       } else if (r.error) {
-        engine.print(fmt.err(r.error));
+        engine.print(fmt.err(friendlyError(r.error)));
       }
     }
   } finally {
@@ -475,7 +512,7 @@ async function runAgent(runtime, state, engine, task) {
       state.history.push({ role: 'user', content: task });
       state.history.push({ role: 'assistant', content: r.answer });
     } else if (r.error) {
-      engine.print(fmt.err(r.error));
+      engine.print(fmt.err(friendlyError(r.error)));
     }
   } finally {
     engine.setSending(false);

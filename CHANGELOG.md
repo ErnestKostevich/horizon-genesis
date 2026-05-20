@@ -13,6 +13,29 @@ First public release. This is the foundation — Horizon AI is a desktop
 agent that runs on your machine, talks to whichever AI provider you
 choose, and learns over time.
 
+### CLI first-run UX (hotfix, retagged cli-v0.0.1)
+The first cli-v0.0.1 binaries shipped with a hard-to-reach setup path: the
+binary launched, painted the banner, and on some Windows terminals exited
+straight back to the prompt with no way to add an API key. The retag fixes
+this end-to-end:
+- **`horizon` with no API key now auto-runs the setup wizard** instead of
+  dropping into an empty TUI. Detects 21 keyed providers + local
+  Ollama/LM Studio/LocalAI URLs.
+- **TUI raw-mode is defensive** — `setRawMode` is wrapped in try/catch
+  and falls through to a plain readline interface when the terminal
+  can't enter raw mode (common with pkg-bundled binaries on Windows).
+  Previously this silently exited the process.
+- **Plain-mode TUI shows a visible `›` prompt** and a welcome line so
+  users know they can type.
+- **Cryptic provider errors get translated.** "HTTP 429" → "Rate limit
+  hit — your provider is throttling. Tip: wait 30–60 seconds, or switch
+  with `horizon model <id>`." Same treatment for 401/403/404/408/5xx
+  plus DNS/network/timeout cases.
+- **Punycode deprecation warning suppressed** — it was cluttering every
+  launch.
+- `HORIZON_SKIP_SETUP=1` / `--no-setup` opts out of the first-run wizard
+  for headless CI / Docker images that pre-mount keys.
+
 ### Memory — 9 layers
 - **Facts** — stable key/value preferences
 - **Episodic memories** — time-stamped events
