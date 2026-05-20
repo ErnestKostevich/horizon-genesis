@@ -16,21 +16,35 @@
 //                                 emitting one step per event + a final `run-end`. Otherwise it
 //                                 buffers the run and returns the JSON result.
 //   GET    /api/version           same payload as `horizon version --json`
+//   GET    /api/status            mobile-friendly status snapshot:
+//                                 {ok, online, provider, model, persona, lang, memoryCount,
+//                                  skillsCount, serverVersion, nodeVersion, platform}.
 //   GET    /api/skills            list of skills (full metadata)
 //   GET    /api/personas          list of personas
+//   GET    /api/providers         list of all configured providers with hasKey flag.
+//   GET    /api/memories?limit=N&q=query
+//                                 recent or searched memories: {memories:[...]}
 //   GET    /api/mem/profile       user profile JSON
 //   POST   /api/mem/search        body {query, limit, semantic?} → results
 //   POST   /api/mem/forget        body {memory? | fact?} → ok
 //   POST   /api/model             body {provider, model?} → ok
 //   POST   /api/persona           body {id} → ok
+//   POST   /api/settings          body {persona?, provider?, model?, lang?} → ok
+//   POST   /api/skill/:id/run     body {task, max_steps?, reflect?} — run the agent loop with one
+//                                 skill forced into the system prompt
 //   GET    /api/health            ping
+//
+// Token can also be passed as `?token=X` query param for clients that
+// can't set the Authorization header (e.g. EventSource probes from the
+// PWA on browsers that don't support custom headers on EventSource).
 //
 // Auth: bearer token in `Authorization: Bearer <token>` header, where
 // `<token>` is either the `--token X` CLI arg or `HORIZON_TOKEN` env var.
 // If neither is set the server binds to 127.0.0.1 with a randomly
 // generated token and prints it once at startup. Loopback-only without
 // a token would still let a local malicious process hit the API, so we
-// always require one.
+// always require one. Token comparison is constant-time so a remote
+// attacker can't time-discover the secret byte by byte.
 
 const http = require('http');
 const crypto = require('crypto');
@@ -124,6 +138,23 @@ async function main({ flags } = {}) {
   return 0;
 }
 
+/**
+ * Constant-time token comparison. crypto.timingSafeEqual throws when the
+ * two buffers differ in length, so we pad first.
+ */
+function safeTokenEqual(a, b) {
+  const aBuf = Buffer.from(String(a || ''), 'utf8');
+  const bBuf = Buffer.from(String(b || ''), 'utf8');
+  // Pad both to the longer length so timingSafeEqual accepts them.
+  const len = Math.max(aBuf.length, bBuf.length, 1);
+  const aPad = Buffer.alloc(len, 0); aBuf.copy(aPad);
+  const bPad = Buffer.alloc(len, 0); bBuf.copy(bPad);
+  // Still XOR-fold the original length difference so equal-length but
+  // wrong tokens stay constant-time relative to longer wrong tokens.
+  const eq = crypto.timingSafeEqual(aPad, bPad);
+  return eq && aBuf.length === bBuf.length;
+}
+
 async function handle(req, res, runtime, expectedToken) {
   // CORS for browser clients on the same machine
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -141,11 +172,15 @@ async function handle(req, res, runtime, expectedToken) {
     return handleWhatsAppWebhook(req, res, runtime);
   }
 
-  // Auth — bearer token required on /api/*
+  // Auth — bearer token required on /api/*. We accept both
+  // `Authorization: Bearer X` (preferred) and `?token=X` query param
+  // (fallback for EventSource and the initial QR-pair hop).
   if (pathname.startsWith('/api/')) {
     const auth = req.headers['authorization'] || '';
-    const token = auth.replace(/^Bearer\s+/i, '').trim();
-    if (token !== expectedToken) {
+    const headerToken = auth.replace(/^Bearer\s+/i, '').trim();
+    const queryToken = url.searchParams.get('token') || '';
+    const supplied = headerToken || queryToken;
+    if (!safeTokenEqual(supplied, expectedToken)) {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'unauthorized' }));
       return;
@@ -159,23 +194,32 @@ async function handle(req, res, runtime, expectedToken) {
   }
 
   try {
-    if (pathname === '/api/health') return json(res, 200, { ok: true, ts: Date.now() });
-    if (pathname === '/api/version') return versionEndpoint(res, runtime);
-    if (pathname === '/api/skills') return skillsEndpoint(res, runtime);
-    if (pathname === '/api/personas') return personasEndpoint(res, runtime);
-    if (pathname === '/api/mem/profile') return profileEndpoint(res, runtime);
+    if (pathname === '/api/health')       return json(res, 200, { ok: true, ts: Date.now() });
+    if (pathname === '/api/version')      return versionEndpoint(res, runtime);
+    if (pathname === '/api/status')       return statusEndpoint(res, runtime);
+    if (pathname === '/api/skills')       return skillsEndpoint(res, runtime);
+    if (pathname === '/api/personas')     return personasEndpoint(res, runtime);
+    if (pathname === '/api/providers')    return providersEndpoint(res, runtime);
+    if (pathname === '/api/memories')     return memoriesEndpoint(res, runtime, url);
+    if (pathname === '/api/mem/profile')  return profileEndpoint(res, runtime);
 
     if (req.method === 'POST') {
       const body = await readJson(req);
-      if (pathname === '/api/chat') return chatEndpoint(res, runtime, body);
-      if (pathname === '/api/agent') return agentEndpoint(req, res, runtime, body);
+      if (pathname === '/api/chat')       return chatEndpoint(res, runtime, body);
+      if (pathname === '/api/agent')      return agentEndpoint(req, res, runtime, body);
       if (pathname === '/api/mem/search') return memSearch(res, runtime, body);
       if (pathname === '/api/mem/forget') return memForget(res, runtime, body);
-      if (pathname === '/api/model') return modelEndpoint(res, runtime, body);
-      if (pathname === '/api/persona') return personaEndpoint(res, runtime, body);
+      if (pathname === '/api/model')      return modelEndpoint(res, runtime, body);
+      if (pathname === '/api/persona')    return personaEndpoint(res, runtime, body);
+      if (pathname === '/api/settings')   return settingsEndpoint(res, runtime, body);
+      // `/api/skill/:id/run` — dispatch by prefix match
+      const skillMatch = pathname.match(/^\/api\/skill\/([^/]+)\/run$/);
+      if (skillMatch) return skillRunEndpoint(req, res, runtime, decodeURIComponent(skillMatch[1]), body);
     }
 
-    json(res, 404, { error: 'not found' });
+    // /api/* paths must NEVER fall through to the static file server —
+    // we always return JSON 404 here so clients get parseable errors.
+    json(res, 404, { error: 'not found', path: pathname });
   } catch (e) {
     json(res, 500, { error: e.message || String(e) });
   }
@@ -263,12 +307,114 @@ function versionEndpoint(res, runtime) {
   });
 }
 
+/**
+ * Mobile-friendly snapshot. Shape stays small + flat so the PWA header
+ * can read it without reaching into nested objects. `online: true`
+ * doubles as a heartbeat — the PWA polls this for the green/red dot.
+ */
+function statusEndpoint(res, runtime) {
+  const pkg = require('../package.json');
+  const provider = runtime.settingsStore.get('provider') || 'gemini';
+  let model = runtime.settingsStore.get('model.' + provider) || '';
+  if (!model) {
+    try {
+      const { DEFAULT_PROVIDER_MODELS } = require('../src/main/runtime/ai-providers');
+      model = DEFAULT_PROVIDER_MODELS[provider] || '';
+    } catch (_) {}
+  }
+  json(res, 200, {
+    ok: true,
+    online: true,
+    provider,
+    model,
+    persona: runtime.settingsStore.get('persona') || 'jarvis',
+    lang: runtime.settingsStore.get('lang') || 'en',
+    memoryCount: runtime.agentMemory?._data?.memories?.length || 0,
+    factCount: Object.keys(runtime.agentMemory?._data?.facts || {}).length,
+    skillsCount: runtime.skillsManager?.list().length || 0,
+    serverVersion: pkg.version,
+    nodeVersion: process.version,
+    platform: process.platform,
+    ts: Date.now(),
+  });
+}
+
 function skillsEndpoint(res, runtime) {
   json(res, 200, runtime.skillsManager?.list() || []);
 }
 
 function personasEndpoint(res, runtime) {
   json(res, 200, runtime.personas?.getAllPersonas?.() || []);
+}
+
+/**
+ * List the providers Horizon knows about, plus whether the user already
+ * has a key configured for each. The PWA uses this to render the
+ * provider dropdown so a phone install doesn't have to ship its own
+ * hard-coded provider list (which goes stale every time we add a new
+ * one).
+ */
+function providersEndpoint(res, runtime) {
+  let providers = [];
+  try {
+    const { DEFAULT_PROVIDER_MODELS } = require('../src/main/runtime/ai-providers');
+    const activeProvider = runtime.settingsStore.get('provider') || 'gemini';
+    const localSet = new Set(['ollama', 'lmstudio', 'localai']);
+    providers = Object.keys(DEFAULT_PROVIDER_MODELS).map(id => {
+      const isLocal = localSet.has(id);
+      // `hasKey`: either a stored key, OR a local provider with a URL set
+      let hasKey = false;
+      if (isLocal) {
+        const urlKey = id === 'ollama' ? 'ollamaUrl'
+                     : id === 'lmstudio' ? 'lmStudioUrl' : 'localAiUrl';
+        hasKey = !!runtime.settingsStore.get(urlKey);
+      } else {
+        hasKey = !!runtime.keysStore.get('k_' + id);
+      }
+      const userModel = runtime.settingsStore.get('model.' + id);
+      return {
+        id,
+        model: userModel || DEFAULT_PROVIDER_MODELS[id],
+        defaultModel: DEFAULT_PROVIDER_MODELS[id],
+        hasKey,
+        local: isLocal,
+        active: id === activeProvider,
+      };
+    });
+    // Add 'auto' as a virtual choice that resolves at call time.
+    providers.unshift({
+      id: 'auto', model: '', defaultModel: '',
+      hasKey: true, local: false, active: 'auto' === activeProvider,
+    });
+  } catch (e) {
+    return json(res, 500, { error: e.message });
+  }
+  json(res, 200, providers);
+}
+
+/**
+ * Recent memories OR search results, depending on whether `q=` is set.
+ * Returns `{memories, total}`. The PWA's drawer reads this for the
+ * "Memories: N" counter and the search panel.
+ */
+function memoriesEndpoint(res, runtime, url) {
+  const q = (url.searchParams.get('q') || '').trim();
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10) || 20, 200);
+  const mem = runtime.agentMemory;
+  if (!mem) return json(res, 503, { error: 'memory unavailable' });
+  try {
+    const total = mem._data?.memories?.length || 0;
+    const memories = q ? mem.recall(q, limit) : mem.getRecent(limit);
+    json(res, 200, {
+      memories: memories.map(m => ({
+        id: m.id, content: m.text || m.content || '', ts: m.created || m.ts || 0,
+        importance: m.importance || 0, tags: m.tags || [],
+      })),
+      total,
+    });
+  } catch (e) {
+    json(res, 500, { error: e.message });
+  }
 }
 
 function profileEndpoint(res, runtime) {
@@ -374,6 +520,84 @@ function personaEndpoint(res, runtime, body) {
   if (!body.id) return json(res, 400, { error: 'id required' });
   runtime.settingsStore.set('persona', body.id);
   json(res, 200, { ok: true, persona: body.id });
+}
+
+/**
+ * One-shot settings update — combines /api/persona + /api/model so the
+ * PWA can save a whole Settings panel with one POST. All fields are
+ * optional; missing ones are left alone.
+ */
+function settingsEndpoint(res, runtime, body) {
+  const updated = {};
+  if (body.persona)  { runtime.settingsStore.set('persona', String(body.persona));       updated.persona = body.persona; }
+  if (body.provider) { runtime.settingsStore.set('provider', String(body.provider));     updated.provider = body.provider; }
+  if (body.model && body.provider) {
+    runtime.settingsStore.set('model.' + body.provider, String(body.model));
+    updated.model = body.model;
+  }
+  if (body.lang)     { runtime.settingsStore.set('lang', String(body.lang));             updated.lang = body.lang; }
+  json(res, 200, { ok: true, updated });
+}
+
+/**
+ * Run the agent loop with one specific skill prepended to the system
+ * prompt. SSE-capable just like /api/agent. Body: {task, max_steps?,
+ * reflect?, history?}. Returns 404 if the skill id doesn't exist.
+ */
+async function skillRunEndpoint(req, res, runtime, skillId, body) {
+  if (!body.task) return json(res, 400, { error: 'task required' });
+  const skill = runtime.skillsManager?.get(skillId);
+  if (!skill) return json(res, 404, { error: 'skill not found', skillId });
+  const wantSse = (req.headers['accept'] || '').includes('text/event-stream');
+  // Build a header that forces this skill into the prompt regardless of
+  // matching score. Reuses the existing skillsBlock pipeline via the
+  // augmented task description.
+  const forcedTask = `[Skill: ${skillId}]\n${body.task}`;
+  const runOpts = {
+    history: body.history,
+    maxSteps: body.max_steps || 8,
+    reflect: body.reflect !== false,
+    askPermission: async () => true,
+  };
+
+  if (wantSse) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    const send = (event, data) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+    try {
+      const result = await runtime.runAgent(forcedTask, {
+        ...runOpts,
+        onStep: (event) => send('step', event),
+      });
+      send('end', {
+        ok: !!result.ok,
+        answer: result.answer,
+        steps: result.steps?.length || 0,
+        skill: skillId,
+        error: result.error || null,
+      });
+    } catch (e) {
+      send('end', { ok: false, error: e.message, skill: skillId });
+    }
+    res.end();
+    return;
+  }
+
+  const result = await runtime.runAgent(forcedTask, runOpts);
+  json(res, 200, {
+    ok: !!result.ok,
+    answer: result.answer,
+    steps: result.steps?.length || 0,
+    skill: skillId,
+    error: result.error || null,
+  });
 }
 
 // ── Phase 15 channel live-runtime helpers ──────────────────────────────
