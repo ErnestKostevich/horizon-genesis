@@ -7,7 +7,7 @@
   "category": "utility",
   "tier": "built_in",
   "icon": "Globe",
-  "permissions": ["network:*"],
+  "permissions": ["network.fetch"],
   "settings": [],
   "tools": [
     {

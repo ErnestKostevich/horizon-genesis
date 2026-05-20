@@ -1042,45 +1042,6 @@ class AgentMemory {
     return `\n\n## User profile (confidence ${(up.confidence * 100).toFixed(0)}%)\n${lines.join('\n')}\n`;
   }
 
-  // ═══ NUTRITION TRACKING (from jarvis) ═══
-  logMeal(description, calories, protein, carbs, fat, time = null) {
-    if (!this.ready) return false;
-    this._data.meals.push({
-      id: Date.now(),
-      description,
-      calories: calories || 0,
-      protein: protein || 0,
-      carbs: carbs || 0,
-      fat: fat || 0,
-      time: time || new Date().toISOString()
-    });
-    // Keep last 1000 meals
-    if (this._data.meals.length > 1000) {
-      this._data.meals = this._data.meals.slice(-1000);
-    }
-    this._save();
-    return true;
-  }
-
-  getMeals(days = 7) {
-    const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    return this._data.meals.filter(m => new Date(m.time).getTime() > cutoff);
-  }
-
-  getTodayNutrition() {
-    const today = new Date().toISOString().split('T')[0];
-    const todayMeals = this._data.meals.filter(m => m.time.startsWith(today));
-    return {
-      meals: todayMeals,
-      total: {
-        calories: todayMeals.reduce((s, m) => s + (m.calories || 0), 0),
-        protein: todayMeals.reduce((s, m) => s + (m.protein || 0), 0),
-        carbs: todayMeals.reduce((s, m) => s + (m.carbs || 0), 0),
-        fat: todayMeals.reduce((s, m) => s + (m.fat || 0), 0)
-      }
-    };
-  }
-
   // ═══ CONVERSATION MEMORY ═══
   saveConversation(userMessage, assistantReply, meta = {}) {
     if (!this.ready) return;
@@ -1414,7 +1375,11 @@ const TOOL_DEFINITIONS = [
   { name: 'get_location', desc: 'Get user location (city, country, lat/lon) via IP', params: {} },
   { name: 'get_weather', desc: 'Get current weather for user location', params: {} },
   { name: 'web_search', desc: 'Search the web (DuckDuckGo)', params: { query: 'string' } },
-  { name: 'wikipedia', desc: 'Search Wikipedia', params: { query: 'string' } },
+  // Sprint-3 — `wikipedia` tool removed from agent surface. The mcpManager
+  // IPC handlers (mcpWikipedia / mcpWikipediaSummary) still exist for the
+  // renderer's command palette, but there was never a dispatcher case in
+  // agent.js, so advertising it to the LLM produced phantom-tool
+  // hallucinations. Use `web_search` for Wikipedia queries instead.
   { name: 'smart_click', desc: 'Click on a UI element by visual description (uses AI vision)', params: { target: 'string describing what to click' } },
   { name: 'open_site', desc: 'Open a website: google, youtube, gmail, github, etc', params: { name: 'string' } },
   { name: 'skill_run_helper', desc: 'Run a helper script bundled with a loaded skill. Use when a SKILL.md tells you to invoke one of its helpers.', params: { skill: 'string skill id', helper: 'string helper path (e.g. helpers/find-stale.js)', args: 'object passed as JSON on stdin', timeoutMs: 'number (default 30000)' } },

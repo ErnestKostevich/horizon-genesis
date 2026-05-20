@@ -1,0 +1,101 @@
+{
+  "id": "morning-briefing",
+  "name": "Morning Briefing",
+  "description": "Daily 8am brief: calendar, email triage, top tech news, weather. Delivered to your preferred channel.",
+  "category": "productivity",
+  "tier": "built_in",
+  "trigger": "schedule:08:00",
+  "enabled": false,
+  "steps": [
+    {
+      "type": "plugin",
+      "action": "fetch_calendar_today",
+      "params": {
+        "pluginId": "calendar",
+        "tool": "events_today",
+        "args": {}
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "email-triage",
+      "params": {
+        "skill": "email-triage",
+        "args": {
+          "since": "yesterday",
+          "maxItems": 50
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "fetch_top_news",
+      "params": {
+        "pluginId": "web-fetch",
+        "tool": "extract_text",
+        "args": {
+          "url": "https://news.ycombinator.com/best"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "plugin",
+      "action": "fetch_weather",
+      "params": {
+        "pluginId": "web-fetch",
+        "tool": "extract_text",
+        "args": {
+          "url": "https://wttr.in/?format=3"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "skill",
+      "action": "summarize-anything",
+      "params": {
+        "skill": "summarize-anything",
+        "args": {
+          "inputs": [
+            "{{steps.fetch_calendar_today.output}}",
+            "{{steps.email-triage.output}}",
+            "{{steps.fetch_top_news.output}}",
+            "{{steps.fetch_weather.output}}"
+          ],
+          "format": "markdown_briefing",
+          "sections": ["Today", "Email", "News", "Weather"]
+        }
+      },
+      "stopOnError": true
+    },
+    {
+      "type": "plugin",
+      "action": "deliver_briefing",
+      "params": {
+        "pluginId": "telegram",
+        "tool": "send_message",
+        "args": {
+          "chatId": "{{settings.telegramChatId}}",
+          "text": "{{steps.summarize-anything.output}}",
+          "parseMode": "Markdown"
+        }
+      },
+      "stopOnError": false
+    },
+    {
+      "type": "notify",
+      "action": "Morning brief delivered",
+      "params": {
+        "title": "Morning Briefing",
+        "body": "Your daily brief is ready."
+      }
+    }
+  ],
+  "outputs": {
+    "primaryChannel": "telegram",
+    "fallback": "notification"
+  }
+}

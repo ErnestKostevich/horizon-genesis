@@ -38,10 +38,11 @@ async function run({ runtime, args, flags }) {
   if (sub === 'new')     return newSkill(runtime, rest, flags);
   if (sub === 'run')     return runSkill(runtime, rest, flags);
   if (sub === 'improve') return improveSkill(runtime, rest, flags);
+  if (sub === 'import')  return require('./skill-import').run({ runtime, args: rest, flags });
   if (sub === 'enable' || sub === 'disable') return toggleSkill(runtime, rest, sub, flags);
 
   process.stderr.write(fmt.err(`Unknown skill subcommand: ${sub}`) + '\n');
-  process.stderr.write('Try: list | show | new | run | improve | enable | disable\n');
+  process.stderr.write('Try: list | show | new | run | improve | import | enable | disable\n');
   return 2;
 }
 

@@ -7,7 +7,7 @@
   "category": "utility",
   "tier": "built_in",
   "icon": "Clipboard",
-  "permissions": ["clipboard:read", "clipboard:write"],
+  "permissions": ["clipboard.read", "clipboard.write"],
   "settings": [],
   "tools": [
     { "name": "read",  "description": "Read current clipboard text content.",      "params": {} },

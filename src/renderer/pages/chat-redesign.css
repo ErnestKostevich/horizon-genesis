@@ -194,20 +194,10 @@ textarea:focus, select:focus {
   box-shadow: 0 0 24px -4px rgba(124, 109, 242, 0.4);
 }
 
-/* ── 6. Animated gradient background ─────────────────────────────────── */
-
-@keyframes hzBgShift {
-  0%, 100% {
-    background-position: 0% 0%, 100% 100%;
-  }
-  50% {
-    background-position: 100% 50%, 0% 50%;
-  }
-}
-
-/* Sprint-1 fix: animated gradient removed (paired with fractal-bg.js kill).
-   Static low-cost background now lives in chat-base.css body rule. The
-   keyframes are kept defined-but-unused above for backward compat. */
+/* ── 6. Background override ──────────────────────────────────────────────
+   The animated WebGL fractal + gradient pair was killed in Sprint-1. The
+   static low-cost background now lives in chat-base.css body rule; the
+   override below makes sure no later rule reintroduces an animated bg. */
 body {
   background-image: none;
   animation: none;
@@ -425,3 +415,33 @@ pre::before {
 }
 /* Composer focus ring already uses the accent — no light-mode override
    needed. Placeholder color tightened in chat-base.css. */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-3 final pass — chat-redesign painted hover bg, button hover,
+   `.btn:hover` etc with rgba(255,255,255,.07). On a white page that is
+   essentially invisible. Light variants below give visible feedback.
+   ─────────────────────────────────────────────────────────────────────── */
+[data-theme="light"] .btn:hover,
+[data-theme="light"] .psv:hover,
+[data-theme="light"] .sc-btn:hover,
+[data-theme="light"] .ic-btn:hover,
+[data-theme="light"] .mt:hover {
+  background-color: rgba(124,109,242,.08) !important;
+}
+
+/* Sidebar item hover accent stripe — used `var(--accent-grad)` which is
+   purple in both themes; just confirm the hover bg is visible on white. */
+[data-theme="light"] .cs-item:hover::before,
+[data-theme="light"] .chatside .row:hover::before {
+  background: var(--accent-grad, linear-gradient(135deg, #7c6df2, #a78bfa));
+}
+
+/* hz-msg-skel — base bg rgba(255,255,255,.04) is invisible on white. */
+[data-theme="light"] .hz-msg-skel .hz-skel-line {
+  background: linear-gradient(90deg,
+    rgba(0,0,0,0.05) 0%,
+    rgba(0,0,0,0.12) 50%,
+    rgba(0,0,0,0.05) 100%);
+}
+
+/* pre::before accent stripe — already uses var(--accent-grad). No change. */

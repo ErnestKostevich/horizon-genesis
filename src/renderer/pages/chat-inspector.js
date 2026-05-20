@@ -429,6 +429,17 @@ function refreshInspectorSubagents() {
 async function _inspLearnedSection(id, label, renderFn) {
   const el = document.getElementById(id);
   if (!el) return;
+  // Sprint 4 — Task 4: paint a small skeleton until the renderFn resolves,
+  // so the inspector right pane no longer flashes blank cells. Skip when
+  // the section already has rendered content (avoid flicker on re-refresh).
+  try {
+    const hasContent = el.children.length > 0
+      && !el.querySelector('.insp-empty')
+      && !el.querySelector('.hz-skel-rows');
+    if (!hasContent && typeof hzSkelRows === 'function') {
+      el.innerHTML = hzSkelRows(3, { height: 12, gap: 6 });
+    }
+  } catch (_) {}
   try {
     const html = await renderFn();
     if (typeof html === 'string') el.innerHTML = html;

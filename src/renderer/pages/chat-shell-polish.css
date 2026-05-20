@@ -634,6 +634,48 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
 }
 .composer-chip.strong b{color:#8eeaff}
 
+/* Sprint 4 — Task 3: persona pill in composer toolbar.
+   Visually parallel to .composer-chip.strong (the Model chip) but with a
+   magenta-accent tint and a leading 18px avatar so the user spots persona
+   switching as a first-class action without opening Settings → Personas. */
+.composer-chip.persona-chip{
+  background:rgba(167,139,250,.10);
+  border-color:rgba(167,139,250,.26);
+  padding-left:6px;
+}
+.composer-chip.persona-chip b{color:#cdb8ff}
+.composer-chip.persona-chip:hover{
+  background:rgba(167,139,250,.16);
+  border-color:rgba(167,139,250,.40);
+}
+.composer-chip .persona-chip-avatar{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  background:rgba(167,139,250,.22);
+  color:#e8dfff;
+  font-size:11px;
+  font-weight:700;
+  line-height:1;
+  /* The avatar contains either an emoji from persona.icon or initials.
+     Reset the parent's letter-spacing / text-transform / font-weight so
+     the glyph isn't warped by the .composer-chip span rule above. */
+  letter-spacing:0;
+  text-transform:none;
+}
+[data-theme="light"] .composer-chip.persona-chip{
+  background:rgba(124,109,242,.08)!important;
+  border-color:rgba(124,109,242,.30)!important;
+}
+[data-theme="light"] .composer-chip.persona-chip b{color:#5b46d6!important}
+[data-theme="light"] .composer-chip .persona-chip-avatar{
+  background:rgba(124,109,242,.16)!important;
+  color:#5b46d6!important;
+}
+
 /* PR-U-MEGA — provider-health traffic-light dot on the Model chip.
    Tiny 6px circle that turns amber on rate-limit / red on auth fail
    / green on a recent fast reply. Defaults to subtle gray so it
@@ -1609,4 +1651,190 @@ textarea#inp{background:transparent!important}
 [data-theme="light"] .fbody {
   background: #ffffff !important;
   color: #18181b !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-3 final pass — remaining shell selectors with hardcoded dark
+   hex behind !important that had no light variant.
+   ───────────────────────────────────────────────────────────────────────
+   Audit found these selectors paint themselves dark on every theme:
+
+   - .ic-btn (BASE, not just :hover) — color was #9aa5b8 ≈ 2.3:1 on white.
+   - .shell-chip (.primary variant flips white-on-dark which fails on light).
+   - .focus-timer — dark green tint with grey text on white = invisible.
+   - .cs-stats — dark text spec on hover sublabel.
+   - .composer-chip span letterspacing label / .composer-chip b active text.
+   - .composer-chip.on (file-attached state) — amber tint, low contrast.
+   - .csb-pill base color label.
+   - .insp-tabs hover/on state — keep tab on-state semantics correct on light.
+   - .insp-tab.on (cyan on cyan) → purple on purple.
+   - .panel + .fpanel inner labels (.ph headings, .pbody scroll surfaces).
+   - User bubble light variant (apex-alive paints it dark-blue gradient
+     which is unreadable on a white shell).
+   - Model + Mode + Persona popovers (.model-popover, .picker-* inside) —
+     use --bg2 var (resolves correctly to light) but option-hover/on states
+     hardcode rgba(255,255,255,.05) which is invisible on white.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* .ic-btn base (icon buttons in tb-r). Hover already exists above. */
+[data-theme="light"] .ic-btn {
+  background: rgba(255,255,255,.95) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important; /* 10.5:1 on white */
+}
+[data-theme="light"] .ic-btn.proc {
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.30) !important;
+  color: #4c40ad !important;
+}
+
+/* shell-chip.primary — sprint-3 sets dark bg + light text via #e8edf6.
+   Flip the polarity on light so it reads as a primary action. */
+[data-theme="light"] .shell-chip.primary {
+  background: #7c6df2 !important;
+  color: #ffffff !important;
+  border-color: #7c6df2 !important;
+}
+[data-theme="light"] .shell-chip:hover {
+  background: rgba(124,109,242,.06) !important;
+  border-color: rgba(124,109,242,.28) !important;
+  color: #18181b !important;
+}
+
+/* csb-pill text label */
+[data-theme="light"] .csb-pill * {
+  color: inherit !important;
+}
+
+/* composer-chip strong active text — was amber #a7e8ff cyan-on-amber */
+[data-theme="light"] .composer-chip.on {
+  background: rgba(180,83,9,.10) !important;
+  border-color: rgba(180,83,9,.30) !important;
+  color: #b45309 !important; /* 4.7:1 AA */
+}
+[data-theme="light"] .composer-chip.on b {
+  color: #b45309 !important;
+}
+
+/* psnav surface inner color leaked dark; psnav-tab.on already covered. */
+[data-theme="light"] .psnav-tab.on {
+  background: rgba(124,109,242,.12) !important;
+}
+
+/* Inspector tab on-state — base is cyan-on-cyan #56d2ff at 2.7:1 on white. */
+[data-theme="light"] .insp-tab.on {
+  color: #4c40ad !important;
+  background: rgba(124,109,242,.12) !important;
+  border-color: rgba(124,109,242,.32) !important;
+  box-shadow: inset 0 0 0 1px rgba(124,109,242,.10) !important;
+}
+[data-theme="light"] .insp-close {
+  background: rgba(0,0,0,.04) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .insp-close:hover {
+  background: rgba(0,0,0,.08) !important;
+  border-color: rgba(0,0,0,.16) !important;
+  color: #18181b !important;
+}
+
+/* Inspector body / sections defaults — keep the surface white. */
+[data-theme="light"] .insp-body,
+[data-theme="light"] .insp-section,
+[data-theme="light"] .insp-h {
+  color: #18181b;
+}
+[data-theme="light"] .insp-h {
+  color: #52525b !important;
+}
+
+/* User message bubble — apex-alive hardcodes a dark-blue gradient which
+   sits below the new --usr-bg light gradient because !important wins.
+   Re-paint with the unified light purple gradient. */
+[data-theme="light"] .msg.usr .bub {
+  background: var(--usr-bg) !important;
+  border-color: var(--usr-b) !important;
+  color: #18181b !important;
+}
+
+/* Model / Mode / Persona popovers — surface, header, search, body. */
+[data-theme="light"] .model-popover,
+[data-theme="light"] #persona-popover,
+[data-theme="light"] #mode-popover {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.10) !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,.14) !important;
+  color: #18181b;
+}
+[data-theme="light"] .model-popover-h {
+  color: #52525b !important;
+  border-bottom-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .model-popover-opt {
+  color: #18181b !important;
+}
+[data-theme="light"] .model-popover-opt:hover {
+  background: rgba(124,109,242,.08) !important;
+}
+[data-theme="light"] .model-popover-opt.on {
+  background: rgba(124,109,242,.12) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .model-popover-opt-price {
+  color: #52525b !important;
+  border-color: rgba(0,0,0,.10) !important;
+  background: rgba(0,0,0,.02) !important;
+}
+[data-theme="light"] .model-popover-opt-meta {
+  color: #71717a !important;
+}
+[data-theme="light"] .model-popover-empty {
+  color: #52525b !important;
+}
+[data-theme="light"] .picker-head {
+  border-bottom-color: rgba(0,0,0,.08);
+}
+[data-theme="light"] .picker-title {
+  color: #18181b !important;
+}
+[data-theme="light"] .picker-sub {
+  color: #52525b !important;
+}
+[data-theme="light"] .picker-search {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border: 1px solid rgba(0,0,0,.10) !important;
+}
+[data-theme="light"] .picker-search::placeholder {
+  color: #71717a !important;
+}
+[data-theme="light"] .model-provider-title {
+  color: #52525b !important;
+}
+[data-theme="light"] .model-provider-title b {
+  color: #18181b !important;
+}
+[data-theme="light"] .persona-picker-row {
+  color: #18181b !important;
+}
+[data-theme="light"] .persona-picker-row:hover {
+  background: rgba(124,109,242,.08) !important;
+}
+[data-theme="light"] .persona-picker-row.on {
+  background: rgba(124,109,242,.12) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .persona-picker-avatar {
+  background: rgba(124,109,242,.14) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .persona-picker-meta {
+  color: #71717a !important;
+}
+
+/* Model picker hint small text inside row (set inline in chat.html with
+   `color:#778aa6` — a dark muted blue that fades to ~3.5:1 on white). */
+[data-theme="light"] .persona-picker-row small {
+  color: #52525b !important;
 }
