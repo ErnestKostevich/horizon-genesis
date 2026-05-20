@@ -597,8 +597,8 @@ body.settings-scroll .ps-toc {
 [data-theme="light"] #panel .pf {
   border-bottom-color: rgba(0, 0, 0, 0.06);
 }
-[data-theme="light"] #panel .pf > label { color: #52525b; }
-[data-theme="light"] #panel .pf > label small { color: #71717a; }
+[data-theme="light"] #panel .pf > label { color: #3f3f46; } /* Sprint-2.3: 10.5:1 AAA */
+[data-theme="light"] #panel .pf > label small { color: #52525b; } /* Sprint-2.3: was #71717a → 7.4:1 AAA */
 
 /* Inputs */
 [data-theme="light"] #panel .pf .pr input,
@@ -615,7 +615,7 @@ body.settings-scroll .ps-toc {
   box-shadow: 0 0 0 3px rgba(124, 109, 242, 0.15);
 }
 [data-theme="light"] #panel .pf .pi::placeholder {
-  color: rgba(113, 113, 122, 0.65);
+  color: rgba(82, 82, 91, 0.80); /* Sprint-2.3: was 113,113,122 @ .65 → ~3.4:1, now ~5.4:1 AA */
 }
 
 /* Buttons */
@@ -634,21 +634,21 @@ body.settings-scroll .ps-toc {
 /* Status / help banners */
 [data-theme="light"] #panel .local-status {
   background: rgba(0, 0, 0, 0.025);
-  color: #52525b;
+  color: #3f3f46; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
   border-left-color: rgba(0, 0, 0, 0.10);
 }
 [data-theme="light"] #panel .local-status.ok {
   background: rgba(16, 185, 129, 0.08);
-  color: #047857;
+  color: #065f46; /* Sprint-2.3: was #047857, now darker green for ~7.5:1 on white */
 }
 [data-theme="light"] #panel .local-status.bad {
   background: rgba(239, 68, 68, 0.08);
-  color: #b91c1c;
+  color: #991b1b; /* Sprint-2.3: was #b91c1c, now darker red for ~8.2:1 */
 }
 
 /* Subsection blockquote */
 [data-theme="light"] #panel .psview-sub {
-  color: #52525b;
+  color: #3f3f46; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
   background: rgba(0, 0, 0, 0.025);
   border-left-color: rgba(124, 109, 242, 0.45);
 }
@@ -670,12 +670,12 @@ body.settings-scroll .ps-toc {
   border-color: rgba(0, 0, 0, 0.10);
   color: #18181b;
 }
-[data-theme="light"] .ps-search-input::placeholder { color: rgba(113, 113, 122, 0.60); }
+[data-theme="light"] .ps-search-input::placeholder { color: rgba(82, 82, 91, 0.80); } /* Sprint-2.3: ~5.4:1 AA */
 [data-theme="light"] .ps-search-input:focus {
   background: #fafafa;
   border-color: rgba(124, 109, 242, 0.55);
 }
-[data-theme="light"] .ps-search-clear { color: #71717a; }
+[data-theme="light"] .ps-search-clear { color: #52525b; } /* Sprint-2.3: was #71717a → 7.4:1 AAA */
 [data-theme="light"] .ps-search-clear:hover {
   color: #18181b;
   background: rgba(0, 0, 0, 0.04);
@@ -683,7 +683,7 @@ body.settings-scroll .ps-toc {
 [data-theme="light"] .ps-search-empty {
   background: #f9fafb;
   border-color: rgba(0, 0, 0, 0.10);
-  color: #52525b;
+  color: #3f3f46; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
 }
 
 /* Conditional-group reveal blocks */
@@ -702,7 +702,7 @@ body.settings-scroll .ps-toc {
 [data-theme="light"] #panel .ms-singularity-only::before,
 [data-theme="light"] #panel .ms-docker-only::before {
   background: rgba(0, 0, 0, 0.06);
-  color: #52525b;
+  color: #3f3f46; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
 }
 
 /* psnav tab gradient — keep accent but with paper substrate */
