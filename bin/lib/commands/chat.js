@@ -8,7 +8,7 @@
 //   - --quiet: only the reply text, no metadata
 //   - --no-stream / --plain: disable streaming/markdown explicitly
 
-const { fmt } = require('../tty');
+const { fmt, friendlyError } = require('../tty');
 const { renderMarkdown } = require('../markdown');
 const { GradientSpinner } = require('../banner');
 
@@ -51,7 +51,7 @@ async function run({ runtime, args, flags }) {
     if (firstToken) {
       // Provider didn't stream — fall back to one-shot
       spinner.stop();
-      if (r.error) { process.stderr.write(fmt.err(r.error) + '\n'); return 1; }
+      if (r.error) { process.stderr.write(fmt.err(friendlyError(r.error)) + '\n'); return 1; }
       // Some providers (cohere) return non-streamed reply this way
       if (r.reply) {
         process.stdout.write(wantMarkdown ? renderMarkdown(r.reply) : r.reply);
@@ -73,7 +73,7 @@ async function run({ runtime, args, flags }) {
   // Buffered (piped / non-TTY / explicit --no-stream)
   const r = await runtime.runChat(message, opts);
   if (r.error) {
-    process.stderr.write(fmt.err(r.error) + '\n');
+    process.stderr.write(fmt.err(friendlyError(r.error)) + '\n');
     return 1;
   }
   if (flags.quiet) {
