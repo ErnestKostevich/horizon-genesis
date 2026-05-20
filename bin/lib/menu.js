@@ -30,6 +30,15 @@ const ANSI = {
   cursorTo:  (col) => `\x1b[${col}G`,
 };
 
+// Sprint 2.6 — mouse-event guard. Same problem the main TUI engine has:
+// SGR mouse reports (\x1b[<…M) can fragment across data events on Windows
+// ConPTY. When that happens readline emits the payload bytes ("0;43;51M")
+// as plain keypress events, which previously got interpreted as digit
+// shortcuts inside the picker → AUTO-COMMITTED the wrong row before the
+// user could press Enter. We strip mouse debris in both the data path
+// AND the keypress path with a short post-mouse swallow window.
+const SGR_PAYLOAD_RE = /^[0-9;]*[Mm]$|^[0-9;]+$|^[Mm]$/;
+
 /**
  * Run an inline menu and return the picked item (or null on cancel).
  *
@@ -88,8 +97,12 @@ function interactiveMenu({ engine, title, items, footer, initial = 0 }) {
         if (it.disabled) row = fmt.dim('   ' + (it.label || '') + (it.sublabel ? '  ' + it.sublabel : ''));
         out.push(prefix + row + '\n');
       }
+      // Sprint 2.6 — make Enter LOUD. The previous footer ("Enter pick")
+      // was easy to misread; users assumed any letter would commit. After
+      // a mouse-leak incident that auto-committed the wrong provider, we
+      // spell it out explicitly: only Enter switches.
       if (footer) out.push('\n  ' + fmt.dim(footer) + '\n');
-      else out.push('\n  ' + fmt.dim('↑/↓ move · Enter pick · Esc cancel · click to choose') + '\n');
+      else out.push('\n  ' + fmt.dim('↑/↓ move · ') + fmt.bold('Enter to switch') + fmt.dim(' · Esc cancel') + '\n');
 
       const text = out.join('');
       menuStartLine = (text.match(/\n/g) || []).length;
@@ -104,6 +117,15 @@ function interactiveMenu({ engine, title, items, footer, initial = 0 }) {
       process.stdout.write(ANSI.show + ANSI.mouseOff + '\n');
       stdin.pause();
       if (engine && typeof engine.resume === 'function') engine.resume();
+      // Sprint 2.6 — force a clean redraw of the host TUI so the picker
+      // closing doesn't leave a stale region behind ("window hang").
+      // engine.resume() already calls _renderInputBar internally; the
+      // _eraseInputBar+repaint guarantees the new frame is fresh.
+      try {
+        if (engine && typeof engine._forceRedraw === 'function') {
+          engine._forceRedraw();
+        }
+      } catch (_) {}
     }
 
     function pick() {
@@ -118,33 +140,75 @@ function interactiveMenu({ engine, title, items, footer, initial = 0 }) {
       resolve(null);
     }
 
+    // Sprint 2.6 — mouse-leak swallow window (mirrors tui-engine logic).
+    let swallowUntil = 0;
+
     function onKey(ch, key) {
       if (!key) return;
+
+      // Sprint 2.6 — drop mouse-sequence noise BEFORE any other handling.
+      // SGR fragments ("\x1b[<", payload digits, lone M/m) must never be
+      // interpreted as commit-causing keystrokes.
+      if (key.sequence) {
+        const isSgr    = key.sequence.indexOf('\x1b[<') >= 0;
+        const isLegacy = /\x1b\[M.{3}/.test(key.sequence);
+        if (isSgr || isLegacy) {
+          // If terminator not in sequence, keep swallowing for a window.
+          if (isSgr && /[Mm]/.test(key.sequence.slice(key.sequence.indexOf('\x1b[<') + 3))) {
+            swallowUntil = Date.now() + 250;
+          } else {
+            swallowUntil = Date.now() + 250;
+          }
+          return;
+        }
+      }
+      if (swallowUntil && Date.now() < swallowUntil) {
+        const c = (ch && typeof ch === 'string') ? ch : (key.sequence || '');
+        if (c && SGR_PAYLOAD_RE.test(c)) {
+          if (/[Mm]/.test(c)) swallowUntil = 0;
+          return;
+        }
+        if (c && /^[0-9;]+$/.test(c) && c.length <= 16) return;
+      }
+
       if (key.ctrl && key.name === 'c') return cancel();
       if (key.name === 'escape' || key.name === 'q') return cancel();
+      // Sprint 2.6 — ONLY Enter commits. Any other key (including digits,
+      // letters, M/m) only moves the highlight. Previously digit shortcuts
+      // auto-committed (cursor = idx-1; pick()) which combined with the
+      // mouse leak to silently switch providers without user confirmation.
       if (key.name === 'return' || key.name === 'enter') return pick();
       if (key.name === 'up'   || key.name === 'k') { cursor = (cursor - 1 + items.length) % items.length; draw(); return; }
       if (key.name === 'down' || key.name === 'j') { cursor = (cursor + 1) % items.length; draw(); return; }
       if (key.name === 'home') { cursor = 0; draw(); return; }
       if (key.name === 'end')  { cursor = items.length - 1; draw(); return; }
-      // Digit shortcuts 1..9
+      // Digit 1..9 only MOVES the highlight (no auto-pick).
       const idx = parseInt(ch, 10);
-      if (!isNaN(idx) && idx >= 1 && idx <= items.length) { cursor = idx - 1; draw(); pick(); return; }
+      if (!isNaN(idx) && idx >= 1 && idx <= items.length) { cursor = idx - 1; draw(); return; }
     }
 
     function onData(buf) {
       const s = buf.toString();
       // SGR mouse: \x1b[<button;col;row(M|m)
-      const m = s.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/);
+      // Sprint 2.6 — was anchored ^…$ which only matched perfectly-aligned
+      // single-event chunks. Loosen to find ANY SGR mouse sequence in the
+      // buffer; this also implies fragmented payloads can't be mis-read
+      // as menu commits because onKey now swallows their debris.
+      const m = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/.exec(s);
+      // Arm the swallow window any time we see a mouse byte sequence.
+      if (s.indexOf('\x1b[<') >= 0 || /\x1b\[M.{3}/.test(s)) {
+        swallowUntil = Date.now() + 250;
+      }
       if (!m) return;
       const button = parseInt(m[1], 10);
       const press  = m[4] === 'M';
       // Wheel up = 64, wheel down = 65 (with SGR)
       if (button === 64 && press) { cursor = (cursor - 1 + items.length) % items.length; draw(); return; }
       if (button === 65 && press) { cursor = (cursor + 1) % items.length; draw(); return; }
-      // Left click — pick the row clicked. We don't track absolute screen
-      // row, so just treat any left-click as confirm-current.
-      if (button === 0 && press) pick();
+      // Sprint 2.6 — left-click no longer auto-commits. Without precise
+      // row tracking, any click would commit whatever was last hovered,
+      // which combined with drag events caused silent wrong switches.
+      // Click is now a no-op; user must press Enter to confirm.
     }
 
     stdin.on('keypress', onKey);

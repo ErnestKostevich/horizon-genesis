@@ -335,11 +335,22 @@ body.code-mode-active:not(.code-terminal-collapsed) .apex-right-pane.code-shell 
   border-color: rgba(0,0,0,.08) !important;
   color: #18181b !important;
 }
-[data-theme="light"] .persona-popover {
+[data-theme="light"] .persona-popover,
+[data-theme="light"] .model-popover,
+[data-theme="light"] .mode-popover {
   background: #ffffff !important;
-  border-color: rgba(0,0,0,.08) !important;
+  border-color: rgba(0,0,0,.10) !important;
   color: #18181b !important;
   box-shadow: 0 12px 32px -8px rgba(0,0,0,.12) !important;
+}
+[data-theme="light"] .picker-head {
+  border-bottom-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .picker-title {
+  color: #18181b !important;
+}
+[data-theme="light"] .picker-sub {
+  color: #52525b !important;
 }
 [data-theme="light"] .persona-picker-row {
   background: transparent !important;
@@ -347,6 +358,60 @@ body.code-mode-active:not(.code-terminal-collapsed) .apex-right-pane.code-shell 
 }
 [data-theme="light"] .persona-picker-row:hover {
   background: rgba(124,109,242,.08) !important;
+}
+/* Composer textarea — was rgba(15,23,42,.58) dark slate */
+[data-theme="light"] textarea#inp {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #18181b !important;
+}
+
+/* Sprint-2.4 — popover inner widgets (search input, option rows, headers)
+   were calibrated for a dark slate substrate. Re-tint them so each item
+   stays visible on a white popover. Selectors mirror the dark rules. */
+[data-theme="light"] .picker-search {
+  background: #f4f4f5 !important;
+  color: #18181b !important;
+  border-color: rgba(0,0,0,.10) !important;
+}
+[data-theme="light"] .picker-search::placeholder {
+  color: #71717a !important;
+}
+[data-theme="light"] .model-provider-title {
+  color: #52525b !important;
+}
+[data-theme="light"] .model-provider-title b {
+  color: #18181b !important;
+}
+[data-theme="light"] .model-popover-opt,
+[data-theme="light"] .persona-picker-row {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .model-popover-opt:hover,
+[data-theme="light"] .persona-picker-row:hover {
+  background: rgba(124,109,242,.06) !important;
+  border-color: rgba(124,109,242,.32) !important;
+}
+[data-theme="light"] .model-popover-opt.on,
+[data-theme="light"] .persona-picker-row.on {
+  background: linear-gradient(135deg, rgba(124,109,242,.10), rgba(167,139,250,.06)) !important;
+  border-color: rgba(124,109,242,.40) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .model-popover-opt-meta,
+[data-theme="light"] .persona-picker-meta {
+  color: #52525b !important;
+}
+[data-theme="light"] .persona-picker-avatar {
+  background: rgba(124,109,242,.14) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .model-popover-empty {
+  background: #f4f4f5 !important;
+  color: #52525b !important;
+  border-color: rgba(0,0,0,.14) !important;
 }
 [data-theme="light"] .apex-right-pane {
   background: #ffffff !important;

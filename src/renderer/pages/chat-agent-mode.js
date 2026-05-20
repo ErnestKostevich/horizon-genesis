@@ -77,9 +77,13 @@
     `;
 
     const dialog = document.createElement('div');
+    // `--fg` is not a defined CSS variable in this app (only `--tx` is); the
+    // old fallback `#d6d8db` was a light-grey that is invisible on a light
+    // paper bg under [data-theme="light"]. Pivot to `--tx` so both themes
+    // resolve to a readable contrast (dark theme: #e8ecf4, light: #09090b).
     dialog.style.cssText = `
       background: var(--bg, #0f1115);
-      color: var(--fg, #d6d8db);
+      color: var(--tx, #18181b);
       border: 1px solid var(--accent, #7c6df2);
       border-radius: 12px;
       padding: 22px 28px;
@@ -99,7 +103,7 @@
       <h2 style="margin:0 0 8px;font-size:18px;font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:8px;">
         <svg class="licon"><use href="#i-zap"/></svg>${title}
       </h2>
-      <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--t2,#9aa0a6);">${intro}</p>
+      <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--t2,#3f3f46);">${intro}</p>
       <div id="agent-consent-caps" style="display:grid;gap:8px;margin:0 0 18px;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button id="agent-consent-cancel"  class="hub-btn" style="padding:8px 16px;">${cancelLabel}</button>
@@ -111,16 +115,19 @@
     const caps = dialog.querySelector('#agent-consent-caps');
     for (const c of CAPABILITIES) {
       const row = document.createElement('div');
+      // `rgba(255,255,255,0.x)` borders and bg become invisible on a light
+      // paper substrate. Switch to neutral var(--b1) borders + transparent
+      // bg so both themes get a visible cell outline.
       row.style.cssText = `
         display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;
-        padding:8px 10px;border:1px solid rgba(255,255,255,0.06);border-radius:8px;
-        background: rgba(255,255,255,0.02);
+        padding:8px 10px;border:1px solid var(--b1, rgba(0,0,0,.08));border-radius:8px;
+        background: var(--bg2, rgba(0,0,0,0.02));
       `;
       row.innerHTML = `
         <div style="line-height:1;color:var(--accent,#7c6df2);"><svg class="licon"><use href="#${c.iconId}"/></svg></div>
         <div>
-          <div style="font-weight:600;font-size:13px;">${c.label}</div>
-          <div style="font-size:11px;color:var(--t3,#7a808a);line-height:1.45;">${c.detail}</div>
+          <div style="font-weight:600;font-size:13px;color:var(--tx,#18181b);">${c.label}</div>
+          <div style="font-size:11px;color:var(--t3,#52525b);line-height:1.45;">${c.detail}</div>
         </div>
       `;
       caps.appendChild(row);
@@ -161,7 +168,7 @@
       border: 1px solid rgba(139,92,246,0.45);
       border-radius: 10px;
       font-size: 12px; font-weight: 600;
-      color: var(--fg, #d6d8db);
+      color: var(--tx, #18181b);
       animation: agentBannerPulse 2.4s ease-in-out infinite;
     `;
     const lang = (typeof window !== 'undefined' && window.lang) || 'en';

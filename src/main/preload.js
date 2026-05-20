@@ -386,6 +386,18 @@ contextBridge.exposeInMainWorld('H', {
   getRunningApps:     () => ipcRenderer.invoke('getRunningApps'),
   showWindow:         () => ipcRenderer.invoke('showWindow'),
 
+  // ── MOBILE COMPANION (one-click phone pairing) ───────────────────────────────
+  // start  → spawns horizon-serve on :18789, returns {ok, url, qrDataUrl, token}
+  // stop   → kills the child process
+  // status → {running, url?, qrDataUrl?, since?}
+  // The Settings "Connect phone" button uses these three handlers — see
+  // chat.html data-pane="mobile".
+  mobile: {
+    start:  ()  => ipcRenderer.invoke('mobile:start'),
+    stop:   ()  => ipcRenderer.invoke('mobile:stop'),
+    status: ()  => ipcRenderer.invoke('mobile:status'),
+  },
+
   // ── LICENSE / PRO ─────────────────────────────────────────────────────────────
   licenseState:            ()              => ipcRenderer.invoke('licenseState'),
   licenseRefresh:          ()              => ipcRenderer.invoke('licenseRefresh'),

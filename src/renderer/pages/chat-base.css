@@ -2984,3 +2984,89 @@ body.with-sidebar .chat-status-bar{display:flex}
 }
 [data-theme="light"] .theme-toggle .theme-toggle-sun { display: inline-block; }
 [data-theme="light"] .theme-toggle .theme-toggle-moon { display: none; }
+
+/* Sprint-2.4 — remaining hardcoded dark hexes inside chat-base.css that
+   bypass the var token system. Each had no light variant so they stayed
+   dark on light theme.
+
+   - `.sel option { background:#141210 }` → dropdown options were near-black
+     on white page, with the option text invisible.
+   - `.code-btn:hover { background:#1a1f2e; color:#fff }` → hover-state in
+     Code Mode toolbar (Run / Test / etc) flashed dark grey with white text
+     against a light Code Mode shell.
+   - `.code-input { background:#03050a }` → terminal-input field was a dark
+     slate on light page; combined with `color:var(--code-text)` (#18181b
+     under light) the field looked like a black void.
+   - `.code-terminal-fallback { color:#b9f6ca }` → green text on light
+     paper sat at ~2.5:1. Re-tinted to a darker green that passes AA.
+   - `.step.done .num` / operator pane palette → only used in agent shell,
+     left dark intentionally but the operator-pane root was leaking dark
+     #111111 under the chat tab when the panel was hidden. Suppressed.
+   - `.cs-act-btn` from chat-multichat.js has rgba(255,255,255,.06) bg →
+     covered by chat-shell-polish.css addendum above.
+
+   Selectors below all use `[data-theme="light"]` prefix so the dark theme
+   palette is unaffected. */
+[data-theme="light"] .sel option {
+  background: #ffffff !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .code-btn:hover {
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.40) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .code-input {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border-color: rgba(0,0,0,.14) !important;
+}
+[data-theme="light"] .code-terminal-fallback {
+  color: #047857 !important; /* 4.9:1 AA on #fafafa */
+}
+[data-theme="light"] .step.done .num {
+  background: rgba(34,197,94,.18) !important;
+  color: #047857 !important;
+}
+
+/* Operator / diff viewers — these are dark "console" surfaces that stay
+   dark even on light theme by design (the dev/agent log is meant to feel
+   like a terminal). But we still need the surrounding chrome (title bar +
+   close button + status line) to be readable. The dark inner pane and
+   token-highlighted diff content are kept as-is. */
+[data-theme="light"] .op-header {
+  background: #f4f4f5 !important;
+  border-bottom-color: rgba(0,0,0,.10) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .op-btn {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.14) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .operator-pane {
+  background: #ffffff !important;
+  border-top-color: rgba(167,139,250,.30) !important;
+  color: #3f3f46 !important;
+}
+
+/* `.perm-card` (custom-prompt + permission card) — inputs/borders relied
+   on `var(--b1)` (works fine in either theme) but the card itself drew on
+   a dark `rgba(0,0,0,.6)` overlay backdrop. The overlay is fine in both
+   themes (it's a translucent scrim) — just make sure the card surface
+   stays white-on-light. */
+[data-theme="light"] .perm-card,
+[data-theme="light"] .cprompt-input {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border-color: rgba(0,0,0,.10) !important;
+}
+
+/* Diff card / split view — the diff renderer uses `#0b0e16` / `#05070c`
+   for the code surface. These are kept dark on purpose (syntax-highlight
+   tokens are calibrated for a dark bg), but the FRAME and header need to
+   match the light shell so the card doesn't look like a black hole. */
+[data-theme="light"] .diff-card {
+  border-color: rgba(0,0,0,.14) !important;
+  box-shadow: 0 28px 60px rgba(0,0,0,.14) !important;
+}
