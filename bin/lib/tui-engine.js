@@ -240,6 +240,27 @@ class TuiEngine {
                                    // input bar). We cursor-up by this many
                                    // before each re-emit.
 
+    // Hotfix — streaming duplication bug.
+    // The pre-fix delta-update path counted LOGICAL lines (split('\n').length)
+    // when deciding how many rows to rewind. On any terminal where a logical
+    // line wraps (say a 200-char line on an 80-col terminal occupying 3
+    // visual rows) the cursor-up moved only 1 row, leaving 2 stale rows
+    // behind. Every 120ms tick stacked another copy → 10x duplication.
+    //
+    // The fix has two parts:
+    //   1. `_streamMode` — default is 'append' (Claude Code style: each tick
+    //      writes only the NEW tail to stdout, no rewind, no cursor math).
+    //      Opt into the in-place re-render with HORIZON_STREAM_MODE=delta.
+    //   2. In `delta` mode, count VISUAL rows (accounting for wrap on
+    //      `process.stdout.columns`) and switch to append-only if the region
+    //      grows past the viewport (cursor cannot move above row 0).
+    this._streamMode = (process.env.HORIZON_STREAM_MODE === 'delta')
+      ? 'delta'
+      : 'append';
+    this._streamOverflow = false; // delta-mode safety: region exceeded viewport
+    this._streamEmittedLen = 0;   // append-mode: bytes of buf already on screen
+    this._streamRawBuf = '';      // append-mode: accumulated raw markdown so far
+
     // Sprint 2.3 — idle art timer. Fires after `_idleAfterMs` of no user
     // input; prints the "idle" art piece into the transcript and re-arms.
     // Reset by any keypress, mouse event, or after sending.
@@ -1435,10 +1456,37 @@ class TuiEngine {
   //   - If user is scrolled back, we update the transcript only and
   //     leave the screen alone — they'll see the final state on return.
 
+  /**
+   * Count VISUAL rows that `text` occupies in a `termWidth`-column terminal.
+   *
+   * The pre-fix delta path used `text.split('\n').length` which counts only
+   * LOGICAL lines. A 200-char logical line on an 80-col terminal wraps to 3
+   * visual rows — the old cursor-up math rewound 1 row and left 2 stale rows
+   * behind, producing the 10x duplication the user reported in the screenshot.
+   *
+   * We strip ANSI SGR escapes from the width math (they don't take columns)
+   * and ceil-divide each logical line's display width by termWidth.
+   */
+  _visualLineCount(text, termWidth) {
+    const w = Math.max(1, termWidth | 0);
+    const lines = String(text).split('\n');
+    let total = 0;
+    for (const ln of lines) {
+      // Strip CSI escape sequences (color, cursor, etc.) for width math.
+      const visible = ln.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+      const width = visible.length || 0;
+      total += Math.max(1, Math.ceil(width / w));
+    }
+    return total || 1;
+  }
+
   startStreamingMessage(prefix = '') {
     this._streamPrefix = prefix || '';
     this._streamActive = true;
     this._streamLinesOnScreen = 0;
+    this._streamOverflow = false;
+    this._streamEmittedLen = 0;
+    this._streamRawBuf = '';
 
     // Sprint 2.1 — turn separator + caption above the streaming reply.
     // Layout we want above the streaming body:
@@ -1464,9 +1512,15 @@ class TuiEngine {
       this.transcript.push(caption);
     }
     this._streamStart = this.transcript.length;
-    // Drop the input bar from the bottom so updates flow right under
-    // the caption. The bar will be restored on finish.
-    if (process.stdin.isTTY && !this._closed && this.scrollOffset === 0) {
+    // In append mode, write the prefix gutter ONCE up front. Subsequent
+    // ticks append plain raw text after it — no cursor math, no rewind.
+    if (this._streamMode === 'append'
+        && process.stdin.isTTY && !this._closed && this.scrollOffset === 0) {
+      this._eraseInputBar();
+      if (this._streamPrefix) process.stdout.write(this._streamPrefix);
+    } else if (process.stdin.isTTY && !this._closed && this.scrollOffset === 0) {
+      // Delta mode — drop the input bar from the bottom so updates flow
+      // right under the caption. The bar will be restored on finish.
       this._eraseInputBar();
     }
   }
@@ -1478,6 +1532,35 @@ class TuiEngine {
    */
   updateStreamingMessage(rawMarkdown, opts = {}) {
     if (!this._streamActive || this._streamStart < 0) return;
+
+    // ── APPEND MODE (default) ────────────────────────────────────────
+    // Each tick emits only the NEW tail of the raw stream — no cursor-up,
+    // no re-render, no risk of mis-counted visual rows. Markdown polish
+    // happens once at finishStreamingMessage(). This is the "Claude Code
+    // style" path: safe, dumb, never dupes.
+    if (this._streamMode === 'append') {
+      const buf = String(rawMarkdown || '');
+      this._streamRawBuf = buf;
+      // Keep transcript in sync for /save and scrollback search. We
+      // overwrite from _streamStart with the current raw buffer split on
+      // newlines — same as before, just without the markdown pass.
+      const parts = buf.split('\n');
+      this.transcript.length = this._streamStart;
+      this.transcript.push(this._streamPrefix + (parts[0] || ''));
+      for (let i = 1; i < parts.length; i++) this.transcript.push(parts[i]);
+      // Live output: append the new tail only.
+      if (this._closed || this.scrollOffset > 0) return;
+      if (buf.length > this._streamEmittedLen) {
+        const tail = buf.slice(this._streamEmittedLen);
+        process.stdout.write(tail);
+        this._streamEmittedLen = buf.length;
+      }
+      // Live output has not redrawn the input bar — finish will do that.
+      this._lastDrawHeight = 0;
+      return;
+    }
+
+    // ── DELTA MODE (opt-in via HORIZON_STREAM_MODE=delta) ────────────
     // Lazy require to avoid a circular dep risk at module load.
     let rendered;
     if (opts.markdown === false) {
@@ -1511,16 +1594,40 @@ class TuiEngine {
       for (const l of restLines) process.stdout.write(l + '\n');
       return;
     }
-    // TTY path — delta update. Move cursor up over the previously
-    // rendered region, erase to end of screen, then emit the new lines.
-    // The status bar / composer are intentionally NOT redrawn here;
-    // they'll be restored once on finishStreamingMessage().
-    //
-    // After the previous update the cursor sits at the END of the last
-    // emitted line (we did NOT emit a trailing newline). To return to
-    // col 0 of the FIRST emitted line, we cursor up by (linesOnScreen
-    // - 1) rows then cursor-left to column 0. On the very first update
-    // (_streamLinesOnScreen === 0) there's nothing to rewind over.
+
+    // Overflow guard: once the streamed region grows past the safe
+    // viewport, the cursor cannot move above row 0 and rewinds start
+    // silently failing. Past that point we fall back to delta-tail
+    // append so the user still sees new tokens (without dupes).
+    const termWidth = process.stdout.columns || 80;
+    const termHeight = process.stdout.rows || 24;
+    const safeMax = Math.max(4, termHeight - 5); // reserve for status + composer
+    const fullRendered = firstLine + (restLines.length ? '\n' + restLines.join('\n') : '');
+    const nextVisualRows = this._visualLineCount(fullRendered, termWidth);
+    if (!this._streamOverflow && nextVisualRows > safeMax) {
+      this._streamOverflow = true;
+    }
+
+    if (this._streamOverflow) {
+      // Past-the-viewport mode — emit only what wasn't on screen yet.
+      // We can't reliably diff rendered markdown so we fall back to
+      // appending the raw markdown tail. Acceptable degradation: user
+      // sees plain tokens for very long replies instead of in-place
+      // markdown polish. No dupes.
+      const buf = String(rawMarkdown || '');
+      if (buf.length > this._streamEmittedLen) {
+        process.stdout.write(buf.slice(this._streamEmittedLen));
+        this._streamEmittedLen = buf.length;
+      }
+      this._lastDrawHeight = 0;
+      return;
+    }
+
+    // TTY path — in-place delta update. Move cursor up over the
+    // previously rendered region by VISUAL row count (accounting for
+    // wrap), erase to end of screen, then emit the new lines. The
+    // status bar / composer are NOT redrawn here; they'll be restored
+    // once on finishStreamingMessage().
     process.stdout.write(ANSI.cursorLeft(9999));
     if (this._streamLinesOnScreen > 1) {
       process.stdout.write(ANSI.cursorUp(this._streamLinesOnScreen - 1));
@@ -1535,14 +1642,18 @@ class TuiEngine {
     // do NOT emit a trailing newline; the cursor stays on the last
     // content row so the next update can rewind cleanly.
     process.stdout.write(firstLine);
-    let physRows = 1;
     for (const l of restLines) {
       process.stdout.write('\n' + l);
-      physRows++;
     }
-    process.stdout.write(fmt.dim(' …'));
-    // Track physical rows for the next cursor-up calculation.
-    this._streamLinesOnScreen = physRows;
+    const tail = ' …';
+    process.stdout.write(fmt.dim(tail));
+    // Track VISUAL rows (not logical) for the next cursor-up. This is
+    // the heart of the fix: split('\n').length lied when a logical line
+    // wrapped, so the cursor-up rewound too few rows and left stale
+    // copies on screen.
+    this._streamLinesOnScreen = this._visualLineCount(
+      fullRendered + tail, termWidth
+    );
     // We have NOT redrawn the input bar — it will be restored by
     // finishStreamingMessage(). _lastDrawHeight is now stale; reset it
     // so the next _eraseInputBar() doesn't try to walk over our
@@ -1552,38 +1663,97 @@ class TuiEngine {
 
   finishStreamingMessage() {
     if (!this._streamActive) return;
+
+    // ── APPEND MODE: optional final markdown polish ──────────────────
+    // The user has been watching plain raw text accumulate. If markdown
+    // is on, do a one-shot rewind + re-emit so the final frame shows
+    // formatted output. The rewind uses VISUAL row count of the raw
+    // buffer (with prefix on the first line) — same width math as delta.
+    if (this._streamMode === 'append') {
+      const raw = this._streamRawBuf || '';
+      // Update transcript with rendered form before restoring the bar.
+      let rendered = raw;
+      try {
+        const { renderMarkdown } = require('./markdown');
+        rendered = renderMarkdown(raw);
+      } catch (_) { /* keep raw */ }
+      const renderedParts = rendered.split('\n');
+      const renderedFirst = this._streamPrefix + (renderedParts[0] || '');
+      const renderedRest = renderedParts.slice(1);
+      this.transcript.length = this._streamStart;
+      this.transcript.push(renderedFirst);
+      for (const l of renderedRest) this.transcript.push(l);
+      this.transcript.push(''); // separator
+      if (!this._closed && process.stdin.isTTY && this.scrollOffset === 0) {
+        // Rewind over the plain-text streamed body and replace with the
+        // rendered markdown. We count VISUAL rows of (prefix + raw).
+        const termWidth = process.stdout.columns || 80;
+        const plainOnScreen = this._streamPrefix + raw;
+        const plainRows = this._visualLineCount(plainOnScreen, termWidth);
+        const termHeight = process.stdout.rows || 24;
+        const safeMax = Math.max(4, termHeight - 5);
+        const canRewind = plainRows <= safeMax;
+        if (canRewind && rendered !== raw) {
+          process.stdout.write(ANSI.cursorLeft(9999));
+          if (plainRows > 1) {
+            process.stdout.write(ANSI.cursorUp(plainRows - 1));
+          }
+          process.stdout.write('\x1b[J');
+          process.stdout.write(renderedFirst);
+          for (const l of renderedRest) {
+            process.stdout.write('\n' + l);
+          }
+        }
+        process.stdout.write('\n');
+        this._renderInputBar();
+      }
+      this._streamActive = false;
+      this._streamStart = -1;
+      this._streamPrefix = '';
+      this._streamLinesOnScreen = 0;
+      this._streamOverflow = false;
+      this._streamEmittedLen = 0;
+      this._streamRawBuf = '';
+      return;
+    }
+
+    // ── DELTA MODE ──────────────────────────────────────────────────
     // Append a blank separator line so the next print() doesn't butt up
     // against the rendered message.
     this.transcript.push('');
     if (!this._closed && process.stdin.isTTY && this.scrollOffset === 0) {
-      // We're sitting at the end of the last rendered streaming line
-      // (with a trailing dim "…"). Strip the indicator by rewinding to
-      // column 0 of that row, erasing to end-of-line, then re-emitting
-      // the last line cleanly. Then emit a trailing newline + restore
-      // the input bar via a single full _renderInputBar() pass.
-      //
-      // Trick: we know what the last rendered line was — it's the final
-      // entry in transcript before the blank separator we just pushed.
-      // We splice it out and re-emit. But this is fragile if the line
-      // is multi-physical-row from wrapping; simpler approach is to
-      // just emit a newline and let the "…" remain as a faint footer
-      // marker. We do the simple thing.
-      process.stdout.write(ANSI.cursorLeft(9999));
-      // Erase end-of-line (the "…" tail).
-      process.stdout.write('\x1b[K');
-      // Re-emit the final rendered last line WITHOUT the ellipsis to
-      // leave a clean final frame.
-      const lastIdx = this.transcript.length - 2; // -1 is blank, -2 is last content
-      if (lastIdx >= 0 && lastIdx >= this._streamStart) {
-        process.stdout.write(this.transcript[lastIdx]);
+      if (this._streamOverflow) {
+        // Past-viewport append mode was active — we never wrote the "…"
+        // tail and we cannot reliably rewind. Just emit a newline and
+        // restore the input bar.
+        process.stdout.write('\n');
+        this._renderInputBar();
+      } else {
+        // We're sitting at the end of the last rendered streaming line
+        // (with a trailing dim "…"). Strip the indicator by rewinding to
+        // column 0 of that row, erasing to end-of-line, then re-emitting
+        // the last line cleanly. Then emit a trailing newline + restore
+        // the input bar via a single full _renderInputBar() pass.
+        process.stdout.write(ANSI.cursorLeft(9999));
+        // Erase end-of-line (the "…" tail).
+        process.stdout.write('\x1b[K');
+        // Re-emit the final rendered last line WITHOUT the ellipsis to
+        // leave a clean final frame.
+        const lastIdx = this.transcript.length - 2; // -1 is blank, -2 is last content
+        if (lastIdx >= 0 && lastIdx >= this._streamStart) {
+          process.stdout.write(this.transcript[lastIdx]);
+        }
+        process.stdout.write('\n');
+        this._renderInputBar();
       }
-      process.stdout.write('\n');
-      this._renderInputBar();
     }
     this._streamActive = false;
     this._streamStart = -1;
     this._streamPrefix = '';
     this._streamLinesOnScreen = 0;
+    this._streamOverflow = false;
+    this._streamEmittedLen = 0;
+    this._streamRawBuf = '';
   }
 
   // ── exit / fallback ─────────────────────────────────────────────────
