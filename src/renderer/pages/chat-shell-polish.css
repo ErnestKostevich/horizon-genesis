@@ -1369,6 +1369,59 @@ textarea#inp{background:transparent!important}
   background: rgba(124,109,242,.12) !important;
   color: #18181b !important;
 }
+/* Sprint-2.4 — chat list inner elements all need explicit light colors.
+   The chat-base.css rules use `var(--tx)` etc which DO resolve correctly
+   under [data-theme="light"], but a few rules hardcode dark literals:
+     - `.cs-actions` gradient uses raw rgba(11,14,22,.92) → a dark slab
+       fades in over the right side of every hovered/active row, making
+       the title + preview unreadable on a white sidebar.
+     - `.cs-act-btn` uses rgba(255,255,255,.06) bg + var(--t2,#9ba3b8)
+       fallback → near-invisible icon on white.
+     - `.cs-act-btn.danger:hover` text uses #fca5a5 → 2.3:1 on white, FAIL AA.
+   Light variants below restore readability + WCAG AA contrast. */
+[data-theme="light"] .cs-list .cs-item .cs-title {
+  color: #18181b !important; /* 19:1 AAA */
+}
+[data-theme="light"] .cs-list .cs-item .cs-preview {
+  color: #52525b !important; /* 7.4:1 AAA */
+}
+[data-theme="light"] .cs-list .cs-item .cs-meta {
+  color: #71717a !important; /* 4.8:1 AA — replaces dark #5b6377 fallback */
+}
+[data-theme="light"] .cs-group-heading {
+  color: #52525b !important; /* 7.4:1 AAA */
+}
+[data-theme="light"] .cs-empty {
+  color: #52525b !important; /* 7.4:1 AAA */
+}
+[data-theme="light"] .cs-actions {
+  background: linear-gradient(90deg, transparent 0, rgba(255,255,255,.92) 16%, rgba(255,255,255,.98) 100%) !important;
+}
+[data-theme="light"] .cs-item.active .cs-actions {
+  background: linear-gradient(90deg, transparent 0, rgba(244,244,245,.96) 16%, rgba(244,244,245,1) 100%) !important;
+}
+[data-theme="light"] .cs-act-btn {
+  background: rgba(0,0,0,.04) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important; /* 10.5:1 AAA on the lightened gradient */
+}
+[data-theme="light"] .cs-act-btn:hover {
+  background: rgba(124,109,242,.14) !important;
+  border-color: rgba(124,109,242,.40) !important;
+  color: #4c40ad !important; /* purple on white — 7.3:1 AAA */
+}
+[data-theme="light"] .cs-act-btn.danger:hover {
+  background: rgba(220,38,38,.10) !important;
+  border-color: rgba(220,38,38,.40) !important;
+  color: #b91c1c !important; /* red on white — 6.4:1 AAA */
+}
+[data-theme="light"] .cs-stats {
+  color: #52525b !important;
+  border-top-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .cs-stats .cs-stat-val {
+  color: #18181b !important;
+}
 
 /* Status / mode pills + chips. */
 [data-theme="light"] .chip,
@@ -1420,4 +1473,140 @@ textarea#inp{background:transparent!important}
 [data-theme="light"] .focus-timer {
   background: rgba(34,197,94,.12) !important;
   border-color: rgba(34,197,94,.30) !important;
+}
+
+/* Sprint-2.4 — additional shell surfaces that hardcode dark hexes with
+   !important inside this file but have no light variant. Each rule below
+   mirrors the same target with a light-paper substrate + dark ink. */
+
+/* Status bar above messages */
+[data-theme="light"] .chat-status-bar {
+  background: rgba(255,255,255,.92) !important;
+  border-bottom-color: rgba(0,0,0,.06) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .csb-title { color: #18181b !important; }
+[data-theme="light"] .csb-pill {
+  background: rgba(0,0,0,.04) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .csb-pill.accent {
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.30) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .csb-byok {
+  background: rgba(34,197,94,.10) !important;
+  border-color: rgba(34,197,94,.32) !important;
+  color: #047857 !important;
+}
+
+/* Composer chips — six-up grid above the input */
+[data-theme="light"] .composer-chip {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .composer-chip span {
+  color: #71717a !important;
+}
+[data-theme="light"] .composer-chip b {
+  color: #18181b !important;
+}
+[data-theme="light"] .composer-chip:hover {
+  background: rgba(124,109,242,.06) !important;
+  border-color: rgba(124,109,242,.30) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .composer-chip.strong {
+  background: rgba(124,109,242,.08) !important;
+  border-color: rgba(124,109,242,.30) !important;
+}
+[data-theme="light"] .composer-chip.strong b {
+  color: #4c40ad !important;
+}
+
+/* Shell chip — top-bar pill */
+[data-theme="light"] .shell-chip {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .shell-chip.subtle {
+  background: rgba(34,197,94,.10) !important;
+  border-color: rgba(34,197,94,.28) !important;
+  color: #047857 !important;
+}
+
+/* Icon button hover — previously left dark slate `#0f1521` even on light */
+[data-theme="light"] .ic-btn:hover {
+  background: rgba(124,109,242,.08) !important;
+  border-color: rgba(124,109,242,.20) !important;
+  color: #18181b !important;
+}
+
+/* Inspector pane (right rail) — extra inner surfaces */
+[data-theme="light"] .insp-head {
+  background: rgba(249,250,251,.96) !important;
+  border-bottom-color: rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .insp-row {
+  border-bottom-color: rgba(0,0,0,.06) !important;
+}
+[data-theme="light"] .insp-byok {
+  background: rgba(249,250,251,.96) !important;
+  border-top-color: rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+
+/* Settings + floating panels (Hub / Store / Workflows / Recorder) */
+[data-theme="light"] .panel.show,
+[data-theme="light"] .fpanel {
+  background: #ffffff !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .pbody-tabbed {
+  background: #ffffff !important;
+}
+[data-theme="light"] .psnav {
+  background: #f9fafb !important;
+  border-right-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .psnav-tab {
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .psnav-tab:hover {
+  background: rgba(124,109,242,.06) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .psnav-tab.on {
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.28) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .fph {
+  background: #ffffff !important;
+  border-bottom-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .ftabs {
+  background: #f9fafb !important;
+  border-bottom-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .ftab {
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .ftab:hover {
+  color: #18181b !important;
+  background: rgba(124,109,242,.06) !important;
+}
+[data-theme="light"] .ftab.on {
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.28) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .fbody {
+  background: #ffffff !important;
+  color: #18181b !important;
 }

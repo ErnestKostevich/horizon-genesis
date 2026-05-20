@@ -64,7 +64,17 @@ const LEGACY_MOUSE_RE = /\x1b\[M(.)(.)(.)/g;
 // Permissive char-class for the SGR payload — used to swallow fragmented
 // remnants that readline may emit as individual keypress events after it
 // has consumed the leading "\x1b[<". Digits, semicolons, terminators.
-const SGR_MOUSE_PAYLOAD_RE = /^[0-9;]*[Mm]?$/;
+//
+// Sprint 2.5 — broadened to also catch full-payload-as-single-string
+// (e.g. "0;43;51M", "1;29M") which some terminal/readline combinations
+// emit as one keypress when they coalesce. The empty-string case is
+// excluded — we don't want this filter to drop ordinary backspace etc.
+//
+// Sprint 2.6 — also catch tails that include a trailing letter from the
+// next chunk (terminal sometimes coalesces "51M" with the next byte that
+// would otherwise have been a fresh keypress), and short fragments like
+// just "M" or "m" arriving alone.
+const SGR_MOUSE_PAYLOAD_RE = /^[0-9;]*[Mm]$|^[0-9;]+$|^[Mm]$/;
 
 /**
  * Feature-detect whether the host terminal forwards mouse events sanely.
@@ -87,7 +97,12 @@ function _supportsMouse() {
   if (env.WT_SESSION)   return true;   // Windows Terminal
   if (env.TERM_PROGRAM) return true;   // VS Code, iTerm2, etc.
   if (env.ConEmuPID || env.ConEmuANSI === 'ON') return true;
-  if (env.TERM && env.TERM !== 'cygwin' && env.TERM !== 'dumb') return true;
+  // On Windows we are conservative: require an explicit modern-terminal
+  // signal. Bare `TERM=xterm-256color` set by some shells (Git Bash,
+  // some PowerShell profiles) does NOT mean the host actually forwards
+  // SGR mouse reports cleanly — legacy ConPTY echoes them back as text
+  // that leaks into the composer. Users who want mouse on those hosts
+  // can set HORIZON_TUI_MOUSE=1.
   return false; // legacy ConPTY / cmd.exe / PowerShell host → off
 }
 
@@ -228,8 +243,9 @@ class TuiEngine {
     // Reset by any keypress, mouse event, or after sending.
     this._idleTimer = null;
     this._idleAfterMs = 60_000;       // 60s of inactivity
-    this._idleRepeatMs = 90_000;      // 90s between repeats
+    this._idleRepeatMs = 90_000;      // (unused after 2.5; kept for back-compat)
     this._idleEnabled = true;
+    this._idleShown = false;          // guard: fire only once per idle window
 
     // Hotfix — SGR/legacy mouse escape sequences must NOT leak into the
     // composer or the AI stream. We parse mouse events from the raw data
@@ -245,7 +261,9 @@ class TuiEngine {
     //     this run. close() reads this so we only send mouseOff if we
     //     enabled it.
     this._mouseSwallowUntil = false;
+    this._mouseSwallowDeadline = 0;   // ms epoch; 0 = inactive
     this._mouseEnabled = false;
+    this._dataBuffer = '';            // persistent byte-level scan buffer
   }
 
   // ── public API ──────────────────────────────────────────────────────
@@ -472,15 +490,37 @@ class TuiEngine {
    */
   _resetIdleTimer() {
     if (this._idleTimer) { clearTimeout(this._idleTimer); this._idleTimer = null; }
+    // Sprint 2.5 — any reset (keypress, mouse, send) means activity:
+    // clear the "already showed art this idle window" flag so the next
+    // genuine idle period can fire ONCE.
+    this._idleShown = false;
     if (!this._idleEnabled || this._closed || !process.stdin.isTTY) return;
     if (process.env.HORIZON_NO_ART === '1') return;
     if (process.env.HORIZON_FAST === '1')   return;
     const tick = () => {
-      if (this._closed || this._sending || this.searchActive || this._scrollMode()) {
-        // Don't drop art into mid-stream output or hidden views — re-arm.
-        this._idleTimer = setTimeout(tick, this._idleRepeatMs);
+      this._idleTimer = null;
+      if (this._idleShown) return;       // already nudged this window
+      if (this._closed) return;
+      // Don't drop art into mid-stream output, search overlay, scrollback
+      // view, while sending, or while a sub-picker (interactiveMenu) has
+      // paused the engine. The picker calls engine.pause() which
+      // removes our key/data listeners — `_onKey == null` is the cheap
+      // proxy that tells us we're in that state.
+      if (this._sending || this.searchActive || this._scrollMode()
+          || this._streamActive || !this._onKey) {
+        // Hold off: re-check on next activity. Do NOT re-arm a timer —
+        // _resetIdleTimer() will be called again the moment input
+        // resumes.
         return;
       }
+      // Sprint 2.6 — set the "already shown" guard BEFORE printing.
+      // print() calls _renderInputBar() which used to be enough of a
+      // detour that on some Windows hosts the libuv loop ran another
+      // tick of the timer queue (or another stray data event reset the
+      // timer mid-flight), and the art rendered twice. Setting the
+      // guard FIRST closes that window — even if `tick` re-enters via
+      // any mechanism, the early `if (this._idleShown) return` aborts.
+      this._idleShown = true;
       try {
         const { renderArt } = require('./banner');
         const out = renderArt('idle');
@@ -491,8 +531,9 @@ class TuiEngine {
           for (const l of out.split('\n')) this.print(l);
         }
       } catch (_) {}
-      // Re-arm for the next idle period.
-      this._idleTimer = setTimeout(tick, this._idleRepeatMs);
+      // Intentionally do NOT schedule another timer here. We fire ONCE
+      // per idle window; the next tick is armed when the user types,
+      // scrolls, or otherwise interacts (which calls _resetIdleTimer()).
     };
     this._idleTimer = setTimeout(tick, this._idleAfterMs);
   }
@@ -556,21 +597,42 @@ class TuiEngine {
         } else if (isSgr) {
           this._mouseSwallowUntil = true;
         }
+        // Mark a short "post-mouse" window so any trailing fragment
+        // chars readline emits as separate keypress events get caught
+        // by the secondary filter below. Sprint 2.6 — bumped from 100ms
+        // to 250ms because Windows ConPTY sometimes delivers the payload
+        // fragment hundreds of ms after the prefix.
+        this._mouseSwallowDeadline = Date.now() + 250;
         return;
       }
     }
-    if (this._mouseSwallowUntil) {
-      // We're mid-sequence. Discard digits, semicolons, and the trailing
-      // 'M'/'m' terminator. Anything else (very rare — would indicate a
-      // genuinely interleaved keypress) gets passed through to the next
-      // listener after we clear the flag.
-      const c = (ch && ch.length === 1) ? ch : (key.sequence || '');
+    // Sprint 2.5 — secondary filter. If we recently saw a mouse prefix
+    // and a plain ASCII fragment of payload chars (digits/semis/M/m)
+    // comes through within the post-mouse window, drop it. This catches
+    // the case where readline buffers the FULL mouse sequence and then
+    // re-emits the payload as a single multi-char `ch` AFTER the prefix
+    // already passed.
+    if (this._mouseSwallowUntil
+        || (this._mouseSwallowDeadline && Date.now() < this._mouseSwallowDeadline)) {
+      const c = (ch && typeof ch === 'string') ? ch : (key.sequence || '');
+      // Allow Enter/Tab/etc through even mid-swallow; only filter the
+      // SGR payload character set (digits, semicolons, lone M/m).
       if (c && SGR_MOUSE_PAYLOAD_RE.test(c)) {
-        if (/[Mm]/.test(c)) this._mouseSwallowUntil = false;
+        if (/[Mm]/.test(c)) {
+          this._mouseSwallowUntil = false;
+          this._mouseSwallowDeadline = 0;
+        }
         return;
       }
-      // Unexpected char — give up swallowing and let it through.
+      // Sprint 2.6 — Also drop short ASCII fragments that *contain* a
+      // digit + semicolon (e.g. "0;43" by itself with no terminator yet),
+      // which can arrive without the full SGR_MOUSE_PAYLOAD_RE match.
+      if (c && /^[0-9;]+$/.test(c) && c.length <= 16) return;
+      // Genuinely unexpected character — clear the swallow flag and let
+      // this one through. Better one stray char than a stuck filter.
       this._mouseSwallowUntil = false;
+      // Don't clear the deadline yet — the time-based window will lapse
+      // naturally and gives the next stray fragment a chance to be caught.
     }
 
     // Sprint 2.3 — any keypress counts as activity; reset idle countdown.
@@ -695,45 +757,142 @@ class TuiEngine {
   //      individual keypress events. This is the core of the leak fix —
   //      without it those payload chars get inserted into the composer.
   _handleData(buf) {
+    // Sprint 2.5 — byte-level streaming scanner.
+    //
+    // The previous regex-on-chunk approach failed on fragmentation:
+    // when the terminal sent "\x1b[<0;43;51M" but it arrived as two
+    // separate `data` events ("\x1b[<0;43" then "51M"), neither chunk
+    // matched the full SGR regex and the payload digits leaked through
+    // readline as plain keypress events. _mouseSwallowUntil caught
+    // SOME of those but not all — especially when readline buffered
+    // the whole fragment and then re-emitted it as a single multi-char
+    // ch argument that bypassed the swallow filter.
+    //
+    // The fix below maintains a persistent `_dataBuffer` across chunks,
+    // scans linearly for complete mouse sequences (SGR or legacy),
+    // strips them, dispatches the parsed event, and keeps any
+    // incomplete trailing sequence in the buffer for the next chunk.
+    // Everything else stays in the buffer too — readline gets the
+    // same stream of bytes it always did, just guaranteed mouse-free.
     let s;
     if (typeof buf === 'string') s = buf;
-    else if (Buffer.isBuffer(buf)) s = buf.toString('utf8');
+    else if (Buffer.isBuffer(buf)) s = buf.toString('binary');  // preserve bytes
     else return;
 
-    // SGR mouse — preferred form (?1006).
-    let m;
-    SGR_MOUSE_RE.lastIndex = 0;
-    while ((m = SGR_MOUSE_RE.exec(s))) {
-      this._mouseSeen = true;
-      const button  = parseInt(m[1], 10);
-      const col     = parseInt(m[2], 10);
-      const row     = parseInt(m[3], 10);
-      const isPress = m[4] === 'M';
-      this._onMouse(button, col, row, isPress);
+    if (!this._dataBuffer) this._dataBuffer = '';
+    this._dataBuffer += s;
+
+    // Scan from start. Each iteration either:
+    //   (a) advances past a non-mouse byte, OR
+    //   (b) consumes a complete mouse sequence (dispatches + strips), OR
+    //   (c) sees a partial mouse sequence at the tail and stops,
+    //       leaving it in _dataBuffer for the next chunk.
+    let i = 0;
+    let dropped = false;
+    while (i < this._dataBuffer.length) {
+      const c0 = this._dataBuffer.charCodeAt(i);
+      // Fast path: not an ESC, definitely not a mouse sequence — keep
+      // scanning. We don't strip these; readline will see them.
+      if (c0 !== 0x1b) { i++; continue; }
+      // ESC. Need at least "\x1b[" to be a CSI.
+      if (i + 1 >= this._dataBuffer.length) break;       // wait for more
+      if (this._dataBuffer.charCodeAt(i + 1) !== 0x5b) { // '['
+        i++; continue;
+      }
+      if (i + 2 >= this._dataBuffer.length) break;
+      const c2 = this._dataBuffer.charCodeAt(i + 2);
+      // SGR mouse: \x1b[<NNN;NNN;NNN(M|m)
+      if (c2 === 0x3c) { // '<'
+        let j = i + 3;
+        while (j < this._dataBuffer.length) {
+          const ch = this._dataBuffer.charCodeAt(j);
+          if (ch === 0x4d || ch === 0x6d) break;        // M or m
+          // SGR payload is digits + semicolons. Anything else means the
+          // sequence is malformed; bail and let it leak (better than
+          // hanging forever on a junk byte).
+          if (!((ch >= 0x30 && ch <= 0x39) || ch === 0x3b)) {
+            j = -1; break;
+          }
+          j++;
+        }
+        if (j < 0) {
+          // Malformed — keep moving past the ESC.
+          i++; continue;
+        }
+        if (j >= this._dataBuffer.length) {
+          // Incomplete — preserve and wait for next chunk.
+          break;
+        }
+        // Complete — parse, dispatch, strip.
+        const seq = this._dataBuffer.slice(i, j + 1);
+        const m = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/.exec(seq);
+        if (m) {
+          this._mouseSeen = true;
+          const button  = parseInt(m[1], 10);
+          const col     = parseInt(m[2], 10);
+          const row     = parseInt(m[3], 10);
+          const isPress = m[4] === 'M';
+          this._onMouse(button, col, row, isPress);
+        }
+        // Splice the sequence out of _dataBuffer in place.
+        this._dataBuffer = this._dataBuffer.slice(0, i) + this._dataBuffer.slice(j + 1);
+        dropped = true;
+        // Don't advance i — the next byte just moved into this slot.
+        continue;
+      }
+      // Legacy mouse: \x1b[M<btn><col><row> — exactly 3 payload bytes.
+      if (c2 === 0x4d) { // 'M'
+        if (i + 5 >= this._dataBuffer.length) break;     // wait for more
+        const btn  = this._dataBuffer.charCodeAt(i + 3) - 32;
+        const col  = this._dataBuffer.charCodeAt(i + 4) - 32;
+        const row  = this._dataBuffer.charCodeAt(i + 5) - 32;
+        const isPress = (btn & 3) !== 3;
+        this._mouseSeen = true;
+        this._onMouse(btn, col, row, isPress);
+        this._dataBuffer = this._dataBuffer.slice(0, i) + this._dataBuffer.slice(i + 6);
+        dropped = true;
+        continue;
+      }
+      // Some other CSI — leave it for readline's keypress decoder.
+      i++;
     }
 
-    // Legacy mouse — \x1b[M<btn><col><row> where each byte is value+32.
-    // Only fires on terminals stuck in ?1000 without SGR support.
-    LEGACY_MOUSE_RE.lastIndex = 0;
-    while ((m = LEGACY_MOUSE_RE.exec(s))) {
-      this._mouseSeen = true;
-      const button  = m[1].charCodeAt(0) - 32;
-      const col     = m[2].charCodeAt(0) - 32;
-      const row     = m[3].charCodeAt(0) - 32;
-      // Legacy mode reports button-release as button 3; everything else
-      // is a press of the encoded button.
-      const isPress = (button & 3) !== 3;
-      this._onMouse(button, col, row, isPress);
+    // Safety cap: don't let an unterminated sequence pin memory if a
+    // misbehaving terminal floods garbage. 8 KB is comically large for
+    // a single CSI; if we see more without a terminator, drop the lot.
+    if (this._dataBuffer.length > 8192) {
+      this._dataBuffer = this._dataBuffer.slice(-1024);
     }
 
-    // Detect a TRUNCATED SGR sequence — "\x1b[<" with no Matching M/m in
-    // this chunk. Readline will emit the leftover payload bytes as plain
-    // keypress events; arm _handleKey to discard them until the
-    // terminator arrives.
+    // If we stripped anything, we set _mouseSwallowUntil as a belt-and-
+    // suspenders measure so any readline-fragmented payload that DID
+    // sneak through (some terminals double-buffer the data event AND
+    // re-emit through readline) still gets caught by _handleKey.
+    if (dropped) {
+      this._mouseSwallowUntil = true;
+      this._mouseSwallowDeadline = Date.now() + 250;
+    }
+
+    // Detect trailing partial SGR — readline may still receive raw
+    // bytes after our scan (Node delivers data to all listeners with
+    // the original buffer; we only mutate our internal copy). Arm the
+    // swallow flag if there's an unterminated "\x1b[<" near the tail.
     const lastOpen = s.lastIndexOf('\x1b[<');
     if (lastOpen >= 0) {
       const tail = s.slice(lastOpen);
-      if (!/[Mm]/.test(tail)) this._mouseSwallowUntil = true;
+      if (!/[Mm]/.test(tail)) {
+        this._mouseSwallowUntil = true;
+        this._mouseSwallowDeadline = Date.now() + 250;
+      }
+    }
+    // Sprint 2.6 — also check our internal persistent buffer for partial
+    // SGR. The byte-level scan may have left an unterminated "\x1b[<…"
+    // at the buffer tail (waiting for the rest in the next chunk); arm
+    // the swallow flag so any payload fragment that arrives via readline
+    // before the next data chunk lands in _handleData gets dropped.
+    if (this._dataBuffer && this._dataBuffer.indexOf('\x1b[<') >= 0) {
+      this._mouseSwallowUntil = true;
+      this._mouseSwallowDeadline = Date.now() + 250;
     }
   }
 
