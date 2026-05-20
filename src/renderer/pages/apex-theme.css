@@ -1106,3 +1106,97 @@ textarea:focus, input:focus, .cmd-input:focus {
   #fractalBg { opacity: 0.18; }
 }
 
+/* =========================================================================
+   Sprint-2.2 fix: LIGHT MODE overrides for apex-theme.
+   ─────────────────────────────────────────────────────────────────────────
+   apex-theme `!important`s every glass/panel/text background with hardcoded
+   dark literals (`var(--glass-1)` resolves to `rgba(11,13,18,.82)`, etc.).
+   Without these overrides the light toggle has no effect on title bar,
+   provider bar, mode chips, panels, modals, terminal — basically every
+   surface defined here.
+
+   Approach: re-map the apex CSS vars under [data-theme="light"] so every
+   `var(--glass-1)` / `var(--tx-1)` / `var(--bd-1)` reference resolves to
+   a light value automatically. Then override the few rules that hardcode
+   raw hex (`#060709`, `#fff`) instead of going through vars.
+   ========================================================================= */
+[data-theme="light"] {
+  /* Background layers */
+  --apex-bg-0: #fafafa;
+  --apex-bg-1: #f4f4f5;
+  --apex-bg-2: #ffffff;
+  --apex-bg-3: #f9fafb;
+
+  /* Glass — light paper with subtle backdrop opacity. */
+  --glass-1: rgba(255, 255, 255, 0.88);
+  --glass-2: rgba(255, 255, 255, 0.82);
+  --glass-3: rgba(249, 250, 251, 0.78);
+
+  /* Borders — dark on light surface. */
+  --bd-1: rgba(0, 0, 0, 0.06);
+  --bd-2: rgba(0, 0, 0, 0.10);
+  --bd-3: rgba(0, 0, 0, 0.18);
+
+  /* Text — dark ink on light paper. */
+  --tx-1: rgba(24, 24, 27, 0.96);
+  --tx-2: rgba(24, 24, 27, 0.72);
+  --tx-3: rgba(24, 24, 27, 0.48);
+  --tx-4: rgba(24, 24, 27, 0.28);
+
+  /* Shadows — softer + lighter ambient. */
+  --sh-1: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --sh-2: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --sh-3: 0 12px 32px rgba(0, 0, 0, 0.10);
+}
+
+/* The html/body rule above is `background: #060709 !important` — a raw
+   hex literal that ignores any var. Override directly. */
+[data-theme="light"] html,
+[data-theme="light"] body {
+  background: #fafafa !important;
+  color: #18181b;
+}
+[data-theme="light"] body {
+  background:
+    radial-gradient(circle at 15% 50%, rgba(124, 109, 242, 0.08), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(167, 139, 250, 0.08), transparent 50%),
+    linear-gradient(180deg, #ffffff 0%, #fafafa 100%) !important;
+}
+
+/* Title bar logo uses a colored-on-dark text fill that becomes invisible
+   on a light gradient. Keep the gradient but darken the H glyph. */
+[data-theme="light"] .logo {
+  color: #ffffff !important;
+}
+
+/* ::selection — overrides apex's amber selection. */
+[data-theme="light"] ::selection {
+  background: rgba(124, 109, 242, 0.22);
+  color: #18181b;
+}
+
+/* Inputs — apex sets them with `rgba(255,255,255,0.03)` backgrounds
+   which on a light page look identical to the panel. Force solid white. */
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Bot message bubble — apex set explicit `color: #fff` on strong/h1/p tags. */
+[data-theme="light"] .msg.bot .bub strong { color: #18181b !important; }
+[data-theme="light"] .msg.bot .bub h1 {
+  color: #18181b !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .msg.bot .bub p,
+[data-theme="light"] .msg.bot .bub li {
+  color: #27272a !important;
+}
+[data-theme="light"] .msg.bot .bub a:hover { color: #18181b !important; }
+
+/* Window controls (wbtn) keep their semantic colors — yellow stays yellow
+   on white, red stays red on white. No override needed; left as-is. */
+

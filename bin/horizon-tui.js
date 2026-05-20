@@ -19,7 +19,7 @@ const path = require('path');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
 const { fmt, isTTY, friendlyError } = require('./lib/tty');
 const { renderMarkdown } = require('./lib/markdown');
-const { bannerBig, GradientSpinner, welcomeReveal } = require('./lib/banner');
+const { bannerBig, GradientSpinner, welcomeReveal, renderArt } = require('./lib/banner');
 const { TuiEngine } = require('./lib/tui-engine');
 const { interactiveMenu } = require('./lib/menu');
 
@@ -28,8 +28,12 @@ const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill
                     '/chat','/stream','/markdown','/banner','/verbose','/find'];
 
 function buildHelp() {
+  // Small art header above the help table — feels premium without
+  // dominating the screen. Falls back to empty string under --no-art.
+  const header = renderArt('helpHeader');
   return [
     '',
+    ...(header ? [header, ''] : []),
     fmt.bold('Slash commands'),
     '  /help                 show this list',
     '  /quit                 exit',
@@ -222,6 +226,9 @@ class StepRail {
   showPlan(steps) {
     if (this.spinner) this.spinner.stop();
     this.engine.print('');
+    // Small accent ribbon above the plan header — subtle, doesn't dominate.
+    const ribbon = renderArt('planAccepted', { tag: `${steps.length} step${steps.length === 1 ? '' : 's'}` });
+    if (ribbon) ribbon.split('\n').forEach(l => this.engine.print(l));
     this.engine.print(fmt.bold('plan'));
     steps.forEach((s, i) => {
       const txt = typeof s === 'string' ? s : (s.text || JSON.stringify(s));
@@ -234,6 +241,14 @@ class StepRail {
     this.lastTool = tool;
     this._toolStartedAt = Date.now();
     this._lastArgs = args;
+    // Subagent-spawn moment — show a tiny accent inline before the spinner
+    // resumes. Only fires for the actual spawn_subagent tool.
+    if (tool === 'spawn_subagent') {
+      if (this.spinner) this.spinner.stop();
+      const n = (args && (args.count || args.n || (Array.isArray(args.tasks) ? args.tasks.length : 1))) || 1;
+      const art = renderArt('subagentSpawn', { tag: `spawning ${n} subagent${n === 1 ? '' : 's'}` });
+      if (art) art.split('\n').forEach(l => this.engine.print(l));
+    }
     const cat = _toolGlyph(tool, this.themeName);
     if (!this.spinner) this.spinner = this._newSpinner('', 'executing');
     else if (typeof this.spinner.setPhase === 'function') this.spinner.setPhase('executing');
@@ -360,6 +375,23 @@ class StepRail {
 }
 
 async function main({ flags } = {}) {
+  // CRITICAL — global crash handlers. If anything in TUI startup throws
+  // (e.g. a status-line render error or a runtime require fault), the
+  // process must NOT vanish silently on the user. This was the v0.0.1
+  // Windows splash-then-exit bug. Without these handlers, uncaught
+  // exceptions from the TUI startup would print nothing visible and
+  // the binary would just disappear back to the shell prompt.
+  if (!process.__horizonTuiHandlersInstalled) {
+    process.__horizonTuiHandlersInstalled = true;
+    process.on('uncaughtException', (e) => {
+      process.stderr.write('\n\x1b[31m[fatal]\x1b[0m ' + (e?.stack || e?.message || String(e)) + '\n');
+      process.exit(1);
+    });
+    process.on('unhandledRejection', (r) => {
+      process.stderr.write('\n\x1b[31m[reject]\x1b[0m ' + (r?.stack || r?.message || String(r)) + '\n');
+    });
+  }
+
   const runtime = createHorizonRuntime({
     userDataDir: flags?.['user-data-dir'],
     workspaceDir: flags?.workspace || process.cwd(),
@@ -416,8 +448,19 @@ async function main({ flags } = {}) {
     markdown: true,
   };
 
+  // CRITICAL — hold the event loop until the engine exits.
+  // Without this resolver, main() resolves the moment engine.start()
+  // returns (which is immediately — start() is synchronous), the
+  // awaiting dispatcher resolves too, and Node decides "nothing left
+  // to do" and exits the process right after the banner renders.
+  // This was the bug. The promise is resolved by the engine's onExit.
+  let exitResolver;
+  const exitPromise = new Promise((resolve) => { exitResolver = resolve; });
+
   const engine = new TuiEngine({
     runtime,  // Fix 3 — engine reads provider/persona/cost/etc. for the status line
+    verbose: !!flags?.verbose,
+    onExit: () => { if (exitResolver) { const r = exitResolver; exitResolver = null; r(); } },
     completer: (line) => {
       if (!line.startsWith('/')) return [[], line];
       const hits = SLASH_LIST.filter(c => c.startsWith(line));
@@ -441,6 +484,9 @@ async function main({ flags } = {}) {
   banner.split('\n').forEach(l => engine.transcript.push(l));
 
   engine.start();
+
+  // Block here forever — engine.close() / engine._exit() resolves this.
+  return exitPromise;
 }
 
 async function handleSlash(raw, state, runtime, engine) {

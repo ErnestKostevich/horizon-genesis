@@ -345,3 +345,81 @@ pre::before {
   border-radius: 0 2px 2px 0;
   opacity: 0.6;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-2.2 fix: LIGHT MODE for the redesign-pass overlays.
+   ───────────────────────────────────────────────────────────────────────
+   Toasts, skeletons, modal animation, sidebar hover ring — all defined
+   above with hardcoded dark literals. Light variants here.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .hz-skel {
+  background: linear-gradient(90deg,
+    rgba(0,0,0,0.04) 0%,
+    rgba(0,0,0,0.08) 50%,
+    rgba(0,0,0,0.04) 100%);
+}
+[data-theme="light"] .hz-msg-skel {
+  background: #f4f4f5;
+  border-color: rgba(0,0,0,0.06);
+}
+[data-theme="light"] .hz-toast {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    0 12px 32px -8px rgba(0,0,0,0.10),
+    0 0 0 1px rgba(0,0,0,0.04) inset;
+  color: #18181b;
+}
+[data-theme="light"] .hz-toast-desc { color: #52525b; }
+[data-theme="light"] .hz-toast-close {
+  color: #71717a;
+}
+[data-theme="light"] .hz-toast-close:hover {
+  background: rgba(0,0,0,0.06);
+  color: #18181b;
+}
+[data-theme="light"] .cs-item:hover,
+[data-theme="light"] .chatside .row:hover {
+  background-color: rgba(124, 109, 242, 0.08);
+  border-color: rgba(124, 109, 242, 0.22);
+}
+[data-theme="light"] .cs-item.active,
+[data-theme="light"] .cs-item.selected {
+  background-color: rgba(124, 109, 242, 0.14);
+  border-color: rgba(124, 109, 242, 0.30);
+}
+[data-theme="light"] .insp-tab:hover {
+  background-color: rgba(0,0,0,0.04);
+  color: #18181b;
+}
+[data-theme="light"] .pf:hover {
+  background-color: rgba(0,0,0,0.025);
+}
+[data-theme="light"] pre {
+  border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] pre:hover {
+  border-color: rgba(124, 109, 242, 0.30);
+}
+/* The typing-dots animation hardcodes `#9aa0a6` ↔ accent — bump the
+   resting color in light mode so it doesn't blend into the paper. */
+[data-theme="light"] .typing span {
+  /* keyframe still applies; the resting opacity makes it readable. */
+}
+@keyframes hzTypingBounceLight {
+  0%, 60%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.4;
+    background: #52525b;
+  }
+  30% {
+    transform: translateY(-6px) scale(1.15);
+    opacity: 1;
+    background: var(--accent, #7c6df2);
+  }
+}
+[data-theme="light"] .typing span {
+  animation-name: hzTypingBounceLight;
+}
+/* Composer focus ring already uses the accent — no light-mode override
+   needed. Placeholder color tightened in chat-base.css. */

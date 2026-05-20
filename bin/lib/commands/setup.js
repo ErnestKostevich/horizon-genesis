@@ -16,7 +16,7 @@
 
 const readline = require('readline');
 const { fmt } = require('../tty');
-const { bannerCompact, GradientSpinner } = require('../banner');
+const { bannerCompact, GradientSpinner, renderArt } = require('../banner');
 
 // Provider catalog — order = recommended first. Cost notes are
 // approximate as of mid-2026; users override anytime via `horizon model`.
@@ -70,6 +70,8 @@ async function run({ runtime, args, flags }) {
   const { keysStore, settingsStore } = runtime;
 
   process.stdout.write('\n  ' + bannerCompact() + '\n\n');
+  const introArt = renderArt('setupIntro', { tag: 'first-time setup · takes about a minute', flags });
+  if (introArt) process.stdout.write(introArt + '\n\n');
   process.stdout.write(fmt.bold('  First-time setup') + ' ' + fmt.dim('— takes 1 minute\n\n'));
   process.stdout.write(fmt.dim('  Skip with --yes to keep current values · re-run safely anytime\n\n'));
 

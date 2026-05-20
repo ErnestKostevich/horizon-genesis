@@ -3,6 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <title>Horizon AI — Setup</title>
+<!-- Sprint-2.2 fix: theme bootstrap (matches chat.html). Runs before any
+     CSS so first paint honors saved theme — no dark flash on light mode. -->
+<script>
+  (function(){
+    try {
+      var saved = localStorage.getItem('horizonTheme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch (_) {}
+    window.toggleHorizonTheme = function () {
+      var cur = document.documentElement.getAttribute('data-theme');
+      var next = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('horizonTheme', next); } catch (_) {}
+    };
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -26,6 +44,66 @@
   --font:'Plus Jakarta Sans',-apple-system,'Segoe UI',system-ui,sans-serif;
   --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
 }
+/* Sprint-2.2 fix: light-theme overrides for setup.html. The page uses
+   its own var system (--bg-0, --tx-0, etc.) so we re-map them here. */
+[data-theme="light"] {
+  --bg-0:#fafafa;  --bg-1:#f4f4f5;
+  --tx-0:#18181b;  --tx-1:#52525b;  --tx-2:#71717a;  --tx-3:#a1a1aa;
+  --line-1:rgba(0,0,0,.06);  --line-2:rgba(0,0,0,.10);  --line-3:rgba(0,0,0,.18);
+  --glass-0:rgba(255,255,255,.85);
+  --glass-1:rgba(255,255,255,.78);
+}
+[data-theme="light"] body { background: #fafafa; color: #18181b; }
+[data-theme="light"] .tb { background: rgba(255,255,255,.85); }
+[data-theme="light"] .wash {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 0%, rgba(124,109,242,.10), transparent 55%),
+    radial-gradient(ellipse 40% 35% at 85% 90%, rgba(167,139,250,.08), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.5) 70%, rgba(255,255,255,.92) 100%);
+}
+[data-theme="light"] .grain { opacity:.025; filter:invert(1); }
+[data-theme="light"] #fractal { opacity:.10; filter:invert(.9) hue-rotate(180deg); }
+[data-theme="light"] input.pi,
+[data-theme="light"] select.sel {
+  background: #ffffff;
+  color: #18181b;
+  border-color: rgba(0,0,0,.10);
+}
+[data-theme="light"] input.pi:focus,
+[data-theme="light"] select.sel:focus {
+  border-color: rgba(124,109,242,.55);
+  background: #fafafa;
+}
+[data-theme="light"] input.pi::placeholder { color: #a1a1aa; }
+[data-theme="light"] select.sel option { background: #ffffff; color: #18181b; }
+[data-theme="light"] .btn-save {
+  background: rgba(0,0,0,.04);
+  color: #52525b;
+}
+[data-theme="light"] .btn-save:hover {
+  background: rgba(124,109,242,.08);
+  color: #4c40ad;
+  border-color: rgba(124,109,242,.30);
+}
+[data-theme="light"] .info-box {
+  background: rgba(124,109,242,.04);
+  border-color: rgba(124,109,242,.20);
+  color: #52525b;
+}
+[data-theme="light"] .info-box strong { color: #4c40ad; }
+[data-theme="light"] .card-head { color: #71717a; }
+[data-theme="light"] .row label { color: #52525b; }
+[data-theme="light"] .note { color: #52525b; }
+[data-theme="light"] .note strong { color: #27272a; }
+[data-theme="light"] .skip { color: #71717a; }
+[data-theme="light"] .skip:hover { color: #6557d4; }
+[data-theme="light"] .trial-badge {
+  background: rgba(124,109,242,.08);
+  border-color: rgba(124,109,242,.28);
+  color: #4c40ad;
+}
+[data-theme="light"] .os-bar { color: #a1a1aa; }
+[data-theme="light"] .os-link:hover { color: #6557d4; }
 html,body{height:100%;overflow:hidden;-webkit-app-region:drag;user-select:none;-webkit-user-select:none}
 body{background:var(--bg-0);color:var(--tx-0);font-family:var(--font);font-feature-settings:"ss01","cv11";display:flex;flex-direction:column;position:relative}
 
@@ -215,7 +293,9 @@ select.sel option{background:#14121a;color:var(--tx-0)}
     </div>
     <div class="tb-sub">Setup</div>
   </div>
-  <div class="tb-r">
+  <div class="tb-r" style="display:flex;align-items:center;gap:8px">
+    <!-- Sprint-2.2 fix: theme toggle parity with main chat window. -->
+    <button onclick="window.toggleHorizonTheme&&window.toggleHorizonTheme()" title="Toggle light / dark theme" aria-label="Toggle theme" style="-webkit-app-region:no-drag;background:rgba(255,255,255,.04);border:1px solid var(--line-2);color:var(--tx-1);width:24px;height:24px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:13px;line-height:1">◐</button>
     <button class="wbtn min" onclick="H.minimize()" title="Minimize"></button>
     <button class="wbtn cls" onclick="H.hide()" title="Close"></button>
   </div>
