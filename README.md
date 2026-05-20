@@ -212,7 +212,7 @@ graph TB
         Memory["8-type memory<br/>facts · episodic · semantic<br/>FTS · profile · workspace"]
         Skills["Skills manager<br/>workspace / user / builtin"]
         Executor["Executor<br/>host or docker"]
-        AI["AI client<br/>14 providers + auto routing"]
+        AI["AI client<br/>25 providers + auto routing"]
     end
 
     subgraph "Channels"
@@ -351,7 +351,7 @@ get their own tools that the agent can call.
 - [x] SSH + Modal + Daytona executors (BYOK)
 - [x] Agent Mode boost — visible "AGENT IN CONTROL" banner + consent gate
 - [x] 50+ CLI subcommands across 5 groups
-- [ ] Mobile PWA companion app
+- [x] Mobile PWA companion app — QR-pair, lives in `mobile/`
 - [ ] MCP servers spawnable from CLI (config exists, process spawn next)
 - [ ] WhatsApp / Signal / iMessage adapters
 - [ ] Plugin SDK v2 with Rust/WASM support
