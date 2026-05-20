@@ -19,13 +19,45 @@ const path = require('path');
 const { createHorizonRuntime } = require('../src/main/runtime/headless');
 const { fmt, isTTY, friendlyError } = require('./lib/tty');
 const { renderMarkdown } = require('./lib/markdown');
-const { bannerBig, GradientSpinner, welcomeReveal, renderArt } = require('./lib/banner');
+const { bannerBig, GradientSpinner, welcomeReveal, renderArt, buildGreetingBase, timeOfDayArt } = require('./lib/banner');
 const { TuiEngine } = require('./lib/tui-engine');
 const { interactiveMenu } = require('./lib/menu');
 
 const SLASH_LIST = ['/help','/quit','/clear','/reset','/skills','/skill','/skill-show',
                     '/persona','/persona-list','/model','/model-list','/mem','/agent',
-                    '/chat','/stream','/markdown','/banner','/verbose','/find'];
+                    '/chat','/stream','/markdown','/banner','/verbose','/find',
+                    // Sprint 2.3 — Easter-egg slash commands (discoverable via /help)
+                    '/tea','/coffee','/whoami','/secret','/art'];
+
+// Sprint 2.3 — Easter-egg trigger map. Keys are normalised user input (lower-cased + trimmed),
+// values are the art-piece name to render. We deliberately list every variant
+// the user might try (English + Russian); the agent isn't called for these.
+const EASTER_EGGS = {
+  '/tea': 'tea',
+  'tea': 'tea',
+  'чай': 'tea',
+  '/coffee': 'coffee',
+  'coffee': 'coffee',
+  'кофе': 'coffee',
+  '/whoami': 'whoami',           // special — renders persona card, handled separately
+  'who am i': 'whoami',
+  'кто я': 'whoami',
+  '/secret': 'konami',
+  'konami': 'konami',
+  '↑↑↓↓←→←→ba': 'konami',
+  '/art': '__gallery__',          // shorthand to dump the gallery
+};
+
+/**
+ * Sprint 2.3 — try matching a user-typed line against the Easter-egg table.
+ * Returns the art piece name (or '__gallery__' / 'whoami' sentinels) on hit,
+ * else null. Caller is responsible for actually printing the art.
+ */
+function matchEasterEgg(line) {
+  if (!line) return null;
+  const key = String(line).toLowerCase().trim().replace(/[?.!]+$/, '');
+  return EASTER_EGGS[key] || null;
+}
 
 function buildHelp() {
   // Small art header above the help table — feels premium without
@@ -68,6 +100,8 @@ function buildHelp() {
     '  Mouse wheel           scroll transcript (where supported)',
     '  Ctrl+C / Ctrl+D       exit',
     '',
+    fmt.dim('  Try also: /tea  /coffee  /whoami  /art  — a few hidden moments live in here.'),
+    '',
   ].join('\n');
 }
 
@@ -93,14 +127,10 @@ function _runtimeHasAnyKey(rt) {
 }
 
 // Sprint 2 — time-of-day + persona-aware greeting for the banner.
+// Sprint 2.3 — base text is now a randomised rotation per-slot (see banner.js
+// `buildGreetingBase`). Persona suffixes still apply.
 function buildGreeting(persona) {
-  const h = new Date().getHours();
-  let base;
-  if (h >= 5  && h < 12) base = 'Good morning';
-  else if (h >= 12 && h < 18) base = 'Good afternoon';
-  else if (h >= 18 && h < 22) base = 'Good evening';
-  else base = 'Working late';
-
+  const base = buildGreetingBase(new Date());
   const id = String(persona || '').toLowerCase();
   let suffix;
   switch (id) {
@@ -122,11 +152,15 @@ function bannerHeader(rt) {
   const lang = rt.settingsStore.get('lang') || 'en';
 
   // Sprint 2 — wordmark + vitals + greeting + hint line.
+  // Sprint 2.3 — sprinkle a small time-of-day art marker when off-hours.
+  const todName = timeOfDayArt(new Date());
+  const todArt = todName ? renderArt(todName) : '';
   const lines = [
     bannerBig(),
     '',
     `  ${fmt.dim('provider')} ${fmt.cyan(provider)}   ${fmt.dim('persona')} ${fmt.cyan(persona)}   ${fmt.dim('lang')} ${fmt.cyan(lang)}   ${fmt.dim('memory')} ${fmt.green(memCount + '')}   ${fmt.dim('skills')} ${fmt.green(skillCount + '')}   ${fmt.dim('workspace')} ${fmt.cyan(path.basename(rt.workspaceDir))}`,
     '  ' + fmt.dim(buildGreeting(persona)),
+    ...(todArt ? [todArt] : []),
     fmt.dim('  Type /help · Tab complete · Shift+Enter newline · Ctrl+F search · /quit to exit'),
     '',
   ];
@@ -219,7 +253,7 @@ class StepRail {
     if (phase && typeof s.setPhase === 'function') s.setPhase(phase);
     return s.start();
   }
-  startThinking(text = 'thinking…') {
+  startThinking(text = '⌁ thinking…') {
     if (this.spinner) this.spinner.stop();
     this.spinner = this._newSpinner(text, 'thinking');
   }
@@ -360,7 +394,7 @@ class StepRail {
 
       this.engine.print('  ' + fmt.dim('╰' + '─'.repeat(innerWidth - 1)));
     }
-    this.spinner = this._newSpinner('thinking…', 'thinking');
+    this.spinner = this._newSpinner('⌁ thinking…', 'thinking');
   }
   reflection(goalMet, confidence) {
     if (this.spinner) this.spinner.stop();
@@ -469,9 +503,29 @@ async function main({ flags } = {}) {
     onLine: async (raw) => {
       const line = raw.trim();
       if (!line) return;
-      // Echo user line into transcript
-      engine.print(fmt.cyan('› ') + line);
+      // Echo user line into transcript. Sprint 2.1 — captioned echo:
+      //   ▌ you · 14:32
+      //   | <message>
+      // Uses an accent-coloured left-half-block bullet and a dim grey
+      // timestamp so the eye can quickly find turn boundaries.
+      const _now = new Date();
+      const _ts = String(_now.getHours()).padStart(2, '0') + ':'
+                + String(_now.getMinutes()).padStart(2, '0');
+      engine.print(fmt.cyan('▌ ') + fmt.bold('you') + ' ' + fmt.dim('· ' + _ts));
+      // Each content line gets a dim "| " gutter so multi-line input
+      // visibly stays grouped under the caption.
+      for (const _ln of line.split('\n')) {
+        engine.print(fmt.dim('| ') + _ln);
+      }
       try {
+        // Sprint 2.3 — Easter eggs run before the slash dispatcher so they
+        // intercept /tea, /coffee, /whoami, /secret, /art and plain text
+        // like "coffee", "who am i". Falls through on miss.
+        const egg = matchEasterEgg(line);
+        if (egg) {
+          await runEasterEgg(egg, runtime, engine);
+          return;
+        }
         if (line.startsWith('/')) await handleSlash(line, state, runtime, engine);
         else await runOne(runtime, state, engine, line);
       } catch (e) {
@@ -487,6 +541,77 @@ async function main({ flags } = {}) {
 
   // Block here forever — engine.close() / engine._exit() resolves this.
   return exitPromise;
+}
+
+/**
+ * Sprint 2.3 — render an Easter-egg art piece into the engine transcript.
+ * Two special sentinels: 'whoami' (renders persona card) and '__gallery__'
+ * (dumps every art piece with its name). All others go through renderArt.
+ */
+async function runEasterEgg(eggName, runtime, engine) {
+  if (eggName === 'whoami') {
+    // Personalised "who am I" card — render the persona + memory snapshot
+    // inside a tasteful Unicode frame. Falls back gracefully when memory
+    // is empty.
+    const persona = runtime.settingsStore?.get?.('persona') || 'jarvis';
+    const memCount = runtime.agentMemory?._data?.memories?.length || 0;
+    const provider = runtime.settingsStore?.get?.('provider') || 'gemini';
+    const lang = runtime.settingsStore?.get?.('lang') || 'en';
+    // Pull the top 3 most-recent / important facts the agent has stored
+    // about the user. Cheap best-effort — we don't want any I/O failure to
+    // break the egg.
+    let topFacts = [];
+    try {
+      const mems = runtime.agentMemory?._data?.memories || [];
+      const sorted = [...mems]
+        .filter(m => m && (m.content || m.text))
+        .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+        .slice(0, 3);
+      topFacts = sorted.map(m => String(m.content || m.text || '').slice(0, 60));
+    } catch (_) {}
+    const lines = [
+      '   ╭─ who you are ────────────╮',
+      `   │  persona  ${fmt.cyan(persona.padEnd(14))} │`,
+      `   │  provider ${fmt.cyan(provider.padEnd(14))} │`,
+      `   │  lang     ${fmt.cyan(lang.padEnd(14))} │`,
+      `   │  memory   ${fmt.green(String(memCount).padEnd(14))} │`,
+      '   ╰──────────────────────────╯',
+    ];
+    engine.print('');
+    for (const l of lines) engine.print(l);
+    if (topFacts.length) {
+      engine.print('');
+      engine.print('   ' + fmt.dim('what I remember about you:'));
+      for (const f of topFacts) engine.print('     ' + fmt.dim('· ' + f));
+    }
+    engine.print('');
+    return;
+  }
+
+  if (eggName === '__gallery__') {
+    // Quick gallery — print every art piece with its name as a tiny header.
+    const { ART, renderArt } = require('./lib/banner');
+    engine.print('');
+    engine.print('  ' + fmt.bold('ascii art gallery'));
+    engine.print('  ' + fmt.dim('opt out anytime with HORIZON_NO_ART=1 / --no-art'));
+    for (const n of Object.keys(ART)) {
+      engine.print('');
+      engine.print('  ' + fmt.cyan(n));
+      const out = renderArt(n);
+      if (out) for (const l of out.split('\n')) engine.print(l);
+    }
+    engine.print('');
+    return;
+  }
+
+  const art = renderArt(eggName);
+  if (art) {
+    engine.print('');
+    for (const l of art.split('\n')) engine.print(l);
+    engine.print('');
+  } else {
+    engine.print(fmt.dim('(art suppressed)'));
+  }
 }
 
 async function handleSlash(raw, state, runtime, engine) {
@@ -680,8 +805,15 @@ async function runChat(runtime, state, engine, message) {
       // the old double-render ("raw tokens then —— rendered ——" block) and
       // gives a smooth live-rendered reply. Falls back to plain passthrough
       // when /markdown is off.
+      //
+      // Sprint 2.1 — caption-style prefix matching the user echo. The
+      // engine itself emits the "▌ horizon" caption + dim divider in
+      // startStreamingMessage() (turn-separator polish); the prefix
+      // passed here is what gets glued onto the FIRST line of the
+      // streamed text, so we keep it as a simple gutter to stay
+      // visually grouped with the caption above.
       const useMarkdown = state.markdown !== false;
-      engine.startStreamingMessage(fmt.bold('Horizon: '));
+      engine.startStreamingMessage(fmt.dim('| '));
       let buf = '';
       let lastRender = 0;
       const r = await runtime.runChatStream(message, { history: state.history }, (chunk) => {
@@ -709,7 +841,13 @@ async function runChat(runtime, state, engine, message) {
     } else {
       const r = await runtime.runChat(message, { history: state.history });
       if (r.reply) {
-        engine.print(fmt.bold('Horizon: ') + (state.markdown ? renderMarkdown(r.reply) : r.reply));
+        // Sprint 2.1 — captioned reply matching the streaming layout.
+        const _now = new Date();
+        const _ts = String(_now.getHours()).padStart(2, '0') + ':'
+                  + String(_now.getMinutes()).padStart(2, '0');
+        engine.print(fmt.dim('  ────'));
+        engine.print(fmt.cyan('⌁ ') + fmt.bold('horizon') + ' ' + fmt.dim('· ' + _ts));
+        engine.print((state.markdown ? renderMarkdown(r.reply) : r.reply));
         state.history.push({ role: 'user', content: message });
         state.history.push({ role: 'assistant', content: r.reply });
       } else if (r.error) {
@@ -725,7 +863,7 @@ async function runChat(runtime, state, engine, message) {
 async function runAgent(runtime, state, engine, task) {
   const rail = new StepRail(engine, runtime);
   engine.setSending(true);
-  rail.startThinking('planning…');
+  rail.startThinking('⌁ planning…');
   try {
     const r = await runtime.runAgent(task, {
       history: state.history,
@@ -749,14 +887,20 @@ async function runAgent(runtime, state, engine, task) {
           process.stdin.resume();
         });
         engine.resume();
-        rail.startThinking('thinking…');
+        rail.startThinking('⌁ thinking…');
         return /^(y|yes|д|да)/i.test(ans);
       },
     });
     rail.stop();
     if (r.answer) {
+      // Sprint 2.1 — captioned final answer matching the streaming layout.
+      const _now = new Date();
+      const _ts = String(_now.getHours()).padStart(2, '0') + ':'
+                + String(_now.getMinutes()).padStart(2, '0');
       engine.print('');
-      engine.print(fmt.bold('Horizon: ') + (state.markdown ? renderMarkdown(r.answer) : r.answer));
+      engine.print(fmt.dim('  ────'));
+      engine.print(fmt.cyan('⌁ ') + fmt.bold('horizon') + ' ' + fmt.dim('· ' + _ts));
+      engine.print((state.markdown ? renderMarkdown(r.answer) : r.answer));
       state.history.push({ role: 'user', content: task });
       state.history.push({ role: 'assistant', content: r.answer });
     } else if (r.error) {

@@ -113,10 +113,17 @@ function bannerCompact() { return _wordmark(); }
 //   - ALWAYS additive — never replaces functional output
 // ────────────────────────────────────────────────────────────────────────
 const ART = {
+  // Bigger welcome — shown on `horizon art welcome` showcase + first launch
+  // animated reveal. ~10 lines, max 40 chars wide.
   welcome: [
-    '   ╭─────────────╮',
-    '   │  ⌁ HORIZON  │',
-    '   ╰─────────────╯',
+    '      ╭───────────────────────╮',
+    '     ╱                         ╲',
+    '    │     ⌁   H O R I Z O N    │',
+    '     ╲                         ╱',
+    '      ╰───────────────────────╯',
+    '             ⌁ ⌁ ⌁ ⌁ ⌁',
+    '       the agent that learns',
+    '            who you are',
   ],
   setupIntro: [
     '   ◆ ◆ ◆',
@@ -143,6 +150,111 @@ const ART = {
   ],
   skillActive: [
     '   ▸',
+  ],
+  // ── New pieces (Sprint 2.3) ───────────────────────────────────────────
+  // "thinking" — small spinner-flavoured fallback when first token is slow.
+  thinking: [
+    '   ◔ ◐ ◑ ◕ ●',
+    '   thinking…',
+  ],
+  // "error" — friendly fatal-error card.
+  error: [
+    '   ╭─ ☄ ─╮',
+    '   │  ✗  │   something exploded',
+    '   ╰─────╯   try: horizon doctor',
+  ],
+  // "offline" — shown when network is down.
+  offline: [
+    '   ⌁ × ⌁    horizon needs internet',
+    '   ─────    check your connection',
+  ],
+  // "achievement" — milestone burst (first 10 msgs, first agent task, etc).
+  achievement: [
+    '     ★ ★ ★',
+    '    ╭─────╮',
+    '    │  ✦  │',
+    '    ╰─────╯',
+    '   well done!',
+  ],
+  // "idle" — shown after 60s of no input.
+  idle: [
+    '   ⌁',
+    '    ╲',
+    '     ╲     still here, sir',
+    '      ╲    type anytime',
+  ],
+  // "konami" — Easter egg.
+  konami: [
+    '   ╭───────────────╮',
+    '   │    K O N A    │',
+    '   │    M I !      │',
+    '   │   ⌁ ⌁ ⌁       │',
+    '   ╰───────────────╯',
+    '   you found me 😉',
+  ],
+  // "tea" — Easter egg, /tea or "tea".
+  tea: [
+    '       )   (',
+    '      ( )  ) (',
+    '     ___c|___ )',
+    '    (_______)',
+    '    Earl Grey, hot.',
+  ],
+  // "coffee" — Easter egg, /coffee or "coffee".
+  coffee: [
+    '       ( (',
+    '        ) )',
+    '      ........',
+    '      |coffee|]',
+    '      \\      /',
+    '       \'----\'',
+    '    need that fuel',
+  ],
+  // "morning" / "evening" / "night" — time-of-day tiny markers.
+  morning: [
+    '   ☀ ─── new day',
+    '   ────────────',
+  ],
+  evening: [
+    '   ◐ ─── sundown',
+    '   ────────────',
+  ],
+  night: [
+    '   ⌒⌒⌒  ☾',
+    '   ─────',
+    '   working late',
+  ],
+};
+
+// Multi-frame art pieces (cycled by animateArt). Each frame is an array of
+// lines, matching the single-frame ART shape so frames can be rendered with
+// the same code path.
+const ART_FRAMES = {
+  loading: [
+    ['   ◐  loading'],
+    ['   ◓  loading'],
+    ['   ◑  loading'],
+    ['   ◒  loading'],
+  ],
+  // "ribbon" — plan-accepted unfurl. Four frames widening the bar.
+  ribbon: [
+    ['   ┃'],
+    ['   ┃━'],
+    ['   ┃━━'],
+    ['   ┃━━━ plan'],
+  ],
+  // "fractal" — agent-step thinking shape, rotates through 4 marks.
+  fractal: [
+    ['   ◇ ◆ ◇'],
+    ['   ◆ ◇ ◆'],
+    ['   ◇ ◆ ◇'],
+    ['   ◆ ◇ ◆'],
+  ],
+  // "spark" — skill activation flourish (3 frames, expanding).
+  spark: [
+    ['   ▸'],
+    ['   ▸ ▸'],
+    ['   ▸ ▸ ▸'],
   ],
 };
 
@@ -213,6 +325,139 @@ function renderArt(name, opts) {
     if (opts.tag && i === tagAt) return painted + '  ' + fmt.dim(opts.tag);
     return painted;
   }).join('\n');
+}
+
+/**
+ * Sprint 2.3 — animated ASCII art. Cycles through frames of a multi-frame
+ * piece for `durationMs`, painted in the accent colour.
+ *
+ *   await animateArt('loading', { fps: 5, durationMs: 800 });
+ *
+ * Honours --no-art / HORIZON_NO_ART / HORIZON_FAST exactly like renderArt.
+ * Returns a Promise that resolves when the animation finishes. Erases the
+ * last frame on exit so the surrounding output flows cleanly.
+ *
+ * No-TTY / suppressed cases resolve immediately without printing.
+ */
+function animateArt(name, opts = {}) {
+  return new Promise(resolve => {
+    if (artSuppressed(opts.flags) || !process.stdout.isTTY) return resolve();
+    const frames = ART_FRAMES[name];
+    if (!frames || !frames.length) return resolve();
+    const fps = Math.max(1, Math.min(30, opts.fps || 5));
+    const durationMs = Math.max(100, Math.min(10_000, opts.durationMs || 800));
+    const intervalMs = Math.round(1000 / fps);
+    const totalFrames = Math.ceil(durationMs / intervalMs);
+    const [r, g, b] = opts.accent || _accentRgb();
+    const COLOR = supportsTruecolor ? rgb(r, g, b) : (supportsColor ? '\x1b[35m' : '');
+    const R = supportsColor ? '\x1b[0m' : '';
+    let i = 0;
+    let lastHeight = 0;
+
+    const paint = () => {
+      const frame = frames[i % frames.length];
+      // Erase previous frame (move up, clear each line) before painting next.
+      if (lastHeight > 0) {
+        process.stdout.write('\x1b[' + lastHeight + 'A');
+        for (let k = 0; k < lastHeight; k++) {
+          process.stdout.write('\x1b[2K');
+          if (k < lastHeight - 1) process.stdout.write('\x1b[1B');
+        }
+        process.stdout.write('\r');
+        if (lastHeight > 1) process.stdout.write('\x1b[' + (lastHeight - 1) + 'A');
+      }
+      const text = frame.map(l => COLOR + l + R).join('\n');
+      process.stdout.write(text + '\n');
+      lastHeight = frame.length;
+    };
+    paint();
+    const timer = setInterval(() => {
+      i++;
+      if (i >= totalFrames) {
+        clearInterval(timer);
+        // Final erase so subsequent output starts cleanly.
+        if (lastHeight > 0) {
+          process.stdout.write('\x1b[' + lastHeight + 'A');
+          for (let k = 0; k < lastHeight; k++) {
+            process.stdout.write('\x1b[2K');
+            if (k < lastHeight - 1) process.stdout.write('\x1b[1B');
+          }
+          process.stdout.write('\r');
+          if (lastHeight > 1) process.stdout.write('\x1b[' + (lastHeight - 1) + 'A');
+        }
+        return resolve();
+      }
+      paint();
+    }, intervalMs);
+  });
+}
+
+/**
+ * Sprint 2.3 — rotating greetings. Returns a random base greeting for the
+ * current hour-of-day; the caller appends a persona suffix.
+ *
+ *   buildGreetingBase(new Date())
+ *      → "Rise and shine" / "Good morning" / "A new day begins" …
+ */
+const GREETINGS = {
+  morning: [
+    'Good morning',
+    'Rise and shine',
+    'A new day begins',
+    'Morning, friend',
+    'Up with the lark',
+  ],
+  afternoon: [
+    'Good afternoon',
+    'How may I assist',
+    'Ready when you are',
+    'Standing by',
+    'At your service',
+  ],
+  evening: [
+    'Good evening',
+    'Winding down',
+    'Evening, friend',
+    'Pleasant evening',
+  ],
+  night: [
+    'Working late',
+    'Burning the midnight oil',
+    'Still here',
+    'Night owl mode',
+  ],
+};
+
+function _greetingSlot(hour) {
+  if (hour >= 5 && hour < 12) return 'morning';
+  if (hour >= 12 && hour < 18) return 'afternoon';
+  if (hour >= 18 && hour < 22) return 'evening';
+  return 'night';
+}
+
+function buildGreetingBase(date) {
+  const d = date || new Date();
+  const slot = _greetingSlot(d.getHours());
+  const arr = GREETINGS[slot] || GREETINGS.afternoon;
+  // Deterministic-ish: pick by minute-of-day so the same minute gives the
+  // same greeting (less jitter inside a single second's worth of redraws),
+  // but rotates over a typical session.
+  const seed = d.getHours() * 60 + d.getMinutes();
+  return arr[seed % arr.length];
+}
+
+/**
+ * Sprint 2.3 — return the time-of-day art piece name (or null if normal
+ * working hours / no relevant art). Used by the banner header to show a
+ * tiny time-flavoured marker line.
+ */
+function timeOfDayArt(date) {
+  const d = date || new Date();
+  const h = d.getHours();
+  if (h >= 5 && h < 11) return 'morning';
+  if (h >= 18 && h < 22) return 'evening';
+  if (h >= 22 || h < 5)  return 'night';
+  return null;
 }
 
 // Phase-aware glyph sets. setPhase(phase) swaps the spinner frames while
@@ -376,12 +621,27 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
   process.stdout.write('\x1b[2J\x1b[H');
   if (!fast) process.stdout.write('\x1b[?25l');
 
-  // Welcome art — small framed box rendered in the active accent colour.
-  // Always opt-out via HORIZON_NO_ART=1.
+  // Welcome art — bigger framed wordmark rendered in the active accent
+  // colour. Fades in line-by-line for cinematic feel. Always opt-out via
+  // HORIZON_NO_ART=1 / --no-art / HORIZON_FAST=1.
   const art = renderArt('welcome');
   if (art) {
-    process.stdout.write('\n' + art + '\n\n');
-    if (!fast) await new Promise(r => setTimeout(r, 60));
+    process.stdout.write('\n');
+    if (fast) {
+      process.stdout.write(art + '\n\n');
+    } else {
+      const artLines = art.split('\n');
+      for (const l of artLines) {
+        process.stdout.write(l + '\n');
+        await new Promise(r => setTimeout(r, 50));
+      }
+      process.stdout.write('\n');
+      // Hold the big art for a beat before the wordmark cascades in.
+      await new Promise(r => setTimeout(r, 600));
+      // "ready when you are" beneath the art.
+      process.stdout.write('  ' + fmt.dim('ready when you are') + '\n\n');
+      await new Promise(r => setTimeout(r, 400));
+    }
   }
 
   // Fix 2 — quick 1-second flash, not 4 seconds. 30ms/line instead of 90.
@@ -530,4 +790,4 @@ async function personaPickerInteractive(currentPersona) {
   });
 }
 
-module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen, renderArt, ART, artSuppressed };
+module.exports = { bannerBig, bannerCompact, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen, renderArt, animateArt, ART, ART_FRAMES, artSuppressed, buildGreetingBase, timeOfDayArt, GREETINGS };

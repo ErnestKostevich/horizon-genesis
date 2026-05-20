@@ -54,6 +54,43 @@ const ANSI = {
   altOff:      '\x1b[?1049l',
 };
 
+// SGR mouse:    \x1b[<button;col;row(M|m)   — modern, used by ?1006
+// Legacy mouse: \x1b[M<btn><col><row>       — 3 raw bytes after 'M'
+// We use these in two places:
+//   - _handleData / data prelistener: parse buttons + col/row, dispatch
+//   - _handleKey: filter so the chars never leak into the composer
+const SGR_MOUSE_RE    = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
+const LEGACY_MOUSE_RE = /\x1b\[M(.)(.)(.)/g;
+// Permissive char-class for the SGR payload — used to swallow fragmented
+// remnants that readline may emit as individual keypress events after it
+// has consumed the leading "\x1b[<". Digits, semicolons, terminators.
+const SGR_MOUSE_PAYLOAD_RE = /^[0-9;]*[Mm]?$/;
+
+/**
+ * Feature-detect whether the host terminal forwards mouse events sanely.
+ * Mouse mode is fine on:
+ *   - any non-Windows TTY (xterm-like terminals)
+ *   - Windows Terminal (WT_SESSION set)
+ *   - VS Code / iTerm2 / similar that set TERM_PROGRAM
+ *   - ConEmu (ConEmuPID set), Cmder, etc.
+ * It is NOT enabled on legacy Windows console (cmd.exe / PowerShell host
+ * without WT_SESSION), where SGR mouse reporting often round-trips as
+ * literal text characters into the input stream — the bug this guards.
+ * Set HORIZON_TUI_MOUSE=0 / =1 to force disable / enable.
+ */
+function _supportsMouse() {
+  const env = process.env || {};
+  const force = env.HORIZON_TUI_MOUSE;
+  if (force === '0' || force === 'false') return false;
+  if (force === '1' || force === 'true')  return true;
+  if (process.platform !== 'win32') return true;
+  if (env.WT_SESSION)   return true;   // Windows Terminal
+  if (env.TERM_PROGRAM) return true;   // VS Code, iTerm2, etc.
+  if (env.ConEmuPID || env.ConEmuANSI === 'ON') return true;
+  if (env.TERM && env.TERM !== 'cygwin' && env.TERM !== 'dumb') return true;
+  return false; // legacy ConPTY / cmd.exe / PowerShell host → off
+}
+
 const PROMPT = '› ';
 
 // Fix 6 — descriptions for slash-command autocomplete menu
@@ -167,9 +204,48 @@ class TuiEngine {
     // index where the current assistant message began so we can replace
     // that tail every ~120ms with a freshly markdown-rendered version of
     // the accumulated buffer.
-    this._streamStart = -1;    // transcript index where the message began
-    this._streamPrefix = '';   // e.g. fmt.bold('Horizon: ')
+    //
+    // Sprint 2.1 — streaming render strategy fixed.
+    // The previous implementation called `\x1b[2J\x1b[H` + full repaint
+    // on every update tick. `\x1b[2J` clears the viewport but does NOT
+    // touch scrollback — every repaint pushed a fresh status line into
+    // scrollback, producing a ladder of 30+ duplicate status bars on a
+    // single reply. We now use a cursor-up + erase-to-end + delta-emit
+    // approach: on each update we move cursor back over the previously
+    // rendered streaming region and re-emit. The status bar / composer
+    // are NOT repainted between updates; only on finish.
+    this._streamStart = -1;       // transcript index where the message began
+    this._streamPrefix = '';      // e.g. fmt.bold('Horizon: ')
     this._streamActive = false;
+    this._streamLinesOnScreen = 0; // number of physical terminal lines
+                                   // currently occupied by the rendered
+                                   // streaming message (NOT including the
+                                   // input bar). We cursor-up by this many
+                                   // before each re-emit.
+
+    // Sprint 2.3 — idle art timer. Fires after `_idleAfterMs` of no user
+    // input; prints the "idle" art piece into the transcript and re-arms.
+    // Reset by any keypress, mouse event, or after sending.
+    this._idleTimer = null;
+    this._idleAfterMs = 60_000;       // 60s of inactivity
+    this._idleRepeatMs = 90_000;      // 90s between repeats
+    this._idleEnabled = true;
+
+    // Hotfix — SGR/legacy mouse escape sequences must NOT leak into the
+    // composer or the AI stream. We parse mouse events from the raw data
+    // buffer (so scroll wheel + click still work) and use this state
+    // machine to ensure ANY keypress events readline fragments out of
+    // those sequences get discarded before reaching _insertChar().
+    //
+    //   _mouseSwallowUntil: when truthy, swallow incoming keypress chars
+    //     until we observe the terminator ('M' or 'm') — used when
+    //     readline emits the SGR payload as separate keypress events
+    //     after consuming the leading "\x1b[<".
+    //   _mouseEnabled:      reflects whether mouseOn was actually sent
+    //     this run. close() reads this so we only send mouseOff if we
+    //     enabled it.
+    this._mouseSwallowUntil = false;
+    this._mouseEnabled = false;
   }
 
   // ── public API ──────────────────────────────────────────────────────
@@ -214,12 +290,26 @@ class TuiEngine {
       this._fallbackPlainMode();
       return;
     }
-    process.stdout.write(ANSI.mouseOn);
+    // Hotfix — only enable mouse mode where the terminal actually
+    // forwards events through stdin cleanly. Legacy Windows console hosts
+    // echo the SGR escape sequence back as literal characters, polluting
+    // the composer with garbage like "0;43;51M0;43;51m". Better to lose
+    // scroll-wheel-through-transcript than to corrupt the input stream.
+    if (_supportsMouse()) {
+      process.stdout.write(ANSI.mouseOn);
+      this._mouseEnabled = true;
+    } else if (this._verbose) {
+      process.stderr.write('[tui] mouse: DISABLED (terminal lacks reliable SGR mouse support)\n');
+    }
 
-    this._onKey = (ch, key) => this._handleKey(ch, key);
+    this._onKey  = (ch, key) => this._handleKey(ch, key);
     this._onData = (buf) => this._handleData(buf);
+    // Prepend the data listener so we observe raw bytes BEFORE readline's
+    // internal keypress decoder. _handleData parses mouse sequences out
+    // of the buffer and bumps a swallow flag so _handleKey can drop any
+    // payload chars readline subsequently emits as fake keypresses.
+    process.stdin.prependListener('data', this._onData);
     process.stdin.on('keypress', this._onKey);
-    process.stdin.on('data', this._onData);
 
     // Belt-and-suspenders: some Windows terminals send a spurious EOF
     // on startup that would otherwise terminate the stream and let the
@@ -243,6 +333,10 @@ class TuiEngine {
         // We don't disable anything; just remember for status display.
       }
     }, 2000);
+
+    // Sprint 2.3 — arm idle timer (60s) so we show a tiny "still here" art
+    // piece when the user steps away. Reset by any keypress/mouse/send.
+    this._resetIdleTimer();
 
     this._renderInputBar();
   }
@@ -345,7 +439,11 @@ class TuiEngine {
     try {
       this._eraseInputBar();
       if (process.stdin.isTTY) {
-        process.stdout.write(ANSI.mouseOff);
+        // Only emit mouseOff if we actually enabled mouse mode. On
+        // terminals where we skipped mouseOn, emitting mouseOff would be
+        // a no-op but would still write escape bytes to stdout right
+        // before exit — best to be tidy.
+        if (this._mouseEnabled) process.stdout.write(ANSI.mouseOff);
         process.stdout.write(ANSI.cursorShow);
         try { process.stdin.setRawMode(false); } catch (_) {}
       }
@@ -361,7 +459,42 @@ class TuiEngine {
     }
     // Clear any pending throttled redraw — it would re-paint after close.
     if (this._frameTimer) { clearTimeout(this._frameTimer); this._frameTimer = null; }
+    // Sprint 2.3 — drop the idle timer so it can't fire after exit.
+    if (this._idleTimer) { clearTimeout(this._idleTimer); this._idleTimer = null; }
     if (this.onExit) this.onExit();
+  }
+
+  /**
+   * Sprint 2.3 — schedule (or re-schedule) the idle-art tick. Called from
+   * key/mouse handlers and after every send so user activity keeps the
+   * timer at bay. Disabled when art is suppressed, in non-TTY mode, or
+   * while sending.
+   */
+  _resetIdleTimer() {
+    if (this._idleTimer) { clearTimeout(this._idleTimer); this._idleTimer = null; }
+    if (!this._idleEnabled || this._closed || !process.stdin.isTTY) return;
+    if (process.env.HORIZON_NO_ART === '1') return;
+    if (process.env.HORIZON_FAST === '1')   return;
+    const tick = () => {
+      if (this._closed || this._sending || this.searchActive || this._scrollMode()) {
+        // Don't drop art into mid-stream output or hidden views — re-arm.
+        this._idleTimer = setTimeout(tick, this._idleRepeatMs);
+        return;
+      }
+      try {
+        const { renderArt } = require('./banner');
+        const out = renderArt('idle');
+        if (out) {
+          // Print silently — uses normal print path so the art appears in
+          // transcript and survives scroll/search.
+          this.print('');
+          for (const l of out.split('\n')) this.print(l);
+        }
+      } catch (_) {}
+      // Re-arm for the next idle period.
+      this._idleTimer = setTimeout(tick, this._idleRepeatMs);
+    };
+    this._idleTimer = setTimeout(tick, this._idleAfterMs);
   }
 
   /** Briefly disable input handling (for sub-prompts via readline.question). */
@@ -369,14 +502,17 @@ class TuiEngine {
     if (!process.stdin.isTTY) return;
     process.stdin.off('keypress', this._onKey);
     process.stdin.off('data', this._onData);
-    process.stdout.write(ANSI.mouseOff);
+    if (this._mouseEnabled) process.stdout.write(ANSI.mouseOff);
     this._eraseInputBar();
   }
   resume() {
     if (!process.stdin.isTTY) return;
+    // Re-prepend the data listener so it still runs BEFORE readline's
+    // internal keypress decoder, preserving the mouse-strip ordering
+    // that protects the composer.
+    process.stdin.prependListener('data', this._onData);
     process.stdin.on('keypress', this._onKey);
-    process.stdin.on('data', this._onData);
-    process.stdout.write(ANSI.mouseOn);
+    if (this._mouseEnabled) process.stdout.write(ANSI.mouseOn);
     this._renderInputBar();
   }
 
@@ -391,6 +527,54 @@ class TuiEngine {
   // ── key handling ────────────────────────────────────────────────────
   _handleKey(ch, key) {
     if (!key) return;
+
+    // Hotfix — drop mouse-sequence noise BEFORE any other handling.
+    //
+    // readline.emitKeypressEvents() does not understand SGR (?1006) or
+    // legacy (?1000) mouse reports, so on some terminals it fragments
+    // sequences like "\x1b[<0;43;51M" into multiple keypress events:
+    //   - one event for "\x1b[<" with key.sequence holding the prefix
+    //   - several events for "0", ";", "4", "3", ... emitted as plain
+    //     printable characters that would otherwise be inserted into
+    //     the composer.
+    // We filter aggressively here. The mouse parser in _handleData has
+    // already extracted any useful button/coord info from the raw buffer
+    // (it runs first via prependListener), so dropping these events at
+    // the keypress layer is safe — we lose nothing.
+    if (key.sequence) {
+      // SGR mouse — any sequence containing "\x1b[<" is a mouse event,
+      // whether or not it has the full payload + terminator. Discard it.
+      const isSgr    = key.sequence.indexOf('\x1b[<') >= 0;
+      // Legacy mouse — "\x1b[M" followed by exactly 3 payload bytes.
+      const isLegacy = /\x1b\[M.{3}/.test(key.sequence);
+      if (isSgr || isLegacy) {
+        // If the sequence carries the terminator we end the swallow state
+        // here; otherwise stay armed for the fragmented payload chars
+        // that readline will emit as follow-up keypress events.
+        if (isSgr && /[Mm]/.test(key.sequence.slice(key.sequence.indexOf('\x1b[<') + 3))) {
+          this._mouseSwallowUntil = false;
+        } else if (isSgr) {
+          this._mouseSwallowUntil = true;
+        }
+        return;
+      }
+    }
+    if (this._mouseSwallowUntil) {
+      // We're mid-sequence. Discard digits, semicolons, and the trailing
+      // 'M'/'m' terminator. Anything else (very rare — would indicate a
+      // genuinely interleaved keypress) gets passed through to the next
+      // listener after we clear the flag.
+      const c = (ch && ch.length === 1) ? ch : (key.sequence || '');
+      if (c && SGR_MOUSE_PAYLOAD_RE.test(c)) {
+        if (/[Mm]/.test(c)) this._mouseSwallowUntil = false;
+        return;
+      }
+      // Unexpected char — give up swallowing and let it through.
+      this._mouseSwallowUntil = false;
+    }
+
+    // Sprint 2.3 — any keypress counts as activity; reset idle countdown.
+    this._resetIdleTimer();
     // Global exits
     if (key.ctrl && key.name === 'c') { this._exit(); return; }
     if (key.ctrl && key.name === 'd' && this.lines[0] === '' && this.lines.length === 1) { this._exit(); return; }
@@ -463,9 +647,20 @@ class TuiEngine {
       this._insertChar(ch);
       return;
     }
-    // Some terminals send multi-char paste in one chunk; handle that
+    // Some terminals send multi-char paste in one chunk; handle that.
+    // Hotfix — strip any embedded SGR / legacy mouse sequences before
+    // inserting so a paste that arrives concatenated with a mouse event
+    // doesn't smuggle escape bytes into the composer.
     if (ch && ch.length > 1 && !key.ctrl) {
-      for (const c of ch) {
+      let cleaned = String(ch)
+        .replace(SGR_MOUSE_RE, '')
+        .replace(LEGACY_MOUSE_RE, '');
+      // Reset the global regexes' lastIndex (they're stateful with /g).
+      SGR_MOUSE_RE.lastIndex = 0;
+      LEGACY_MOUSE_RE.lastIndex = 0;
+      // Also drop any remaining ESC-introduced CSI debris.
+      cleaned = cleaned.replace(/\x1b\[[<?]?[0-9;]*[A-Za-z~]/g, '');
+      for (const c of cleaned) {
         if (c === '\r' || c === '\n') this._insertNewline();
         else if (c >= ' ') this._insertChar(c);
       }
@@ -488,18 +683,57 @@ class TuiEngine {
   }
 
   // ── mouse handling ──────────────────────────────────────────────────
+  //
+  // Runs as a prependListener on `data`, so we see the raw buffer BEFORE
+  // readline's keypress decoder. Two jobs:
+  //
+  //   1. Parse SGR (?1006) and legacy (?1000) mouse sequences, dispatch
+  //      them to _onMouse() for scroll-wheel + click handling.
+  //   2. Detect the START of a partial SGR sequence ("\x1b[<" with no
+  //      terminator yet in this chunk) and arm _mouseSwallowUntil so
+  //      _handleKey drops the digits/semicolons readline will emit as
+  //      individual keypress events. This is the core of the leak fix —
+  //      without it those payload chars get inserted into the composer.
   _handleData(buf) {
-    const s = buf.toString();
-    // SGR mouse: \x1b[<button;col;row(M|m)
-    const re = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
+    let s;
+    if (typeof buf === 'string') s = buf;
+    else if (Buffer.isBuffer(buf)) s = buf.toString('utf8');
+    else return;
+
+    // SGR mouse — preferred form (?1006).
     let m;
-    while ((m = re.exec(s))) {
+    SGR_MOUSE_RE.lastIndex = 0;
+    while ((m = SGR_MOUSE_RE.exec(s))) {
       this._mouseSeen = true;
-      const button = parseInt(m[1], 10);
-      const col = parseInt(m[2], 10);
-      const row = parseInt(m[3], 10);
+      const button  = parseInt(m[1], 10);
+      const col     = parseInt(m[2], 10);
+      const row     = parseInt(m[3], 10);
       const isPress = m[4] === 'M';
       this._onMouse(button, col, row, isPress);
+    }
+
+    // Legacy mouse — \x1b[M<btn><col><row> where each byte is value+32.
+    // Only fires on terminals stuck in ?1000 without SGR support.
+    LEGACY_MOUSE_RE.lastIndex = 0;
+    while ((m = LEGACY_MOUSE_RE.exec(s))) {
+      this._mouseSeen = true;
+      const button  = m[1].charCodeAt(0) - 32;
+      const col     = m[2].charCodeAt(0) - 32;
+      const row     = m[3].charCodeAt(0) - 32;
+      // Legacy mode reports button-release as button 3; everything else
+      // is a press of the encoded button.
+      const isPress = (button & 3) !== 3;
+      this._onMouse(button, col, row, isPress);
+    }
+
+    // Detect a TRUNCATED SGR sequence — "\x1b[<" with no Matching M/m in
+    // this chunk. Readline will emit the leftover payload bytes as plain
+    // keypress events; arm _handleKey to discard them until the
+    // terminator arrives.
+    const lastOpen = s.lastIndexOf('\x1b[<');
+    if (lastOpen >= 0) {
+      const tail = s.slice(lastOpen);
+      if (!/[Mm]/.test(tail)) this._mouseSwallowUntil = true;
     }
   }
 
@@ -508,6 +742,8 @@ class TuiEngine {
     //   0=left, 1=middle, 2=right, 64=scroll up, 65=scroll down
     //   add 32 for drag/move
     if (!isPress) return;
+    // Sprint 2.3 — mouse counts as activity; reset idle countdown.
+    this._resetIdleTimer();
     if (button === 64) { this._scrollBy(-3); return; }
     if (button === 65) { this._scrollBy(3);  return; }
     // Click anywhere → ensure input bar is active (no real focus model in
@@ -650,6 +886,8 @@ class TuiEngine {
     this._eraseInputBar();
     this.onLine(text);
     if (!this._closed) this._renderInputBar();
+    // Sprint 2.3 — a fresh send restarts the idle countdown.
+    this._resetIdleTimer();
   }
 
   // ── history ─────────────────────────────────────────────────────────
@@ -942,12 +1180,17 @@ class TuiEngine {
 
     // Composer — print each line. Sprint 2: if the composer is empty and
     // we're on the only line, render a dim placeholder after the prompt.
+    // Sprint 2.1 — placeholder now uses a labeled-input look:
+    //   ▌ Type a message · /help for commands
+    // The accent-coloured "▌" matches the user-echo caption, signalling
+    // "this is where you type". The legacy "░░░" dotted style was hard
+    // to read and didn't anchor the eye to the prompt.
     const lineCount = this.lines.length;
     const placeholderActive = lineCount === 1 && this.lines[0].length === 0;
     for (let i = 0; i < lineCount; i++) {
       const prefix = i === 0 ? fmt.cyan(PROMPT) : fmt.dim('  ');
       if (i === 0 && placeholderActive) {
-        process.stdout.write(prefix + fmt.dim('░░░ Type a message, /help for commands ░░░'));
+        process.stdout.write(prefix + fmt.cyan('▌ ') + fmt.dim('Type a message · /help for commands'));
       } else {
         process.stdout.write(prefix + this.lines[i]);
       }
@@ -996,25 +1239,75 @@ class TuiEngine {
 
   // ── Sprint 2 — streaming markdown rendering ─────────────────────────
   // Three-phase API:
-  //   startStreamingMessage(prefix) → record where in transcript the
-  //     message begins (anchor) + the prefix to prepend.
+  //   startStreamingMessage(prefix) → reserve a region just above the
+  //     input bar and write the prefix (and optional turn divider). The
+  //     region grows in place as updates arrive.
   //   updateStreamingMessage(buf) → re-render markdown for the full buf
-  //     and REPLACE everything in transcript from anchor onwards. This
-  //     means the displayed message keeps growing/changing as new tokens
-  //     arrive without leaving stale partial output behind.
-  //   finishStreamingMessage() → one final render + clear active state +
-  //     append a blank separator line.
+  //     and OVERWRITE the previous rendered region in place using a
+  //     cursor-up + erase-to-end + emit pattern. The input bar / status
+  //     line is NOT redrawn between updates — only restored on finish.
+  //   finishStreamingMessage() → flush the final render, append a
+  //     blank separator to transcript, and repaint the input bar.
   //
-  // We deliberately repaint the assistant zone by:
-  //   1. Truncating this.transcript back to _streamStart
-  //   2. Pushing the freshly rendered lines
-  //   3. Clearing screen + replaying the visible window
-  // This is "Option A" from the brief — good enough for 95% of cases.
+  // CRITICAL fix vs. the original (pre-fix) Sprint 2 implementation:
+  //   The old code issued `\x1b[2J\x1b[H` + full repaint on every update
+  //   tick. `\x1b[2J` clears the visible viewport but the previous frame
+  //   has already scrolled into the terminal's scrollback buffer. With
+  //   the status line drawn at the bottom of every frame, 30 token
+  //   batches → 30 status lines stacked in scrollback. The fix below
+  //   uses an in-place delta update: cursor up over what we last drew,
+  //   erase to end of screen, then emit the new rendered text. Nothing
+  //   scrolls; nothing duplicates.
+  //
+  // Implementation notes:
+  //   - `_streamLinesOnScreen` is the number of physical rows the
+  //     current rendered streaming region occupies in the terminal, NOT
+  //     including the input bar. We move the cursor up by this many
+  //     rows before re-emitting.
+  //   - We approximate "physical rows" as the number of '\n' in the
+  //     rendered output + 1 (assumes no terminal-side word-wrap). For
+  //     typical chat replies (no long-line content) this is accurate.
+  //   - The transcript array stays in sync (truncated + repushed) so
+  //     search / scrollback see the most recent rendered state.
+  //   - Non-TTY path: just append rendered lines to stdout (no cursor
+  //     movement makes sense without a terminal).
+  //   - If user is scrolled back, we update the transcript only and
+  //     leave the screen alone — they'll see the final state on return.
 
   startStreamingMessage(prefix = '') {
-    this._streamStart = this.transcript.length;
     this._streamPrefix = prefix || '';
     this._streamActive = true;
+    this._streamLinesOnScreen = 0;
+
+    // Sprint 2.1 — turn separator + caption above the streaming reply.
+    // Layout we want above the streaming body:
+    //   ────                  ← faint divider (turn separator)
+    //   ⌁ horizon · 14:32     ← assistant caption with timestamp
+    //   <streamed body>       ← updateStreamingMessage() rewrites this
+    //   …status bar / composer…
+    //
+    // We use print() so the lines land in transcript AND get drawn to
+    // stdout in one shot. Then we record _streamStart at the position
+    // immediately AFTER the caption so updates only rewrite the body —
+    // the divider + caption stay fixed for the entire reply.
+    const _now = new Date();
+    const _ts = String(_now.getHours()).padStart(2, '0') + ':'
+              + String(_now.getMinutes()).padStart(2, '0');
+    const divider = fmt.dim('  ────');
+    const caption = fmt.cyan('⌁ ') + fmt.bold('horizon') + ' ' + fmt.dim('· ' + _ts);
+    if (process.stdin.isTTY && !this._closed && this.scrollOffset === 0) {
+      this.print(divider);
+      this.print(caption);
+    } else {
+      this.transcript.push(divider);
+      this.transcript.push(caption);
+    }
+    this._streamStart = this.transcript.length;
+    // Drop the input bar from the bottom so updates flow right under
+    // the caption. The bar will be restored on finish.
+    if (process.stdin.isTTY && !this._closed && this.scrollOffset === 0) {
+      this._eraseInputBar();
+    }
   }
 
   /**
@@ -1036,34 +1329,64 @@ class TuiEngine {
         rendered = String(rawMarkdown || '');
       }
     }
-    const firstLine = this._streamPrefix + (rendered.split('\n')[0] || '');
-    const restLines = rendered.split('\n').slice(1);
-    // Replace transcript tail
+    const parts = rendered.split('\n');
+    const firstLine = this._streamPrefix + (parts[0] || '');
+    const restLines = parts.slice(1);
+    // Update transcript array (search / scrollback see the latest state).
+    // _streamStart points to the first body row — the divider + caption
+    // emitted by startStreamingMessage() live BEFORE _streamStart and
+    // stay untouched across updates.
     this.transcript.length = this._streamStart;
     this.transcript.push(firstLine);
     for (const l of restLines) this.transcript.push(l);
 
-    // Repaint visible window (only in live view — if user is scrolled
-    // back, we don't disturb them; they'll see the final result on
-    // return to live).
+    // If user is scrolled back or we're closed, transcript-only update.
     if (this._closed || this.scrollOffset > 0) return;
     if (!process.stdin.isTTY) {
-      // Non-TTY path — just stream the latest tail diff to stdout. We
-      // don't try to be clever, full re-emit of the new lines.
+      // Non-TTY path — straight append. Old rendered chunks remain in
+      // stdout history but that's fine; the consumer sees the latest
+      // line on each update.
       process.stdout.write(firstLine + '\n');
       for (const l of restLines) process.stdout.write(l + '\n');
       return;
     }
-    // TTY path — clear-and-repaint the last `h - 2` lines so the message
-    // visually replaces itself in place.
-    this._eraseInputBar();
-    process.stdout.write(ANSI.clearScreen);
-    const h = (process.stdout.rows || 24) - 2;
-    const start = Math.max(0, this.transcript.length - h);
-    for (let i = start; i < this.transcript.length; i++) {
-      process.stdout.write(this.transcript[i] + '\n');
+    // TTY path — delta update. Move cursor up over the previously
+    // rendered region, erase to end of screen, then emit the new lines.
+    // The status bar / composer are intentionally NOT redrawn here;
+    // they'll be restored once on finishStreamingMessage().
+    //
+    // After the previous update the cursor sits at the END of the last
+    // emitted line (we did NOT emit a trailing newline). To return to
+    // col 0 of the FIRST emitted line, we cursor up by (linesOnScreen
+    // - 1) rows then cursor-left to column 0. On the very first update
+    // (_streamLinesOnScreen === 0) there's nothing to rewind over.
+    process.stdout.write(ANSI.cursorLeft(9999));
+    if (this._streamLinesOnScreen > 1) {
+      process.stdout.write(ANSI.cursorUp(this._streamLinesOnScreen - 1));
     }
-    this._renderInputBar();
+    // Erase from cursor to end of screen. \x1b[J = clear from cursor
+    // down. This removes the previous rendered streaming region and
+    // any leftover input bar lines.
+    process.stdout.write('\x1b[J');
+
+    // Emit the freshly rendered lines. We append a dim ellipsis tail to
+    // signal "more coming" — removed on finishStreamingMessage(). We
+    // do NOT emit a trailing newline; the cursor stays on the last
+    // content row so the next update can rewind cleanly.
+    process.stdout.write(firstLine);
+    let physRows = 1;
+    for (const l of restLines) {
+      process.stdout.write('\n' + l);
+      physRows++;
+    }
+    process.stdout.write(fmt.dim(' …'));
+    // Track physical rows for the next cursor-up calculation.
+    this._streamLinesOnScreen = physRows;
+    // We have NOT redrawn the input bar — it will be restored by
+    // finishStreamingMessage(). _lastDrawHeight is now stale; reset it
+    // so the next _eraseInputBar() doesn't try to walk over our
+    // streaming region.
+    this._lastDrawHeight = 0;
   }
 
   finishStreamingMessage() {
@@ -1072,13 +1395,34 @@ class TuiEngine {
     // against the rendered message.
     this.transcript.push('');
     if (!this._closed && process.stdin.isTTY && this.scrollOffset === 0) {
-      this._eraseInputBar();
+      // We're sitting at the end of the last rendered streaming line
+      // (with a trailing dim "…"). Strip the indicator by rewinding to
+      // column 0 of that row, erasing to end-of-line, then re-emitting
+      // the last line cleanly. Then emit a trailing newline + restore
+      // the input bar via a single full _renderInputBar() pass.
+      //
+      // Trick: we know what the last rendered line was — it's the final
+      // entry in transcript before the blank separator we just pushed.
+      // We splice it out and re-emit. But this is fragile if the line
+      // is multi-physical-row from wrapping; simpler approach is to
+      // just emit a newline and let the "…" remain as a faint footer
+      // marker. We do the simple thing.
+      process.stdout.write(ANSI.cursorLeft(9999));
+      // Erase end-of-line (the "…" tail).
+      process.stdout.write('\x1b[K');
+      // Re-emit the final rendered last line WITHOUT the ellipsis to
+      // leave a clean final frame.
+      const lastIdx = this.transcript.length - 2; // -1 is blank, -2 is last content
+      if (lastIdx >= 0 && lastIdx >= this._streamStart) {
+        process.stdout.write(this.transcript[lastIdx]);
+      }
       process.stdout.write('\n');
       this._renderInputBar();
     }
     this._streamActive = false;
     this._streamStart = -1;
     this._streamPrefix = '';
+    this._streamLinesOnScreen = 0;
   }
 
   // ── exit / fallback ─────────────────────────────────────────────────
