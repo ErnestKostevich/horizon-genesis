@@ -719,3 +719,120 @@ body.settings-scroll .ps-toc {
   border-color: rgba(0, 0, 0, 0.08) !important;
   box-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.08);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mobile companion — one-click "Connect phone" card
+   Designed to read as a discrete action card inside the existing
+   .ps section. The QR sits next to a 3-step instruction list so even
+   non-technical users can pair without context. Both themes supported
+   (dark uses --bg-elevated/--border tokens, light overrides below).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.mobile-pair-card {
+  padding: 20px;
+  border: 1px solid var(--b1, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  background: var(--bg2, rgba(10, 18, 28, 0.55));
+}
+.mp-stopped {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+.mp-stopped .psv.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 13px;
+  background: linear-gradient(135deg, var(--acc, #7c6df2), var(--acc3, #a78bfa));
+  border-color: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.mp-stopped .psv.primary:hover { filter: brightness(1.08); }
+.mp-stopped .psv.primary[disabled] { opacity: 0.6; cursor: progress; }
+.mp-stopped .mp-hint,
+.mp-running .mp-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--t3, #8b9aa8);
+}
+.mp-running {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mp-qr-wrap {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.mp-qr {
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  display: block;
+}
+.mp-instr { flex: 1; min-width: 220px; }
+.mp-instr h3 {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  color: var(--t1, #e6edf3);
+  font-weight: 600;
+}
+.mp-instr h3:first-child { margin-top: 0; }
+.mp-instr p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--t2, #b8c5d1);
+  line-height: 1.4;
+}
+.mp-url {
+  background: var(--bg3, rgba(0, 0, 0, 0.35));
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 11px;
+  color: var(--acc3, #a78bfa);
+  word-break: break-all;
+}
+.mp-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.mp-status {
+  font-size: 12px;
+  color: var(--t3, #8b9aa8);
+}
+.mp-port {
+  color: var(--acc3, #a78bfa);
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-weight: 600;
+}
+
+/* Light-mode polish — paper background, soft drop shadow on the QR. */
+[data-theme="light"] .mobile-pair-card {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .mp-qr {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .mp-url {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: #5b21b6 !important;
+}
+[data-theme="light"] .mp-instr h3 { color: #18181b !important; }
+[data-theme="light"] .mp-instr p,
+[data-theme="light"] .mp-hint,
+[data-theme="light"] .mp-status { color: #52525b !important; }

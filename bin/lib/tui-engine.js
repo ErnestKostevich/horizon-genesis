@@ -130,6 +130,7 @@ const SLASH_DESCRIPTIONS = {
   '/banner':       'reprint the banner header',
   '/verbose':      'restart with --verbose for diagnostics',
   '/find':         'search transcript (same as Ctrl+F)',
+  '/mobile':       'pair a phone via QR code',
 };
 
 // Sprint 2 — short live-hint descriptions for the dim grey hint line that
@@ -155,6 +156,7 @@ const SLASH_HINTS = {
   '/banner':       'reprint the banner',
   '/verbose':      'toggle verbose logging',
   '/find':         'in-chat search overlay',
+  '/mobile':       'pair a phone via QR code',
   '/theme':        'switch CLI theme',
   '/voice':        'toggle voice input/output',
 };

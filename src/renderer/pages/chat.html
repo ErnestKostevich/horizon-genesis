@@ -138,6 +138,7 @@
     <symbol id="i-plug-add" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
     <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+    <symbol id="i-smartphone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12 18h.01"/></symbol>
   </defs>
 </svg>
 
@@ -239,6 +240,7 @@
       <button class="psnav-tab"    onclick="setSettingsTab('models')"   data-tab="models"><span class="psn-i"><svg class="licon"><use href="#i-brain"/></svg></span><span>Models</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('providers')" data-tab="providers"><span class="psn-i"><svg class="licon"><use href="#i-key"/></svg></span><span>Providers</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('connections')" data-tab="connections"><span class="psn-i"><svg class="licon"><use href="#i-plug"/></svg></span><span>Connections</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('mobile')"   data-tab="mobile"><span class="psn-i"><svg class="licon"><use href="#i-smartphone"/></svg></span><span>Mobile</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('voice')"    data-tab="voice"><span class="psn-i"><svg class="licon"><use href="#i-mic"/></svg></span><span>Voice &amp; Wake</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('features')" data-tab="features"><span class="psn-i"><svg class="licon"><use href="#i-sparkles"/></svg></span><span>Features</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('personas')" data-tab="personas"><span class="psn-i"><svg class="licon"><use href="#i-drama"/></svg></span><span>Personas</span></button>
@@ -251,12 +253,13 @@
          the matching <section data-pane="…"> + highlights via the
          IntersectionObserver wired in JS. -->
     <nav class="ps-toc" id="ps-toc">
-      <div class="ps-toc-h">SETTINGS · 10</div>
+      <div class="ps-toc-h">SETTINGS · 11</div>
       <a class="ps-toc-link on" data-target="account"     onclick="setSettingsTab('account');return false"><svg class="licon"><use href="#i-user"/></svg>Account</a>
       <a class="ps-toc-link"    data-target="profile"     onclick="setSettingsTab('profile');return false"><svg class="licon"><use href="#i-file-text"/></svg>Profile</a>
       <a class="ps-toc-link"    data-target="models"      onclick="setSettingsTab('models');return false"><svg class="licon"><use href="#i-brain"/></svg>Models</a>
       <a class="ps-toc-link"    data-target="providers"   onclick="setSettingsTab('providers');return false"><svg class="licon"><use href="#i-key"/></svg>Providers</a>
       <a class="ps-toc-link"    data-target="connections" onclick="setSettingsTab('connections');return false"><svg class="licon"><use href="#i-plug"/></svg>Connections</a>
+      <a class="ps-toc-link"    data-target="mobile"      onclick="setSettingsTab('mobile');return false"><svg class="licon"><use href="#i-smartphone"/></svg>Mobile</a>
       <a class="ps-toc-link"    data-target="voice"       onclick="setSettingsTab('voice');return false"><svg class="licon"><use href="#i-mic"/></svg>Voice</a>
       <a class="ps-toc-link"    data-target="features"    onclick="setSettingsTab('features');return false"><svg class="licon"><use href="#i-sparkles"/></svg>Features</a>
       <a class="ps-toc-link"    data-target="personas"    onclick="setSettingsTab('personas');return false"><svg class="licon"><use href="#i-drama"/></svg>Personas</a>
@@ -695,6 +698,48 @@
             <div class="local-status" id="mcp-status">No MCP server selected.</div>
           </div>
           <div id="mcp-servers" class="local-status" style="margin-top:8px"></div>
+        </div>
+      </section>
+
+      <!-- ───────── MOBILE COMPANION ───────── -->
+      <!-- One-click "Connect phone": spawns horizon-serve on :18789, paints
+           a QR code of the pairing URL with the bearer token embedded. User
+           scans with their camera and the mobile PWA opens with auth
+           already in place. No copy-paste, no terminal commands. -->
+      <section data-pane="mobile">
+        <div class="psview-h">Mobile companion</div>
+        <div class="psview-sub">Open Horizon on your phone — same chat, same memory, same provider. Click Connect, scan, done.</div>
+        <div class="ps">
+          <div class="psl">Pair your phone</div>
+          <p class="ps-hint" style="margin:0 0 12px;font-size:12px;color:var(--t3)">Your phone must be on the same Wi-Fi network as this computer.</p>
+          <div class="mobile-pair-card">
+            <!-- State: server stopped -->
+            <div class="mp-stopped">
+              <button class="psv primary" id="mp-start" onclick="mobilePairStart()">
+                <svg class="licon" style="vertical-align:-2px"><use href="#i-smartphone"/></svg>
+                Connect phone
+              </button>
+              <p class="mp-hint">We'll show a QR code — point your phone camera at it and tap the link.</p>
+            </div>
+            <!-- State: server running -->
+            <div class="mp-running" hidden>
+              <div class="mp-qr-wrap">
+                <img class="mp-qr" alt="QR code for pairing" id="mp-qr-img"/>
+                <div class="mp-instr">
+                  <h3>1. Open your camera</h3>
+                  <p>Point it at this QR code (no app needed).</p>
+                  <h3>2. Tap the link</h3>
+                  <p>Or open <code class="mp-url" id="mp-url-text"></code> manually.</p>
+                  <h3>3. Save to home screen</h3>
+                  <p>Tap "Add to Home Screen" — it'll work like an app.</p>
+                </div>
+              </div>
+              <div class="mp-actions">
+                <button class="psv ghost" id="mp-stop" onclick="mobilePairStop()">Stop server</button>
+                <span class="mp-status">Running on port <span class="mp-port" id="mp-port-text">18789</span></span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2805,6 +2850,130 @@ function closePanel(){
   document.getElementById('panel').classList.remove('show');
   if (isSurfaceActive('settings') || isSurfaceActive('personas')) closeActiveSurface();
 }
+
+// ═══ MOBILE COMPANION ═══════════════════════════════════════════════════════
+// Settings → Mobile pane. The user clicks "Connect phone"; we ask the main
+// process to spawn horizon-serve on :18789, get back a QR code data-URL of
+// the pairing URL (with bearer token baked in), and swap the card to its
+// "running" state. The QR can be scanned with any iOS / Android camera —
+// the mobile PWA opens with auth pre-filled. Stopping the server returns
+// the card to the "Connect phone" state. Both calls are idempotent so a
+// double-click can't double-start the server.
+let _mpBusy = false;
+function _mpFindCard() {
+  return document.querySelector('.mobile-pair-card');
+}
+function _mpRenderRunning(state) {
+  const card = _mpFindCard();
+  if (!card) return;
+  const stopped = card.querySelector('.mp-stopped');
+  const running = card.querySelector('.mp-running');
+  if (stopped) stopped.hidden = true;
+  if (running) running.hidden = false;
+  const img = document.getElementById('mp-qr-img');
+  if (img && state.qrDataUrl) img.src = state.qrDataUrl;
+  const urlEl = document.getElementById('mp-url-text');
+  if (urlEl && state.url) urlEl.textContent = state.url;
+  const portEl = document.getElementById('mp-port-text');
+  if (portEl && state.port) portEl.textContent = String(state.port);
+}
+function _mpRenderStopped() {
+  const card = _mpFindCard();
+  if (!card) return;
+  const stopped = card.querySelector('.mp-stopped');
+  const running = card.querySelector('.mp-running');
+  if (stopped) stopped.hidden = false;
+  if (running) running.hidden = true;
+}
+async function mobilePairStart() {
+  if (_mpBusy) return;
+  if (!window.H || !window.H.mobile || typeof window.H.mobile.start !== 'function') {
+    toast?.('Mobile pairing not available — restart the app to load the new bridge.');
+    return;
+  }
+  const btn = document.getElementById('mp-start');
+  _mpBusy = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Starting…'; }
+  try {
+    const res = await window.H.mobile.start();
+    if (!res || !res.ok) {
+      const msg = (res && res.error) || 'Failed to start mobile server';
+      try { toast?.(msg); } catch(_) { alert(msg); }
+      return;
+    }
+    _mpRenderRunning(res);
+  } catch (e) {
+    try { toast?.('Mobile start failed: ' + e.message); } catch(_) { alert(e.message); }
+  } finally {
+    _mpBusy = false;
+    if (btn) {
+      btn.disabled = false;
+      // Restore the original label + icon.
+      btn.innerHTML = '<svg class="licon" style="vertical-align:-2px"><use href="#i-smartphone"/></svg> Connect phone';
+    }
+  }
+}
+async function mobilePairStop() {
+  if (_mpBusy) return;
+  if (!window.H || !window.H.mobile || typeof window.H.mobile.stop !== 'function') return;
+  _mpBusy = true;
+  try {
+    await window.H.mobile.stop();
+    _mpRenderStopped();
+  } catch (e) {
+    try { toast?.('Mobile stop failed: ' + e.message); } catch(_) {}
+  } finally {
+    _mpBusy = false;
+  }
+}
+// On Settings open — query current state so the card reflects reality even
+// after a re-open or renderer reload. Wired via the existing setSettingsTab
+// hook above (see chat-settings.js), but also fires here as a safety net so
+// the pane is correct regardless of how it was navigated to.
+async function refreshMobilePairState() {
+  if (!window.H || !window.H.mobile || typeof window.H.mobile.status !== 'function') return;
+  try {
+    const s = await window.H.mobile.status();
+    if (s && s.running && s.url) {
+      _mpRenderRunning(s);
+    } else {
+      _mpRenderStopped();
+    }
+  } catch (_) { /* swallow — leaves card in its default Stopped state */ }
+}
+// Auto-refresh when the Mobile pane scrolls into view (single-scroll mode)
+// or when the legacy tab switch fires.
+(function _wireMobilePaneObserver() {
+  function wire() {
+    const sec = document.querySelector('section[data-pane="mobile"]');
+    if (!sec) return setTimeout(wire, 300);
+    // Refresh on pane visible
+    try {
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) { refreshMobilePairState(); break; }
+        }
+      }, { threshold: 0.2 });
+      io.observe(sec);
+    } catch (_) {}
+    // Also refresh on every setSettingsTab call to 'mobile' via a thin wrapper.
+    const orig = window.setSettingsTab;
+    if (typeof orig === 'function' && !orig.__mobileWrapped) {
+      const wrapped = function(name) {
+        const r = orig.apply(this, arguments);
+        if (name === 'mobile') { try { refreshMobilePairState(); } catch(_) {} }
+        return r;
+      };
+      wrapped.__mobileWrapped = true;
+      window.setSettingsTab = wrapped;
+    }
+  }
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', wire, { once: true });
+  } else {
+    wire();
+  }
+})();
 
 // Phase 20.3 — settings search filter. Walks every .pf row and every .ps
 // card, dim/hide those whose visible text doesn't match the query.

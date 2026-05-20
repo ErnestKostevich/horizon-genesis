@@ -107,6 +107,7 @@ function printHelp(opts = {}) {
       [c('doctor'),  '[--fix]',   'health check + auto-fix'],
       [c('cost'),    '',          'token + dollar spend'],
       [c('status'),  '',          'compact runtime status'],
+      [c('mobile'),  '',          'pair a phone (QR + local server)'],
       [c('theme'),   '[name]',    'switch CLI theme (--list)'],
       [c('version'), '',          'version + key health'],
       [c('help'),    '[--all]',   'show this help (--all = full list)'],
@@ -326,7 +327,9 @@ async function dispatch(argv) {
                  // Phase 28.5 — Honcho dialectic + Live Canvas surfaces
                  'dialectic', 'canvas',
                  // Fix 8 — CLI themes
-                 'theme'];
+                 'theme',
+                 // Phone pairing — QR + local server, one command
+                 'mobile'];
 
   // Phase 12 — AI-helper + utility verbs bundled in two shared files.
   // Dispatch routes them to the right module + passes the subcommand
