@@ -18,7 +18,7 @@
 //   --never-approve  reject every tool call (read-only safe mode)
 //   default          interactive prompt for shell/file-write tools
 
-const { fmt, promptYesNo, isTTY } = require('../tty');
+const { fmt, promptYesNo, isTTY, friendlyError } = require('../tty');
 const { renderMarkdown } = require('../markdown');
 const { GradientSpinner } = require('../banner');
 
@@ -137,7 +137,7 @@ async function run({ runtime, args, flags }) {
     }) + '\n');
   } else {
     if (result.error) {
-      process.stderr.write(fmt.err(result.error) + '\n');
+      process.stderr.write(fmt.err(friendlyError(result.error)) + '\n');
       return 1;
     }
     if (result.answer) {

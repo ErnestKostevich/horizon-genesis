@@ -1,6 +1,22 @@
 #!/usr/bin/env node
 // Horizon CLI — single entry point for all subcommands.
 //
+// v0.0.2 first-run UX: suppress noisy Node deprecations (punycode etc.)
+// so the splash isn't cluttered, and auto-detect zero-keys state so
+// `horizon` with no args drops the user straight into the setup wizard
+// instead of an empty TUI prompt they don't understand.
+
+// Suppress Node's punycode deprecation warning + any other DEP* notices.
+// These show up because some transitive npm dependency still uses the
+// removed `punycode` module. We can't fix it from our side and it
+// rattles the user on every launch.
+process.removeAllListeners('warning');
+process.on('warning', (w) => {
+  if (w?.name === 'DeprecationWarning') return;
+  // Other warnings still surface, just not the deprecation noise.
+  process.stderr.write(`(warning) ${w.message}\n`);
+});
+//
 // Usage:
 //   horizon                        — launch TUI
 //   horizon "task"                 — shorthand for `horizon agent "task"`
@@ -174,6 +190,45 @@ function resolveProfileUserDataDir(baseUserDataDir, explicitProfile) {
   return path.join(baseUserDataDir, 'profiles', name);
 }
 
+/**
+ * v0.0.2 — first-run detection. Returns true if at least one AI
+ * provider key (or a local provider URL) is configured on the loaded
+ * runtime's keysStore / settingsStore. Used by the no-args path to
+ * decide whether to drop into the TUI or run setup first.
+ *
+ * Order matches the setup wizard's recommended list — cheap and free
+ * options first. We don't validate the key is correct (that's
+ * `horizon doctor`'s job), just that SOMETHING is configured.
+ */
+function _anyProviderKeyConfigured(runtime) {
+  const k = runtime?.keysStore;
+  const s = runtime?.settingsStore;
+  if (!k && !s) return false;
+  const KEYED = ['gemini','groq','cerebras','openai','claude','deepseek',
+                 'deepinfra','fireworks','together','sambanova','nebius',
+                 'openrouter','mistral','qwen','moonshot','zai','perplexity',
+                 'cohere','grok','azure','custom'];
+  if (k) {
+    for (const id of KEYED) {
+      try {
+        const v = k.get(`k_${id}`);
+        if (v && String(v).trim()) return true;
+      } catch (_) {}
+    }
+  }
+  // Local provider URLs count as "configured" — user can run Ollama
+  // without any API key whatsoever.
+  if (s) {
+    try {
+      const ollama = s.get('ollamaUrl') || s.get('ollama.url');
+      const lmstudio = s.get('lmStudioUrl') || s.get('lmstudio.url');
+      const localai = s.get('localAiUrl') || s.get('localai.url');
+      if (ollama || lmstudio || localai) return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
 async function loadRuntime(flags) {
   const { createHorizonRuntime } = require('../src/main/runtime/headless');
   const { defaultUserDataDir } = require('../src/main/runtime/store-shim');
@@ -200,10 +255,36 @@ async function dispatch(argv) {
 
   const cmd = positional[0];
 
-  // No args → launch TUI
+  // No args → first-run check, then TUI.
+  //
+  // v0.0.2 — if the user has zero API keys configured, we DON'T drop
+  // them into an empty TUI with a `>` prompt and no way to send a
+  // message (which was the v0.0.1 trap). Instead we auto-run the
+  // setup wizard. After it finishes, we hand off to the TUI like
+  // normal. Skip the detection with --no-setup or HORIZON_SKIP_SETUP=1
+  // (useful for headless CI / docker images that pre-mount keys).
   if (!cmd) {
+    // Skip auto-setup when:
+    //   • user explicitly opts out (--no-setup or HORIZON_SKIP_SETUP=1)
+    //   • stdin isn't a TTY (piped input — wizard would block on readline)
+    const skipSetup = flags?.['no-setup']
+                   || process.env.HORIZON_SKIP_SETUP === '1'
+                   || !process.stdin.isTTY;
+    if (!skipSetup) {
+      const runtime = await loadRuntime(flags);
+      if (!_anyProviderKeyConfigured(runtime)) {
+        // Friendly nudge so the user understands what's about to happen.
+        const c = require('./lib/banner');
+        process.stdout.write('\n' + c.bannerCompact() + '\n');
+        process.stdout.write('  \x1b[90mNo API key found.\x1b[0m  \x1b[97mLet\'s set you up — 30 seconds.\x1b[0m\n');
+        process.stdout.write('  \x1b[90mSkip with Ctrl+C; rerun anytime via \x1b[36mhorizon setup\x1b[90m.\x1b[0m\n\n');
+        const setupCmd = require('./lib/commands/setup');
+        const rc = await setupCmd.run({ runtime, args: [], flags });
+        if (rc !== 0) return rc;
+      }
+    }
     const tuiPath = path.join(__dirname, 'horizon-tui.js');
-    require(tuiPath).main({ flags });
+    await require(tuiPath).main({ flags });
     return 0;
   }
 
