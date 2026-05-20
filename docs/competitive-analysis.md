@@ -47,7 +47,7 @@ we have a desktop app a non-coder can use.
 | | Horizon | Hermes |
 |---|---|---|
 | Subcommands | 53 unique | ~70 |
-| Streaming chat | ✓ token-by-token across 14 providers | ✓ |
+| Streaming chat | ✓ token-by-token across 25 providers | ✓ |
 | Markdown rendering | ✓ in-terminal | ✓ |
 | ASCII banner + gradient spinner | ✓ | ✓ |
 | Shell autocomplete | ✓ bash + zsh + fish + pwsh | ✓ |
