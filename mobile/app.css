@@ -91,6 +91,15 @@ body { display: flex; flex-direction: column; }
 .appbar-title { display: flex; flex-direction: column; line-height: 1.1; }
 .appbar-title strong { font-size: 15px; }
 .appbar-title small { font-size: 11px; color: var(--t3); }
+/* Status dot before the small text. Green = connected, red = offline.
+   Defaults to neutral until the first /api/status poll lands. */
+.appbar-title small::before {
+  content: ''; display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--t3); margin-right: 6px; vertical-align: middle;
+}
+.appbar-title small.online::before  { background: var(--good); }
+.appbar-title small.offline::before { background: var(--bad); }
 
 .iconbtn {
   background: transparent; border: none; color: var(--fg); cursor: pointer;

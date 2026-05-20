@@ -167,3 +167,106 @@ test('CORS preflight OPTIONS returns 204', async () => {
   assert.equal(r.status, 204);
   assert.ok(r.headers['access-control-allow-origin']);
 });
+
+test('GET /api/status returns the PWA snapshot shape', async () => {
+  const r = await request('GET', '/api/status', null, { Authorization: 'Bearer ' + TOKEN });
+  assert.equal(r.status, 200);
+  const parsed = JSON.parse(r.body);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.online, true);
+  assert.ok(parsed.provider);
+  assert.ok(parsed.persona);
+  assert.ok('memoryCount' in parsed);
+  assert.ok('skillsCount' in parsed);
+  assert.ok(parsed.serverVersion);
+});
+
+test('GET /api/providers lists configured providers with hasKey flag', async () => {
+  const r = await request('GET', '/api/providers', null, { Authorization: 'Bearer ' + TOKEN });
+  assert.equal(r.status, 200);
+  const parsed = JSON.parse(r.body);
+  assert.ok(Array.isArray(parsed));
+  // Should include the major providers
+  const ids = parsed.map(p => p.id);
+  assert.ok(ids.includes('auto'));
+  assert.ok(ids.includes('gemini'));
+  assert.ok(ids.includes('claude'));
+  assert.ok(ids.includes('openai'));
+  // Every entry has the shape the PWA expects
+  for (const p of parsed) {
+    assert.ok('id' in p);
+    assert.ok('hasKey' in p);
+    assert.ok('model' in p);
+  }
+});
+
+test('GET /api/memories returns the memories envelope', async () => {
+  const r = await request('GET', '/api/memories?limit=5', null, { Authorization: 'Bearer ' + TOKEN });
+  assert.equal(r.status, 200);
+  const parsed = JSON.parse(r.body);
+  assert.ok(Array.isArray(parsed.memories));
+  assert.ok('total' in parsed);
+});
+
+test('GET /api/memories with q= still returns the envelope', async () => {
+  const r = await request('GET', '/api/memories?q=anything&limit=3', null, { Authorization: 'Bearer ' + TOKEN });
+  assert.equal(r.status, 200);
+  const parsed = JSON.parse(r.body);
+  assert.ok(Array.isArray(parsed.memories));
+});
+
+test('POST /api/settings updates persona + provider in one call', async () => {
+  const r = await request('POST', '/api/settings', JSON.stringify({ persona: 'sage', provider: 'gemini' }),
+    { Authorization: 'Bearer ' + TOKEN });
+  assert.equal(r.status, 200);
+  const parsed = JSON.parse(r.body);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.updated.persona, 'sage');
+  assert.equal(parsed.updated.provider, 'gemini');
+  // Confirm the change actually landed in the store
+  const s = await request('GET', '/api/status', null, { Authorization: 'Bearer ' + TOKEN });
+  const sp = JSON.parse(s.body);
+  assert.equal(sp.persona, 'sage');
+  assert.equal(sp.provider, 'gemini');
+});
+
+test('POST /api/skill/:id/run on missing skill returns 404 JSON', async () => {
+  const r = await request('POST', '/api/skill/does-not-exist/run', JSON.stringify({ task: 'noop' }),
+    { Authorization: 'Bearer ' + TOKEN });
+  assert.equal(r.status, 404);
+  const parsed = JSON.parse(r.body);
+  assert.equal(parsed.error, 'skill not found');
+});
+
+test('GET /api/unknown returns JSON 404, NOT the PWA HTML', async () => {
+  // Critical regression guard: the mobile PWA chokes if an /api/* path
+  // accidentally falls through to the static-file server (it tries to
+  // JSON.parse `<!doctype html...` and shows "Unexpected token '<'").
+  const r = await request('GET', '/api/this-does-not-exist', null, { Authorization: 'Bearer ' + TOKEN });
+  assert.equal(r.status, 404);
+  assert.match(r.headers['content-type'], /application\/json/);
+  const parsed = JSON.parse(r.body);
+  assert.equal(parsed.error, 'not found');
+  assert.equal(parsed.path, '/api/this-does-not-exist');
+});
+
+test('?token= query param is accepted as an Authorization fallback', async () => {
+  // EventSource and some embedded WebViews can't set custom headers, so
+  // we accept the token via query string too. Same constant-time check.
+  const r = await request('GET', '/api/status?token=' + encodeURIComponent(TOKEN));
+  assert.equal(r.status, 200);
+  const parsed = JSON.parse(r.body);
+  assert.equal(parsed.ok, true);
+});
+
+test('?token= with wrong value still returns 401', async () => {
+  const r = await request('GET', '/api/status?token=wrong-value');
+  assert.equal(r.status, 401);
+});
+
+test('GET / serves the PWA HTML (token NOT required for static)', async () => {
+  const r = await request('GET', '/');
+  assert.equal(r.status, 200);
+  assert.match(r.headers['content-type'], /text\/html/);
+  assert.match(r.body, /<title>Horizon AI/);
+});

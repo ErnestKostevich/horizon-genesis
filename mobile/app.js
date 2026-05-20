@@ -24,13 +24,17 @@
     sending: false,
   };
 
-  // Pre-fill from URL hash/search params (QR pairing)
+  // Pre-fill from URL hash/search params (QR pairing). If only `token`
+  // is present, assume the PWA is being served from the same origin as
+  // the API and default state.url to location.origin — this is what
+  // `horizon mobile` produces and what every QR pair flow expects.
   (() => {
     const params = new URLSearchParams(location.search || location.hash.slice(1));
     const t = params.get('token');
     const u = params.get('url');
     if (t) state.token = t;
     if (u) state.url = u;
+    else if (t && !state.url) state.url = location.origin;
     if (t || u) {
       // Clean URL so the token isn't visible in browser history
       history.replaceState(null, '', location.pathname);
@@ -41,20 +45,45 @@
   const $ = (id) => document.getElementById(id);
 
   async function api(method, path, body) {
-    const r = await fetch(state.url.replace(/\/$/, '') + path, {
-      method,
-      headers: {
-        'Accept': 'application/json',
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        'Authorization': 'Bearer ' + state.token,
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    let r;
+    try {
+      r = await fetch(state.url.replace(/\/$/, '') + path, {
+        method,
+        headers: {
+          'Accept': 'application/json',
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+          'Authorization': 'Bearer ' + state.token,
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (e) {
+      // Network error — server unreachable. Re-throw with a clearer message.
+      throw new Error('cannot reach server (check Wi-Fi / URL)');
+    }
     if (!r.ok) {
       const err = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status}: ${err.slice(0, 200)}`);
+      // Try to surface a JSON error if the server returned one
+      let detail = err.slice(0, 200);
+      try {
+        const j = JSON.parse(err);
+        if (j.error) detail = j.error;
+      } catch (_) {}
+      if (r.status === 401) throw new Error('unauthorized — token rejected');
+      if (r.status === 404) throw new Error(`not found (${path})`);
+      throw new Error(`HTTP ${r.status}: ${detail}`);
     }
-    return r.json();
+    // Some endpoints accidentally return HTML when misrouted — catch the
+    // JSON parse error and give a useful hint instead of "Unexpected
+    // token '<'".
+    const text = await r.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      if (text.trim().startsWith('<')) {
+        throw new Error('server returned HTML (check token / server URL)');
+      }
+      throw new Error('bad JSON from server');
+    }
   }
 
   function save() {
@@ -157,11 +186,14 @@
   }
 
   // ── App view ─────────────────────────────────────────────────────────
+  let statusPollTimer = null;
+
   async function enterApp() {
     show('app');
     setModePill();
     await refreshHeader();
     await populateSettings();
+    startStatusPoll();
   }
 
   function setModePill() {
@@ -176,55 +208,94 @@
     setModePill();
   });
 
+  /** Pull /api/status and update the header dot + persona/provider summary. */
   async function refreshHeader() {
     try {
-      const v = await api('GET', '/api/version');
-      $('hdr-title').textContent = 'Horizon · ' + (v.persona || 'jarvis');
-      $('hdr-status').textContent = `${v.provider || '?'} · ${v.memory?.memories || 0} mem · v${v.version}`;
+      const s = await api('GET', '/api/status');
+      $('hdr-title').textContent = 'Horizon · ' + (s.persona || 'jarvis');
+      $('hdr-status').textContent = `online · ${s.provider || '?'} · ${s.memoryCount || 0} mem · v${s.serverVersion}`;
+      $('hdr-status').classList.remove('offline');
+      $('hdr-status').classList.add('online');
       $('info-url').textContent = state.url;
-      $('info-mem').textContent = (v.memory?.memories || 0);
-      $('info-skills').textContent = (v.skills || 0);
+      $('info-mem').textContent = (s.memoryCount || 0);
+      $('info-skills').textContent = (s.skillsCount || 0);
+      return s;
     } catch (e) {
-      $('hdr-status').textContent = 'offline · ' + e.message.slice(0, 30);
+      $('hdr-status').textContent = 'offline · ' + e.message.slice(0, 40);
+      $('hdr-status').classList.remove('online');
+      $('hdr-status').classList.add('offline');
+      return null;
     }
+  }
+
+  /** Poll /api/status every 10s for a live online indicator. */
+  function startStatusPoll() {
+    if (statusPollTimer) clearInterval(statusPollTimer);
+    statusPollTimer = setInterval(() => { refreshHeader().catch(() => {}); }, 10_000);
   }
 
   async function populateSettings() {
     try {
-      const personas = await api('GET', '/api/personas');
-      const v = await api('GET', '/api/version');
+      const [personas, providers, status] = await Promise.all([
+        api('GET', '/api/personas').catch(() => []),
+        api('GET', '/api/providers').catch(() => []),
+        api('GET', '/api/status').catch(() => ({})),
+      ]);
+
       const sel = $('set-persona');
       sel.innerHTML = '';
-      for (const p of personas) {
+      const personaList = Array.isArray(personas) ? personas : [];
+      for (const p of personaList) {
         const o = document.createElement('option');
-        o.value = p.id; o.textContent = p.id;
-        if (p.id === v.persona) o.selected = true;
+        o.value = p.id;
+        o.textContent = p.name ? `${p.id} · ${p.name}` : p.id;
+        if (p.id === status.persona) o.selected = true;
         sel.appendChild(o);
       }
       sel.onchange = async () => {
-        await api('POST', '/api/persona', { id: sel.value }).catch(() => {});
+        try {
+          await api('POST', '/api/settings', { persona: sel.value });
+        } catch (e) {
+          // Old server with no /api/settings — fall back to /api/persona
+          await api('POST', '/api/persona', { id: sel.value }).catch(() => {});
+        }
         await refreshHeader();
       };
-      // Provider dropdown — hard-coded list (matches DEFAULT_PROVIDER_MODELS)
+
       const provSel = $('set-provider');
       provSel.innerHTML = '';
-      for (const p of ['auto','gemini','claude','openai','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','together','fireworks','deepinfra','cerebras','sambanova','moonshot','zai','nebius','ollama','lmstudio']) {
+      const provList = Array.isArray(providers) && providers.length ? providers
+        // Backstop list in case /api/providers is missing on an old server.
+        : ['auto','gemini','claude','openai','groq','deepseek','grok','mistral','qwen','perplexity','cohere','openrouter','together','fireworks','deepinfra','cerebras','sambanova','moonshot','zai','nebius','ollama','lmstudio'].map(id => ({ id, hasKey: false }));
+      for (const p of provList) {
         const o = document.createElement('option');
-        o.value = p; o.textContent = p;
-        if (p === v.provider) o.selected = true;
+        o.value = p.id;
+        // Mark configured providers with a • so the user sees what works
+        const tag = p.hasKey ? ' •' : p.local ? ' (local)' : '';
+        o.textContent = p.id + tag;
+        if (p.id === status.provider) o.selected = true;
         provSel.appendChild(o);
       }
       provSel.onchange = async () => {
-        await api('POST', '/api/model', { provider: provSel.value }).catch(() => {});
+        try {
+          await api('POST', '/api/settings', { provider: provSel.value });
+        } catch (e) {
+          await api('POST', '/api/model', { provider: provSel.value }).catch(() => {});
+        }
         await refreshHeader();
       };
-    } catch (_) {}
+    } catch (e) {
+      // Surface the error in the drawer so the user can see why the
+      // dropdowns are empty.
+      $('info-url').textContent = state.url + ' (' + e.message + ')';
+    }
   }
 
   // Drawer
   $('open-menu').addEventListener('click', () => $('drawer').classList.remove('hidden'));
   $('close-drawer').addEventListener('click', () => $('drawer').classList.add('hidden'));
   $('reset-pair').addEventListener('click', () => {
+    if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
     localStorage.clear();
     location.reload();
   });
