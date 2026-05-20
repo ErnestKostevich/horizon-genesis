@@ -272,8 +272,14 @@ function createHorizonRuntime(opts = {}) {
         // refreshTools() lazily spawns each enabled server (stdio
         // handshake + tools/list call) and caches the result on the
         // settingsStore so callers can read it without re-spawning.
-        const tools = await mcpRegistry.refreshTools().catch(e => { log('mcp refreshTools failed:', e.message); return []; });
-        log(`mcp: ${enabled.length} server${enabled.length === 1 ? '' : 's'} live, ${tools.length} tools cached`);
+        // Fire-and-forget — createHorizonRuntime() is sync (every
+        // caller expects a plain object back), so we don't await
+        // the refresh here. Tools are cached on settingsStore as
+        // they come back, and the renderer / CLI commands re-query
+        // when they need a fresh list.
+        mcpRegistry.refreshTools()
+          .then(tools => log(`mcp: ${enabled.length} server${enabled.length === 1 ? '' : 's'} live, ${tools.length} tools cached`))
+          .catch(e => log('mcp refreshTools failed:', e.message));
       } else {
         log('mcp: no servers configured (use `horizon mcp add` to register)');
       }
