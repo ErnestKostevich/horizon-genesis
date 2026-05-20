@@ -51,123 +51,135 @@ const SPEC = {
   aliases: { h: 'help', v: 'version', j: 'json', q: 'quiet', m: 'model', p: 'persona' },
   booleans: ['help', 'version', 'json', 'human', 'quiet', 'stream', 'verbose',
              'auto-approve', 'never-approve', 'reflect', 'semantic',
-             'list', 'enable-tg', 'enable-discord'],
+             'list', 'enable-tg', 'enable-discord', 'reveal', 'all',
+             'no-setup'],
   negatables: ['reflect', 'semantic'],
 };
 
-function printHelp() {
-  // Phase 20.3 — column-aligned help table. Each section is a list of
-  // [command, args, description] rows; helpTable() pads command + args
-  // columns so the description text lines up across every row.
+function printHelp(opts = {}) {
+  // Fix 7 — compact 25-line help by default. Two-column layout, four
+  // groups, brief phrases. `--all` shows everything (the previous full
+  // surface). Rarely-used commands live behind `horizon help --all`.
   const c = (s) => fmt.cyan(s);
+  const showAll = !!opts.all;
 
   const head = [
     bannerCompact(),
     '',
-    fmt.bold('Usage'),
-    '  horizon                          launch the TUI',
-    '  horizon "task"                   shorthand for \'horizon agent "task"\'',
-    '  horizon <command> [args...]',
+    fmt.bold('Usage') + fmt.dim('  horizon [command] [args] [flags]'),
   ].join('\n');
 
-  const tables = {
-    'Commands': [
-      [c('setup'),      '',           'Interactive first-time wizard (provider, key, persona, lang)'],
-      [c('agent'),      '"task"',     'Full agent loop with tool use + reflection'],
-      [c('chat'),       '"msg"',      'Single-turn chat (streaming + markdown by default)'],
-      [c('cost'),       '',           'Token + dollar spend (--days N --json --provider X)'],
-      [c('skill'),      'subcommand', 'list | show <id> | new <id> | run <id> "task" | enable | disable'],
-      [c('mem'),        'subcommand', 'search | dump | profile | forget | stats | migrate | sqlite-status | review'],
-      [c('dialectic'),  'subcommand', 'Honcho 9th-layer diff log: summary | recent | search | clear'],
-      [c('canvas'),     'subcommand', 'Live Canvas surface: show | append | prepend | replace | clear'],
-      [c('model'),      '[provider]', 'Read/set provider. --list shows all 25 options'],
-      [c('persona'),    '[id]',       'Read/set active persona. --list shows options'],
-      [c('connect'),    'subcommand', 'list | test <id> | telegram|discord|slack|notion|linear|whatsapp|signal|imessage|email --token X'],
-      [c('doctor'),     '[--fix]',    'Health check + auto-fix'],
-      [c('profile'),    'subcommand', 'list | use | create | show | delete | rename | path'],
-      [c('completion'), '<shell>',    'Emit bash/zsh/fish/pwsh tab-completion script'],
-      [c('update'),     '[--check]',  'Self-update from GitHub Releases'],
-      [c('cron'),       'subcommand', 'Scheduled tasks: list | create "<expr>" "<task>" | run | pause | daemon'],
-      [c('sessions'),   'subcommand', 'Multi-chat history: list | new | show | export | delete | rename'],
-      [c('checkpoints'),'subcommand', 'Memory savepoints: save | list | restore | remove'],
-      [c('backup'),     'subcommand', 'Full userData snapshots: snapshot | list | restore | prune'],
-      [c('status'),     '[--deep]',   'Compact runtime status (+ latency probes)'],
-      [c('insights'),   '[--days N]', 'Usage analytics: models, hours, personas, success rate'],
-      [c('logs'),       '[type]',     'Typed log views: cost | agent | errors | cron | all'],
-      [c('hooks'),      'subcommand', 'Life-cycle hooks: list | add <event> "<cmd>" | test | remove'],
-      [c('agents'),     'subcommand', 'List/stop concurrent runs (needs horizon serve up)'],
+  // Default: four groups, ~25 lines total
+  const coreTables = {
+    'Chat & Agent': [
+      [c('agent'),   '"task"',    'multi-step agent loop with tools'],
+      [c('chat'),    '"msg"',     'single-turn chat (streaming)'],
+      [c('ask'),     '"..."',     'quick one-liner question'],
+      [c('tui'),     '',          'launch interactive shell'],
     ],
-    'AI helpers': [
-      [c('ask'),        '"..."',      'Quick one-liner question (terse, plain output)'],
-      [c('explain'),    '<file|->',   'Explain code or text in plain language'],
-      [c('summarize'),  '<file|->',   'Bullet-point summary'],
-      [c('translate'),  '<file|->',   'Translate (--to <lang>, default Russian)'],
-      [c('review'),     '<file>',     'Code review (bugs, security, maintainability)'],
-      [c('refactor'),   '<file>',     'Suggest refactoring (read-only output)'],
-      [c('test'),       '<file>',     'Generate unit-test scaffold'],
-      [c('diff'),       '<file|->',   'Explain a unified diff'],
-      [c('search'),     '"query"',    'Semantic search across memory'],
-      [c('brief'),      '',           'Morning briefing from memory + cron + cost'],
+    'Skills & Memory': [
+      [c('skill'),   'sub',       'list / show / new / run / enable / disable'],
+      [c('mem'),     'sub',       'search / dump / profile / stats / review'],
+      [c('sessions'),'sub',       'multi-chat history: list / new / show'],
+      [c('persona'), '[id]',      'read or set persona (--list)'],
+      [c('model'),   '[prov]',    'read or set provider (--list)'],
     ],
-    'Management': [
-      [c('mcp'),        'subcommand', 'MCP servers: list | add | remove | enable | disable | tools'],
-      [c('plugins'),    'subcommand', 'Installed plugins: list | show | enable | disable'],
-      [c('rules'),      'subcommand', '.horizon/rules.md: show | edit | add "rule" | clear'],
-      [c('ws'),         'subcommand', '.horizon/: show | init | path | memory show|edit'],
+    'Connectors': [
+      [c('connect'), 'sub',       'list / test / telegram|discord|slack|notion|...'],
+      [c('mcp'),     'sub',       'MCP servers: list / add / remove / tools'],
+      [c('plugins'), 'sub',       'installed plugins: list / show / enable'],
+      [c('serve'),   '',          'headless HTTP API server (PWA / cron / mobile)'],
     ],
-    'Utilities': [
-      [c('notes'),      'subcommand', 'Quick notes: list | add "..." | show | rm'],
-      [c('todo'),       'subcommand', 'TODO with completion: list | add | done | rm | clear-done'],
-      [c('timer'),      '<minutes>',  'Pomodoro timer with progress bar + bell'],
-      [c('stats'),      '',           'Global usage stats (memory + skills + cost)'],
-      [c('clip'),       '[show|len]', 'Read clipboard, analyse with AI by default'],
-      [c('env'),        'subcommand', 'Per-install env vars: list | set K=V | unset K'],
-      [c('open'),       '<url|path>', 'OS-native opener'],
-    ],
-    'Dev helpers': [
-      [c('git'),        'subcommand', 'AI git: commit | review [target] | log [query] | blame <file>'],
-      [c('shell'),      '"what to do"', 'Get a shell command suggestion (--run to execute)'],
-      [c('web'),        '"query"',    'Web search via Tavily / Perplexity'],
-      [c('image'),      '"prompt"',   'Generate image (DALL-E / Imagen) → --out file.png'],
-      [c('screen'),     'subcommand', 'capture | describe (vision-AI describes screen)'],
-      [c('explain-error'),'<log|->',  'Explain a stack trace or error log'],
-      [c('serve'),      '',           'Start the headless HTTP API server (PWA / cron / mobile)'],
-      [c('tui'),        '',           'Launch the interactive shell'],
-      [c('version'),    '',           'Print version + key health summary'],
-    ],
-    'Common flags': [
-      ['--json / --human / --quiet', '', 'Output format'],
-      ['--provider X | auto',        '', 'Override AI provider (claude|openai|gemini|...|auto)'],
-      ['--model X',                  '', 'Override model for this call'],
-      ['--persona X',                '', 'Override active persona for this call'],
-      ['--workspace path',           '', 'Override .horizon/ lookup root'],
-      ['--max-steps N',              '', 'Cap agent loop steps (default 8)'],
-      ['--no-reflect',               '', 'Disable reflection epilogue'],
-      ['--auto-approve',             '', 'Auto-approve every tool call (cron mode)'],
-      ['--never-approve',            '', 'Reject every tool call (read-only)'],
-      ['--verbose',                  '', 'Log boot diagnostics to stderr'],
+    'System': [
+      [c('setup'),   '',          'first-time wizard'],
+      [c('doctor'),  '[--fix]',   'health check + auto-fix'],
+      [c('cost'),    '',          'token + dollar spend'],
+      [c('status'),  '',          'compact runtime status'],
+      [c('theme'),   '[name]',    'switch CLI theme (--list)'],
+      [c('version'), '',          'version + key health'],
+      [c('help'),    '[--all]',   'show this help (--all = full list)'],
     ],
   };
 
-  const examples = [
-    '',
-    fmt.bold('Examples'),
-    '  horizon ' + fmt.dim('"найди все TODO в проекте и сгруппируй"'),
-    '  horizon chat ' + fmt.dim('"what\'s the capital of Lithuania?"'),
-    '  horizon skill list ' + fmt.dim('--scope user'),
-    '  horizon mem search ' + fmt.dim('"yerba mate" --limit 5'),
-    '  horizon mem dump ' + fmt.dim('--type facts > facts.jsonl'),
-    '  horizon model ' + fmt.dim('claude --model claude-sonnet-4-6'),
-    '  horizon persona ' + fmt.dim('alfred'),
-    '  horizon connect ' + fmt.dim('telegram --token <bot-token>'),
-    '  horizon serve ' + fmt.dim('--port 18789 --token mysecret'),
-    '',
-    fmt.dim('  Reads keys/settings from the same files as the Electron app'),
-    fmt.dim('  (' + require('../src/main/runtime/store-shim').defaultUserDataDir() + ').'),
-    '',
-  ].join('\n');
+  const allExtras = {
+    'AI helpers': [
+      [c('explain'),    '<file|->', 'explain code/text'],
+      [c('summarize'),  '<file|->', 'bullet-point summary'],
+      [c('translate'),  '<file|->', '--to <lang>, default ru'],
+      [c('review'),     '<file>',   'code review (bugs, security)'],
+      [c('refactor'),   '<file>',   'refactoring suggestions'],
+      [c('test'),       '<file>',   'unit-test scaffold'],
+      [c('diff'),       '<file|->', 'explain a unified diff'],
+      [c('search'),     '"query"',  'semantic memory search'],
+      [c('brief'),      '',         'morning briefing'],
+    ],
+    'Management': [
+      [c('rules'),      'sub',      '.horizon/rules.md: show / edit / add'],
+      [c('ws'),         'sub',      '.horizon/: show / init / path / memory'],
+      [c('profile'),    'sub',      'list / use / create / show / delete'],
+      [c('hooks'),      'sub',      'list / add / test / remove'],
+      [c('cron'),       'sub',      'list / create / run / pause / daemon'],
+      [c('checkpoints'),'sub',      'save / list / restore / remove'],
+      [c('backup'),     'sub',      'snapshot / list / restore / prune'],
+      [c('dialectic'),  'sub',      'Honcho diff log: summary / recent / search'],
+      [c('canvas'),     'sub',      'Live Canvas surface: show / append / replace'],
+      [c('agents'),     'sub',      'list / stop concurrent runs'],
+      [c('insights'),   '[--days]', 'usage analytics'],
+      [c('logs'),       '[type]',   'typed log views'],
+      [c('completion'), '<shell>',  'bash/zsh/fish/pwsh tab-completion'],
+      [c('update'),     '[--check]','self-update from GitHub Releases'],
+    ],
+    'Utilities': [
+      [c('notes'),      'sub',      'list / add / show / rm'],
+      [c('todo'),       'sub',      'list / add / done / rm / clear-done'],
+      [c('timer'),      '<min>',    'pomodoro timer + bell'],
+      [c('stats'),      '',         'global usage stats'],
+      [c('clip'),       '[show]',   'read clipboard, analyse with AI'],
+      [c('env'),        'sub',      'list / set K=V / unset K'],
+      [c('open'),       '<url|p>',  'OS-native opener'],
+    ],
+    'Dev helpers': [
+      [c('git'),        'sub',      'AI git: commit / review / log / blame'],
+      [c('shell'),      '"goal"',   'shell command suggestion (--run)'],
+      [c('web'),        '"q"',      'web search (Tavily / Perplexity)'],
+      [c('image'),      '"prompt"', 'generate image (DALL-E / Imagen)'],
+      [c('screen'),     'sub',      'capture / describe'],
+      [c('explain-error'),'<log>',  'explain a stack trace'],
+    ],
+    'Common flags': [
+      ['--json|--human|--quiet','',   'output format'],
+      ['--provider X|auto',     '',   'override provider'],
+      ['--model X',             '',   'override model'],
+      ['--persona X',           '',   'override persona'],
+      ['--no-reflect',          '',   'skip reflection epilogue'],
+      ['--auto-approve',        '',   'cron-friendly: approve everything'],
+      ['--never-approve',       '',   'read-only: reject everything'],
+      ['--verbose',             '',   'log boot diagnostics'],
+    ],
+  };
 
-  process.stdout.write(head + '\n' + helpTable(tables) + examples);
+  const tables = showAll ? { ...coreTables, ...allExtras } : coreTables;
+
+  let tail;
+  if (showAll) {
+    tail = [
+      '',
+      fmt.bold('Examples'),
+      '  horizon ' + fmt.dim('"find all TODOs and group them"'),
+      '  horizon chat ' + fmt.dim('"what is the capital of Lithuania?"'),
+      '  horizon model ' + fmt.dim('claude --model claude-sonnet-4-6'),
+      '  horizon connect ' + fmt.dim('telegram --token <bot-token>'),
+      '  horizon serve ' + fmt.dim('--port 18789 --token mysecret'),
+      '',
+      fmt.dim('  Reads keys/settings from the Electron app userData dir'),
+      fmt.dim('  (' + require('../src/main/runtime/store-shim').defaultUserDataDir() + ').'),
+      '',
+    ].join('\n');
+  } else {
+    tail = '\n' + fmt.dim('  Run ') + fmt.cyan('horizon help --all') + fmt.dim('  for the full command surface (AI helpers, utilities, dev tools).') + '\n';
+  }
+
+  process.stdout.write(head + '\n' + helpTable(tables) + tail);
 }
 
 function resolveProfileUserDataDir(baseUserDataDir, explicitProfile) {
@@ -245,7 +257,7 @@ async function dispatch(argv) {
   const flags = parseArgv(argv, SPEC);
   const positional = flags._;
 
-  if (flags.help) { printHelp(); return 0; }
+  if (flags.help) { printHelp({ all: !!flags.all }); return 0; }
   if (flags.version && !positional.length) {
     // bare --version flag (not the `version` subcommand)
     const runtime = await loadRuntime(flags);
@@ -299,7 +311,9 @@ async function dispatch(argv) {
                  // Phase 12 management
                  'mcp', 'plugins', 'rules', 'ws', 'workspace',
                  // Phase 28.5 — Honcho dialectic + Live Canvas surfaces
-                 'dialectic', 'canvas'];
+                 'dialectic', 'canvas',
+                 // Fix 8 — CLI themes
+                 'theme'];
 
   // Phase 12 — AI-helper + utility verbs bundled in two shared files.
   // Dispatch routes them to the right module + passes the subcommand
@@ -312,7 +326,7 @@ async function dispatch(argv) {
   const DEV_HELPERS = ['git', 'shell', 'web', 'image', 'screen',
                        'todo', 'explain-error'];
 
-  if (cmd === 'help') { printHelp(); return 0; }
+  if (cmd === 'help') { printHelp({ all: !!flags.all }); return 0; }
   if (cmd === 'tui') {
     const tuiPath = path.join(__dirname, 'horizon-tui.js');
     require(tuiPath).main({ flags });

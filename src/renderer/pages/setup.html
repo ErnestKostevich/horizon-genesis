@@ -5,19 +5,25 @@
 <title>Horizon AI — Setup</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg-0:#07060a;   --bg-1:#0b0a10;
-  --tx-0:#f2eee6;   --tx-1:#b4a998;   --tx-2:#6d6354;   --tx-3:#3a3528;
-  --line-1:rgba(255,232,200,.06); --line-2:rgba(255,232,200,.10); --line-3:rgba(255,232,200,.18);
-  --amber-0:#ffb566; --amber-1:#e8a050; --amber-2:#b86818;
+  /* Sprint-1 fix: aligned setup.html palette + font with main app (chat-base.css).
+     Was: Inter + amber/cream/cyan. Now: Plus Jakarta Sans + unified violet accent.
+     Amber tokens kept as aliases so existing .amber-0 etc. selectors still work,
+     but they all point at the unified accent. */
+  --bg-0:#0b0d12;   --bg-1:#11141b;
+  --tx-0:#e8ecf4;   --tx-1:#8b95a8;   --tx-2:#4a5568;   --tx-3:#2d3142;
+  --line-1:rgba(255,255,255,.055); --line-2:rgba(255,255,255,.10); --line-3:rgba(255,255,255,.18);
+  --accent:#7c6df2; --accent-soft:#a78bfa;
+  --accent-grad:linear-gradient(135deg,#7c6df2,#a78bfa);
+  --amber-0:#7c6df2; --amber-1:#a78bfa; --amber-2:#6557d4;  /* aliased to accent */
   --cyan-0:#7ee6ff;  --cyan-1:#5bd5f5;
   --green-0:#7eeab2; --red-0:#ff9c9c;
-  --glass-0:rgba(22,18,26,.55);
-  --glass-1:rgba(30,24,34,.7);
-  --font:'Inter',-apple-system,'Segoe UI',system-ui,sans-serif;
+  --glass-0:rgba(15,18,25,.78);
+  --glass-1:rgba(22,26,35,.72);
+  --font:'Plus Jakarta Sans',-apple-system,'Segoe UI',system-ui,sans-serif;
   --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
 }
 html,body{height:100%;overflow:hidden;-webkit-app-region:drag;user-select:none;-webkit-user-select:none}

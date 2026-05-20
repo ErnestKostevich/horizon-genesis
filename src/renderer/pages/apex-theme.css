@@ -81,9 +81,9 @@
   --t2:   var(--tx-2);
   --t3:   var(--tx-3);
   --t4:   var(--tx-4);
-  --acc:  var(--apex-amber-0);
-  --acc2: var(--apex-amber-1);
-  --acc3: rgba(255, 181, 102, 0.14);
+  /* Sprint-1 fix: accent now comes from chat-base.css (#7c6df2). Amber is
+     reserved for warnings/highlights only (see --c-warn / --amber below). */
+  /* --acc / --acc2 / --acc3 intentionally NOT overridden — inherit from chat-base. */
   --green:  var(--c-ok);
   --red:    var(--c-bad);
   --blue:   var(--apex-cyan-0);
@@ -91,10 +91,12 @@
   --amber:  var(--apex-amber-0);
   --usr-bg: linear-gradient(135deg, rgba(126, 230, 255, 0.14), rgba(91, 213, 245, 0.08));
   --usr-b:  rgba(126, 230, 255, 0.32);
-  --glow:   var(--glow-amber);
+  /* Sprint-1 fix: glow uses unified accent instead of amber. */
+  --glow:   0 0 28px rgba(124, 109, 242, 0.28);
 
-  /* Typography */
-  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Typography — Sprint-1 fix: aligned on Plus Jakarta Sans (matches chat-base /
+     main app). Setup + apex no longer drift to Inter. */
+  --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", "Cascadia Code", monospace;
 
   /* Motion */
@@ -460,7 +462,7 @@ body {
 /* Tool-call card inside an assistant bubble. */
 .tcard-title {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--text-sm, 12px);
   letter-spacing: 0.14em;
   color: var(--apex-cyan-0);
   text-transform: uppercase;
@@ -592,7 +594,7 @@ textarea:focus, input:focus, .cmd-input:focus {
   bottom: -13px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 8px;
+  font-size: var(--text-xs, 11px);
   letter-spacing: 0.15em;
   color: var(--tx-4);
   font-family: var(--mono);
@@ -759,7 +761,7 @@ textarea:focus, input:focus, .cmd-input:focus {
 .local-status {
   margin-top: 7px;
   color: var(--tx-3);
-  font-size: 11px;
+  font-size: var(--text-sm, 12px);
   line-height: 1.45;
 }
 .local-status.ok { color: var(--apex-cyan-0); }
@@ -900,7 +902,7 @@ textarea:focus, input:focus, .cmd-input:focus {
   color: var(--c-ok);
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--text-sm, 12px);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 600;
@@ -1062,7 +1064,7 @@ textarea:focus, input:focus, .cmd-input:focus {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--text-sm, 12px);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;

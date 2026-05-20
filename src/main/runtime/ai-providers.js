@@ -214,8 +214,67 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
   if (!keysStore || !settingsStore) {
     throw new Error('createAiClient: keysStore and settingsStore required');
   }
-  const fetch = fetchImpl
+  const baseFetch = fetchImpl
     || (typeof globalThis.fetch === 'function' ? globalThis.fetch : require('node-fetch'));
+
+  // Fix 9 — retry-with-backoff fetch wrapper.
+  // Retries up to 3 times on 429 / 5xx (and on network throw). Honours
+  // the Retry-After header if the provider sends one. Exponential
+  // backoff: 1s, 2s, 4s.
+  //
+  // Streaming requests need special care: once the response body is being
+  // consumed we can't retry safely. So we only retry BEFORE we hand back
+  // the response (i.e. retrying when the status code itself is 429/5xx).
+  async function fetchWithRetry(url, opts = {}, retryOpts = {}) {
+    const maxAttempts = retryOpts.maxAttempts || 3;
+    const baseDelay = retryOpts.baseDelay || 1000;
+    let lastErr;
+    let lastResp;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const resp = await baseFetch(url, opts);
+        // Retry on 429 (rate limit) or 5xx (server)
+        if (resp.status === 429 || (resp.status >= 500 && resp.status < 600)) {
+          lastResp = resp;
+          // Honour Retry-After header (seconds or HTTP-date)
+          let delay = baseDelay * Math.pow(2, attempt);
+          try {
+            const ra = resp.headers?.get?.('retry-after');
+            if (ra) {
+              const secs = parseInt(ra, 10);
+              if (!isNaN(secs) && secs > 0) {
+                delay = Math.min(secs * 1000, 30000);
+              } else {
+                // HTTP-date form
+                const t = Date.parse(ra);
+                if (!isNaN(t)) {
+                  const gap = t - Date.now();
+                  if (gap > 0) delay = Math.min(gap, 30000);
+                }
+              }
+            }
+          } catch (_) {}
+          if (attempt < maxAttempts - 1) {
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          return resp;
+        }
+        return resp;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < maxAttempts - 1) {
+          await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)));
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (lastResp) return lastResp;
+    if (lastErr) throw lastErr;
+  }
+
+  const fetch = fetchWithRetry;
 
   function selectModel(provider, opts = {}) {
     if (opts.model) return opts.model;
@@ -441,6 +500,7 @@ function createAiClient({ keysStore, settingsStore, fetchImpl } = {}) {
    */
   function asAgentAiFn(opts = {}) {
     return async (messages, system, _agentMeta) => {
+      // Honour opts.onNotice so failover messages reach the caller
       return complete(messages, { ...opts, system });
     };
   }

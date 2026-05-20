@@ -162,7 +162,7 @@ textarea:focus, select:focus {
   outline: none;
   border-color: rgba(139, 92, 246, 0.6) !important;
   box-shadow:
-    0 0 0 3px rgba(139, 92, 246, 0.18),
+    0 0 0 3px rgba(124, 109, 242, 0.18),
     0 0 0 1px rgba(139, 92, 246, 0.35) inset !important;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
@@ -180,16 +180,18 @@ textarea:focus, select:focus {
   transform: scale(0.97);
 }
 
-/* Primary button accent */
+/* Primary button accent — Sprint-1 fix: unified to var(--accent-grad)
+   (was #8b5cf6 → #ec4899 purple-pink, one of three fighting accents). */
 .btn.primary, .hub-btn.primary {
-  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  background: var(--accent-grad);
   color: #fff;
   border: 0;
   font-weight: 600;
 }
 .btn.primary:hover, .hub-btn.primary:hover {
-  background: linear-gradient(135deg, #9a6bf7, #f1539e);
-  box-shadow: 0 0 24px -4px rgba(139, 92, 246, 0.4);
+  background: var(--accent-grad);
+  filter: brightness(1.08);
+  box-shadow: 0 0 24px -4px rgba(124, 109, 242, 0.4);
 }
 
 /* ── 6. Animated gradient background ─────────────────────────────────── */
@@ -203,12 +205,12 @@ textarea:focus, select:focus {
   }
 }
 
+/* Sprint-1 fix: animated gradient removed (paired with fractal-bg.js kill).
+   Static low-cost background now lives in chat-base.css body rule. The
+   keyframes are kept defined-but-unused above for backward compat. */
 body {
-  background-image:
-    radial-gradient(800px 600px at 18% -10%, rgba(56, 189, 248, 0.06), transparent 60%),
-    radial-gradient(900px 700px at 82% 110%, rgba(244, 201, 93, 0.05), transparent 60%);
-  background-size: 200% 200%, 200% 200%;
-  animation: hzBgShift 30s ease-in-out infinite;
+  background-image: none;
+  animation: none;
 }
 
 /* ── 7. Sidebar hover effects ────────────────────────────────────────── */
@@ -219,8 +221,8 @@ body {
   position: relative;
 }
 .cs-item:hover, .chatside .row:hover {
-  background-color: rgba(139, 92, 246, 0.06);
-  border-color: rgba(139, 92, 246, 0.18);
+  background-color: rgba(124, 109, 242, 0.06);
+  border-color: rgba(124, 109, 242, 0.18);
 }
 .cs-item:hover::before, .chatside .row:hover::before {
   content: '';
@@ -230,12 +232,12 @@ body {
   transform: translateY(-50%);
   width: 2px;
   height: 60%;
-  background: linear-gradient(180deg, #06b6d4, #8b5cf6);
+  background: var(--accent-grad);
   border-radius: 0 2px 2px 0;
 }
 .cs-item.active, .cs-item.selected {
-  background-color: rgba(139, 92, 246, 0.10);
-  border-color: rgba(139, 92, 246, 0.25);
+  background-color: rgba(124, 109, 242, 0.10);
+  border-color: rgba(124, 109, 242, 0.25);
 }
 
 /* ── 8. Composer polish ──────────────────────────────────────────────── */
@@ -257,7 +259,7 @@ body {
   transition: box-shadow 0.2s, transform 0.08s;
 }
 .send-btn:hover, #send:hover, .ic-btn[data-act="send"]:hover {
-  box-shadow: 0 0 18px -4px rgba(139, 92, 246, 0.55);
+  box-shadow: 0 0 18px -4px rgba(124, 109, 242, 0.55);
 }
 
 /* ── 9. Loading dots animation enhancement ───────────────────────────── */
@@ -278,7 +280,7 @@ body {
   30% {
     transform: translateY(-6px) scale(1.15);
     opacity: 1;
-    background: #06b6d4;
+    background: var(--accent, #7c6df2);
   }
 }
 
@@ -299,7 +301,7 @@ body {
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, #06b6d4, #8b5cf6, #ec4899);
+  background: var(--accent-grad);
   animation: hzTabGlide 0.32s cubic-bezier(0.32, 0.72, 0.20, 1);
 }
 @keyframes hzTabGlide {
@@ -324,7 +326,7 @@ pre {
   transition: border-color 0.15s;
 }
 pre:hover {
-  border-color: rgba(139, 92, 246, 0.25);
+  border-color: rgba(124, 109, 242, 0.25);
 }
 pre code {
   display: block;
@@ -339,7 +341,7 @@ pre::before {
   top: 8px;
   bottom: 8px;
   width: 2px;
-  background: linear-gradient(180deg, #06b6d4, #8b5cf6);
+  background: var(--accent-grad);
   border-radius: 0 2px 2px 0;
   opacity: 0.6;
 }
