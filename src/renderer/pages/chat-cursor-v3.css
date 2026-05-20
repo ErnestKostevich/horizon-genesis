@@ -314,7 +314,7 @@ textarea#inp {
   background: rgba(0,0,0,.025) !important;
 }
 [data-theme="light"] .ic-btn {
-  color: #52525b !important;
+  color: #3f3f46 !important; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
 }
 [data-theme="light"] .ic-btn:hover {
   background: rgba(124,109,242,.08) !important;
@@ -334,7 +334,7 @@ textarea#inp {
 [data-theme="light"] .btn-dictate {
   background: rgba(0,0,0,.04) !important;
   border-color: rgba(0,0,0,.10) !important;
-  color: #52525b !important;
+  color: #3f3f46 !important; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
 }
 [data-theme="light"] .inp-wrap {
   background: linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.96) 70%) !important;

@@ -370,9 +370,9 @@ pre::before {
     0 0 0 1px rgba(0,0,0,0.04) inset;
   color: #18181b;
 }
-[data-theme="light"] .hz-toast-desc { color: #52525b; }
+[data-theme="light"] .hz-toast-desc { color: #3f3f46; } /* Sprint-2.3: 7.4:1 → 10.5:1 */
 [data-theme="light"] .hz-toast-close {
-  color: #71717a;
+  color: #52525b; /* Sprint-2.3: was #71717a, now 7.4:1 on white toast */
 }
 [data-theme="light"] .hz-toast-close:hover {
   background: rgba(0,0,0,0.06);
@@ -407,10 +407,12 @@ pre::before {
   /* keyframe still applies; the resting opacity makes it readable. */
 }
 @keyframes hzTypingBounceLight {
+  /* Sprint-2.3: opacity 0.4 × #52525b on #fafafa was ~2.6:1 (fail). Bumped to
+     0.7 × #3f3f46 → ~5.4:1 AA. */
   0%, 60%, 100% {
     transform: translateY(0) scale(1);
-    opacity: 0.4;
-    background: #52525b;
+    opacity: 0.7;
+    background: #3f3f46;
   }
   30% {
     transform: translateY(-6px) scale(1.15);

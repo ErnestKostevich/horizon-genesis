@@ -2795,18 +2795,25 @@ body.with-sidebar .chat-status-bar{display:flex}
    this block expanded to cover every CSS-var literal the shell touches.
    --------------------------------------------------------------------- */
 [data-theme="light"] {
+  /* Sprint-2.3 contrast fix — bumped every neutral one stop darker so WCAG
+     AA passes on a #fafafa substrate:
+       --tx  #09090b → 19.1:1 ✓ AAA (body / headings / primary)
+       --t2  #3f3f46 → 10.5:1 ✓ AAA (secondary labels, panel sublabels)
+       --t3  #52525b →  7.4:1 ✓ AAA (meta, hints, timestamps)
+       --t4  #71717a →  4.8:1 ✓ AA  (faint — was #a1a1aa @ 2.4:1, failed)
+     Borders strengthened (#d4d4d8) so panel edges stay visible on paper. */
   --bg: #fafafa;
   --bg2: #f4f4f5;
   --bg3: #ffffff;
-  --tx: #18181b;
-  --t2: #52525b;
-  --t3: #71717a;
-  --t4: #a1a1aa;
-  --b1: rgba(0,0,0,.06);
-  --b2: rgba(0,0,0,.10);
-  --b3: rgba(0,0,0,.18);
-  --usr-bg: linear-gradient(135deg, rgba(124,109,242,.16), rgba(124,109,242,.08));
-  --usr-b: rgba(124,109,242,.32);
+  --tx: #09090b;
+  --t2: #3f3f46;
+  --t3: #52525b;
+  --t4: #71717a;
+  --b1: rgba(0,0,0,.08);
+  --b2: rgba(0,0,0,.14);
+  --b3: rgba(0,0,0,.22);
+  --usr-bg: linear-gradient(135deg, rgba(124,109,242,.18), rgba(124,109,242,.10));
+  --usr-b: rgba(124,109,242,.38);
   --glow: 0 0 30px rgba(124,109,242,.18);
 }
 [data-theme="light"] body {
@@ -2852,7 +2859,7 @@ body.with-sidebar .chat-status-bar{display:flex}
 }
 [data-theme="light"] input::placeholder,
 [data-theme="light"] textarea::placeholder {
-  color: #a1a1aa !important;
+  color: #71717a !important; /* Sprint-2.3: was #a1a1aa @ 2.4:1, now 4.8:1 AA */
 }
 [data-theme="light"] select option {
   background: #ffffff;
@@ -2877,7 +2884,7 @@ body.with-sidebar .chat-status-bar{display:flex}
 [data-theme="light"] .msg.bot .bub p,
 [data-theme="light"] .msg.bot .bub li,
 [data-theme="light"] .msg.bot .bub span {
-  color: #27272a !important;
+  color: #18181b !important; /* Sprint-2.3: was #27272a, now 16:1 for body */
 }
 [data-theme="light"] .msg.bot .bub a {
   color: #6557d4 !important;
@@ -2909,6 +2916,45 @@ body.with-sidebar .chat-status-bar{display:flex}
   color: #18181b !important;
 }
 
+/* Sprint-2.3 contrast fix: the dark-theme semantic palette (--success-500
+   #34d399, --danger-500 #f87171, --warn-500 #fbbf24, --info-500 #60a5fa,
+   --special-500 #a78bfa) is calibrated for a dark substrate. On #fafafa
+   they sit between 1.7:1 and 3.0:1 — all fail AA for text. Darker hues
+   below preserve hue but pass 4.5:1 on white. Code-editor variables also
+   re-tinted for paper bg (was dark navy code surface bleeding into light
+   shell). */
+[data-theme="light"] {
+  --success-500: #047857;
+  --warn-500:    #b45309;
+  --danger-500:  #b91c1c;
+  --info-500:    #1d4ed8;
+  --special-500: #6d28d9;
+  --green:  var(--success-500);
+  --red:    var(--danger-500);
+  --blue:   var(--info-500);
+  --purple: var(--special-500);
+  --amber:  var(--warn-500);
+  --code-bg:    #f4f4f5;
+  --code-bg-2:  #fafafa;
+  --code-bg-3:  #ffffff;
+  --code-line:  rgba(0,0,0,.08);
+  --code-line-2:rgba(0,0,0,.14);
+  --code-text:  #18181b;
+  --code-mute:  #52525b;
+}
+
+/* `.dim` is the global "subtle text" helper (chat-base + several panels).
+   In dark theme its 0.45 alpha resolves to ~3.2:1 on #08090c — borderline
+   but readable. On the light #fafafa substrate the same alpha computes to
+   ~1.9:1 (invisible). Bump opacity to 0.72 → ~5.4:1 AA. */
+[data-theme="light"] .dim,
+[data-theme="light"] .hint,
+[data-theme="light"] .muted,
+[data-theme="light"] .t-mute {
+  opacity: 0.78;
+  color: var(--t2) !important;
+}
+
 /* Theme toggle button in the title bar. */
 .theme-toggle {
   -webkit-app-region: no-drag;
@@ -2930,7 +2976,7 @@ body.with-sidebar .chat-status-bar{display:flex}
 [data-theme="light"] .theme-toggle {
   background: rgba(0,0,0,.04);
   border-color: rgba(0,0,0,.10);
-  color: #52525b;
+  color: #3f3f46; /* Sprint-2.3: was #52525b → 10.5:1 for the sun glyph */
 }
 [data-theme="light"] .theme-toggle:hover {
   background: rgba(0,0,0,.08);

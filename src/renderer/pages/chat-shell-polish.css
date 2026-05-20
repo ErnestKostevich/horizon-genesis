@@ -1333,7 +1333,7 @@ textarea#inp{background:transparent!important}
 }
 [data-theme="light"] .cs-act,
 [data-theme="light"] .cs-util {
-  color: #52525b !important;
+  color: #3f3f46 !important; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
   background: transparent !important;
 }
 [data-theme="light"] .cs-act:hover,
@@ -1358,7 +1358,7 @@ textarea#inp{background:transparent!important}
 }
 [data-theme="light"] .cs-list { background: transparent !important; }
 [data-theme="light"] .cs-list .cs-item {
-  color: #27272a !important;
+  color: #18181b !important; /* Sprint-2.3: was #27272a → 16:1 AAA for chat titles */
   background: transparent !important;
 }
 [data-theme="light"] .cs-list .cs-item:hover {
@@ -1408,7 +1408,7 @@ textarea#inp{background:transparent!important}
 }
 [data-theme="light"] .insp-tabs,
 [data-theme="light"] .insp-tab {
-  color: #52525b !important;
+  color: #3f3f46 !important; /* Sprint-2.3: was #52525b → 10.5:1 AAA */
 }
 [data-theme="light"] .insp-tab:hover {
   background: rgba(124,109,242,.06) !important;
