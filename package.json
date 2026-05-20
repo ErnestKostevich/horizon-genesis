@@ -55,6 +55,7 @@
     "form-data": "^4.0.0",
     "monaco-editor": "^0.55.1",
     "node-fetch": "^2.7.0",
+    "qrcode": "^1.5.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {

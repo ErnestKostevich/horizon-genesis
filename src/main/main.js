@@ -5446,6 +5446,186 @@ ipcMain.handle('connectionsRuntimeStatus', async (_, id) => {
   }
 });
 
+// ── Mobile companion: one-click pairing ────────────────────────────────────
+// The "Connect phone" button in Settings spawns `bin/horizon-serve.js` as a
+// child process on a fixed local port (18789) and generates a QR-code
+// data-URL of the pairing URL. The renderer drops the QR on screen — the
+// user scans it with their phone camera and lands on the mobile PWA with
+// the bearer token auto-prefilled in the query string.
+//
+// The serve binary already handles token auth + PWA hosting; we just glue
+// the lifecycle to the desktop app so non-technical users never see a
+// terminal. On `app.before-quit` we kill the child so it doesn't outlive
+// the desktop window.
+const HORIZON_MOBILE_PORT = 18789;
+let mobileServerProc = null;
+let mobileServerState = { running: false, url: null, qrDataUrl: null, token: null, since: 0 };
+
+function _mobilePickLocalIp() {
+  try {
+    const ifaces = os.networkInterfaces();
+    const candidates = [];
+    for (const list of Object.values(ifaces || {})) {
+      for (const it of list || []) {
+        if (!it || it.internal) continue;
+        if (it.family !== 'IPv4' && it.family !== 4) continue;
+        candidates.push(it.address);
+      }
+    }
+    // Prefer 192.168.*, then 10.*, then 172.16-31.*, then anything else.
+    const score = (ip) => {
+      if (/^192\.168\./.test(ip)) return 3;
+      if (/^10\./.test(ip)) return 2;
+      if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)) return 1;
+      return 0;
+    };
+    candidates.sort((a, b) => score(b) - score(a));
+    return candidates[0] || 'localhost';
+  } catch (_) {
+    return 'localhost';
+  }
+}
+
+async function _mobileBuildQrDataUrl(url) {
+  try {
+    const QRCode = require('qrcode');
+    return await QRCode.toDataURL(String(url), {
+      width: 200,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' },
+    });
+  } catch (e) {
+    console.error('[mobile] qr generation failed:', e.message);
+    return null;
+  }
+}
+
+function _mobileKillServer() {
+  const proc = mobileServerProc;
+  mobileServerProc = null;
+  mobileServerState = { running: false, url: null, qrDataUrl: null, token: null, since: 0 };
+  if (!proc) return;
+  try {
+    if (process.platform === 'win32') {
+      // SIGTERM doesn't reliably propagate to detached node.exe on Windows
+      // — fall back to taskkill /T to bring down the whole tree.
+      try { exec(`taskkill /pid ${proc.pid} /T /F`, () => {}); } catch (_) {}
+    } else {
+      proc.kill('SIGTERM');
+      setTimeout(() => { try { proc.kill('SIGKILL'); } catch (_) {} }, 2000).unref?.();
+    }
+  } catch (_) { /* already gone */ }
+}
+
+ipcMain.handle('mobile:start', async () => {
+  // Idempotent: if already running, just return current state with a fresh QR
+  // so the renderer can re-paint after a Settings reopen.
+  if (mobileServerProc && mobileServerState.running && mobileServerState.url) {
+    return {
+      ok: true,
+      url: mobileServerState.url,
+      qrDataUrl: mobileServerState.qrDataUrl,
+      token: mobileServerState.token,
+      port: HORIZON_MOBILE_PORT,
+      since: mobileServerState.since,
+    };
+  }
+
+  const token = crypto.randomBytes(16).toString('hex');
+  const localIp = _mobilePickLocalIp();
+  const url = `http://${localIp}:${HORIZON_MOBILE_PORT}/?token=${encodeURIComponent(token)}`;
+  const serveScript = path.resolve(__dirname, '..', '..', 'bin', 'horizon-serve.js');
+  if (!fs.existsSync(serveScript)) {
+    return { ok: false, error: 'horizon-serve.js not found at ' + serveScript };
+  }
+
+  try {
+    // Bind to 0.0.0.0 so phones on the same LAN can reach the server. The
+    // bearer token still gates every /api/* call, so this is not an open
+    // door — but we narrow CORS implicitly via the token check.
+    const child = spawn(process.execPath, [
+      serveScript,
+      '--port', String(HORIZON_MOBILE_PORT),
+      '--host', '0.0.0.0',
+      '--token', token,
+    ], {
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1', // run plain Node, not a second Electron window
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+
+    let readyResolve;
+    const ready = new Promise((resolve) => { readyResolve = resolve; });
+    let stderrBuf = '';
+    child.stderr?.on?.('data', (chunk) => {
+      const s = String(chunk);
+      stderrBuf += s;
+      // serve.js prints "Horizon serve  http://..." once the listener is up.
+      if (/Horizon serve\s+http:\/\//i.test(stderrBuf) && readyResolve) {
+        readyResolve(true);
+        readyResolve = null;
+      }
+    });
+    child.on('exit', (code, sig) => {
+      if (mobileServerProc === child) {
+        mobileServerProc = null;
+        mobileServerState = { running: false, url: null, qrDataUrl: null, token: null, since: 0 };
+      }
+      console.log('[mobile] serve exited', code, sig);
+    });
+    child.on('error', (err) => {
+      console.error('[mobile] serve error:', err.message);
+      if (readyResolve) { readyResolve(false); readyResolve = null; }
+    });
+
+    // Race ready signal against a 4-second timeout — most cold-starts on a
+    // dev machine finish in <500ms, but if something goes wrong we shouldn't
+    // hang the Settings UI forever.
+    const winner = await Promise.race([
+      ready,
+      new Promise((r) => setTimeout(() => r(false), 4000)),
+    ]);
+    if (!winner || !child.pid) {
+      try { child.kill(); } catch (_) {}
+      return { ok: false, error: 'serve did not become ready in 4s: ' + stderrBuf.slice(-300) };
+    }
+
+    mobileServerProc = child;
+    const qrDataUrl = await _mobileBuildQrDataUrl(url);
+    mobileServerState = {
+      running: true,
+      url,
+      qrDataUrl,
+      token,
+      since: Date.now(),
+    };
+    return { ok: true, url, qrDataUrl, token, port: HORIZON_MOBILE_PORT, since: mobileServerState.since };
+  } catch (e) {
+    return { ok: false, error: e.message || String(e) };
+  }
+});
+
+ipcMain.handle('mobile:stop', () => {
+  _mobileKillServer();
+  return { ok: true, running: false };
+});
+
+ipcMain.handle('mobile:status', () => {
+  return {
+    ok: true,
+    running: !!mobileServerState.running,
+    url: mobileServerState.url || null,
+    qrDataUrl: mobileServerState.qrDataUrl || null,
+    token: mobileServerState.token || null,
+    port: HORIZON_MOBILE_PORT,
+    since: mobileServerState.since || 0,
+  };
+});
+
 // PHASE 28.3 — Email runtime adapter lifecycle. Lives outside
 // connectionsManager because the EmailAdapter has its own start/stop
 // loop and emits 'incoming' events we wire into the agent loop.
@@ -6561,6 +6741,11 @@ app.whenReady().then(async () => {
   licenseManager.startPolling();
 });
 
-app.on('before-quit', () => { isQuitting = true; });
+app.on('before-quit', () => {
+  isQuitting = true;
+  // Gracefully bring down the mobile companion serve process so it doesn't
+  // outlive the desktop window and squat on port 18789.
+  try { _mobileKillServer(); } catch (_) {}
+});
 app.on('window-all-closed', () => {}); // tray keeps alive
 app.on('activate', () => { win?.show(); });

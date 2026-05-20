@@ -210,6 +210,14 @@ const ART = {
     '       \'----\'',
     '    need that fuel',
   ],
+  // "mobile" — phone-pairing flourish, shown above the QR by `horizon mobile`.
+  mobile: [
+    '   ┌─────┐',
+    '   │ ┌─┐ │   scan + go',
+    '   │ │ │ │',
+    '   │ └─┘ │',
+    '   └──○──┘',
+  ],
   // "morning" / "evening" / "night" — time-of-day tiny markers.
   morning: [
     '   ☀ ─── new day',
