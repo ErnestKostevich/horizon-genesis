@@ -39,6 +39,14 @@ const { exec, execFile } = require('child_process');
 const electron = require('electron');
 const shell = electron.shell || { openExternal: async () => { throw new Error('Electron shell is not available'); } };
 const Notification = electron.Notification || class { constructor() {} show() {} };
+const { runHandlerInSandbox, isSandboxDisabled } = require('./pluginSandbox');
+
+// Sprint-6 — Community plugins now run inside a vm sandbox (see
+// pluginSandbox.js) so the previous "off-by-default with explicit env
+// var" gate is no longer needed for safety. Kept as an OPT-IN flag so
+// power users / CI can still toggle on the legacy unsandboxed path if
+// they're knowingly running locally-authored community plugins. The
+// safer default (community plugins enabled with sandbox) is now ON.
 const COMMUNITY_PLUGINS_ENABLED = process.env.HORIZON_ENABLE_COMMUNITY_PLUGINS === '1';
 
 // node-fetch is already a runtime dependency (see package.json); fall back
@@ -269,6 +277,41 @@ class PluginManager {
     };
   }
 
+  // ─── Sprint-6 — sandbox loader ──────────────────────────────────────────
+  // Decides whether to run a plugin's handler under vm sandbox vs the
+  // direct `require()` path. Sandbox is used for the `community` tier
+  // (untrusted, marketplace-published-but-not-reviewed code). All other
+  // tiers (built_in, demo, local, marketplace) go through direct require
+  // because they either ship with the app or have been signed/reviewed.
+  // HORIZON_PLUGIN_NO_SANDBOX=1 forces direct require for ALL tiers —
+  // dev affordance only, never for end users.
+  _shouldSandbox(manifest) {
+    if (isSandboxDisabled()) return false;
+    const tier = manifest?.tier || 'community';
+    return tier === 'community';
+  }
+
+  _loadHandler(pluginId, handlerPath, manifest) {
+    if (!this._shouldSandbox(manifest)) {
+      // Trusted tier — direct require, identical behaviour to pre-Sprint-6.
+      try { delete require.cache[require.resolve(handlerPath)]; } catch (_) {}
+      return require(handlerPath);
+    }
+    // Community tier — sandbox the handler. Errors here are caught by the
+    // caller (loadAll / install) and the plugin simply ends up without a
+    // registered handler, which surfaces as "Tool not found" at call time.
+    const code = fs.readFileSync(handlerPath, 'utf8');
+    const { exports: handlerExports } = runHandlerInSandbox(
+      pluginId,
+      manifest,
+      code,
+      handlerPath,
+      { ctxBuilder: (m) => this._buildCtx(m) },
+      { timeout: 30000 },
+    );
+    return handlerExports;
+  }
+
   loadAll() {
     const loaded = [];
     try {
@@ -312,8 +355,10 @@ class PluginManager {
           }
           if (fs.existsSync(handlerPath) && trusted) {
             try {
-              delete require.cache[require.resolve(handlerPath)];
-              this.handlers.set(dir, require(handlerPath));
+              // Sprint-6 — community plugins go through the vm sandbox,
+              // everything else (built_in / demo / local / marketplace) keeps
+              // the direct require() path. See _loadHandler for details.
+              this.handlers.set(dir, this._loadHandler(dir, handlerPath, manifest));
             } catch (e) { console.error(`Plugin handler error (${dir}):`, e.message); }
           }
           loaded.push({ id: dir, name: manifest.name, version: manifest.version });
@@ -325,7 +370,21 @@ class PluginManager {
 
   isTrusted(plugin) {
     const tier = plugin?.tier || 'community';
-    return tier === 'built_in' || tier === 'demo' || tier === 'local' || tier === 'marketplace' || COMMUNITY_PLUGINS_ENABLED;
+    // Sprint-6 — community plugins are now safe-by-default because they
+    // run inside the vm sandbox (see pluginSandbox.js). The
+    // HORIZON_ENABLE_COMMUNITY_PLUGINS gate is preserved for the legacy
+    // unsandboxed path, and HORIZON_PLUGIN_NO_SANDBOX=1 can also force
+    // the unsandboxed path globally (dev affordance only).
+    if (tier === 'built_in' || tier === 'demo' || tier === 'local' || tier === 'marketplace') return true;
+    if (tier === 'community') {
+      // If the sandbox is disabled (dev override), only trust community
+      // plugins when the user has explicitly opted in via the legacy env
+      // var — i.e. the old behaviour. Otherwise, sandbox-protected
+      // community plugins are trusted-by-default.
+      if (isSandboxDisabled()) return COMMUNITY_PLUGINS_ENABLED;
+      return true;
+    }
+    return COMMUNITY_PLUGINS_ENABLED;
   }
 
   install(pluginJson) {
@@ -341,9 +400,14 @@ class PluginManager {
         }
       }
       if (!this.isTrusted(plugin)) {
+        // Sprint-6 — with sandbox shipped, community plugins are trusted by
+        // default. This branch is now only reachable when the user has
+        // explicitly opted-out of the sandbox (HORIZON_PLUGIN_NO_SANDBOX=1)
+        // AND has NOT also opted-in to legacy unsandboxed community plugins
+        // (HORIZON_ENABLE_COMMUNITY_PLUGINS=1).
         return {
           ok: false,
-          error: 'Community plugin execution is disabled until the sandbox and permission review ship. Use the web publish flow for moderation instead.',
+          error: 'Community plugin execution requires the sandbox. Unset HORIZON_PLUGIN_NO_SANDBOX or set HORIZON_ENABLE_COMMUNITY_PLUGINS=1 to allow unsandboxed installs.',
         };
       }
 
@@ -373,8 +437,10 @@ class PluginManager {
         fs.writeFileSync(path.join(pluginDir, 'handler.js'), plugin.handler);
         try {
           const handlerPath = path.join(pluginDir, 'handler.js');
-          delete require.cache[require.resolve(handlerPath)];
-          this.handlers.set(plugin.id, require(handlerPath));
+          // Sprint-6 — sandbox-or-direct based on tier. See _loadHandler.
+          // Manifest needs _id so the sandbox can build logs/storage paths.
+          const manifestWithId = { ...manifest, _id: plugin.id, _dir: pluginDir };
+          this.handlers.set(plugin.id, this._loadHandler(plugin.id, handlerPath, manifestWithId));
         } catch (e) { console.error(`Handler load error (${plugin.id}):`, e.message); }
       }
       this.plugins.set(plugin.id, manifest);
@@ -463,7 +529,11 @@ class PluginManager {
     }
     const manifest = this.plugins.get(pluginId) || {};
     if (!this.isTrusted(manifest)) {
-      return { ok: false, error: 'Community plugin execution is disabled until sandboxing ships.' };
+      // Sprint-6 — same gate as install(): sandbox makes community plugins
+      // trusted by default, so this branch only fires when the user has
+      // explicitly opted out of the sandbox without opting back in via the
+      // legacy unsandboxed env var.
+      return { ok: false, error: 'Community plugin execution requires the sandbox. Unset HORIZON_PLUGIN_NO_SANDBOX or set HORIZON_ENABLE_COMMUNITY_PLUGINS=1.' };
     }
     const handler = this.handlers.get(pluginId);
     // Sprint-3 — full ctx with fetch/logger/storage (was `{ settings }` only,
@@ -698,8 +768,11 @@ class PluginManager {
       if (installedManifest.enabled !== false && this.isTrusted(installedManifest)) {
         this.enabled.add(pluginId);
       }
-      try { delete require.cache[require.resolve(handlerPath)]; } catch (_) {}
-      this.handlers.set(pluginId, require(handlerPath));
+      // Sprint-6 — built-ins keep their direct-require path (tier !==
+      // 'community' so _loadHandler skips the sandbox). Going through
+      // _loadHandler keeps a single load path so future hardening
+      // changes only need to touch one helper.
+      this.handlers.set(pluginId, this._loadHandler(pluginId, handlerPath, installedManifest));
       return { ok: true, id: pluginId, repaired };
     } catch (e) {
       console.error(`Builtin install failed for "${pluginId}":`, e.message);
