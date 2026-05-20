@@ -100,15 +100,92 @@ function _pkgVersion() {
 function bannerBig()     { return _wordmark(); }
 function bannerCompact() { return _wordmark(); }
 
+// Phase-aware glyph sets. setPhase(phase) swaps the spinner frames while
+// keeping the timer/cycle alive. The default ('default') is the classic
+// braille loop. If the active theme has its own spinnerFrames the theme
+// wins — the user has made a deliberate aesthetic choice.
+const PHASE_FRAMES = {
+  default:    ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'],
+  thinking:   ['◯','◔','◑','◕','●','◕','◑','◔'],
+  planning:   ['◢','◣','◤','◥'],
+  executing:  ['▱▱▱▱','▰▱▱▱','▰▰▱▱','▰▰▰▱','▰▰▰▰'],
+  reflecting: ['☆','★','✦','★'],
+  finishing:  ['✓'],
+};
+
+// Read the active theme's spinnerFrames (if any) without forcing a runtime.
+// Uses the same settings-file probe tty.js uses, so we honour the user's
+// chosen theme before any runtime is constructed.
+let _themeFramesCache = null;
+function _activeThemeFrames() {
+  if (_themeFramesCache !== null) return _themeFramesCache;
+  try {
+    const themes = require('./themes');
+    const fs = require('fs');
+    const path = require('path');
+    const { defaultUserDataDir } = require('../../src/main/runtime/store-shim');
+    const baseDir = defaultUserDataDir();
+    const candidates = [path.join(baseDir, 'settings.json')];
+    try {
+      const f = path.join(baseDir, 'active-profile.txt');
+      if (fs.existsSync(f)) {
+        const name = fs.readFileSync(f, 'utf8').trim();
+        if (name && name !== 'default' && /^[a-z0-9][a-z0-9-_]{0,30}$/i.test(name)) {
+          candidates.unshift(path.join(baseDir, 'profiles', name, 'settings.json'));
+        }
+      }
+    } catch (_) {}
+    for (const file of candidates) {
+      try {
+        if (fs.existsSync(file)) {
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const name = data.cliTheme;
+          if (name) {
+            const t = themes.getTheme(name);
+            // Only override if the theme explicitly defines spinnerFrames
+            // AND it isn't the inherited default braille loop.
+            const def = themes.getTheme('default');
+            if (t && Array.isArray(t.spinnerFrames) && t.spinnerFrames !== def.spinnerFrames) {
+              _themeFramesCache = t.spinnerFrames;
+              return _themeFramesCache;
+            }
+            _themeFramesCache = false;
+            return _themeFramesCache;
+          }
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  _themeFramesCache = false;
+  return _themeFramesCache;
+}
+
 // Spinner — a gradient-flowing braille spinner. Used by TUI/agent command.
+// Now phase-aware: setPhase('thinking'|'planning'|'executing'|'reflecting'|
+// 'finishing') swaps the glyph set without resetting the gradient timer.
+// The theme's spinnerFrames override the phase frames when set.
 class GradientSpinner {
   constructor(text) {
     this.text = text || '';
-    this.frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+    this.phase = 'default';
+    this.frames = this._framesFor('default');
     this.i = 0;
     this.timer = null;
     this.lastLen = 0;
     this.isTTY = !!process.stdout.isTTY;
+  }
+  _framesFor(phase) {
+    const themeFrames = _activeThemeFrames();
+    if (themeFrames) return themeFrames;  // theme override wins
+    return PHASE_FRAMES[phase] || PHASE_FRAMES.default;
+  }
+  setPhase(phase) {
+    if (!phase || phase === this.phase) return this;
+    this.phase = phase;
+    this.frames = this._framesFor(phase);
+    this.i = 0;  // reset index so we start at frame 0 of the new set
+    // timer keeps ticking — next _tick uses the new frames
+    return this;
   }
   start(text) {
     if (text) this.text = text;

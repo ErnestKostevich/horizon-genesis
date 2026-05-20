@@ -88,6 +88,28 @@ function _runtimeHasAnyKey(rt) {
   return false;
 }
 
+// Sprint 2 — time-of-day + persona-aware greeting for the banner.
+function buildGreeting(persona) {
+  const h = new Date().getHours();
+  let base;
+  if (h >= 5  && h < 12) base = 'Good morning';
+  else if (h >= 12 && h < 18) base = 'Good afternoon';
+  else if (h >= 18 && h < 22) base = 'Good evening';
+  else base = 'Working late';
+
+  const id = String(persona || '').toLowerCase();
+  let suffix;
+  switch (id) {
+    case 'jarvis': suffix = ', sir.'; break;
+    case 'alfred': suffix = ', master.'; break;
+    case 'friday': suffix = '!'; break;
+    case 'sage':   suffix = '. Ready to think.'; break;
+    case 'pixel':  suffix = '! ✨'; break;
+    default:       suffix = '.';
+  }
+  return base + suffix;
+}
+
 function bannerHeader(rt) {
   const provider = rt.settingsStore.get('provider') || 'gemini';
   const persona = rt.settingsStore.get('persona') || 'jarvis';
@@ -95,11 +117,12 @@ function bannerHeader(rt) {
   const skillCount = rt.skillsManager?.list().length || 0;
   const lang = rt.settingsStore.get('lang') || 'en';
 
-  // Compact one-line wordmark + one line of vitals + one hint line.
+  // Sprint 2 — wordmark + vitals + greeting + hint line.
   const lines = [
     bannerBig(),
     '',
     `  ${fmt.dim('provider')} ${fmt.cyan(provider)}   ${fmt.dim('persona')} ${fmt.cyan(persona)}   ${fmt.dim('lang')} ${fmt.cyan(lang)}   ${fmt.dim('memory')} ${fmt.green(memCount + '')}   ${fmt.dim('skills')} ${fmt.green(skillCount + '')}   ${fmt.dim('workspace')} ${fmt.cyan(path.basename(rt.workspaceDir))}`,
+    '  ' + fmt.dim(buildGreeting(persona)),
     fmt.dim('  Type /help · Tab complete · Shift+Enter newline · Ctrl+F search · /quit to exit'),
     '',
   ];
@@ -112,12 +135,72 @@ function fmtArgs(a) {
   catch (_) { return ''; }
 }
 
-// Live step rail (re-uses the engine's print so it appears in transcript)
+// Sprint 2 — render args inline if short, else collapse to "{ … N keys … }".
+function fmtArgsInline(a) {
+  if (!a || typeof a !== 'object') return '';
+  let s;
+  try { s = JSON.stringify(a); } catch (_) { return ''; }
+  if (s.length <= 60) return s;
+  const keys = Object.keys(a);
+  if (keys.length === 0) return '{}';
+  return `{ … ${keys.length} ${keys.length === 1 ? 'key' : 'keys'} … }`;
+}
+
+// Sprint 2 — humanise a millisecond duration: 234ms, 1.2s, 1m23s.
+function fmtDuration(ms) {
+  if (!ms || ms < 0) ms = 0;
+  if (ms < 1000)   return `${Math.round(ms)}ms`;
+  if (ms < 60000)  return `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`;
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  return `${mins}m${String(secs).padStart(2, '0')}s`;
+}
+
+// Sprint 2 — visually strip ANSI for length measurement when sizing
+// box borders. Borders themselves are ANSI-free so the chars-rendered
+// width is just .replace(/\x1b\[[0-9;]*m/g,'').length.
+function visibleLen(s) { return String(s).replace(/\x1b\[[0-9;]*m/g, '').length; }
+
+// Per-tool category glyph. Themes that read well with emoji get colourful
+// icons; mono / matrix / retro-amber stay ASCII-only to preserve their vibe.
+const EMOJI_THEMES = new Set(['default', 'vapor', 'mocha', 'kawaii']);
+function _toolGlyph(tool, themeName) {
+  const t = String(tool || '');
+  const useEmoji = EMOJI_THEMES.has(themeName || 'default');
+  const cat =
+    /^web_|^fetch_/.test(t)                                       ? 'web'  :
+    /^(run_code|run_shell|run_python)$|^exec_/.test(t)            ? 'exec' :
+    /^(write_file|edit_file|read_file)$/.test(t)                  ? 'file' :
+    /^(mouse_|keyboard_)|^(smart_click|screenshot)$/.test(t)      ? 'mouse':
+    /^conn_/.test(t)                                              ? 'conn' :
+    /^memory_|^recall_/.test(t)                                   ? 'mem'  :
+    /^spawn_subagent$/.test(t)                                    ? 'agent':
+                                                                    'other';
+  if (useEmoji) {
+    return { web: '🌐', exec: '▶', file: '📄', mouse: '🖱', conn: '💬', mem: '🧠', agent: '🌿', other: '⚙' }[cat];
+  }
+  return { web: 'W', exec: '>', file: 'F', mouse: 'M', conn: 'C', mem: 'K', agent: 'A', other: '·' }[cat];
+}
+
+// Live step rail (re-uses the engine's print so it appears in transcript).
+// Uses GradientSpinner.setPhase() to swap glyph sets between phases.
 class StepRail {
-  constructor(engine) { this.engine = engine; this.spinner = null; this.lastTool = ''; }
+  constructor(engine, runtime) {
+    this.engine = engine;
+    this.runtime = runtime;
+    this.spinner = null;
+    this.lastTool = '';
+    this._toolStartedAt = 0;
+    this.themeName = (runtime && runtime.settingsStore && runtime.settingsStore.get('cliTheme')) || 'default';
+  }
+  _newSpinner(text, phase) {
+    const s = new GradientSpinner(text);
+    if (phase && typeof s.setPhase === 'function') s.setPhase(phase);
+    return s.start();
+  }
   startThinking(text = 'thinking…') {
     if (this.spinner) this.spinner.stop();
-    this.spinner = new GradientSpinner(text).start();
+    this.spinner = this._newSpinner(text, 'thinking');
   }
   showPlan(steps) {
     if (this.spinner) this.spinner.stop();
@@ -128,25 +211,124 @@ class StepRail {
       this.engine.print(`  ${fmt.dim((i + 1) + '.')} ${txt}`);
     });
     this.engine.print('');
-    this.spinner = new GradientSpinner('starting…').start();
+    this.spinner = this._newSpinner('starting…', 'planning');
   }
   executing(tool, args) {
     this.lastTool = tool;
-    if (this.spinner) this.spinner.update(`${tool}(${fmtArgs(args)})`);
+    this._toolStartedAt = Date.now();
+    this._lastArgs = args;
+    const cat = _toolGlyph(tool, this.themeName);
+    if (!this.spinner) this.spinner = this._newSpinner('', 'executing');
+    else if (typeof this.spinner.setPhase === 'function') this.spinner.setPhase('executing');
+    this.spinner.update(`${cat} ${tool}(${fmtArgs(args)})`);
   }
+
+  /**
+   * Sprint 2 — render the tool result as a card.
+   * Wide (≥100 cols) → bordered box with status glyph, args, output (≤6 lines).
+   * Narrow (<100 cols) → fall back to the one-liner format.
+   */
   result(tool, ok, result) {
     if (this.spinner) this.spinner.stop();
-    if (ok) {
-      this.engine.print(`  ${fmt.green('✓')} ${fmt.cyan(tool)} ${fmt.dim(fmtArgs(result?.out ? { out: result.out } : result || {}))}`);
-      const out = String(result?.out || '');
-      if (out && out.length < 400) {
-        for (const l of out.split('\n').slice(0, 4)) this.engine.print('    ' + fmt.dim(l));
+    const duration = this._toolStartedAt ? (Date.now() - this._toolStartedAt) : 0;
+    const cols = process.stdout.columns || 80;
+    const args = this._lastArgs || {};
+    const isDenied = !ok && /permission|denied|not\s+approved|denied\s+by\s+user/i.test(
+      String(result?.err || result?.error || '')
+    );
+
+    // Status glyph + colour
+    let glyph;
+    if (isDenied)   glyph = fmt.yellow('⊘');
+    else if (ok)    glyph = fmt.green('✓');
+    else            glyph = fmt.red('✗');
+    // Per-tool category glyph (emoji for friendly themes, ASCII otherwise)
+    const cat = _toolGlyph(tool, this.themeName);
+
+    if (cols < 100) {
+      // ── Narrow fallback (one-liner) ────────────────────────────────────
+      const durStr = duration ? ' ' + fmt.cyan('⏱ ' + fmtDuration(duration)) : '';
+      const argsStr = fmtArgsInline(args);
+      const argsRender = argsStr ? ' ' + fmt.dim(argsStr) : '';
+      if (ok) {
+        this.engine.print(`  ${glyph} ${cat} ${fmt.cyan(tool)}${argsRender}${durStr}`);
+        const out = String(result?.out || '');
+        if (out && out.length < 400) {
+          const lines = out.split('\n');
+          for (const l of lines.slice(0, 4)) this.engine.print('    ' + fmt.dim(l));
+          if (lines.length > 4) this.engine.print('    ' + fmt.dim(`(+ ${lines.length - 4} more lines)`));
+        }
+      } else {
+        const err = result?.err || result?.error || 'failed';
+        this.engine.print(`  ${glyph} ${cat} ${fmt.cyan(tool)}${argsRender} ${fmt.red(String(err).slice(0, 120))}${durStr}`);
       }
     } else {
-      const err = result?.err || result?.error || 'failed';
-      this.engine.print(`  ${fmt.red('✗')} ${fmt.cyan(tool)} ${fmt.red(String(err).slice(0, 120))}`);
+      // ── Wide card with rounded Unicode borders ─────────────────────────
+      const innerWidth = Math.min(cols - 4, 100); // leave 2-char gutter + closing safety
+      const argsRendered = fmtArgsInline(args);
+      const headerRaw = ` ${cat} ${tool} `;
+      // Title row: ╭─ <tool> ─...─  <status> <duration>
+      const trailingStatus = (duration ? fmt.cyan('⏱ ' + fmtDuration(duration)) : '');
+      const statusTail = ' ' + glyph + (trailingStatus ? ' ' + trailingStatus : '');
+      // Visible budget for the dashes between tool name and the trailing status
+      const titlePrefixVis = 1 + 1 + headerRaw.length; // "╭" + "─" + " tool "
+      const titleSuffixVis = visibleLen(statusTail);
+      const dashCount = Math.max(2, innerWidth - titlePrefixVis - titleSuffixVis);
+      const topLine = '  '
+        + fmt.dim('╭─')
+        + fmt.cyan(headerRaw)
+        + fmt.dim('─'.repeat(dashCount))
+        + statusTail;
+      this.engine.print(topLine);
+
+      // Body — "args:" then "out:"/"err:"
+      const renderRow = (label, text) => {
+        // Wrap text within the box; show up to 6 lines.
+        const txt = String(text || '');
+        const lines = txt.split('\n').filter((l, i, a) => i < a.length - 1 || l !== '');
+        const max = innerWidth - 2 - label.length - 1;
+        const rendered = [];
+        for (const raw of lines) {
+          let rest = raw;
+          let firstSlice = true;
+          while (rest.length > 0 || firstSlice) {
+            const slice = rest.slice(0, max);
+            rest = rest.slice(max);
+            rendered.push(slice);
+            firstSlice = false;
+            if (rest.length === 0) break;
+          }
+        }
+        const totalRows = rendered.length || 1;
+        const shown = rendered.slice(0, 6);
+        const truncated = totalRows - shown.length;
+        if (!shown.length) shown.push('');
+        for (let i = 0; i < shown.length; i++) {
+          // Label appears only on the first row of the whole block;
+          // continuation rows are indented by the label's visible width.
+          const lbl = (i === 0 ? fmt.dim(label) : ' '.repeat(visibleLen(label)));
+          const body = i === 0 ? shown[i] : fmt.dim(shown[i]);
+          this.engine.print('  ' + fmt.dim('│  ') + lbl + ' ' + body);
+        }
+        if (truncated > 0) {
+          this.engine.print('  ' + fmt.dim('│  ') + ' '.repeat(visibleLen(label) + 1)
+            + fmt.dim(`(+ ${truncated} more lines)`));
+        }
+      };
+
+      if (argsRendered) renderRow('args:', argsRendered);
+
+      if (ok) {
+        const out = String(result?.out || '');
+        if (out) renderRow('out: ', out);
+      } else {
+        const err = String(result?.err || result?.error || 'failed');
+        renderRow('err: ', fmt.red(err));
+      }
+
+      this.engine.print('  ' + fmt.dim('╰' + '─'.repeat(innerWidth - 1)));
     }
-    this.spinner = new GradientSpinner('thinking…').start();
+    this.spinner = this._newSpinner('thinking…', 'thinking');
   }
   reflection(goalMet, confidence) {
     if (this.spinner) this.spinner.stop();
@@ -155,7 +337,7 @@ class StepRail {
               : fmt.red('● not met');
     const conf = confidence ? fmt.dim(` confidence=${confidence}`) : '';
     this.engine.print(`  ${tag}${conf}`);
-    this.spinner = new GradientSpinner('finishing…').start();
+    this.spinner = this._newSpinner('finishing…', 'reflecting');
   }
   stop() { if (this.spinner) { this.spinner.stop(); this.spinner = null; } }
 }
@@ -427,36 +609,40 @@ async function runOne(runtime, state, engine, message, modeOverride) {
 async function runChat(runtime, state, engine, message) {
   engine.setSending(true);
   engine.print('');
-  let firstToken = true;
-  let buf = '';
 
   try {
     if (state.stream) {
+      // Sprint 2 — buffer the stream, then re-render markdown every ~120ms
+      // by REPLACING the assistant message tail in transcript. This avoids
+      // the old double-render ("raw tokens then —— rendered ——" block) and
+      // gives a smooth live-rendered reply. Falls back to plain passthrough
+      // when /markdown is off.
+      const useMarkdown = state.markdown !== false;
+      engine.startStreamingMessage(fmt.bold('Horizon: '));
+      let buf = '';
+      let lastRender = 0;
       const r = await runtime.runChatStream(message, { history: state.history }, (chunk) => {
-        if (firstToken) {
-          engine.print(fmt.bold('Horizon: ') + chunk);
-          firstToken = false;
-          buf = chunk;
-        } else {
-          buf += chunk;
-          engine.print(chunk, { noAppend: true });
+        buf += chunk;
+        const now = Date.now();
+        if (now - lastRender >= 120) {
+          engine.updateStreamingMessage(buf, { markdown: useMarkdown });
+          lastRender = now;
         }
       });
-      // Ensure transcript has the final assembled reply
-      if (!firstToken) {
-        engine.transcript.push(fmt.bold('Horizon: ') + (r.reply || ''));
-      }
+      // Final render — use r.reply if the provider returned a fully-assembled
+      // string, otherwise the streamed buf. Either way: one last full pass
+      // through the markdown renderer guarantees an unterminated fence is
+      // closed correctly.
+      const finalText = r.reply || buf;
+      engine.updateStreamingMessage(finalText, { markdown: useMarkdown });
+      engine.finishStreamingMessage();
       if (r.error) engine.print(fmt.err(friendlyError(r.error)));
-      else if (firstToken && r.reply) {
-        engine.print(fmt.bold('Horizon: ') + (state.markdown ? renderMarkdown(r.reply) : r.reply));
-      } else if (state.markdown && r.reply && /[*_`#>-]/.test(r.reply)) {
-        engine.print(fmt.dim('─── rendered ───'));
-        engine.print(renderMarkdown(r.reply));
-      }
-      if (r.reply) {
+      if (r.reply || buf) {
         state.history.push({ role: 'user', content: message });
-        state.history.push({ role: 'assistant', content: r.reply });
+        state.history.push({ role: 'assistant', content: r.reply || buf });
       }
+      // Sprint 2 — feed token/cost into the status bar.
+      if (r.usage) engine.recordUsage(r.usage, { model: r.model });
     } else {
       const r = await runtime.runChat(message, { history: state.history });
       if (r.reply) {
@@ -466,6 +652,7 @@ async function runChat(runtime, state, engine, message) {
       } else if (r.error) {
         engine.print(fmt.err(friendlyError(r.error)));
       }
+      if (r.usage) engine.recordUsage(r.usage, { model: r.model });
     }
   } finally {
     engine.setSending(false);
@@ -473,7 +660,7 @@ async function runChat(runtime, state, engine, message) {
 }
 
 async function runAgent(runtime, state, engine, task) {
-  const rail = new StepRail(engine);
+  const rail = new StepRail(engine, runtime);
   engine.setSending(true);
   rail.startThinking('planning…');
   try {
