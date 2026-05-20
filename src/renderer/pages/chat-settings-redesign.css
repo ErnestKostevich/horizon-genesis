@@ -819,6 +819,78 @@ body.settings-scroll .ps-toc {
   font-weight: 600;
 }
 
+/* Copy-block under the QR — three rows (pairing URL / server URL / token)
+   each with a tap-to-copy button. This is the "Can't scan?" fallback for
+   when the camera-scan path fails — same values as the QR, just typeable.
+   Token row is intentionally not masked because the user has full local
+   access to the desktop anyway, and they need to read it to retype. */
+.mp-copy-block {
+  border: 1px solid var(--b1, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg3, rgba(0, 0, 0, 0.25));
+}
+.mp-copy-h {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t2, #b8c5d1);
+  margin-bottom: 2px;
+}
+.mp-copy-row {
+  display: grid;
+  grid-template-columns: 88px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.mp-copy-label {
+  font-size: 11px;
+  color: var(--t3, #8b9aa8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+.mp-copy-val {
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg2, rgba(0, 0, 0, 0.35));
+  color: var(--acc3, #a78bfa);
+  word-break: break-all;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+.mp-copy-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--b1, rgba(255,255,255,0.14));
+  background: var(--bg2, rgba(255,255,255,0.04));
+  color: var(--t1, #e6edf3);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.mp-copy-btn:hover { border-color: var(--acc, #7c6df2); color: var(--acc3, #a78bfa); }
+.mp-copy-btn.copied {
+  background: var(--green, #10b981);
+  border-color: var(--green, #10b981);
+  color: #fff;
+}
+@media (max-width: 560px) {
+  .mp-copy-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .mp-copy-btn { justify-self: end; }
+}
+
 /* Light-mode polish — paper background, soft drop shadow on the QR. */
 [data-theme="light"] .mobile-pair-card {
   background: rgba(0, 0, 0, 0.03) !important;
@@ -836,3 +908,27 @@ body.settings-scroll .ps-toc {
 [data-theme="light"] .mp-instr p,
 [data-theme="light"] .mp-hint,
 [data-theme="light"] .mp-status { color: #52525b !important; }
+[data-theme="light"] .mp-copy-block {
+  background: rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .mp-copy-h { color: #3f3f46 !important; }
+[data-theme="light"] .mp-copy-label { color: #71717a !important; }
+[data-theme="light"] .mp-copy-val {
+  background: #fff !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .mp-copy-btn {
+  background: #fff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .mp-copy-btn:hover {
+  border-color: #7c6df2 !important;
+  color: #5b21b6 !important;
+}
+[data-theme="light"] .mp-copy-btn.copied {
+  background: #10b981 !important;
+  color: #fff !important;
+}

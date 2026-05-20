@@ -2,7 +2,10 @@
 // offline. We never cache /api/* responses (those are dynamic +
 // auth-bound).
 
-const CACHE_NAME = 'horizon-pwa-v1';
+// Bumped to v2 when the pair-view UX was redesigned (QR scan primary,
+// manual fields collapsed). Old clients pick up the new shell on next
+// load instead of being stuck on the cached v1 form.
+const CACHE_NAME = 'horizon-pwa-v2';
 const APP_SHELL = [
   './',
   'index.html',

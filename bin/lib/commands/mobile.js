@@ -501,8 +501,16 @@ async function run({ runtime, args, flags }) {
   process.stdout.write('    ' + fmt.cyan('3.') + ' Tap the link that appears.\n');
   process.stdout.write('    ' + fmt.cyan('4.') + ' On the page that opens, tap ' + fmt.bold('Add to Home Screen') + '.\n\n');
 
-  process.stdout.write('  ' + fmt.dim('Or open manually: ') + fmt.cyan(url) + '\n');
-  process.stdout.write('  ' + fmt.dim('Token (already baked into the URL): ') + fmt.dim(token) + '\n\n');
+  // Plain-text URL + token block — for when scanning fails (bad camera,
+  // weird lighting, glare on the screen) and the user needs to type the
+  // values into the phone manually. Showing the token in plain text is
+  // safe because anyone with access to this terminal already has full
+  // control of the server; we keep the manual form on the PWA gated by
+  // the same token check.
+  process.stdout.write('  ' + fmt.bold('Can\'t scan? Type these into the phone\'s "I have the URL and token" form:') + '\n');
+  process.stdout.write('    ' + fmt.dim('QR scan-friendly URL: ') + fmt.cyan(url) + '\n');
+  process.stdout.write('    ' + fmt.dim('Server URL:           ') + fmt.cyan(apiUrl) + '\n');
+  process.stdout.write('    ' + fmt.dim('Token:                ') + fmt.cyan(token) + '\n\n');
 
   // Boot the server. We re-use horizon-serve.main() in-process so the QR
   // code stays on screen above the server's log lines and Ctrl+C cleanly

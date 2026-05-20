@@ -729,9 +729,32 @@
                   <h3>1. Open your camera</h3>
                   <p>Point it at this QR code (no app needed).</p>
                   <h3>2. Tap the link</h3>
-                  <p>Or open <code class="mp-url" id="mp-url-text"></code> manually.</p>
+                  <p>The mobile app opens with the token already filled in.</p>
                   <h3>3. Save to home screen</h3>
                   <p>Tap "Add to Home Screen" — it'll work like an app.</p>
+                </div>
+              </div>
+              <!-- Can't scan? Copy block — for shaky cameras, glare, or
+                   users who need to type the values into the PWA's manual
+                   form on the phone. Tap-to-copy via the small button at
+                   the end of each row; same token + URL is also embedded
+                   in the QR above, so this is purely a manual fallback. -->
+              <div class="mp-copy-block">
+                <div class="mp-copy-h">Can't scan? Type these on the phone instead:</div>
+                <div class="mp-copy-row">
+                  <span class="mp-copy-label">Pairing URL</span>
+                  <code class="mp-url mp-copy-val" id="mp-url-text"></code>
+                  <button class="mp-copy-btn" type="button" data-copy-target="mp-url-text" onclick="mobilePairCopy('mp-url-text', this)">Copy</button>
+                </div>
+                <div class="mp-copy-row">
+                  <span class="mp-copy-label">Server URL</span>
+                  <code class="mp-url mp-copy-val" id="mp-server-url-text"></code>
+                  <button class="mp-copy-btn" type="button" data-copy-target="mp-server-url-text" onclick="mobilePairCopy('mp-server-url-text', this)">Copy</button>
+                </div>
+                <div class="mp-copy-row">
+                  <span class="mp-copy-label">Token</span>
+                  <code class="mp-url mp-copy-val" id="mp-token-text"></code>
+                  <button class="mp-copy-btn" type="button" data-copy-target="mp-token-text" onclick="mobilePairCopy('mp-token-text', this)">Copy</button>
                 </div>
               </div>
               <div class="mp-actions">
@@ -2876,6 +2899,55 @@ function _mpRenderRunning(state) {
   if (urlEl && state.url) urlEl.textContent = state.url;
   const portEl = document.getElementById('mp-port-text');
   if (portEl && state.port) portEl.textContent = String(state.port);
+  // The pairing URL is `http://<ip>:<port>/?token=…`. Strip the query
+  // string to derive the bare server URL the PWA's manual form expects.
+  // Falls back gracefully if the URL is malformed for some reason.
+  const serverUrlEl = document.getElementById('mp-server-url-text');
+  const tokenEl = document.getElementById('mp-token-text');
+  if (state.url && (serverUrlEl || tokenEl)) {
+    try {
+      const u = new URL(state.url);
+      if (serverUrlEl) serverUrlEl.textContent = u.origin;
+    } catch (_) {
+      if (serverUrlEl) serverUrlEl.textContent = state.url;
+    }
+  }
+  if (tokenEl && state.token) tokenEl.textContent = state.token;
+}
+
+// Tap-to-copy any of the URL/token rows. Uses navigator.clipboard.writeText
+// in Electron's renderer (works without permission prompts inside the app),
+// falls back to a hidden textarea + execCommand on the off chance the
+// modern API is gone. The button text flashes "Copied!" for ~1.2s so the
+// user gets visible feedback without us needing to build a full toast.
+async function mobilePairCopy(elId, btn) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const text = el.textContent || '';
+  if (!text) return;
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch (_) {
+    // Fallback for environments without the clipboard API
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (_) { ok = false; }
+  }
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = ok ? 'Copied!' : 'Copy failed';
+    btn.classList.toggle('copied', ok);
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.classList.remove('copied');
+    }, 1200);
+  }
 }
 function _mpRenderStopped() {
   const card = _mpFindCard();
