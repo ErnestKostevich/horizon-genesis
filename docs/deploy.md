@@ -15,6 +15,35 @@ for the "running on a real server" path.
 - Node 22 LTS
 - Optional but recommended: Docker (for the isolated executor backend)
 
+### Desktop install notes (Linux GUI only)
+
+The Linux AppImage build needs **libfuse2** on Ubuntu 22.04+ and
+Debian 12+ (modern distros only ship libfuse3, which AppImage doesn't
+use):
+
+```bash
+sudo apt-get install -y libfuse2
+chmod +x Horizon-AI-Linux.AppImage
+./Horizon-AI-Linux.AppImage
+```
+
+Agent mouse / keyboard / window-control tools (smart_click, type_text,
+press_key, scroll) shell out to **xdotool** under X11 and **ydotool**
+under Wayland. Without them the agent still runs — it just falls back
+to "no computer use" mode. Install if you want real desktop control:
+
+```bash
+# X11 (most distros)
+sudo apt-get install -y xdotool
+
+# Wayland (GNOME 45+, KDE Plasma 6+)
+sudo apt-get install -y ydotool
+```
+
+You **don't need any of this** for the `horizon serve` headless path
+below — the server mode skips voice / screen / mouse subsystems
+entirely.
+
 ## 1. Install Node 22
 
 ```bash
