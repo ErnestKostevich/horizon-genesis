@@ -88,18 +88,19 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: ''
 
-      # PHASE 28.5 — better-sqlite3 prebuild ships a Node-ABI binary.
-      # Electron has a different NODE_MODULE_VERSION so without an
-      # explicit rebuild, packaged apps load a binary that can't
-      # `require()` cleanly and the SQLite + FTS5 memory layer
-      # silently falls back to JSON. We force-rebuild here, before
-      # electron-builder packages the asar, so every release ships
-      # working FTS5 on all three platforms.
+      # PHASE 28.5 — rebuild native modules under Electron's ABI before
+      # electron-builder packages the asar. Without this, better-sqlite3
+      # ships with a Node-ABI binary that can't load inside Electron and
+      # the SQLite + FTS5 memory layer silently falls back to JSON.
+      #
+      # We use `electron-builder install-app-deps` (the canonical path
+      # documented by electron-userland/electron-builder) instead of
+      # calling `@electron/rebuild` directly: it picks the right Electron
+      # version from devDependencies, walks ALL native modules including
+      # the ones in optionalDependencies (node-pty), and skips cleanly
+      # for any module that doesn't ship a binding for this OS.
       - name: Rebuild native modules for Electron ABI
-        run: npx --yes @electron/rebuild -f -w better-sqlite3 -w node-pty
-        # node-pty is in optionalDependencies — `-w` is best-effort and
-        # won't fail the build if it's not installed for this platform
-        # (Linux without prebuilt binding, etc.).
+        run: npx --no-install electron-builder install-app-deps
         continue-on-error: true
 
       - name: Stamp build-info.json
