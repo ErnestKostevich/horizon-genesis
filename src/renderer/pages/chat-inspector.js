@@ -879,6 +879,24 @@ window._inspDialecticRefresh = async function(btn) {
   }
 };
 
+// PHASE 28.5 — wire the dead `H.dialecticSearch` IPC to the new search
+// input above. Debounced 200ms so typing doesn't hammer the main proc.
+let _dialecticSearchTimer = null;
+window._inspDialecticSearch = function(query) {
+  clearTimeout(_dialecticSearchTimer);
+  _dialecticSearchTimer = setTimeout(async () => {
+    try {
+      const q = String(query || '').trim();
+      const r = q
+        ? await H.dialecticSearch?.({ query: q, limit: 30 })
+        : await H.dialecticRecent?.({ limit: 20 });
+      _renderDialecticList(r?.records || []);
+    } catch (e) {
+      console.warn('[dialectic] search failed:', e.message);
+    }
+  }, 200);
+};
+
 window._inspDialecticClear = async function(btn) {
   try {
     const confirmed = await (typeof customConfirm === 'function'
