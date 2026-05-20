@@ -826,6 +826,137 @@ window._inspReindex = async function _inspReindex(btn) {
   }
 };
 
+// PHASE 28.4 — Dialectic model viewer (9th memory layer, Honcho-style).
+// Big Five panel above is the static snapshot; this list shows the
+// time-ordered diff log of what the agent has learned about the user.
+function _renderDialecticList(records) {
+  const list = document.getElementById('insp-dialectic-list');
+  if (!list) return;
+  if (!records || !records.length) {
+    list.innerHTML = '<div class="insp-empty">No dialectic records yet — the agent emits one when it learns something new about you.</div>';
+    return;
+  }
+  const colour = (kind) => ({
+    belief:           'var(--cyan, #06b6d4)',
+    desire:           'var(--rose, #f43f5e)',
+    knowledge:        'var(--green, #10b981)',
+    'theory-of-mind': 'var(--violet, #8b5cf6)',
+    correction:       'var(--amber, #f59e0b)',
+  })[kind] || 'var(--t2)';
+  list.innerHTML = records.map(r => `
+    <div style="padding:6px 8px;border-left:2px solid ${colour(r.kind)};margin-bottom:6px;background:rgba(255,255,255,0.02)">
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em">
+        <span style="color:${colour(r.kind)}">${esc(r.kind)}</span>
+        <span>${esc(new Date(r.ts).toLocaleString())} · conf ${(r.confidence || 0.7).toFixed(2)}</span>
+      </div>
+      <div style="margin-top:4px;color:var(--tx)">${esc(r.after || '')}</div>
+      ${r.before ? `<div style="margin-top:2px;color:var(--t3);font-size:10px">was: ${esc(r.before)}</div>` : ''}
+      ${r.evidence ? `<div style="margin-top:2px;color:var(--t3);font-size:10px;font-style:italic">"${esc(r.evidence)}"</div>` : ''}
+    </div>
+  `).join('');
+}
+
+window._inspDialecticRefresh = async function(btn) {
+  const summaryEl = document.getElementById('insp-dialectic-summary');
+  try {
+    const [sum, list] = await Promise.all([
+      H.dialecticSummary?.(),
+      H.dialecticRecent?.({ limit: 20 }),
+    ]);
+    if (summaryEl) {
+      if (!sum?.ok) {
+        summaryEl.textContent = sum?.error || 'Dialectic model unavailable.';
+      } else {
+        const byKind = sum.byKind || {};
+        const kindBits = Object.entries(byKind).map(([k, n]) => `${n} ${k}`).join(' · ') || 'no records yet';
+        const updated = sum.lastUpdatedAt ? `last update ${new Date(sum.lastUpdatedAt).toLocaleString()}` : 'never updated';
+        summaryEl.textContent = `${sum.total} records (cap ${sum.cap}) — ${kindBits}. ${updated}.`;
+      }
+    }
+    _renderDialecticList(list?.records || []);
+  } catch (e) {
+    if (summaryEl) summaryEl.textContent = 'Refresh failed: ' + (e.message || String(e));
+  }
+};
+
+window._inspDialecticClear = async function(btn) {
+  try {
+    const confirmed = await (typeof customConfirm === 'function'
+      ? customConfirm('Wipe all dialectic records? Big Five profile stays untouched.')
+      : Promise.resolve(window.confirm('Wipe all dialectic records?')));
+    if (!confirmed) return;
+    const r = await H.dialecticClear?.();
+    if (!r?.ok) { addMsg?.('bot', `❌ Clear failed: ${esc(r?.error || 'unknown')}`); return; }
+    addMsg?.('bot', '🧹 Dialectic records wiped. Big Five profile is untouched.');
+    await window._inspDialecticRefresh?.();
+  } catch (e) {
+    addMsg?.('bot', `❌ Clear exception: ${esc(e.message)}`);
+  }
+};
+
+// Auto-refresh the dialectic list whenever the Learned tab opens.
+const _origRefreshLearned = typeof refreshInspectorLearned === 'function' ? refreshInspectorLearned : null;
+if (_origRefreshLearned) {
+  refreshInspectorLearned = function(...args) {
+    const out = _origRefreshLearned.apply(this, args);
+    try { window._inspDialecticRefresh?.(); } catch (_) {}
+    return out;
+  };
+}
+
+// PHASE 28.3 — Agent-curated memory reviewer buttons (Hermes-style
+// periodic nudges). Same flow as the SQLite mirror buttons below:
+// status reads from main, "Review now" triggers a pass immediately.
+window._inspMemoryReviewerStatus = async function(btn) {
+  try {
+    const r = await H.memoryReviewerStatus?.();
+    if (!r) { addMsg?.('bot', '⚠️ memoryReviewerStatus IPC unavailable.'); return; }
+    if (!r.ok) { addMsg?.('bot', `❌ Reviewer: ${esc(r.error || 'not initialized')}`); return; }
+    const stats = r.lastRunStats;
+    const statsEl = document.getElementById('insp-reviewer-stats');
+    if (statsEl) {
+      if (stats) {
+        statsEl.innerHTML = `Last pass: <strong>${stats.reviewed || 0}</strong> reviewed · ${stats.decayed || 0} decayed · ${stats.merged || 0} merged · ${stats.forgotten || 0} forgotten · ${new Date(r.lastRunAt || Date.now()).toLocaleString()}`;
+      } else {
+        statsEl.textContent = r.running ? 'Reviewer is running, no pass complete yet.' : 'Reviewer not running.';
+      }
+    }
+    if (!stats) addMsg?.('bot', '📊 Reviewer is scheduled but hasn\'t completed a pass yet. Click Review now to force one.');
+    else addMsg?.('bot', `📊 Last review pass — ${stats.reviewed || 0} reviewed, ${stats.decayed || 0} decayed, ${stats.merged || 0} merged, ${stats.forgotten || 0} forgotten.`);
+  } catch (e) {
+    addMsg?.('bot', `❌ Reviewer status exception: ${esc(e.message)}`);
+  }
+};
+
+window._inspMemoryReviewerRunNow = async function(btn) {
+  if (btn instanceof HTMLElement) {
+    btn.disabled = true;
+    btn.dataset._origText = btn.dataset._origText || btn.textContent;
+    btn.textContent = 'Reviewing…';
+  }
+  try {
+    addMsg?.('bot', '🧹 Running memory review pass — decay / merge near-duplicates / forget stale low-importance entries.');
+    const r = await H.memoryReviewerRunNow?.();
+    if (!r) { addMsg?.('bot', '⚠️ Reviewer IPC unavailable.'); return; }
+    if (!r.ok) { addMsg?.('bot', `❌ Review failed: ${esc(r.error || 'unknown error')}`); return; }
+    if (r.skipped) {
+      addMsg?.('bot', `ℹ️ Skipped — ${r.skipped} (memories: ${r.count || 0}). Reviewer waits for at least 50 memories before running.`);
+    } else {
+      addMsg?.('bot', `✓ Reviewed **${r.reviewed}** memories — ${r.decayed} decayed, ${r.merged} merged, ${r.forgotten} forgotten, ${r.survivors} kept.`);
+    }
+    // Refresh inspector to show the updated stats.
+    if (inspectorTab === 'learned') refreshInspectorLearned();
+  } catch (e) {
+    addMsg?.('bot', `❌ Review exception: ${esc(e.message)}`);
+    console.error('[memoryReviewer] exception:', e);
+  } finally {
+    if (btn instanceof HTMLElement) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._origText || 'Review now';
+    }
+  }
+};
+
 // PHASE 28 — SQLite + FTS5 mirror buttons. The JSON file stays the
 // source of truth; this just lets users opt into a queryable database
 // alongside it. Failure modes are reported plainly so users on
