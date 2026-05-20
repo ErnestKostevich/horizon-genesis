@@ -33,6 +33,7 @@
 
 const readline = require('readline');
 const { fmt } = require('./tty');
+const { ctxFor } = require('./themes');
 
 const ANSI = {
   clearScreen: '\x1b[2J\x1b[H',
@@ -79,6 +80,34 @@ const SLASH_DESCRIPTIONS = {
   '/find':         'search transcript (same as Ctrl+F)',
 };
 
+// Sprint 2 — short live-hint descriptions for the dim grey hint line that
+// appears UNDER the composer while the user types a slash command (no Tab
+// required). Kept short on purpose — single line, no truncation drama.
+const SLASH_HINTS = {
+  '/help':         'show command list',
+  '/quit':         'exit horizon',
+  '/clear':        'clear screen',
+  '/reset':        'clear chat history (memory keeps everything)',
+  '/skills':       'list installed skills',
+  '/skill':        'force-include a skill in next turn',
+  '/skill-show':   'print SKILL.md for a skill',
+  '/persona':      'switch active persona',
+  '/persona-list': 'list available personas',
+  '/model':        'switch active provider',
+  '/model-list':   'list available providers',
+  '/mem':          'memory search / recall / forget',
+  '/agent':        'run an agent task',
+  '/chat':         'send a chat (default mode anyway)',
+  '/stream':       'toggle streaming on/off',
+  '/markdown':     'toggle markdown render on/off',
+  '/banner':       'reprint the banner',
+  '/verbose':      'toggle verbose logging',
+  '/find':         'in-chat search overlay',
+  '/theme':        'switch CLI theme',
+  '/voice':        'toggle voice input/output',
+};
+const SLASH_HINT_KEYS = Object.keys(SLASH_HINTS);
+
 class TuiEngine {
   constructor(opts = {}) {
     this.completer = opts.completer || null;
@@ -114,6 +143,12 @@ class TuiEngine {
     this.runtime = opts.runtime || null;
     this._sessionStartMs = Date.now();
 
+    // Sprint 2 — Hermes-style status bar v2. Lightweight in-memory session
+    // tracker, accumulated across runChat / runAgent calls via recordUsage.
+    // costTracker on the runtime tracks long-term spend (persisted to disk);
+    // this is just the THIS-SESSION view for the status bar.
+    this.sessionStats = { tokensIn: 0, tokensOut: 0, costUsd: 0, lastModel: '' };
+
     // Fix 5 — render throttling. engine.print() may be called once per
     // streamed token (200+/sec); we throttle redraws to ~20fps so the
     // input bar doesn't flicker.
@@ -125,6 +160,14 @@ class TuiEngine {
     this._completionHits = null;   // array of slash commands or null
     this._completionIdx = 0;       // currently-highlighted hit
     this._completionPrefix = '';   // the prefix the hits were computed from
+
+    // Sprint 2 — streaming-markdown message state. We track the transcript
+    // index where the current assistant message began so we can replace
+    // that tail every ~120ms with a freshly markdown-rendered version of
+    // the accumulated buffer.
+    this._streamStart = -1;    // transcript index where the message began
+    this._streamPrefix = '';   // e.g. fmt.bold('Horizon: ')
+    this._streamActive = false;
   }
 
   // ── public API ──────────────────────────────────────────────────────
@@ -233,6 +276,34 @@ class TuiEngine {
 
   /** Print without appending to transcript (use for transient progress). */
   status(text) { this.print(text, { noAppend: true }); }
+
+  /**
+   * Sprint 2 — accumulate session usage from a completed chat/agent run.
+   * `usage` is the {prompt, completion, total} shape returned by aiClient
+   * (provider-normalised). Calls this with cost from runtime.costTracker
+   * for the just-recorded line; if absent, we compute via priceOf().
+   */
+  recordUsage(usage, opts = {}) {
+    if (!usage) return;
+    const tokensIn  = Number(usage.prompt)     || 0;
+    const tokensOut = Number(usage.completion) || 0;
+    this.sessionStats.tokensIn  += tokensIn;
+    this.sessionStats.tokensOut += tokensOut;
+    if (opts.model) this.sessionStats.lastModel = opts.model;
+    // Cost — explicit value wins; else best-effort lookup.
+    if (typeof opts.costUsd === 'number' && !Number.isNaN(opts.costUsd)) {
+      this.sessionStats.costUsd += opts.costUsd;
+    } else {
+      try {
+        const { costUsd } = require('../../src/main/runtime/cost-tracker');
+        const c = costUsd(opts.model || this.sessionStats.lastModel, usage);
+        if (typeof c === 'number') this.sessionStats.costUsd += c;
+      } catch (_) {}
+    }
+    // Status bar reads these on next render — force one now so the user
+    // sees tokens/cost update the moment a reply finishes.
+    if (process.stdin.isTTY && !this._closed) this._forceRedraw();
+  }
 
   /** Disable raw mode + restore terminal, then call onExit. */
   close() {
@@ -661,49 +732,106 @@ class TuiEngine {
   }
 
   /**
-   * Fix 3 — render a single status line above the composer.
-   * Format: ⌁ <provider>:<model>  ·  <persona>  ·  <tokens>/<ctx>  ·  $<cost>  ·  <mm:ss>
-   * Fails gracefully to a minimal line if runtime fields are missing.
-   * Returns the formatted line (ANSI-coloured) without trailing newline.
+   * Sprint 2 — Hermes-grade status bar v2.
+   *
+   * Full (≥100 cols):
+   *   ⌁ <prov>:<model> · <persona> · <tokens>/<ctx> · [████░░░] <pct>% · $<cost> · <mm:ss>
+   * Medium (70–99 cols):
+   *   ⌁ <prov>:<model> · <persona> · <tokens>/<ctx> · [████░░] <pct>% · $<cost>
+   * Narrow (<70 cols):
+   *   ⌁ <prov>:<model> · <persona> · <pct>%
+   *
+   * Bar fill colour by % of context used:
+   *   <50% green, 50–80% yellow, 80–95% warn/orange, ≥95% red.
    */
   _statusLine() {
     const rt = this.runtime;
     if (!rt || !rt.settingsStore) return '';
-    let provider = '—', persona = '—', modelStr = '';
+
+    let provider = '—', persona = '—', modelName = '';
     try {
       provider = rt.settingsStore.get('provider') || 'gemini';
       persona = rt.settingsStore.get('persona') || 'jarvis';
-      const m = rt.settingsStore.get('model.' + provider);
-      modelStr = m ? (':' + String(m).split('/').pop().slice(0, 22)) : '';
+      modelName = this.sessionStats.lastModel
+        || rt.settingsStore.get('model.' + provider)
+        || '';
     } catch (_) {}
 
-    // Session time mm:ss
+    const modelShort = modelName ? String(modelName).split('/').pop().slice(0, 28) : '';
+    const modelStr   = modelShort ? (':' + modelShort) : '';
+
+    // Token usage + context window
+    const used = this.sessionStats.tokensIn + this.sessionStats.tokensOut;
+    const ctxMax = ctxFor(modelName);
+    const pct = ctxMax > 0 ? Math.min(100, (used / ctxMax) * 100) : 0;
+
+    // Format tokens compactly: 12.4K / 200K
+    const fmtTokens = (n) => {
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+      return String(n);
+    };
+    const tokensStr = `${fmtTokens(used)}/${fmtTokens(ctxMax)}`;
+
+    // Session time mm:ss (≥1h shows h:mm:ss)
     const elapsed = Math.floor((Date.now() - this._sessionStartMs) / 1000);
-    const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-    const ss = String(elapsed % 60).padStart(2, '0');
+    let timeStr;
+    if (elapsed >= 3600) {
+      const hh = Math.floor(elapsed / 3600);
+      const mm = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+      const ss = String(elapsed % 60).padStart(2, '0');
+      timeStr = `${hh}:${mm}:${ss}`;
+    } else {
+      const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const ss = String(elapsed % 60).padStart(2, '0');
+      timeStr = `${mm}:${ss}`;
+    }
 
-    // Cost (best-effort — fail silently if costTracker is absent)
-    let costStr = '';
-    let tokensStr = '';
-    try {
-      if (rt.costTracker && typeof rt.costTracker.summary === 'function') {
-        const s = rt.costTracker.summary({ days: 1 });
-        if (s?.totals) {
-          const c = s.totals.costUsd || 0;
-          if (c > 0) costStr = '$' + c.toFixed(c < 0.01 ? 4 : 2);
-          const t = s.totals.tokens || 0;
-          if (t > 0) tokensStr = t > 1000 ? (Math.round(t / 100) / 10) + 'k' : String(t);
+    // Cost — combine THIS-SESSION accumulator with persisted today's spend.
+    // sessionStats wins when non-zero; else fall back to costTracker.summary({days:1}).
+    let costUsd = this.sessionStats.costUsd || 0;
+    if (!costUsd) {
+      try {
+        if (rt.costTracker && typeof rt.costTracker.summary === 'function') {
+          const s = rt.costTracker.summary({ days: 1 });
+          costUsd = (s?.totals?.costUsd) || 0;
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
+    const costStr = costUsd > 0
+      ? '$' + (costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(2))
+      : '$0.00';
 
-    const parts = [];
-    parts.push(fmt.cyan('⌁ ') + fmt.bold(provider + modelStr));
-    parts.push(fmt.dim('  ·  ') + fmt.cyan(persona));
-    if (tokensStr) parts.push(fmt.dim('  ·  ') + fmt.dim(tokensStr + ' tok'));
-    if (costStr) parts.push(fmt.dim('  ·  ') + fmt.green(costStr));
-    parts.push(fmt.dim('  ·  ' + mm + ':' + ss));
-    return parts.join('');
+    // Bar render: 10-cell wide for full mode, 6-cell for medium.
+    const cols = process.stdout.columns || 80;
+    const wantFull   = cols >= 100;
+    const wantMedium = cols >= 70 && cols < 100;
+    const barCells = wantFull ? 10 : 6;
+    const filled = Math.max(0, Math.min(barCells, Math.round((pct / 100) * barCells)));
+    const empty = barCells - filled;
+    const barRaw = '█'.repeat(filled) + '░'.repeat(empty);
+
+    // Colour by usage
+    let barFn;
+    if (pct >= 95) barFn = fmt.red;
+    else if (pct >= 80) barFn = fmt.yellow;   // warn (orange) — yellow is closest in default palette
+    else if (pct >= 50) barFn = fmt.yellow;
+    else barFn = fmt.green;
+    const barColored = barFn(barRaw);
+    const pctStr = pct >= 10 ? Math.round(pct) + '%' : pct.toFixed(1) + '%';
+
+    const SEP = fmt.dim(' · ');
+    const head = fmt.cyan('⌁ ') + fmt.bold(provider + modelStr);
+    const personaPart = fmt.cyan(persona);
+
+    if (!wantFull && !wantMedium) {
+      // Narrow: prov:model · persona · pct%
+      return head + SEP + personaPart + SEP + barFn(pctStr);
+    }
+
+    const parts = [head, personaPart, fmt.dim(tokensStr), '[' + barColored + '] ' + barFn(pctStr), fmt.green(costStr)];
+    if (wantFull) parts.push(fmt.dim(timeStr));
+    return parts.join(SEP);
   }
 
   _renderInputBar() {
@@ -760,14 +888,31 @@ class TuiEngine {
     let statusHeight = 0;
     if (status) { process.stdout.write(status + '\n'); statusHeight++; }
 
-    // Composer — print each line
+    // Sprint 2 — slash live hint above composer (single dim line).
+    // Only render when:
+    //   - user is single-line, on the first line, starts with `/`
+    //   - the floating Tab-menu is NOT already open (would duplicate)
+    //   - at least one command matches the prefix
+    const hintLine = (!this._completionHits || this._completionHits.length <= 1)
+      ? this._renderSlashHint(this.lines[0] || '')
+      : '';
+    let hintHeight = 0;
+    if (hintLine) { process.stdout.write(hintLine + '\n'); hintHeight++; }
+
+    // Composer — print each line. Sprint 2: if the composer is empty and
+    // we're on the only line, render a dim placeholder after the prompt.
     const lineCount = this.lines.length;
+    const placeholderActive = lineCount === 1 && this.lines[0].length === 0;
     for (let i = 0; i < lineCount; i++) {
       const prefix = i === 0 ? fmt.cyan(PROMPT) : fmt.dim('  ');
-      process.stdout.write(prefix + this.lines[i]);
+      if (i === 0 && placeholderActive) {
+        process.stdout.write(prefix + fmt.dim('░░░ Type a message, /help for commands ░░░'));
+      } else {
+        process.stdout.write(prefix + this.lines[i]);
+      }
       if (i < lineCount - 1) process.stdout.write('\n');
     }
-    this._lastDrawHeight = menuHeight + statusHeight + lineCount;
+    this._lastDrawHeight = menuHeight + statusHeight + hintHeight + lineCount;
 
     // Position cursor on (lineIdx, col)
     if (this.lineIdx < lineCount - 1) {
@@ -776,6 +921,123 @@ class TuiEngine {
     }
     process.stdout.write(ANSI.cursorLeft(9999));
     process.stdout.write(ANSI.cursorRight(this.col + (this.lineIdx === 0 ? PROMPT.length : 2)));
+  }
+
+  /**
+   * Sprint 2 — compute the live slash-command hint line.
+   * Returns a single dim-styled string, or '' to indicate "no hint".
+   * Behavior:
+   *   - empty input or non-slash → ''
+   *   - just '/' alone → show first 3 commands as a teaser
+   *   - prefix matches one command → "<cmd>  —  <description>"
+   *   - prefix matches multiple → first 3 separated by "  ·  "
+   *   - no match → '' (the line vanishes)
+   * Truncated at terminal width - 4 to avoid wrapping mess.
+   */
+  _renderSlashHint(input) {
+    if (!input || !input.startsWith('/')) return '';
+    // Match by prefix against the canonical slash list.
+    const matches = SLASH_HINT_KEYS.filter(k => k.startsWith(input));
+    if (!matches.length) return '';
+    const width = (process.stdout.columns || 80) - 4;
+    let body;
+    if (matches.length === 1) {
+      const cmd = matches[0];
+      body = cmd + '  —  ' + (SLASH_HINTS[cmd] || '');
+    } else {
+      // First 3 — name only if more than one match (description would be too noisy)
+      body = matches.slice(0, 3).join('  ·  ');
+      if (matches.length > 3) body += '  · …';
+    }
+    if (body.length > width) body = body.slice(0, Math.max(0, width - 1)) + '…';
+    return fmt.dim(body);
+  }
+
+  // ── Sprint 2 — streaming markdown rendering ─────────────────────────
+  // Three-phase API:
+  //   startStreamingMessage(prefix) → record where in transcript the
+  //     message begins (anchor) + the prefix to prepend.
+  //   updateStreamingMessage(buf) → re-render markdown for the full buf
+  //     and REPLACE everything in transcript from anchor onwards. This
+  //     means the displayed message keeps growing/changing as new tokens
+  //     arrive without leaving stale partial output behind.
+  //   finishStreamingMessage() → one final render + clear active state +
+  //     append a blank separator line.
+  //
+  // We deliberately repaint the assistant zone by:
+  //   1. Truncating this.transcript back to _streamStart
+  //   2. Pushing the freshly rendered lines
+  //   3. Clearing screen + replaying the visible window
+  // This is "Option A" from the brief — good enough for 95% of cases.
+
+  startStreamingMessage(prefix = '') {
+    this._streamStart = this.transcript.length;
+    this._streamPrefix = prefix || '';
+    this._streamActive = true;
+  }
+
+  /**
+   * @param {string} rawMarkdown - the full accumulated markdown so far
+   * @param {object} opts
+   *   - markdown:  if false, skip renderMarkdown() and use raw text
+   */
+  updateStreamingMessage(rawMarkdown, opts = {}) {
+    if (!this._streamActive || this._streamStart < 0) return;
+    // Lazy require to avoid a circular dep risk at module load.
+    let rendered;
+    if (opts.markdown === false) {
+      rendered = String(rawMarkdown || '');
+    } else {
+      try {
+        const { renderMarkdown } = require('./markdown');
+        rendered = renderMarkdown(String(rawMarkdown || ''));
+      } catch (_) {
+        rendered = String(rawMarkdown || '');
+      }
+    }
+    const firstLine = this._streamPrefix + (rendered.split('\n')[0] || '');
+    const restLines = rendered.split('\n').slice(1);
+    // Replace transcript tail
+    this.transcript.length = this._streamStart;
+    this.transcript.push(firstLine);
+    for (const l of restLines) this.transcript.push(l);
+
+    // Repaint visible window (only in live view — if user is scrolled
+    // back, we don't disturb them; they'll see the final result on
+    // return to live).
+    if (this._closed || this.scrollOffset > 0) return;
+    if (!process.stdin.isTTY) {
+      // Non-TTY path — just stream the latest tail diff to stdout. We
+      // don't try to be clever, full re-emit of the new lines.
+      process.stdout.write(firstLine + '\n');
+      for (const l of restLines) process.stdout.write(l + '\n');
+      return;
+    }
+    // TTY path — clear-and-repaint the last `h - 2` lines so the message
+    // visually replaces itself in place.
+    this._eraseInputBar();
+    process.stdout.write(ANSI.clearScreen);
+    const h = (process.stdout.rows || 24) - 2;
+    const start = Math.max(0, this.transcript.length - h);
+    for (let i = start; i < this.transcript.length; i++) {
+      process.stdout.write(this.transcript[i] + '\n');
+    }
+    this._renderInputBar();
+  }
+
+  finishStreamingMessage() {
+    if (!this._streamActive) return;
+    // Append a blank separator line so the next print() doesn't butt up
+    // against the rendered message.
+    this.transcript.push('');
+    if (!this._closed && process.stdin.isTTY && this.scrollOffset === 0) {
+      this._eraseInputBar();
+      process.stdout.write('\n');
+      this._renderInputBar();
+    }
+    this._streamActive = false;
+    this._streamStart = -1;
+    this._streamPrefix = '';
   }
 
   // ── exit / fallback ─────────────────────────────────────────────────

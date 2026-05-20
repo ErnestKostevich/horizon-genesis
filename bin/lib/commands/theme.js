@@ -16,15 +16,30 @@ function run({ runtime, args, flags }) {
 
   if (flags.list || args[0] === 'list') {
     if (flags.json) {
-      process.stdout.write(JSON.stringify({ active: current, themes }) + '\n');
+      const detailed = themes.map((id) => {
+        const t = getTheme(id);
+        return { id, active: id === current, banner: t.banner, spinner: t.spinnerFrames[0] || '', description: t.description || '' };
+      });
+      process.stdout.write(JSON.stringify({ active: current, themes: detailed }) + '\n');
       return 0;
     }
     process.stdout.write(fmt.bold('Themes') + '\n');
-    for (const id of themes) {
+    // Column-align: name column is widest theme id, glyph column is widest banner+spinner.
+    const nameW = Math.max(...themes.map((id) => id.length));
+    const glyphRaw = themes.map((id) => {
+      const t = getTheme(id);
+      return (t.banner || '') + ' ' + (t.spinnerFrames?.[0] || '');
+    });
+    const glyphW = Math.max(...glyphRaw.map((s) => s.length));
+    themes.forEach((id, i) => {
       const t = getTheme(id);
       const active = id === current ? fmt.green(' ●') : '  ';
-      process.stdout.write(`${active}  ${fmt.cyan(id.padEnd(10))} ${fmt.dim(t.banner + ' ' + (t.spinnerFrames[0] || ''))}\n`);
-    }
+      const namePad = id + ' '.repeat(Math.max(0, nameW - id.length));
+      const glyph = glyphRaw[i];
+      const glyphPad = glyph + ' '.repeat(Math.max(0, glyphW - glyph.length));
+      const desc = t.description ? fmt.dim('"' + t.description + '"') : '';
+      process.stdout.write(`${active}  ${fmt.cyan(namePad)}  ${fmt.dim(glyphPad)}  ${desc}\n`);
+    });
     process.stdout.write('\n' + fmt.dim('  Switch with: horizon theme <name>') + '\n');
     return 0;
   }
