@@ -2780,12 +2780,19 @@ body.with-sidebar .chat-status-bar{display:flex}
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sprint-1 fix: LIGHT MODE
+   Sprint-1 fix + Sprint-2.2 expansion: LIGHT MODE
    ═══════════════════════════════════════════════════════════════════════════
    Toggled via `document.documentElement.setAttribute('data-theme','light')`.
    Persisted in localStorage as `horizonTheme`. Restored on boot by inline
-   bootstrap at the top of chat.html <body>. Accent stays the same so the
+   bootstrap in <head> of chat.html (before any CSS link, so first paint
+   already respects the saved theme — no flash). Accent stays the same so the
    brand identity is preserved across modes — only neutrals flip.
+
+   Sprint-2.2: user reported the toggle "doesn't work at all" because four
+   other stylesheets (apex-theme, chat-shell-polish, chat-redesign, chat-
+   settings-redesign) hardcode dark hex/rgba behind `!important` and never
+   define a `[data-theme="light"]` variant. They are now patched separately;
+   this block expanded to cover every CSS-var literal the shell touches.
    --------------------------------------------------------------------- */
 [data-theme="light"] {
   --bg: #fafafa;
@@ -2794,32 +2801,114 @@ body.with-sidebar .chat-status-bar{display:flex}
   --tx: #18181b;
   --t2: #52525b;
   --t3: #71717a;
+  --t4: #a1a1aa;
   --b1: rgba(0,0,0,.06);
   --b2: rgba(0,0,0,.10);
   --b3: rgba(0,0,0,.18);
+  --usr-bg: linear-gradient(135deg, rgba(124,109,242,.16), rgba(124,109,242,.08));
+  --usr-b: rgba(124,109,242,.32);
+  --glow: 0 0 30px rgba(124,109,242,.18);
 }
 [data-theme="light"] body {
   background:
     radial-gradient(at 20% 10%, rgba(124,109,242,0.10), transparent 60%),
     radial-gradient(at 80% 90%, rgba(167,139,250,0.08), transparent 50%),
-    #fafafa;
+    #fafafa !important;
+  color: #18181b;
 }
+[data-theme="light"] html { background: #fafafa; }
 [data-theme="light"] body::before {
   opacity: 0.12;
   filter: invert(1);
 }
+[data-theme="light"] body::after {
+  background: radial-gradient(ellipse at 70% 80%, rgba(167,139,250,.05), transparent 60%);
+}
 [data-theme="light"] .tb {
-  background: rgba(255,255,255,.85);
-  border-bottom-color: rgba(0,0,0,.08);
+  background: rgba(255,255,255,.85) !important;
+  border-bottom-color: rgba(0,0,0,.08) !important;
+  color: #18181b;
 }
 [data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,.15);
+  background: rgba(0,0,0,.15) !important;
 }
-/* Inputs / textarea need an explicit light bg or they look identical to the page. */
-[data-theme="light"] input, [data-theme="light"] textarea, [data-theme="light"] select {
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(124,109,242,.32) !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+[data-theme="light"] ::selection {
+  background: rgba(124,109,242,.22);
+  color: #18181b;
+}
+/* Inputs / textarea / select need an explicit light bg + dark text. */
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border-color: rgba(0,0,0,.10);
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #a1a1aa !important;
+}
+[data-theme="light"] select option {
   background: #ffffff;
   color: #18181b;
 }
+
+/* Message bubbles. The bot bubble background is hardcoded dark elsewhere;
+   give it a paper-white surface here. The user bubble inherits via --usr-bg. */
+[data-theme="light"] .msg.bot .bub,
+[data-theme="light"] .msg.bot .bub-wrap,
+[data-theme="light"] .bub.bot {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .msg.bot .bub strong,
+[data-theme="light"] .msg.bot .bub h1,
+[data-theme="light"] .msg.bot .bub h2,
+[data-theme="light"] .msg.bot .bub h3 {
+  color: #18181b !important;
+}
+[data-theme="light"] .msg.bot .bub p,
+[data-theme="light"] .msg.bot .bub li,
+[data-theme="light"] .msg.bot .bub span {
+  color: #27272a !important;
+}
+[data-theme="light"] .msg.bot .bub a {
+  color: #6557d4 !important;
+}
+[data-theme="light"] .msg.bot .bub a:hover {
+  color: #4c40ad !important;
+  background: rgba(124,109,242,.08) !important;
+}
+
+/* Code blocks need their own treatment — dark code on light paper. */
+[data-theme="light"] pre,
+[data-theme="light"] pre code,
+[data-theme="light"] .msg.bot .bub pre {
+  background: #f4f4f5 !important;
+  color: #18181b !important;
+  border-color: rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] code:not(pre code) {
+  background: rgba(124,109,242,.12) !important;
+  color: #4c40ad !important;
+}
+
+/* Text default — many surfaces inherit. */
+[data-theme="light"] .tb-name,
+[data-theme="light"] .tb-title,
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] h3 {
+  color: #18181b !important;
+}
+
 /* Theme toggle button in the title bar. */
 .theme-toggle {
   -webkit-app-region: no-drag;
@@ -2838,5 +2927,14 @@ body.with-sidebar .chat-status-bar{display:flex}
 .theme-toggle:hover { background: var(--b2); color: var(--tx); }
 .theme-toggle .theme-toggle-sun { display: none; }
 .theme-toggle .theme-toggle-moon { display: inline-block; }
+[data-theme="light"] .theme-toggle {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.10);
+  color: #52525b;
+}
+[data-theme="light"] .theme-toggle:hover {
+  background: rgba(0,0,0,.08);
+  color: #18181b;
+}
 [data-theme="light"] .theme-toggle .theme-toggle-sun { display: inline-block; }
 [data-theme="light"] .theme-toggle .theme-toggle-moon { display: none; }

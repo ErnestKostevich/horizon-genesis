@@ -1282,3 +1282,142 @@ textarea#inp{background:transparent!important}
 .step-rail-gate.show { display: flex; }
 .step-rail-gate-body { flex: 1; min-width: 0; }
 .step-rail-gate-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-2.2 fix: LIGHT MODE overrides for shell-polish.
+   ───────────────────────────────────────────────────────────────────────
+   This file hardcodes a dark navy sidebar (`#070a10`, `#060910`, `#0c111a`)
+   with `!important`, so without overrides the side rail stays pitch-black
+   on light mode. Mirror every shell color here as a light variant.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .tb {
+  background:
+    radial-gradient(circle at 24px 0, rgba(124,109,242,.10), transparent 42px),
+    linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.85)) !important;
+  border-bottom: 1px solid rgba(0,0,0,.08) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.5), 0 1px 3px rgba(0,0,0,.04) !important;
+}
+[data-theme="light"] .tb-name { color: #18181b !important; }
+[data-theme="light"] .tb-sub { color: #6557d4 !important; }
+[data-theme="light"] .tb-r {
+  border-color: rgba(0,0,0,.08) !important;
+  background: linear-gradient(180deg, rgba(0,0,0,.03), rgba(0,0,0,.01)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 16px rgba(0,0,0,.04) !important;
+}
+
+/* Sidebar — left rail. */
+[data-theme="light"] .chatside {
+  background: #ffffff !important;
+  border-right: 1px solid rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .cs-new {
+  background: #7c6df2 !important;
+  color: #ffffff !important;
+}
+[data-theme="light"] .cs-new:hover {
+  background: #6557d4 !important;
+}
+[data-theme="light"] .cs-search {
+  background: transparent !important;
+  border-color: rgba(0,0,0,.06) !important;
+}
+[data-theme="light"] .cs-search input,
+[data-theme="light"] .cs-search-input {
+  background: #f4f4f5 !important;
+  color: #18181b !important;
+  border: 1px solid rgba(0,0,0,.06) !important;
+}
+[data-theme="light"] .cs-activity {
+  background: #f9fafb !important;
+  border-right: 1px solid rgba(0,0,0,.06) !important;
+}
+[data-theme="light"] .cs-act,
+[data-theme="light"] .cs-util {
+  color: #52525b !important;
+  background: transparent !important;
+}
+[data-theme="light"] .cs-act:hover,
+[data-theme="light"] .cs-util:hover {
+  color: #18181b !important;
+  background: rgba(124,109,242,.08) !important;
+  border-color: rgba(124,109,242,.18) !important;
+}
+[data-theme="light"] .cs-act.on,
+[data-theme="light"] .cs-act.proc {
+  color: #18181b !important;
+  background: rgba(124,109,242,.10) !important;
+  border-color: rgba(124,109,242,.22) !important;
+}
+[data-theme="light"] .cs-utility {
+  background: #f9fafb !important;
+  border-top: 1px solid rgba(0,0,0,.06) !important;
+  border-right: 1px solid rgba(0,0,0,.06) !important;
+}
+[data-theme="light"] .cs-resize:hover {
+  background: rgba(124,109,242,.18) !important;
+}
+[data-theme="light"] .cs-list { background: transparent !important; }
+[data-theme="light"] .cs-list .cs-item {
+  color: #27272a !important;
+  background: transparent !important;
+}
+[data-theme="light"] .cs-list .cs-item:hover {
+  background: rgba(124,109,242,.06) !important;
+}
+[data-theme="light"] .cs-list .cs-item.on,
+[data-theme="light"] .cs-list .cs-item.active {
+  background: rgba(124,109,242,.12) !important;
+  color: #18181b !important;
+}
+
+/* Status / mode pills + chips. */
+[data-theme="light"] .chip,
+[data-theme="light"] .mt {
+  background: rgba(0,0,0,.04) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .chip:hover,
+[data-theme="light"] .mt:hover {
+  background: rgba(0,0,0,.08) !important;
+}
+
+/* Modes / shell-tab bar. */
+[data-theme="light"] .modes {
+  background: rgba(255,255,255,.85) !important;
+  border-bottom-color: rgba(0,0,0,.06) !important;
+}
+
+/* Composer + input wrap. */
+[data-theme="light"] .inp-wrap {
+  background: rgba(255,255,255,.85) !important;
+  border-top-color: rgba(0,0,0,.06) !important;
+}
+[data-theme="light"] .inp,
+[data-theme="light"] #inp,
+[data-theme="light"] .composer-input {
+  background: #ffffff !important;
+  color: #18181b !important;
+  border-color: rgba(0,0,0,.10) !important;
+}
+
+/* Inspector + panel surfaces. */
+[data-theme="light"] .inspector-pane {
+  background: #ffffff !important;
+  border-left: 1px solid rgba(0,0,0,.08) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .insp-tabs,
+[data-theme="light"] .insp-tab {
+  color: #52525b !important;
+}
+[data-theme="light"] .insp-tab:hover {
+  background: rgba(124,109,242,.06) !important;
+  color: #18181b !important;
+}
+
+/* Focus timer pill (had hardcoded green tint). Light variant keeps the
+   green semantic but tunes saturation for paper bg. */
+[data-theme="light"] .focus-timer {
+  background: rgba(34,197,94,.12) !important;
+  border-color: rgba(34,197,94,.30) !important;
+}
