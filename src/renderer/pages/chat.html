@@ -1293,6 +1293,14 @@
      Like the model dropdown in ChatGPT / Claude. -->
 <div class="model-popover" id="model-popover"></div>
 <div class="persona-popover" id="persona-popover"></div>
+<!-- Mode-picker popover. MUST live at body level, sibling to the other
+     two popovers above. Was originally nested inside .inp-wrap further
+     down — .inp-wrap has backdrop-filter:blur(20px) which creates a
+     containing block for position:fixed descendants in Electron, so the
+     popover anchored 200+px below the viewport when positionPicker set
+     viewport-relative left/top. Moving it here fixes the "Mode chip
+     does nothing" regression that survived 5d9790a and 2bbefd5. -->
+<div class="mode-popover" id="mode-popover"></div>
 
 </div>
 
@@ -1731,8 +1739,17 @@
       <span>Tools</span><b>⌘K</b>
     </button>
   </div>
-  <!-- PR-LAYOUT-V3 — Mode picker popover (same pattern as Model/Persona). -->
-  <div class="mode-popover" id="mode-popover"></div>
+  <!-- PR-LAYOUT-V3 — Mode picker popover. ⚠ DO NOT MOVE INSIDE .inp-wrap.
+       Was nested here originally and the mode chip "didn't open" because
+       .inp-wrap has backdrop-filter:blur(20px) — which creates a containing
+       block for position:fixed descendants in Chromium/Electron. The
+       popover *did* open, but its left/top values (computed via
+       getBoundingClientRect in positionPicker) were viewport-relative
+       while the popover was positioning against .inp-wrap (bottom strip
+       of the window). Result: popover rendered ~200px BELOW the viewport.
+       Sibling Model/Persona popovers (lines below #chat-status-bar)
+       worked because they sit at body level. Mode picker now lives next
+       to them. See `#mode-popover` div ~25 lines below. -->
   <div class="irow">
     <input type="file" id="file-input" accept="image/*,.txt,.md,.js,.ts,.jsx,.tsx,.py,.html,.css,.json,.csv,.xml,.yaml,.yml,.sh,.sql,.zip,.pdf" multiple onchange="onFilesSelected(event)"/>
     <button class="ibtn btn-attach" onclick="document.getElementById('file-input').click()" title="Прикрепить файл или фото"><svg class="licon"><use href="#i-paperclip"/></svg></button>
