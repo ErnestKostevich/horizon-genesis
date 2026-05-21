@@ -42,6 +42,10 @@
 <!-- Phase 19 — Settings panel CSS-only redesign (card grid, gradient
      section headers, consistent inputs/buttons, status accents). -->
 <link rel="stylesheet" href="chat-settings-redesign.css"/>
+<!-- chat-refinement.css — final polish layer. Loaded LAST so its rules
+     dominate the cascade without needing !important wars. Reference DNA:
+     Linear / Anthropic Claude.ai / Cursor / Windsurf / OpenAI ChatGPT. -->
+<link rel="stylesheet" href="chat-refinement.css"/>
 </head>
 <body>
 <!-- ═══════════ ICON LIBRARY (lucide.dev) ═══════════
@@ -992,7 +996,16 @@
        The csb-model pill in the chat status bar is also retired below
        — composer-toolbar is now THE place for model selection. -->
   <div class="tb-center">
-    <button class="shell-chip primary" id="shell-surface-label" onclick="openCmdPalette()" title="Command palette · ⌘K · BYOK · all calls go directly to your providers">Chat</button>
+    <!-- The header surface chip shows the active chat mode (Chat / Code /
+         Agent / etc). Used to open Cmd-K palette on click, but users
+         expected a mode picker — clicking "Chat" naturally suggests
+         switching mode. Now opens the mode picker; ⌘K still opens the
+         palette via keyboard. Right-click / long-press also keeps the
+         palette accessible for users muscle-memoried into the old flow. -->
+    <button class="shell-chip primary" id="shell-surface-label"
+            onclick="openModePicker(event)"
+            oncontextmenu="event.preventDefault();openCmdPalette()"
+            title="Click — choose chat mode · ⌘K — command palette · right-click — palette">Chat</button>
     <!-- PR-C4 — git branch chip. Hidden by default; populated by
          refreshGitBranchChip() when a workspace is open and is a git
          repo. Click opens the recent-branches dropdown. -->
@@ -1016,9 +1029,15 @@
       <svg class="licon theme-toggle-sun"><use href="#i-sun"/></svg>
     </button>
     <button class="ic-btn" onclick="openPanel()" title="Settings"><svg class="licon"><use href="#i-settings"/></svg></button>
-    <div style="width:6px"></div>
-    <button class="wbtn wy" onclick="H.minimize()"></button>
-    <button class="wbtn wr" onclick="H.hide()"></button>
+    <div style="width:10px"></div>
+    <!-- Window controls. Custom traffic-light style; on macOS the native
+         hiddenInset traffic-lights take over and chat-base.css hides these
+         (body.os-mac rule). On Win + Linux these are the only controls.
+         Close = hide-to-tray (intentional, user keeps agent running in
+         background). Use the tray menu or `horizon quit` to fully exit. -->
+    <button class="wbtn wy" onclick="try{H.minimize()}catch(_){}" title="Minimize" aria-label="Minimize"></button>
+    <button class="wbtn wg" onclick="try{H.toggleMaximize()}catch(_){}" title="Maximize / Restore" aria-label="Maximize"></button>
+    <button class="wbtn wr" onclick="try{H.hide()}catch(_){try{window.close()}catch(__){}}" title="Hide to tray" aria-label="Hide to tray"></button>
   </div>
 </div>
 
@@ -2783,10 +2802,18 @@ var _MODE_PICKER_ITEMS = [
 ];
 function openModePicker(ev) {
   try { ev?.stopPropagation(); } catch (_) {}
-  closeModelPicker();
-  closePersonaPicker();
+  // Best-effort close of sibling pickers — if either helper isn't defined
+  // yet (e.g. chat-model-picker.js failed to load), don't let that
+  // silently break opening THIS picker. Was: bare calls → ReferenceError
+  // bubbled out of openModePicker, no popover ever shown, user sees
+  // "nothing happens" on the header / composer mode chip.
+  try { if (typeof closeModelPicker === 'function') closeModelPicker(); } catch (e) { console.warn('closeModelPicker failed:', e?.message || e); }
+  try { if (typeof closePersonaPicker === 'function') closePersonaPicker(); } catch (e) { console.warn('closePersonaPicker failed:', e?.message || e); }
   const pop = document.getElementById('mode-popover');
-  if (!pop) return;
+  if (!pop) {
+    console.warn('openModePicker: #mode-popover element missing');
+    return;
+  }
   const active = String(mode || 'chat').toLowerCase();
   const groups = ['Core', 'Niche'];
   const sections = groups.map(g => {
@@ -2814,7 +2841,25 @@ function openModePicker(ev) {
     </div>
     <div class="picker-body">${sections}</div>
   `;
-  positionPicker(pop, ev?.currentTarget || document.getElementById('composer-mode-chip'));
+  // Anchor: prefer the actual element that fired the click (header
+  // shell-surface-label OR composer-mode-chip), then fall back to either
+  // chip. Was: only composer-mode-chip fallback, which meant when the
+  // header chip is the one wired to openModePicker the picker would
+  // re-anchor below the composer instead of where the user clicked.
+  const anchor = ev?.currentTarget
+    || document.getElementById('shell-surface-label')
+    || document.getElementById('composer-mode-chip');
+  if (typeof positionPicker === 'function') {
+    positionPicker(pop, anchor);
+  } else {
+    // Defensive fallback — if chat-model-picker.js hasn't loaded yet,
+    // still show the popover near top-centre so the user sees SOMETHING.
+    console.warn('positionPicker missing; falling back to centred popover');
+    pop.style.left = '50%';
+    pop.style.top = '120px';
+    pop.style.transform = 'translateX(-50%)';
+    pop.classList.add('show');
+  }
 }
 function closeModePicker() {
   document.getElementById('mode-popover')?.classList.remove('show');
@@ -2827,6 +2872,10 @@ document.addEventListener('click', (e) => {
   if (!pop?.classList.contains('show')) return;
   if (e.target.closest('#mode-popover')) return;
   if (e.target.closest('#composer-mode-chip')) return;
+  // The header surface-label chip is now an alternate trigger for
+  // openModePicker; clicking it again should toggle, but the outside
+  // dismiss handler must not eat the click before openModePicker fires.
+  if (e.target.closest('#shell-surface-label')) return;
   if (e.target.closest('.composer-chip')) {
     const btn = e.target.closest('.composer-chip');
     if (String(btn?.textContent || '').toLowerCase().includes('mode')) return;
@@ -4485,15 +4534,40 @@ H.onMarketAuthenticated?.(async (user) => {
     if (notif) { notificationsOn = true; document.getElementById('sw-notifs').classList.add('on'); startNotifications(); }
   } catch(_) {}
   
-  // Load workflows
-  await loadWorkflows();
-  
-  // Check Google auth
-  checkGoogleAuth();
-  loadGithubRepos();
-  loadPluginList();
-  // Check Horizon Marketplace session (SSO with the website)
-  refreshAccount();
+  // Load workflows — guard against ReferenceError. loadWorkflows lives in
+  // chat-workflows.js which is loaded AFTER this inline IIFE (parser hasn't
+  // reached the <script src> tag yet), so calling it sync throws and breaks
+  // every line below it inside the IIFE — which was the root cause of "Mode
+  // chip does nothing / nothing initializes". The deferred _runLateInit
+  // below re-runs it post-load when chat-workflows.js is available.
+  try {
+    if (typeof loadWorkflows === 'function') await loadWorkflows();
+  } catch (e) { console.warn('[init] loadWorkflows deferred:', e?.message); }
+
+  // Defer late-init calls to after all <script src=...> tags below have
+  // loaded. The inline script runs synchronously while external scripts
+  // (chat-integrations.js with loadGithubRepos, etc.) are deferred to
+  // bottom of body, so calling them inline → ReferenceError. Wrap in
+  // typeof-checks + a microtask so even if execution order shifts, we
+  // don't crash initHorizon mid-flight.
+  const _safeCall = (name) => {
+    try {
+      const fn = window[name];
+      if (typeof fn === 'function') fn();
+    } catch (e) { console.warn('[init] ' + name + ' failed:', e?.message); }
+  };
+  // Wait for the document to fully load (all <script src=...> resolved)
+  // before calling functions that live in external files.
+  const _runLateInit = () => {
+    _safeCall('checkGoogleAuth');
+    _safeCall('loadGithubRepos');
+    _safeCall('loadPluginList');
+    _safeCall('refreshAccount');
+    _safeCall('loadWorkflows');
+    _safeCall('loadPersonaSelect');
+  };
+  if (document.readyState === 'complete') _runLateInit();
+  else window.addEventListener('load', _runLateInit, { once: true });
 })();
 
 

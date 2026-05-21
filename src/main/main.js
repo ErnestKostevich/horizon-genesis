@@ -12,6 +12,32 @@ const http   = require('http');
 const { exec, spawn } = require('child_process');
 const Store  = require('electron-store');
 
+// ── Boot crash logger ────────────────────────────────────────────────────────
+// Bug 2 — `Horizon-AI-Portable-0.0.1.exe` was exiting silently on launch
+// because a sync require() of a native module threw outside any try/catch.
+// Electron swallows uncaught exceptions during boot and exits with code 1
+// with no UI, so the user just sees the icon flash and disappear.
+// Capture every fatal at the bottom of the require chain and write it to
+// a file under <userData>/crash.log so we can diagnose the next time.
+// (Also surface to console — picked up by `--enable-logging`.)
+(function installBootCrashLogger() {
+  const dump = (where, err) => {
+    const line = `[${new Date().toISOString()}] ${where}: ${err?.stack || err?.message || err}\n`;
+    try { process.stderr.write(line); } catch (_) {}
+    try {
+      // app.getPath('userData') is not safe until app.whenReady fires, so
+      // fall back to os.tmpdir() during the very early boot window.
+      const dir = (app && typeof app.getPath === 'function')
+        ? (() => { try { return app.getPath('userData'); } catch (_) { return os.tmpdir(); } })()
+        : os.tmpdir();
+      try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+      fs.appendFileSync(path.join(dir, 'horizon-crash.log'), line);
+    } catch (_) {}
+  };
+  process.on('uncaughtException', (err) => dump('uncaughtException', err));
+  process.on('unhandledRejection', (err) => dump('unhandledRejection', err));
+})();
+
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 
@@ -602,13 +628,39 @@ function createWindow(page = 'chat') {
       if (input.type !== 'keyDown') return;
       const isF12 = input.key === 'F12';
       const isCtrlShiftI = input.control && input.shift && input.key === 'I';
+      // Bug 3 — clarify the reload story. Ctrl+R is Electron's default and
+      // already does a renderer-only soft reload; Ctrl+Shift+R does a hard
+      // reload (cache busted). We bind both explicitly so the keybindings
+      // survive even when the renderer captures the event with its own
+      // keydown listener (which happens in code mode + Monaco).
+      const isReload = input.control && !input.shift && (input.key === 'R' || input.key === 'r');
+      const isHardReload = input.control && input.shift && (input.key === 'R' || input.key === 'r');
       if (isF12 || isCtrlShiftI) {
         win.webContents.toggleDevTools();
+        event.preventDefault();
+        return;
+      }
+      if (isHardReload) {
+        win.webContents.reloadIgnoringCache();
+        event.preventDefault();
+        return;
+      }
+      if (isReload) {
+        win.webContents.reload();
         event.preventDefault();
       }
     });
     win.webContents.once('did-finish-load', () => {
       try { win.webContents.openDevTools({ mode: 'detach' }); } catch (_) {}
+      // Bug 3 — surface the dev reload workflow in the renderer console
+      // so users running `npm start` actually know how to see their
+      // edits. Main-process changes still need a full restart; renderer
+      // changes only need Ctrl+R (Cmd+R on macOS).
+      try {
+        win.webContents.executeJavaScript(`
+          console.log('%c[Horizon dev]','color:#7c6df2;font-weight:bold','Renderer live. Press Ctrl+R (Cmd+R) for soft reload, Ctrl+Shift+R for hard reload (cache-busting). Main-process edits need npm start restart. See docs/local-development.md.');
+        `).catch(()=>{});
+      } catch (_) {}
     });
   }
 

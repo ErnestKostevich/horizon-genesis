@@ -335,40 +335,35 @@ body.with-sidebar.chat-sidebar-collapsed > .msgs > .greet {
 .psn-i .licon{width:15px;height:15px}
 /* Mode chips look better with a slightly heavier stroke at small sizes. */
 .mt .licon{width:13px;height:13px;stroke-width:1.85;margin-right:2px}
-.wbtn{width:12px;height:12px;border-radius:50%;border:none;cursor:pointer;-webkit-app-region:no-drag}
-.wy{background:#FEBC2E}.wr{background:#FF5F57}
-/* PR-B5 — when the platform supplies native window controls (macOS
-   traffic-lights or Win11 titleBarOverlay), the custom .wbtn buttons
-   become redundant. Hide them via the body class set by the renderer
-   on boot. macOS additionally needs left padding so the logo cluster
-   doesn't overlap the inset traffic-lights. */
-body.os-mac .wbtn,
-body.os-win .wbtn { display: none !important; }
+/* Mac-style traffic-light window controls (used on Win + Linux; on Mac
+   the native hiddenInset traffic-lights take over and we hide these). */
+.wbtn{
+  width:12px;height:12px;border-radius:50%;border:none;cursor:pointer;
+  -webkit-app-region:no-drag;
+  transition:filter .15s ease, transform .12s ease;
+  position:relative;
+}
+.wbtn:hover{filter:brightness(1.18)}
+.wbtn:active{transform:translateY(.5px)}
+.wbtn:focus-visible{outline:2px solid rgba(255,255,255,.45); outline-offset:2px}
+.wg{background:#28C840}                /* green   – maximize/restore */
+.wy{background:#FEBC2E}                /* yellow  – minimize         */
+.wr{background:#FF5F57}                /* red     – close            */
+
+/* On macOS, BrowserWindow uses titleBarStyle:'hiddenInset' which paints
+   native traffic-lights top-left; the custom .wbtn buttons would
+   duplicate them, so hide on Mac only. Windows is frameless (no native
+   overlay enabled in main.js), so the custom buttons MUST stay visible
+   there — earlier they were hidden too, leaving the window with no
+   way to minimize/close from the chat surface. */
+body.os-mac .wbtn { display: none !important; }
 body.os-mac .tb-l { padding-left: 80px !important; }
 
-/* PR-FIX-OVERLAP — reserve space on the right edge for native window
-   controls so they never sit on top of our buttons (⌘K, settings cog,
-   panel close, focus-timer chip). Windows titleBarOverlay reserves
-   ~138px × 52px in the top-right; we pad 150px for safety. macOS
-   traffic-lights are top-LEFT so .tb-r stays free (only .tb-l above
-   gets padding), but panel headers .ph / .fph need similar treatment
-   because they're at the top of every modal. */
-body.os-win .tb { padding-right: 150px !important; }
-body.os-win .ph,
-body.os-win .fph { padding-right: 162px !important; }
-/* On macOS the traffic-lights take top-LEFT, so panel headers need
-   left padding to keep the title clear of them. */
+/* macOS panel headers need left padding so titles clear the inset
+   traffic-lights. Windows + Linux draw their controls inside .tb-r,
+   so no header padding is needed there. */
 body.os-mac .ph,
 body.os-mac .fph { padding-left: 92px !important; }
-
-/* PR-FIX-OVERLAP — the .ph-x / .fph-x close buttons SHOULD sit on
-   the right of their header, but on Windows the native overlay is
-   already there. Push them to the left edge so they're always
-   reachable. We use flex-order to flip without touching markup. */
-body.os-win .ph { justify-content: flex-start; gap: 12px; }
-body.os-win .ph-x { order: -1; }
-body.os-win .fph { justify-content: flex-start; gap: 14px; }
-body.os-win .fph-r { order: -1; margin-right: 8px; }
 
 /* PR-FIX-OVERLAP — sidebar collapse propagation. The PR-U-MEGA layout
    put the chat on margin-left:280px to clear the sidebar; when the
@@ -719,13 +714,233 @@ body:not(.settings-scroll) .ps-toc { display: none !important; }
 .info-box .kbd{background:rgba(255,255,255,.07);border:1px solid var(--b2);border-radius:4px;padding:1px 6px;font-size:var(--text-sm);font-family:monospace;color:var(--t2)}
 
 /* Model variant popover (chat header → click model pill) */
-.model-popover{display:none;position:fixed;background:var(--bg2,#14121a);border:1px solid var(--b1);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.55);padding:6px;min-width:300px;max-width:420px;max-height:420px;z-index:300;overflow-y:auto;-webkit-app-region:no-drag}
+.model-popover{display:none;position:fixed;background:var(--bg2,#14121a);border:1px solid var(--b1);border-radius:12px;box-shadow:0 18px 56px rgba(0,0,0,.62), 0 0 0 1px rgba(255,255,255,.03) inset;padding:8px;min-width:360px;max-width:480px;max-height:520px;z-index:300;overflow-y:auto;-webkit-app-region:no-drag}
 .model-popover.show{display:block}
 .model-popover-h{font-size:var(--text-sm);font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--t3);padding:8px 10px;border-bottom:1px solid var(--b1);margin-bottom:4px}
-.model-popover-opt{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:11.5px;color:var(--tx);transition:background .12s;line-height:1.4;font-family:var(--mono);display:flex;align-items:center;gap:8px}
-.model-popover-opt:hover{background:rgba(255,255,255,.05)}
-.model-popover-opt.on{background:rgba(232,160,80,.12);color:var(--acc)}
-.model-popover-empty{padding:10px;font-size:var(--text-sm);color:var(--t3);font-style:italic}
+
+/* FIX: model option rows are <button> elements. Without explicit background/
+   border the UA paints them with the system "button-face" gray, which
+   on dark themes reads as ugly light pills with near-invisible text.
+   Reset them and add full styling for both default + hover + active states. */
+.model-popover-opt{
+  appearance:none; -webkit-appearance:none;
+  background:transparent; border:1px solid transparent;
+  padding:9px 12px; border-radius:8px; cursor:pointer;
+  font-size:12px; color:var(--tx); transition:background .12s ease, border-color .12s ease, color .12s ease;
+  line-height:1.4; font-family:var(--mono);
+  display:flex; align-items:center; gap:10px;
+  width:100%; text-align:left;
+}
+.model-popover-opt:hover{ background:rgba(255,255,255,.045); border-color:rgba(255,255,255,.08); color:var(--tx) }
+.model-popover-opt:focus-visible{ outline:none; border-color:rgba(232,160,80,.55); background:rgba(232,160,80,.06) }
+.model-popover-opt.on{ background:rgba(232,160,80,.14); border-color:rgba(232,160,80,.32); color:var(--acc) }
+.model-popover-empty{padding:14px 12px;font-size:var(--text-sm);color:var(--t3);font-style:italic;text-align:center}
+
+/* FIX: picker-* and model-provider-* classes were used by the renderer
+   but only had [data-theme="light"] overrides — no default dark styles.
+   Below: dark-theme defaults for the full picker chrome. */
+.picker-head{
+  display:flex; align-items:flex-start; gap:12px;
+  padding:10px 12px 12px; margin:-2px -2px 8px; border-bottom:1px solid var(--b1);
+}
+.picker-head > div:first-child{ flex:1; min-width:0 }
+.picker-title{ font-size:13px; font-weight:600; color:var(--tx); letter-spacing:.2px }
+.picker-sub{ font-size:11px; color:var(--t3); margin-top:3px; line-height:1.4 }
+.picker-search{
+  appearance:none; -webkit-appearance:none;
+  background:rgba(255,255,255,.04); border:1px solid var(--b1); border-radius:7px;
+  color:var(--tx); font-family:var(--font); font-size:12px;
+  padding:6px 10px; min-width:160px; outline:none;
+  transition:border-color .12s ease, background .12s ease;
+}
+.picker-search:focus{ border-color:rgba(232,160,80,.5); background:rgba(255,255,255,.06) }
+.picker-search::placeholder{ color:var(--t3) }
+.picker-body{ padding:2px 2px 4px }
+.model-provider-section{ margin-bottom:6px }
+.model-provider-section:last-child{ margin-bottom:0 }
+.model-provider-title{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 12px 6px; font-size:10.5px; letter-spacing:1.1px;
+  text-transform:uppercase; color:var(--t3);
+}
+.model-provider-title b{ color:var(--t2); font-weight:600; letter-spacing:.6px; text-transform:none; font-size:11.5px }
+.model-provider-models{ display:flex; flex-direction:column; gap:1px }
+.model-popover-opt-meta{
+  font-size:10px; color:var(--t3); padding:2px 7px; border:1px solid var(--b1);
+  border-radius:999px; white-space:nowrap; flex-shrink:0; letter-spacing:.3px;
+}
+.model-popover-opt.on .model-popover-opt-meta{ color:var(--acc); border-color:rgba(232,160,80,.4); background:rgba(232,160,80,.08) }
+
+/* ─── Persona + Mode popovers ───────────────────────────────────────────
+   Mirror .model-popover. The comment in chat.html (line 2844) said
+   ".mode-popover inherits .persona-popover visual style" — but BOTH had
+   only light-theme rules in chat-shell-polish.css; nothing for the
+   default dark theme. Result: both popups rendered as unstyled `<div>`s
+   with no `position`, so positionPicker()'s inline left/top did nothing,
+   the popover flowed in normal document order, and the `<button>` rows
+   inside got the system buttonface background (the visible "white pills
+   on white" bug).
+
+   Fix: real defaults for the container, mirror the picker chrome from
+   .model-popover, and reset the row <button>s so they inherit theme. */
+.persona-popover,
+.mode-popover{
+  display:none;
+  position:fixed;
+  background:var(--bg2, #14121a);
+  border:1px solid var(--b1);
+  border-radius:12px;
+  box-shadow:0 18px 56px rgba(0,0,0,.62), 0 0 0 1px rgba(255,255,255,.03) inset;
+  padding:8px;
+  min-width:340px;
+  max-width:460px;
+  max-height:520px;
+  z-index:300;
+  overflow-y:auto;
+  -webkit-app-region:no-drag;
+}
+/* !important is defensive — other CSS files (esp light-theme) used to
+   conflict and leave the popover invisible even after JS added .show. */
+.persona-popover.show,
+.mode-popover.show{ display:block !important }
+
+.persona-picker-row{
+  appearance:none; -webkit-appearance:none;
+  display:flex; align-items:center; gap:11px;
+  width:100%; padding:9px 11px;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:8px;
+  color:var(--tx, var(--tx-1, #d7deeb));
+  font:500 12px/1.35 var(--font);
+  text-align:left;
+  cursor:pointer;
+  transition:background .12s ease, border-color .12s ease;
+}
+.persona-picker-row + .persona-picker-row{ margin-top:1px }
+.persona-picker-row:hover{
+  background:rgba(255,255,255,.045);
+  border-color:rgba(255,255,255,.08);
+}
+.persona-picker-row:focus-visible{
+  outline:none;
+  border-color:rgba(232,160,80,.55);
+  background:rgba(232,160,80,.06);
+}
+.persona-picker-row.on{
+  background:rgba(232,160,80,.12);
+  border-color:rgba(232,160,80,.32);
+  color:var(--acc, #ffb566);
+}
+.persona-picker-avatar{
+  flex-shrink:0;
+  width:28px; height:28px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:50%;
+  color:var(--tx-1, #d7deeb);
+  font:600 11px/1 var(--font);
+  letter-spacing:.3px;
+  text-transform:uppercase;
+}
+.persona-picker-row.on .persona-picker-avatar{
+  background:rgba(232,160,80,.16);
+  border-color:rgba(232,160,80,.32);
+  color:var(--acc, #ffb566);
+}
+.persona-picker-name{
+  flex:1;
+  min-width:0;
+  color:inherit;
+  font-weight:500;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.persona-picker-name small{
+  display:block !important;
+  color:var(--tx-3, #778aa6) !important;
+  font: 400 10.5px/1.4 var(--font) !important;
+  font-weight: 400 !important;
+  margin-top:3px !important;
+  white-space:normal;
+}
+.persona-picker-meta{
+  flex-shrink:0;
+  font-size:10px;
+  padding:2px 7px;
+  border-radius:999px;
+  border:1px solid var(--b1);
+  background:rgba(255,255,255,.02);
+  color:var(--tx-3, #778aa6);
+  letter-spacing:.3px;
+  text-transform:lowercase;
+  white-space:nowrap;
+}
+.persona-picker-row.on .persona-picker-meta{
+  color:var(--acc, #ffb566);
+  border-color:rgba(232,160,80,.4);
+  background:rgba(232,160,80,.08);
+}
+
+/* "Manage" button in the persona-popover header. Currently classed
+   ".btn.btn-sm.ghost" but those generic classes have no dark-theme
+   contrast — sat as a system-buttonface gray rectangle. */
+.picker-head .btn,
+.picker-head .btn-sm,
+.picker-head .ghost{
+  appearance:none; -webkit-appearance:none;
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--b1);
+  border-radius:7px;
+  color:var(--tx-2, #aeb8c8);
+  padding:5px 11px;
+  font:500 11px/1 var(--font);
+  cursor:pointer;
+  transition:background .12s ease, color .12s ease, border-color .12s ease;
+  flex-shrink:0;
+}
+.picker-head .btn:hover,
+.picker-head .ghost:hover{
+  background:rgba(255,255,255,.07);
+  color:var(--tx-1, #fff);
+  border-color:rgba(255,255,255,.14);
+}
+
+/* ─── Defensive button reset ────────────────────────────────────────────
+   The root cause we keep hitting: when a renderer component creates a
+   `<button>` without explicit background/border CSS, Chromium paints
+   it with the system "buttonface" gray on dark themes — light pills
+   with near-invisible text. Reset every `<button>` inside our chat
+   shell to inherit by default; component CSS still styles the ones
+   that need to look like buttons. Excludes a few classes that already
+   set their own backgrounds intentionally (e.g. .wbtn traffic lights). */
+.tb button:not([class]),
+.fbody button:not([class]),
+.picker-body button:not([class]),
+.cmd-results button:not([class]),
+.fpanel button:not([class]),
+body > button:not([class]){
+  appearance:none; -webkit-appearance:none;
+  background:transparent;
+  border:1px solid transparent;
+  color:inherit;
+  font:inherit;
+  cursor:pointer;
+}
+/* Catch-all: any *unclassed* button anywhere in the renderer shouldn't
+   inherit OS chrome. This is a defensive default, not a styling rule —
+   components keep their own visual treatments. */
+button:where(:not([class])){
+  appearance:none; -webkit-appearance:none;
+  background:transparent;
+  border:none;
+  color:inherit;
+  font:inherit;
+  padding:0;
+  cursor:pointer;
+}
 /* PR-C3 — pricing chip in model picker rows. Right-aligned, mono,
    muted. Tooltip on hover shows the full per-Mtok in/out + context
    window. */

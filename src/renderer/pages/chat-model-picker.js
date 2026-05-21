@@ -63,12 +63,31 @@ function positionPicker(pop, anchor) {
   const fallback = document.getElementById('inp') || document.body;
   const target = anchor || fallback;
   const r = target.getBoundingClientRect();
-  pop.style.left = '16px';
-  pop.style.top = '16px';
+
+  // Earlier this set { left:16px, top:16px } first and repositioned via
+  // requestAnimationFrame. On Electron 28 the rAF could be coalesced so
+  // the popover stuck at the top-left corner where the user wasn't
+  // looking — looked like the picker "doesn't open". Fix: pre-position
+  // BEFORE adding .show, using a sane initial estimate (centred above
+  // the anchor for composer chips), then refine in rAF once the popover
+  // has measured its actual size. Width-estimate 380 ≈ min-width of
+  // .mode-popover / .persona-popover (340 + 8 padding either side).
+  const initW = 380;
+  const initH = Math.min(420, window.innerHeight - 80);
+  const margin = 14;
+  const fitLeft = Math.min(Math.max(margin, r.left), Math.max(margin, window.innerWidth - initW - margin));
+  const preferAboveInit = r.top > initH + 24;
+  const fitTop = preferAboveInit
+    ? Math.max(margin, r.top - initH - 10)
+    : Math.min(window.innerHeight - initH - margin, r.bottom + 10);
+  pop.style.left = `${fitLeft}px`;
+  pop.style.top = `${fitTop}px`;
   pop.classList.add('show');
+
+  // Refine in next frame with the popover's REAL rendered size.
   requestAnimationFrame(() => {
+    if (!pop.classList.contains('show')) return; // closed in the meantime
     const pr = pop.getBoundingClientRect();
-    const margin = 14;
     const preferAbove = r.top > pr.height + 24;
     const left = Math.min(Math.max(margin, r.left), Math.max(margin, window.innerWidth - pr.width - margin));
     const topCandidate = preferAbove ? (r.top - pr.height - 10) : (r.bottom + 10);

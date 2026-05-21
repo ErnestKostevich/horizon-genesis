@@ -610,29 +610,49 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
   cursor:pointer;
 }
 .qsk-clear:hover{color:#fff;border-color:rgba(255,255,255,.20)}
+/* Calm-pass — chips were 800-weight uppercase 10px with bright cyan/magenta
+   tints stacked together. References: Linear, Anthropic, Cursor — they keep
+   one accent at a time, sentence-case labels, weight 500-600, generous
+   tracking only on tiny meta text. Below: keep the same DOM but tone down
+   typography + colour, so the composer toolbar reads as a calm row of
+   information chips rather than a carnival. */
 .composer-chip{
   height:30px;
   display:inline-flex;
   align-items:center;
-  gap:7px;
-  padding:0 10px;
+  gap:8px;
+  padding:0 11px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,.07);
-  background:rgba(255,255,255,.035);
-  color:#8f9bb1;
-  font:700 10px/1 var(--font);
+  border:1px solid rgba(255,255,255,.06);
+  background:rgba(255,255,255,.025);
+  color:var(--tx-2, #8f9bb1);
+  font:500 11.5px/1 var(--font);
+  letter-spacing:.1px;
   cursor:pointer;
   white-space:nowrap;
   -webkit-app-region:no-drag;
+  transition:background .15s ease, border-color .15s ease, color .15s ease;
 }
-.composer-chip span{color:#667189;font-weight:800;text-transform:uppercase;letter-spacing:.8px}
-.composer-chip b{color:#d7deeb;font-weight:700;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+.composer-chip span{
+  color:var(--tx-3, #667189);
+  font-weight:500;
+  font-size:10.5px;
+  text-transform:none;
+  letter-spacing:.2px;
+}
+.composer-chip b{
+  color:var(--tx-1, #d7deeb);
+  font-weight:600;
+  max-width:190px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 .composer-chip.strong{
-  background:rgba(86,210,255,.095);
-  border-color:rgba(86,210,255,.24);
+  background:rgba(86,210,255,.06);
+  border-color:rgba(86,210,255,.18);
   position:relative;
 }
-.composer-chip.strong b{color:#8eeaff}
+.composer-chip.strong b{color:#8eeaff;font-weight:600}
 
 /* Sprint 4 — Task 3: persona pill in composer toolbar.
    Visually parallel to .composer-chip.strong (the Model chip) but with a
@@ -803,13 +823,21 @@ body.shell-clean.code-mode-active .modes { display: none !important; }
    of dead space at the top of every chat. */
 body.shell-clean .msgs { padding-top: 14px; }
 .composer-chip.on{
-  background:rgba(251,191,36,.12);
-  border-color:rgba(251,191,36,.28);
+  background:rgba(251,191,36,.085);
+  border-color:rgba(251,191,36,.22);
+  color:#ffd494;
 }
 .composer-chip:hover{
   color:#fff;
-  border-color:rgba(86,210,255,.28);
-  transform:translateY(-1px);
+  background:rgba(255,255,255,.05);
+  border-color:rgba(255,255,255,.14);
+  /* Drop the lift — Linear/Anthropic/Cursor don't translate chips on hover;
+     they brighten background only. The y-shift made the toolbar wobble. */
+}
+.composer-chip:focus-visible{
+  outline:none;
+  border-color:rgba(86,210,255,.4);
+  background:rgba(86,210,255,.08);
 }
 /* PR-LAYOUT-V2 — line 3204 used to be
    `body.surface-active .composer-toolbar{display:none}`
@@ -1165,30 +1193,44 @@ body.chat-sidebar-collapsed .cs-collapse svg{
   gap:6px!important;
   justify-content:flex-start!important;
 }
+/* Override block — Linear/Cursor-style restraint. !important is here only
+   because there's a competing earlier block in this file; consolidating
+   would be cleaner but riskier. Same DNA as the main definition above:
+   weight 500, sentence-case labels, single accent per state. */
 .composer-chip{
-  height:28px!important;
+  height:30px!important;
   border-radius:8px!important;
-  background:#0c111a!important;
-  border:1px solid var(--shell-line)!important;
-  color:#9aa5b8!important;
+  background:rgba(255,255,255,.025)!important;
+  border:1px solid rgba(255,255,255,.06)!important;
+  color:var(--tx-2, #9aa5b8)!important;
   box-shadow:none!important;
+  font-weight:500!important;
 }
-.composer-chip span{color:#6f7b90!important;letter-spacing:.7px}
-.composer-chip b{color:#dce3ef!important}
+.composer-chip span{
+  color:var(--tx-3, #6f7b90)!important;
+  letter-spacing:.15px!important;
+  text-transform:none!important;
+  font-weight:500!important;
+  font-size:10.5px!important;
+}
+.composer-chip b{
+  color:var(--tx-1, #dce3ef)!important;
+  font-weight:600!important;
+}
 .composer-chip.strong{
-  background:rgba(125,211,252,.08)!important;
-  border-color:rgba(125,211,252,.20)!important;
+  background:rgba(125,211,252,.06)!important;
+  border-color:rgba(125,211,252,.18)!important;
 }
-.composer-chip.strong b{color:#a7e8ff!important}
+.composer-chip.strong b{color:#a7e8ff!important;font-weight:600!important}
 .composer-chip.on{
-  background:rgba(242,179,95,.10)!important;
-  border-color:rgba(242,179,95,.24)!important;
+  background:rgba(242,179,95,.085)!important;
+  border-color:rgba(242,179,95,.22)!important;
 }
 .composer-chip:hover{
   transform:none!important;
-  color:var(--shell-text)!important;
-  background:#111827!important;
-  border-color:var(--shell-line-strong)!important;
+  color:var(--tx-1, #fff)!important;
+  background:rgba(255,255,255,.05)!important;
+  border-color:rgba(255,255,255,.14)!important;
 }
 textarea#inp{background:transparent!important}
 .inspector-pane{
