@@ -345,7 +345,9 @@ async function dispatch(argv) {
                  // Fix 8 — CLI themes
                  'theme',
                  // Phone pairing — QR + local server, one command
-                 'mobile'];
+                 'mobile',
+                 // Sprint 7D — computer use deepening (OCR + macros + find)
+                 'macro', 'ocr', 'find'];
 
   // Phase 12 — AI-helper + utility verbs bundled in two shared files.
   // Dispatch routes them to the right module + passes the subcommand

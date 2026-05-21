@@ -693,6 +693,186 @@ ${listing}`, ext };
       return computerUse.findUIElements(base64, aiVisionFn);
     } catch(e) { return { ok: false, error: e.message }; }
   });
+
+  // ─── Sprint 7D: OCR / multi-display / macro IPC channels ──────────────────
+  // The renderer drives the macro recorder UI through these and the CLI
+  // command uses identical entry points via the headless runtime. Each
+  // handler is a thin shim around the per-module helpers + the tool
+  // registry singleton, so behaviour stays consistent across both paths.
+
+  const _lazyOcr = () => { try { return require('../ocr'); } catch (_) { return null; } };
+  const _lazyMd  = () => { try { return require('../multiDisplay'); } catch (_) { return null; } };
+  const _lazyMacro = () => { try { return require('../macroRecorder'); } catch (_) { return null; } };
+  const _lazyComputerTools = () => { try { return require('../tools/computer'); } catch (_) { return null; } };
+
+  // OCR ----------------------------------------------------------------------
+
+  ipcMain.handle('ocrAvailable', () => {
+    const ocr = _lazyOcr();
+    if (!ocr) return { ok: false, available: false, message: 'ocr module not loaded' };
+    return { ok: true, available: ocr.isAvailable(), message: ocr.isAvailable() ? null : ocr.unavailableMessage() };
+  });
+
+  ipcMain.handle('ocrScreenshot', async (event, displayId) => withPermission(
+    event.sender,
+    'screen.ocr',
+    { displayId: displayId ?? null },
+    'Run OCR on screenshot',
+    async () => {
+      const ocr = _lazyOcr();
+      const md = _lazyMd();
+      if (!ocr || !md) return { ok: false, error: 'OCR module unavailable' };
+      if (!ocr.isAvailable()) return { ok: false, error: ocr.unavailableMessage() };
+      const shot = await md.captureDisplay(displayId ?? null);
+      if (!shot.ok) return { ok: false, error: shot.error || 'screenshot failed' };
+      return ocr.runOcr(shot.buffer);
+    }
+  ));
+
+  ipcMain.handle('ocrImage', async (event, base64) => withPermission(
+    event.sender,
+    'image.ocr',
+    { bytes: typeof base64 === 'string' ? base64.length : 0 },
+    'Run OCR on image',
+    async () => {
+      const ocr = _lazyOcr();
+      if (!ocr || !ocr.isAvailable()) return { ok: false, error: ocr ? ocr.unavailableMessage() : 'OCR module unavailable' };
+      try {
+        const buf = Buffer.from(String(base64 || ''), 'base64');
+        return ocr.runOcr(buf);
+      } catch (e) { return { ok: false, error: e.message }; }
+    }
+  ));
+
+  ipcMain.handle('ocrFindText', async (event, query, opts) => withPermission(
+    event.sender,
+    'screen.ocr_find',
+    { query: String(query || ''), displayId: opts?.displayId ?? null },
+    'Find text on screen via OCR',
+    async () => {
+      const ocr = _lazyOcr();
+      const md = _lazyMd();
+      if (!ocr || !ocr.isAvailable()) return { ok: false, error: ocr ? ocr.unavailableMessage() : 'OCR unavailable' };
+      const shot = await md.captureDisplay(opts?.displayId ?? null);
+      if (!shot.ok) return { ok: false, error: shot.error };
+      return ocr.findInImage(shot.buffer, query, opts || {});
+    }
+  ));
+
+  // Multi-display ------------------------------------------------------------
+
+  ipcMain.handle('listDisplays', () => {
+    const md = _lazyMd();
+    if (!md) return { ok: false, displays: [] };
+    return { ok: true, displays: md.listDisplays() };
+  });
+
+  ipcMain.handle('displayScreenshot', async (event, displayId) => withPermission(
+    event.sender,
+    'screen.capture',
+    { displayId: displayId ?? null },
+    'Capture display screenshot',
+    async () => {
+      const md = _lazyMd();
+      if (!md) return { ok: false, error: 'multiDisplay unavailable' };
+      const r = await md.captureDisplay(displayId ?? null);
+      if (!r.ok) return r;
+      // Drop the raw Buffer before IPC marshal — base64 + path are enough.
+      return { ok: true, base64: r.base64, path: r.path, display: r.display };
+    }
+  ));
+
+  // Macros -------------------------------------------------------------------
+  // Renderer-side recording: the UI can use either the OS hook (when
+  // available via uiohook-napi) OR push events directly via macroPushEvent
+  // (DOM-level capture during a modal recording overlay).
+
+  ipcMain.handle('macroList', () => {
+    const M = _lazyMacro();
+    if (!M) return { ok: false, macros: [] };
+    return { ok: true, macros: M.listMacros(app.getPath('userData')) };
+  });
+
+  ipcMain.handle('macroLoad', (_, name) => {
+    const M = _lazyMacro();
+    if (!M) return { ok: false, error: 'macroRecorder unavailable' };
+    return M.loadMacro(app.getPath('userData'), name);
+  });
+
+  ipcMain.handle('macroDelete', (_, name) => {
+    const M = _lazyMacro();
+    if (!M) return { ok: false, error: 'macroRecorder unavailable' };
+    return M.deleteMacro(app.getPath('userData'), name);
+  });
+
+  ipcMain.handle('macroSave', (_, macro) => {
+    const M = _lazyMacro();
+    if (!M) return { ok: false, error: 'macroRecorder unavailable' };
+    return M.saveMacro(app.getPath('userData'), macro);
+  });
+
+  ipcMain.handle('macroRecordStart', async (event, name) => withPermission(
+    event.sender,
+    'macro.record',
+    { name: String(name || '') },
+    'Record macro',
+    async () => {
+      loadAgentModules();
+      const ct = _lazyComputerTools();
+      if (!ct) return { ok: false, error: 'tools layer unavailable' };
+      // The recorder singleton lives behind ./tools/computer.js — call
+      // it via the registered tool so the recording state is shared
+      // with the agent's macro_record_start tool.
+      const reg = require('../tools/registry');
+      const tool = reg.get('macro_record_start');
+      if (!tool) return { ok: false, error: 'macro_record_start tool not registered' };
+      return tool.execute({ name });
+    }
+  ));
+
+  ipcMain.handle('macroRecordStop', async () => {
+    const reg = require('../tools/registry');
+    const tool = reg.get('macro_record_stop');
+    if (!tool) return { ok: false, error: 'macro_record_stop tool not registered' };
+    return tool.execute({});
+  });
+
+  // Push an event captured by the renderer (DOM listener fallback when
+  // uiohook isn't available). Calls into the recorder singleton.
+  ipcMain.handle('macroPushEvent', (_, ev) => {
+    const ct = _lazyComputerTools();
+    if (!ct) return { ok: false, error: 'tools layer unavailable' };
+    try {
+      // The recorder is internal to the tools/computer.js singleton — we
+      // expose it via _recorder() so the renderer push can land in the
+      // same event buffer the stop() call will flush.
+      const tools = require('../tools/computer');
+      const reg = require('../tools/registry');
+      // Cheap reach-in: macro_record_start sets state on the singleton,
+      // so we just call its private push via a tiny tool we register
+      // below if it isn't there yet.
+      // Simplest path: route through a fresh recorder lookup.
+      const rec = tools._getRecorder ? tools._getRecorder() : null;
+      if (rec && typeof rec.pushEvent === 'function') {
+        return { ok: true, event: rec.pushEvent(ev) };
+      }
+      return { ok: false, error: 'No active recorder' };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+
+  ipcMain.handle('macroPlay', async (event, name, opts) => withPermission(
+    event.sender,
+    'macro.play',
+    { name: String(name || ''), speed: opts?.speed || 1, repeat: opts?.repeat || 1, dryRun: !!opts?.dryRun },
+    'Play macro',
+    async () => {
+      loadAgentModules();
+      const reg = require('../tools/registry');
+      const tool = reg.get('macro_play');
+      if (!tool) return { ok: false, error: 'macro_play tool not registered' };
+      return tool.execute({ name, ...(opts || {}) });
+    }
+  ));
 }
 
 module.exports = { register };

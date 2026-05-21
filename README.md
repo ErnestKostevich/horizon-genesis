@@ -51,6 +51,31 @@ iwr https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/
 ```
 
 <details>
+<summary><strong>Install via package managers</strong></summary>
+
+```bash
+# macOS / Linux Homebrew
+brew tap ErnestKostevich/tap https://github.com/ErnestKostevich/horizon-homebrew-tap
+brew install horizon
+```
+
+```powershell
+# Windows Scoop
+scoop bucket add horizon https://github.com/ErnestKostevich/horizon-scoop-bucket
+scoop install horizon
+```
+
+```bash
+# Or npm (cross-platform, requires Node 20+)
+npm install -g @horizonai/cli
+```
+
+All three install the same `horizon` command. After install, run
+`horizon setup` to pick a provider and paste your key (30 seconds).
+
+</details>
+
+<details>
 <summary><strong>Desktop app downloads (Windows / macOS / Linux)</strong></summary>
 
 Grab the official installer from

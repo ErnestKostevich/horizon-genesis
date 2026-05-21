@@ -14,6 +14,7 @@ const channels   = require('./channels');
 const mcp        = require('./mcp');
 const skills     = require('./skills');
 const workflows  = require('./workflows');
+const agents     = require('./agents');
 
 function registerAll(deps) {
   // Order mirrors the original file so the Pro-guard wrapping and any
@@ -29,6 +30,7 @@ function registerAll(deps) {
   mcp.register(deps);
   skills.register(deps);
   workflows.register(deps);
+  agents.register(deps);
 }
 
 module.exports = { registerAll };

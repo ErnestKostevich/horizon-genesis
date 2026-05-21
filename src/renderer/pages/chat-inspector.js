@@ -986,34 +986,35 @@ window._inspMemoryReviewerRunNow = async function(btn) {
   }
 };
 
-// PHASE 28 — SQLite + FTS5 mirror buttons. The JSON file stays the
-// source of truth; this just lets users opt into a queryable database
-// alongside it. Failure modes are reported plainly so users on
-// platforms without a prebuilt better-sqlite3 binding know what to do.
+// Sprint 7B — SQLite is the primary memory store. JSON becomes an
+// export format only. The migration that copies legacy memory.json
+// into memory.sqlite happens automatically on boot; these buttons let
+// users snapshot/restore between the two.
 window._inspMemoryDbStatus = async function(btn) {
   try {
     const r = await H.memoryDbStatus?.();
     if (!r) { addMsg?.('bot', '⚠️ memoryDbStatus IPC unavailable.'); return; }
     if (!r.ok) { addMsg?.('bot', `❌ Status: ${esc(r.error || 'unknown error')}`); return; }
     if (!r.exists) {
-      addMsg?.('bot', `📦 SQLite mirror not created yet. Click **Export to SQLite** to mirror your memory into\n\`${esc(r.dbPath)}\``);
+      addMsg?.('bot', `📦 SQLite store not created yet — will be created at first write to\n\`${esc(r.dbPath)}\``);
       return;
     }
     const s = r.stats || {};
-    addMsg?.('bot', `📦 SQLite mirror at \`${esc(r.dbPath)}\` — **${s.memories || 0}** memories, **${s.facts || 0}** facts, **${s.conversations || 0}** conversations (schema v${s.schema || 1}).`);
+    addMsg?.('bot', `📦 **SQLite (primary)** at \`${esc(r.dbPath)}\` — **${s.memories || 0}** memories, **${s.facts || 0}** facts, **${s.conversations || 0}** conversations (schema v${s.schema || 1}).`);
   } catch (e) {
     addMsg?.('bot', `❌ Status exception: ${esc(e.message)}`);
   }
 };
 
 window._inspMemoryMigrate = async function(btn) {
+  // Kept for legacy callers — re-runs the JSON→SQLite migration helper.
   if (btn instanceof HTMLElement) {
     btn.disabled = true;
     btn.dataset._origText = btn.dataset._origText || btn.textContent;
-    btn.textContent = 'Exporting…';
+    btn.textContent = 'Migrating…';
   }
   try {
-    addMsg?.('bot', '📦 Mirroring memory to SQLite + FTS5 — this is a one-way export. Your JSON file stays untouched.');
+    addMsg?.('bot', '📦 Re-running JSON → SQLite migration (idempotent — dupes skipped).');
     const r = await H.memoryDbMigrate?.();
     if (!r) { addMsg?.('bot', '⚠️ Migration IPC unavailable.'); return; }
     if (!r.ok) {
@@ -1028,7 +1029,59 @@ window._inspMemoryMigrate = async function(btn) {
   } finally {
     if (btn instanceof HTMLElement) {
       btn.disabled = false;
-      btn.textContent = btn.dataset._origText || 'Export to SQLite';
+      btn.textContent = btn.dataset._origText || 'Rebuild mirror';
+    }
+  }
+};
+
+// Sprint 7B — Export SQLite → JSON snapshot. The IPC pops a save
+// dialog so the user picks where to write the file.
+window._inspMemoryExportJson = async function(btn) {
+  if (btn instanceof HTMLElement) {
+    btn.disabled = true;
+    btn.dataset._origText = btn.dataset._origText || btn.textContent;
+    btn.textContent = 'Exporting…';
+  }
+  try {
+    const r = await H.memoryDbExportJson?.();
+    if (!r) { addMsg?.('bot', '⚠️ memoryDbExportJson IPC unavailable.'); return; }
+    if (r.canceled) { return; /* user cancelled — silent */ }
+    if (!r.ok) { addMsg?.('bot', `❌ Export failed: ${esc(r.error || 'unknown error')}`); return; }
+    const s = r.stats || {};
+    addMsg?.('bot', `✓ Exported memory snapshot to \`${esc(r.jsonPath)}\` — ${s.memories || 0} memories, ${s.facts || 0} facts, ${s.conversations || 0} conversations · ${((r.bytes || 0) / 1024).toFixed(1)} KB.`);
+  } catch (e) {
+    addMsg?.('bot', `❌ Export exception: ${esc(e.message)}`);
+    console.error('[memoryDbExportJson] exception:', e);
+  } finally {
+    if (btn instanceof HTMLElement) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._origText || 'Export memory to JSON file';
+    }
+  }
+};
+
+// Sprint 7B — Import a JSON memory dump back into SQLite. Idempotent —
+// duplicates (same memory key / fact key / conversation id) are skipped.
+window._inspMemoryImportJson = async function(btn) {
+  if (btn instanceof HTMLElement) {
+    btn.disabled = true;
+    btn.dataset._origText = btn.dataset._origText || btn.textContent;
+    btn.textContent = 'Importing…';
+  }
+  try {
+    const r = await H.memoryDbImportJson?.();
+    if (!r) { addMsg?.('bot', '⚠️ memoryDbImportJson IPC unavailable.'); return; }
+    if (r.canceled) { return; /* user cancelled — silent */ }
+    if (!r.ok) { addMsg?.('bot', `❌ Import failed: ${esc(r.error || 'unknown error')}`); return; }
+    const a = r.added || {};
+    addMsg?.('bot', `✓ Imported from \`${esc(r.source)}\` — added **${a.memories}** memories, **${a.facts}** facts, **${a.conversations}** conversations.`);
+  } catch (e) {
+    addMsg?.('bot', `❌ Import exception: ${esc(e.message)}`);
+    console.error('[memoryDbImportJson] exception:', e);
+  } finally {
+    if (btn instanceof HTMLElement) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._origText || 'Import JSON memory dump';
     }
   }
 };

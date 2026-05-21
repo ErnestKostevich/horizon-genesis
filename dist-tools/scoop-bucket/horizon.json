@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
+  "version": "0.0.1",
+  "description": "Personal AI agent that runs on your machine — local-first, BYOK. 25 providers + 300 models, 8-type memory, skills, plugins, MCP.",
+  "homepage": "https://horizonaai.dev",
+  "license": "BUSL-1.1",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/ErnestKostevich/horizon-genesis/releases/download/cli-v0.0.1/horizon-win-x64.exe",
+      "hash": "SHA256_PLACEHOLDER_WIN",
+      "bin": [
+        [
+          "horizon-win-x64.exe",
+          "horizon"
+        ]
+      ]
+    }
+  },
+  "notes": [
+    "First-time setup (pick a provider, paste your key):",
+    "  horizon setup",
+    "",
+    "Launch the interactive TUI:",
+    "  horizon",
+    "",
+    "Keys and memory live in:",
+    "  %APPDATA%\\horizon-ai\\",
+    "",
+    "Docs: https://horizonaai.dev/docs"
+  ],
+  "checkver": {
+    "github": "https://github.com/ErnestKostevich/horizon-genesis",
+    "regex": "cli-v([\\d.]+)"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/ErnestKostevich/horizon-genesis/releases/download/cli-v$version/horizon-win-x64.exe"
+      }
+    },
+    "hash": {
+      "url": "$baseurl/horizon-win-x64.exe.sha256"
+    }
+  }
+}

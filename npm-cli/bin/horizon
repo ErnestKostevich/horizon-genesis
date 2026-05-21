@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// Horizon CLI shim — published to npm as @horizonai/cli.
+// Delegates to the bundled lib/bin/horizon.js entrypoint.
+require('../lib/bin/horizon.js');

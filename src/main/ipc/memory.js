@@ -16,6 +16,7 @@ function register(deps) {
   const {
     ipcMain, app,
     BrowserWindow,
+    dialog,
     path,
     loadAgentModules,
     getAgentMemory, getDialecticModel, getMemoryReviewer, getCanvasManager,
@@ -206,6 +207,90 @@ function register(deps) {
     try {
       const { migrateJsonToSqlite } = require('../runtime/migrateJsonToSqlite');
       return migrateJsonToSqlite(paths);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // Sprint 7B — Export SQLite → JSON snapshot. When the renderer doesn't
+  // pre-pick a path, we pop a Save dialog so the user picks where to save.
+  ipcMain.handle('memoryDbExportJson', async (event, targetPath) => {
+    const paths = _memSqlitePaths();
+    if (!paths) return { ok: false, error: 'userData path unavailable' };
+    try {
+      const fs = require('fs');
+      if (!fs.existsSync(paths.dbPath)) {
+        return { ok: false, error: 'No SQLite DB yet — nothing to export.' };
+      }
+      let outPath = targetPath ? String(targetPath) : '';
+      if (!outPath && dialog) {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        const defaultName = `memory.export.${new Date().toISOString().slice(0, 10)}.json`;
+        const r = await dialog.showSaveDialog(win, {
+          title: 'Export memory to JSON file',
+          defaultPath: defaultName,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        });
+        if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+        outPath = r.filePath;
+      }
+      if (!outPath) {
+        // Fallback default (e.g. dialog unavailable in some test contexts)
+        outPath = path.join(path.dirname(paths.dbPath), `memory.export.${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+      }
+      const { MemoryDb } = require('../memoryDb');
+      const db = new MemoryDb(paths.dbPath).open();
+      const r = db.exportToJson(outPath);
+      db.close();
+      return r;
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // Sprint 7B — Import JSON snapshot → SQLite. When the renderer doesn't
+  // pre-pick a path, we pop an Open dialog. Idempotent (dedupes by
+  // stable keys/ids).
+  ipcMain.handle('memoryDbImportJson', async (event, sourcePath) => {
+    const paths = _memSqlitePaths();
+    if (!paths) return { ok: false, error: 'userData path unavailable' };
+    try {
+      const fs = require('fs');
+      let inPath = sourcePath ? String(sourcePath) : '';
+      if (!inPath && dialog) {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        const r = await dialog.showOpenDialog(win, {
+          title: 'Import JSON memory dump',
+          properties: ['openFile'],
+          filters: [{ name: 'JSON', extensions: ['json'] }, { name: 'All', extensions: ['*'] }],
+        });
+        if (r.canceled || !r.filePaths?.[0]) return { ok: false, canceled: true };
+        inPath = r.filePaths[0];
+      }
+      if (!inPath) return { ok: false, error: 'source path required' };
+      if (!fs.existsSync(inPath)) {
+        return { ok: false, error: `File not found: ${inPath}` };
+      }
+      const { MemoryDb } = require('../memoryDb');
+      const db = new MemoryDb(paths.dbPath).open();
+      const before = db.stats();
+      db.importFromJsonFile(inPath);
+      const after = db.stats();
+      db.close();
+      const added = {
+        memories: after.memories - before.memories,
+        facts: after.facts - before.facts,
+        conversations: after.conversations - before.conversations,
+      };
+      // Re-hydrate the in-memory cache so the UI sees new rows immediately.
+      try {
+        const agentMemory = getAgentMemory();
+        if (agentMemory && typeof agentMemory.setMemoryDb === 'function') {
+          const live = new MemoryDb(paths.dbPath).open();
+          agentMemory.setMemoryDb(live);
+        }
+      } catch (_) { /* best-effort */ }
+      return { ok: true, before, after, added, source: inPath };
     } catch (e) {
       return { ok: false, error: e.message };
     }
