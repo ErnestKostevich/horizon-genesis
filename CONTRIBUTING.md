@@ -15,7 +15,15 @@ cd horizon-genesis
 npm install
 ```
 
-Requires Node 18+ and npm 9+.
+Requires Node 20+ (per `package.json` engines field) and npm 9+.
+
+Run the tests before sending a PR:
+
+```bash
+npm test                  # 178 unit tests
+npm run test:integration  # 36 integration tests
+npm run test:all          # both
+```
 
 ### Unlock the source-preview gate (contributors only)
 
@@ -45,11 +53,21 @@ The app runs without any env vars or API keys — you configure providers inside
 ## Project layout
 
 ```
-src/main/           Electron main process (IPC, plugin runtime, AI providers)
+src/main/           Electron main process (entry, plugin runtime, AI providers)
+src/main/ipc/       IPC handlers split out of main.js
+src/main/tools/     Agent tool registry
+src/main/runtime/   Headless runtime (shared by CLI/TUI/serve)
+src/main/channels/  Messaging adapters (TG / Discord / Slack / WhatsApp / Signal / iMessage / Email)
 src/renderer/       UI (chat, setup — plain HTML/CSS/JS, no build step)
-builtin-plugins/    Ships-with-the-app plugins
+bin/                CLI + TUI + HTTP serve entry points
+builtin-skills/     30 SKILL.md bundles that ship with the app
+builtin-plugins/    Ships-with-the-app plugins (vm-sandboxed at runtime)
+builtin-workflows/  5 first-party workflows
+mobile/             PWA companion
+test/unit/          178 unit tests (node --test)
+test/integration/   36 integration tests
 assets/             Installer icons
-.github/workflows/  CI build for Windows + macOS
+.github/workflows/  CI build for Windows + macOS + Linux
 ```
 
 ## What I accept
