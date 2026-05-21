@@ -232,7 +232,10 @@ Tests: 5.6% LOC coverage. Main gaps: `dispatchTool`, `agentLoop`,
 - npm i -g @horizonai/cli published
 - Homebrew tap, scoop bucket
 - Durable Kanban runtime
-- SQLite-first memory flip
+- SQLite-first memory flip (Sprint 7B: DONE — JSON is now export-only,
+  legacy memory.json auto-migrates into memory.sqlite on first boot
+  and archives as memory.json.legacy.<ts>; opt back via
+  HORIZON_MEMORY_BACKEND=json)
 
 ---
 

@@ -134,39 +134,66 @@ function createHorizonRuntime(opts = {}) {
     log('embeddings unavailable:', e.message);
   }
 
-  // PHASE 28.2 — SQLite + FTS5 backend (the second half of the hybrid).
-  // CLI and headless `horizon serve` now mirror the JSON file into a
-  // queryable SQLite database on first run, then keep it live-synced via
-  // AgentMemory.setMemoryDb(). Without this, CLI users only got the
-  // JSON + in-memory FTS half and the inspector's "Hybrid" claim wasn't
-  // honest from the shell.
-  try {
-    const fs = require('fs');
-    const jsonPath = memDbPath.replace(/\.db$/, '.json');
-    const sqlitePath = path.join(userDataDir, 'memory.sqlite');
-    let shouldMirror = false;
-    if (fs.existsSync(jsonPath)) {
-      if (!fs.existsSync(sqlitePath)) shouldMirror = true;
-      else {
-        const j = fs.statSync(jsonPath).mtimeMs;
-        const s = fs.statSync(sqlitePath).mtimeMs;
-        if (j > s + 1000) shouldMirror = true;
+  // Sprint 7B — SQLite is now the PRIMARY memory store.
+  //   - If memory.sqlite exists → open it (SQLite is source of truth).
+  //   - If only memory.json exists → migrate it into SQLite, then
+  //     archive memory.json as memory.json.legacy.<timestamp> so the
+  //     old file doesn't drift out of sync silently.
+  //   - If both exist → SQLite wins (no automatic merge).
+  //   - If neither → fresh SQLite, empty start.
+  // Opt back to old JSON-primary behaviour with HORIZON_MEMORY_BACKEND=json
+  // (skips the SQLite open + migration entirely).
+  const memoryBackend = String(process.env.HORIZON_MEMORY_BACKEND || 'sqlite').toLowerCase();
+  if (memoryBackend !== 'json') {
+    try {
+      const fs = require('fs');
+      const jsonPath = memDbPath.replace(/\.db$/, '.json');
+      const sqlitePath = path.join(userDataDir, 'memory.sqlite');
+      const sqliteExists = fs.existsSync(sqlitePath);
+      const jsonExists = fs.existsSync(jsonPath);
+
+      // Auto-migration: JSON exists but SQLite doesn't → one-shot import,
+      // then archive the JSON file so it can't drift out of sync.
+      // AgentMemory.init() may have just created an empty horizon_memory.json
+      // a few lines up — skip the archive dance in that case (nothing to
+      // migrate, and we'd leave a clutter of empty .legacy.<ts> files).
+      if (!sqliteExists && jsonExists) {
+        try {
+          const { migrateJsonToSqlite } = require('./migrateJsonToSqlite');
+          const r = migrateJsonToSqlite({ jsonPath, dbPath: sqlitePath, backup: false });
+          if (r.ok) {
+            const total = (r.added?.memories || 0) + (r.added?.facts || 0) + (r.added?.conversations || 0);
+            if (total > 0) {
+              const ts = new Date().toISOString().replace(/[:.]/g, '-');
+              const legacyPath = `${jsonPath}.legacy.${ts}`;
+              try {
+                fs.renameSync(jsonPath, legacyPath);
+                log(`[migration] memory.json → memory.sqlite — ${total} entries migrated (archived to ${path.basename(legacyPath)})`);
+              } catch (e) {
+                log(`[migration] memory.json → memory.sqlite — ${total} entries migrated (archive failed: ${e.message})`);
+              }
+            }
+            // 0 entries: silently skip the archive — likely a fresh boot
+            // where init() just created an empty JSON.
+          } else {
+            log('[migration] failed:', r.error);
+          }
+        } catch (e) {
+          log('[migration] threw:', e.message);
+        }
       }
-    }
-    if (shouldMirror) {
-      const { migrateJsonToSqlite } = require('./migrateJsonToSqlite');
-      const r = migrateJsonToSqlite({ jsonPath, dbPath: sqlitePath, backup: false });
-      if (r.ok) log(`memory.sqlite refreshed (+${r.added?.memories || 0} mem, +${r.added?.facts || 0} facts, +${r.added?.conversations || 0} conv)`);
-      else log('SQLite mirror skipped:', r.error);
-    }
-    if (fs.existsSync(sqlitePath)) {
+
+      // Open the SQLite primary handle (creates an empty DB if missing).
       const { MemoryDb } = require('../memoryDb');
       const liveDb = new MemoryDb(sqlitePath).open();
       agentMemory.setMemoryDb(liveDb);
-      log('memoryDb: live SQLite + FTS5 wired');
+      const s = liveDb.stats();
+      log(`memoryDb: SQLite primary @ ${path.basename(sqlitePath)} (${s.memories} mem, ${s.facts} facts, ${s.conversations} conv)`);
+    } catch (e) {
+      log('SQLite primary unavailable:', e.message, '— falling back to JSON-only path');
     }
-  } catch (e) {
-    log('SQLite hybrid unavailable:', e.message);
+  } else {
+    log('memoryDb: HORIZON_MEMORY_BACKEND=json — staying on legacy JSON-primary backend');
   }
 
   // PHASE 28.4 — DialecticModel (9th memory layer, Honcho-style). The
@@ -556,6 +583,58 @@ function createHorizonRuntime(opts = {}) {
     return result;
   }
 
+  // ── Kanban queue (Sprint 7C) ──────────────────────────────────────────
+  // Durable task queue + worker pool. Tasks survive process crashes —
+  // workers heartbeat every 5s, and reclaim() re-queues anything that's
+  // gone silent for >60s. Opt out via HORIZON_KANBAN=off; tune worker
+  // count via HORIZON_WORKERS=N (default 1).
+  let kanbanQueue = null;
+  let kanbanWorkers = [];
+  let kanbanReclaimTimer = null;
+  if (String(process.env.HORIZON_KANBAN || 'on').toLowerCase() !== 'off') {
+    try {
+      const { KanbanQueue } = require('../kanbanQueue');
+      const { startWorker } = require('../kanbanWorker');
+      const kanbanPath = path.join(userDataDir, 'kanban.sqlite');
+      kanbanQueue = new KanbanQueue(kanbanPath).open();
+      // Mirror onto main.js exports so spawn_subagent tool can find it
+      // via require.cache (works whether headless or Electron loads first).
+      try {
+        const mainCache = require.cache[require.resolve('../main')];
+        if (mainCache?.exports) mainCache.exports.kanbanQueue = kanbanQueue;
+      } catch (_) { /* main.js not loaded — fine in CLI */ }
+      log('kanban:', kanbanQueue.stats().total, 'rows @', path.basename(kanbanPath));
+
+      // Default to 1 worker unless caller passed opts.workers / env override.
+      const wantWorkers = Math.max(0, Math.min(8,
+        Number(opts.workers) || Number(process.env.HORIZON_WORKERS) || 1
+      ));
+      // Stub runtime ref so worker can reach runAgent — see closure below.
+      const workerRuntimeStub = { runAgent: (...a) => runAgent(...a) };
+      for (let i = 0; i < wantWorkers; i++) {
+        const w = startWorker({
+          queue: kanbanQueue,
+          runtime: workerRuntimeStub,
+          log: (...a) => log('[kanban]', ...a),
+          noSignalHandler: i > 0, // only the first worker registers SIGTERM
+        });
+        kanbanWorkers.push(w);
+        log('kanban worker started:', w.workerId);
+      }
+
+      // Watchdog — sweep abandoned tasks every 30s.
+      kanbanReclaimTimer = setInterval(() => {
+        try {
+          const r = kanbanQueue.reclaim();
+          if (r.reclaimed > 0) log(`kanban reclaim: ${r.reclaimed} stale task(s) re-queued`);
+        } catch (e) { log('kanban reclaim failed:', e.message); }
+      }, 30_000);
+      kanbanReclaimTimer.unref?.();
+    } catch (e) {
+      log('kanban unavailable:', e.message);
+    }
+  }
+
   // Plain chat — single AI call, no agent loop. Used by `horizon chat`.
   async function runChat(message, opts = {}) {
     const provider = opts.provider || settingsStore.get('provider') || 'gemini';
@@ -620,6 +699,18 @@ function createHorizonRuntime(opts = {}) {
     // need a handle).
     mcpRegistry, dialecticModel, memoryReviewer,
     resolveAutoProvider,
+    // Sprint 7C — durable Kanban queue (null if HORIZON_KANBAN=off or
+    // better-sqlite3 isn't available). Workers run in-process; reclaim
+    // watchdog is set on a 30s interval that unrefs so it won't keep
+    // the CLI alive past its task.
+    kanbanQueue,
+    kanbanWorkers,
+    async stopKanban() {
+      if (kanbanReclaimTimer) { clearInterval(kanbanReclaimTimer); kanbanReclaimTimer = null; }
+      await Promise.all(kanbanWorkers.map((w) => w.stop()));
+      kanbanWorkers = [];
+      if (kanbanQueue) { try { kanbanQueue.close(); } catch (_) {} kanbanQueue = null; }
+    },
     // High-level entry points
     runAgent, runChat, runChatStream,
     buildSystemPrompt,

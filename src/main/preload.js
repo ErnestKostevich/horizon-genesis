@@ -177,9 +177,13 @@ contextBridge.exposeInMainWorld('H', {
   },
   memEmbedStatus: ()           => ipcRenderer.invoke('memEmbedStatus'),
   memEmbedReindex: ()          => ipcRenderer.invoke('memEmbedReindex'),
-  // PHASE 28 — opt-in SQLite + FTS5 mirror of the JSON memory file.
+  // PHASE 28 / Sprint 7B — SQLite + FTS5 is the primary memory store.
+  // JSON migrate kept around for legacy paths; new export/import IPC
+  // power the Settings → "Export memory to JSON" / "Import JSON" buttons.
   memoryDbStatus: ()           => ipcRenderer.invoke('memoryDbStatus'),
   memoryDbMigrate: ()          => ipcRenderer.invoke('memoryDbMigrate'),
+  memoryDbExportJson: (target) => ipcRenderer.invoke('memoryDbExportJson', target),
+  memoryDbImportJson: (source) => ipcRenderer.invoke('memoryDbImportJson', source),
   // PHASE 28.3 — agent-curated memory reviewer (Hermes-style nudges).
   memoryReviewerStatus: ()     => ipcRenderer.invoke('memoryReviewerStatus'),
   memoryReviewerRunNow: ()     => ipcRenderer.invoke('memoryReviewerRunNow'),
@@ -193,6 +197,21 @@ contextBridge.exposeInMainWorld('H', {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('memory:embeddingProgress', handler);
     return () => ipcRenderer.removeListener('memory:embeddingProgress', handler);
+  },
+
+  // Sprint 7C — durable Kanban queue.
+  kanbanList:    (opts)      => ipcRenderer.invoke('kanbanList', opts),
+  kanbanShow:    (id)        => ipcRenderer.invoke('kanbanShow', id),
+  kanbanCancel:  (id)        => ipcRenderer.invoke('kanbanCancel', id),
+  kanbanEnqueue: (opts)      => ipcRenderer.invoke('kanbanEnqueue', opts),
+  kanbanStats:   ()          => ipcRenderer.invoke('kanbanStats'),
+  kanbanBoard:   (opts)      => ipcRenderer.invoke('kanbanBoard', opts),
+  kanbanPurge:   (opts)      => ipcRenderer.invoke('kanbanPurge', opts),
+  kanbanReclaim: ()          => ipcRenderer.invoke('kanbanReclaim'),
+  onKanbanEvent: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('kanban:event', handler);
+    return () => ipcRenderer.removeListener('kanban:event', handler);
   },
 
   // Live Canvas (Phase 26 MVP) — bidirectional shared surface.
@@ -304,6 +323,22 @@ contextBridge.exposeInMainWorld('H', {
   // ── COMPUTER USE ──────────────────────────────────────────────────────────────
   smartClick:       (desc)            => ipcRenderer.invoke('smartClick', desc),
   findUIElements:   ()                => ipcRenderer.invoke('findUIElements'),
+
+  // ── Sprint 7D: OCR + multi-display + macros ───────────────────────────────
+  ocrAvailable:     ()                => ipcRenderer.invoke('ocrAvailable'),
+  ocrScreenshot:    (displayId)       => ipcRenderer.invoke('ocrScreenshot', displayId),
+  ocrImage:         (b64)             => ipcRenderer.invoke('ocrImage', b64),
+  ocrFindText:      (q, opts)         => ipcRenderer.invoke('ocrFindText', q, opts),
+  listDisplays:     ()                => ipcRenderer.invoke('listDisplays'),
+  displayScreenshot:(displayId)       => ipcRenderer.invoke('displayScreenshot', displayId),
+  macroList:        ()                => ipcRenderer.invoke('macroList'),
+  macroLoad:        (name)            => ipcRenderer.invoke('macroLoad', name),
+  macroDelete:      (name)            => ipcRenderer.invoke('macroDelete', name),
+  macroSave:        (macro)           => ipcRenderer.invoke('macroSave', macro),
+  macroRecordStart: (name)            => ipcRenderer.invoke('macroRecordStart', name),
+  macroRecordStop:  ()                => ipcRenderer.invoke('macroRecordStop'),
+  macroPushEvent:   (ev)              => ipcRenderer.invoke('macroPushEvent', ev),
+  macroPlay:        (name, opts)      => ipcRenderer.invoke('macroPlay', name, opts),
 
   // ── BROWSER AUTOMATION ────────────────────────────────────────────────────────
   browserOpenUrl:   (url)             => ipcRenderer.invoke('browserOpenUrl', url),

@@ -1,19 +1,23 @@
 'use strict';
 /**
- * Horizon Memory DB — SQLite + FTS5 hybrid backend (PHASE 28).
+ * Horizon Memory DB — SQLite + FTS5 PRIMARY backend (Sprint 7B).
  *
- * Sits alongside the JSON file + in-memory InvertedIndex (memoryFts.js)
- * and the embeddings sidecar. Use it when:
- *   - the memory file is approaching the 2000-entry cap and FTS rebuilds
- *     on every boot start to add up;
- *   - you want phrase / prefix / proximity queries that the pure-JS
- *     InvertedIndex can't do;
- *   - a workspace shares its memory across tools that all speak SQL.
+ * As of Sprint 7B this is the source of truth. AgentMemory hydrates
+ * its in-memory `_data` cache from these tables on boot, every write
+ * lands here first, and the JSON sidecar (horizon_memory.json) holds
+ * only the userProfile + learning stats — memories/facts/conversations
+ * are export-only via exportToJson(). Migration from the old JSON-
+ * primary layout happens once on first boot via migrateJsonToSqlite();
+ * the legacy file is archived as memory.json.legacy.<timestamp> so it
+ * can't drift out of sync.
  *
- * The shape mirrors the JSON file so a migration is cheap (see
- * src/main/runtime/migrateJsonToSqlite.js). Embeddings stay in the
- * existing JSON sidecar — large float32[] arrays are awful in SQL and
- * sqlite-vec is still a moving target on Electron.
+ * Opt back to JSON-primary with HORIZON_MEMORY_BACKEND=json (main.js
+ * and headless.js skip setMemoryDb in that mode and the old hybrid
+ * path takes over).
+ *
+ * Embeddings stay in the existing JSON sidecar — large float32[]
+ * arrays are awful in SQL and sqlite-vec is still a moving target on
+ * Electron.
  *
  *   memories                facts                  conversations
  *   ---------               -----                  -------------
@@ -368,6 +372,105 @@ class MemoryDb {
     });
     tx(data);
     return this.stats();
+  }
+
+  /**
+   * Sprint 7B — Bulk import from a JSON file. SQLite is now the
+   * primary store, so this exists as the inverse of exportToJson()
+   * for `horizon mem import <file>`. Returns row counts on success.
+   */
+  importFromJsonFile(jsonPath) {
+    if (!jsonPath || !fs.existsSync(jsonPath)) {
+      throw new Error(`JSON file not found: ${jsonPath}`);
+    }
+    const raw = fs.readFileSync(jsonPath, 'utf8');
+    const data = JSON.parse(raw);
+    return this.importFromJson(data);
+  }
+
+  /**
+   * Sprint 7B — Snapshot the entire DB into a JSON object that matches
+   * the legacy horizon_memory.json shape. Used by `horizon mem export`
+   * and the Settings → "Export memory to JSON" button. The roundtrip
+   * (export → fresh DB → import) is lossless for memories/facts/
+   * conversations.
+   */
+  toJsonObject() {
+    const memories = this.db.prepare(`
+      SELECT id, content, category, importance, created_at, last_seen, seen, source, persona_id
+        FROM memories
+       ORDER BY created_at ASC
+    `).all().map(r => ({
+      id: r.id,            // legacy field — preserved for compatibility
+      key: r.id,
+      content: r.content,
+      category: r.category || 'general',
+      importance: r.importance || 5,
+      created: r.created_at,
+      firstSeen: r.created_at,
+      lastSeen: r.last_seen || r.created_at,
+      seen: r.seen || 1,
+      source: r.source || 'sqlite',
+      lastSource: r.source || 'sqlite',
+      personaId: r.persona_id || null,
+      personas: r.persona_id ? [r.persona_id] : [],
+    }));
+
+    const factRows = this.db.prepare('SELECT key, value, updated_at, source FROM facts ORDER BY key ASC').all();
+    const facts = {};
+    for (const f of factRows) {
+      facts[f.key] = {
+        value: f.value,
+        updated: f.updated_at,
+        seen: 1,
+        source: f.source || 'sqlite',
+        lastSource: f.source || 'sqlite',
+      };
+    }
+
+    const conversations = this.db.prepare(`
+      SELECT id, user, assistant, source, persona_id, created_at
+        FROM conversations
+       ORDER BY created_at ASC
+    `).all().map(c => ({
+      id: Number(c.id) || c.id,
+      user: c.user || '',
+      assistant: c.assistant || '',
+      source: c.source || 'sqlite',
+      personaId: c.persona_id || null,
+      time: new Date(c.created_at || Date.now()).toISOString(),
+      meta: {},
+    }));
+
+    return {
+      memories,
+      facts,
+      conversations,
+      meals: [],
+      learning: { stats: { exportedAt: new Date().toISOString() } },
+      userProfile: null, // SQLite doesn't track userProfile yet — JSON import preserves it separately
+    };
+  }
+
+  /**
+   * Sprint 7B — Write a JSON snapshot to disk. Returns the path written
+   * and a stats object. Atomic-ish: writes to a `.tmp` then renames so
+   * a crashed export doesn't leave a half-written file behind.
+   */
+  exportToJson(jsonPath) {
+    if (!jsonPath) throw new Error('jsonPath required');
+    const dir = path.dirname(jsonPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const data = this.toJsonObject();
+    const tmp = `${jsonPath}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, jsonPath);
+    return {
+      ok: true,
+      jsonPath,
+      stats: this.stats(),
+      bytes: fs.statSync(jsonPath).size,
+    };
   }
 }
 

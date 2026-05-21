@@ -238,6 +238,7 @@
       <button class="psnav-tab"    onclick="setSettingsTab('features')" data-tab="features"><span class="psn-i"><svg class="licon"><use href="#i-sparkles"/></svg></span><span>Features</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('personas')" data-tab="personas"><span class="psn-i"><svg class="licon"><use href="#i-drama"/></svg></span><span>Personas</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('plugins')"  data-tab="plugins"><span class="psn-i"><svg class="licon"><use href="#i-puzzle"/></svg></span><span>Plugins</span></button>
+      <button class="psnav-tab"    onclick="setSettingsTab('macros')"   data-tab="macros"><span class="psn-i"><svg class="licon"><use href="#i-replay"/></svg></span><span>Macros</span></button>
       <button class="psnav-tab"    onclick="setSettingsTab('data')"     data-tab="data"><span class="psn-i"><svg class="licon"><use href="#i-trash"/></svg></span><span>Data &amp; Health</span></button>
     </nav>
     <!-- PR-U4 — sticky right-side TOC (Linear / Vercel pattern). Only
@@ -257,6 +258,7 @@
       <a class="ps-toc-link"    data-target="features"    onclick="setSettingsTab('features');return false"><svg class="licon"><use href="#i-sparkles"/></svg>Features</a>
       <a class="ps-toc-link"    data-target="personas"    onclick="setSettingsTab('personas');return false"><svg class="licon"><use href="#i-drama"/></svg>Personas</a>
       <a class="ps-toc-link"    data-target="plugins"     onclick="setSettingsTab('plugins');return false"><svg class="licon"><use href="#i-puzzle"/></svg>Plugins</a>
+      <a class="ps-toc-link"    data-target="macros"      onclick="setSettingsTab('macros');return false"><svg class="licon"><use href="#i-replay"/></svg>Macros</a>
       <a class="ps-toc-link"    data-target="data"        onclick="setSettingsTab('data');return false"><svg class="licon"><use href="#i-trash"/></svg>Data &amp; Health</a>
     </nav>
     <div class="psview" id="psview">
@@ -895,6 +897,29 @@
         <div class="ps">
           <div id="plugin-list" style="margin-bottom:8px"></div>
           <button class="mic-test-btn" onclick="closePanel();openStore()" style="border-color:rgba(108,140,255,.3);color:var(--acc)"><svg class="licon"><use href="#i-store"/></svg> Open Marketplace</button>
+        </div>
+      </section>
+
+      <!-- ───────── MACROS (Sprint 7D) ───────── -->
+      <!-- Recordable macro UI: list of saved macros + record button.
+           Renderer talks to main via H.macro* and H.ocr* IPC helpers.
+           Heavy lifting lives in chat-macros.js (loaded as external
+           script alongside the other chat-* modules). -->
+      <section data-pane="macros">
+        <div class="psview-h">Macros</div>
+        <div class="psview-sub">Record mouse + keyboard sequences and replay them via the agent. Great for repeated workflows the LLM doesn't need to think through every time.</div>
+        <div class="ps">
+          <div id="macros-status" class="local-status">Loading saved macros...</div>
+          <div id="macros-list" style="margin-top:10px"></div>
+          <div class="pr" style="margin-top:14px">
+            <button class="psv" onclick="macroStartRecorder()" id="macro-record-btn"><svg class="licon" style="vertical-align:-2px"><use href="#i-mic"/></svg> Record new macro</button>
+            <button class="psv" onclick="macrosRefresh()">Refresh</button>
+          </div>
+        </div>
+        <div class="ps" style="margin-top:14px">
+          <div class="psl">OCR (offline text recognition)</div>
+          <div class="local-status" id="ocr-status">Checking...</div>
+          <div class="psview-sub" style="margin-top:8px">Install tesseract.js to enable cheap, fast, fully-offline text recognition for tools like <code>find_text</code> and <code>ocr_screenshot</code>. Without it the agent falls back to vision LLM calls (slow + costs tokens).</div>
         </div>
       </section>
 
@@ -1558,27 +1583,30 @@
         </div>
       </div>
     </div>
-    <!-- PHASE 28.2 — Hybrid Storage v2 (matches the architecture
-         diagram). SQLite handles searchable + structured data, JSON
-         sidecars hold things you edit in an editor or commit to git. -->
+    <!-- Sprint 7B — SQLite is now the PRIMARY memory store. JSON is
+         kept around only as a portable export format (snapshots, git
+         diffs, machine-to-machine moves). Migration from the old
+         JSON-primary layout happens automatically on first boot. -->
     <div class="insp-section">
-      <div class="insp-h">Storage backend · hybrid</div>
+      <div class="insp-h">Storage backend · SQLite primary, JSON export available</div>
       <div id="insp-learned-storage" class="insp-empty" style="line-height:1.6;padding:8px 0">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:11px">
           <div>
-            <div style="color:var(--accent,#7ec8e3);font-weight:600;margin-bottom:4px">SQLite (.db)</div>
+            <div style="color:var(--accent,#7ec8e3);font-weight:600;margin-bottom:4px">SQLite (.sqlite) — primary</div>
             <div style="color:var(--t2);line-height:1.5">
               · FTS5 keyword index<br>
               · Memory metadata<br>
               · Conversation history<br>
               · Facts (KV table)<br>
               · SQL WHERE filters<br>
-              · ACID transactions
+              · ACID transactions<br>
+              · Scales past 10K records
             </div>
           </div>
           <div>
-            <div style="color:var(--amb,#facc15);font-weight:600;margin-bottom:4px">JSON (.json)</div>
+            <div style="color:var(--amb,#facc15);font-weight:600;margin-bottom:4px">JSON (.json) — export only</div>
             <div style="color:var(--t2);line-height:1.5">
+              · Portable backup snapshot<br>
               · Vector embeddings (sidecar)<br>
               · Skills (per-skill folder)<br>
               · Settings + preferences<br>
@@ -1589,11 +1617,12 @@
           </div>
         </div>
         <div style="font-size:10px;color:var(--t3);margin-top:8px">
-          Rule: SQLite for things you'd <em>search/filter/join</em>; JSON for things you'd <em>read by eye / diff in git / back up to a folder</em>.
+          SQLite holds the live store. Use the buttons below to snapshot to JSON or import a JSON dump back into SQLite.
         </div>
-        <div class="insp-row" style="justify-content:flex-end;padding-top:8px;gap:6px">
-          <button class="hub-btn" onclick="window._inspMemoryDbStatus?.(this)" title="Show row counts in the SQLite mirror">Status</button>
-          <button class="hub-btn" onclick="window._inspMemoryMigrate?.(this)" title="Rebuild the SQLite + FTS5 mirror from the current JSON file">Rebuild mirror</button>
+        <div class="insp-row" style="justify-content:flex-end;padding-top:8px;gap:6px;flex-wrap:wrap">
+          <button class="hub-btn" onclick="window._inspMemoryDbStatus?.(this)" title="Show row counts in the SQLite store">Status</button>
+          <button class="hub-btn" onclick="window._inspMemoryExportJson?.(this)" title="Snapshot the SQLite store into a JSON file">Export memory to JSON file</button>
+          <button class="hub-btn" onclick="window._inspMemoryImportJson?.(this)" title="Bulk-load a JSON dump back into SQLite">Import JSON memory dump</button>
         </div>
       </div>
     </div>
@@ -4545,6 +4574,9 @@ H.onMarketAuthenticated?.(async (user) => {
      run helper scripts via skill_run_helper (permission-gated), preview
      relevance match before save. Backed by skillsManager.js in main. -->
 <script src="chat-skills.js"></script>
+<!-- Sprint 7D — Macros tab in Settings. Render saved macros + record/play UI.
+     Backed by macroRecorder.js in main via H.macro* IPC. -->
+<script src="chat-macros.js"></script>
 <!-- Telegram chat viewer: shows the bot's local-stored conversations and
      lets the user reply from the desktop. Backed by connectionsManager
      Telegram runtime + IPC handlers (tgListChats / tgGetHistory / tgSendFromUI). -->

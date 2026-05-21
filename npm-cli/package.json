@@ -1,0 +1,69 @@
+{
+  "name": "@horizonai/cli",
+  "version": "0.0.1",
+  "description": "Horizon AI - the personal AI agent that runs on your machine. CLI distribution (local-first, bring-your-own-keys, 25 providers + 300+ models).",
+  "main": "index.js",
+  "bin": {
+    "horizon": "bin/horizon"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js",
+    "test": "node -e \"require('./index.js'); console.log('ok')\""
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "scripts/",
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "tui",
+    "claude",
+    "openai",
+    "gemini",
+    "groq",
+    "deepseek",
+    "ollama",
+    "local-first",
+    "byok",
+    "personal-ai",
+    "horizon",
+    "horizon-ai"
+  ],
+  "author": {
+    "name": "Ernest Kostevich",
+    "email": "ernest2011kostevich@gmail.com"
+  },
+  "license": "BUSL-1.1",
+  "homepage": "https://horizonaai.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ErnestKostevich/horizon-genesis.git",
+    "directory": "npm-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/ErnestKostevich/horizon-genesis/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^12.10.0",
+    "conf": "^10.2.0",
+    "node-fetch": "^2.7.0",
+    "ws": "^8.18.0",
+    "qrcode": "^1.5.4"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.1.0"
+  }
+}

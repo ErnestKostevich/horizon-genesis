@@ -1,0 +1,24 @@
+# Local dev artefacts — never publish these
+node_modules/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Don't publish horizon-genesis sources directly — they get copied
+# into lib/ by scripts/build-npm-cli.js before `npm publish`.
+src/
+test/
+mobile/
+build/
+dist/
+dist-cli/
+docs/
+plugin-logs/
+plugin-storage/
+builtin-plugins/
+.git/
+.github/
+
+# Don't ship the build script that pulls files in.
+scripts/build-npm-cli.js

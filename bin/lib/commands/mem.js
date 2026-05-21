@@ -7,8 +7,10 @@
 //   horizon mem forget --memory <id>       — delete one memory
 //   horizon mem forget --fact <key>        — delete one fact
 //   horizon mem stats                      — summary counts + embedding state
-//   horizon mem migrate                    — mirror JSON memory to SQLite+FTS5
-//   horizon mem sqlite-status              — show row counts in the SQLite mirror
+//   horizon mem export <path>              — write SQLite → JSON snapshot
+//   horizon mem import <path>              — bulk-load JSON → SQLite
+//   horizon mem migrate                    — (legacy) JSON memory → SQLite mirror
+//   horizon mem sqlite-status              — show row counts in the SQLite store
 //   horizon mem review                     — agent-curated pass (decay/dedupe/forget)
 
 const { fmt } = require('../tty');
@@ -20,13 +22,15 @@ async function run({ runtime, args, flags }) {
   if (sub === 'dump')    return dump(runtime, flags);
   if (sub === 'profile') return profile(runtime, flags);
   if (sub === 'forget')  return forget(runtime, flags);
+  if (sub === 'export')  return exportJson(runtime, rest, flags);
+  if (sub === 'import')  return importJson(runtime, rest, flags);
   if (sub === 'migrate') return migrate(runtime, flags);
   if (sub === 'sqlite-status') return sqliteStatus(runtime, flags);
   if (sub === 'review')  return review(runtime, flags);
   if (sub === 'stats' || !sub) return stats(runtime, flags);
 
   process.stderr.write(fmt.err(`Unknown mem subcommand: ${sub}`) + '\n');
-  process.stderr.write('Try: search | dump | profile | forget | stats | migrate | sqlite-status | review\n');
+  process.stderr.write('Try: search | dump | profile | forget | stats | export | import | migrate | sqlite-status | review\n');
   return 2;
 }
 
@@ -136,10 +140,19 @@ function forget(runtime, flags) {
 function stats(runtime, flags) {
   const d = runtime.agentMemory._data || {};
   const emb = runtime.embeddingService?.status() || { available: false };
+  // Sprint 7B — SQLite is primary. Pull live counts from the DB when wired,
+  // otherwise fall back to the JSON in-memory view (legacy / opt-back mode).
+  const memDb = runtime.agentMemory.memoryDb;
+  let backend = 'json';
+  let dbStats = null;
+  if (memDb && memDb.db) {
+    try { dbStats = memDb.stats(); backend = 'sqlite'; } catch (_) {}
+  }
   const out = {
-    memories: d.memories?.length || 0,
-    facts: Object.keys(d.facts || {}).length,
-    conversations: d.conversations?.length || 0,
+    backend,
+    memories: dbStats ? dbStats.memories : (d.memories?.length || 0),
+    facts: dbStats ? dbStats.facts : Object.keys(d.facts || {}).length,
+    conversations: dbStats ? dbStats.conversations : (d.conversations?.length || 0),
     embeddings: emb,
     profile: !!d.userProfile,
   };
@@ -148,6 +161,7 @@ function stats(runtime, flags) {
     return 0;
   }
   process.stdout.write(fmt.bold('Memory stats') + '\n');
+  process.stdout.write(`  backend        ${backend === 'sqlite' ? fmt.green('SQLite + FTS5 (primary)') : fmt.dim('JSON (legacy)')}\n`);
   process.stdout.write(`  memories       ${out.memories}\n`);
   process.stdout.write(`  facts          ${out.facts}\n`);
   process.stdout.write(`  conversations  ${out.conversations}\n`);
@@ -156,7 +170,87 @@ function stats(runtime, flags) {
   } else {
     process.stdout.write('  embeddings     ' + fmt.dim('no key (keyword + FTS only)') + '\n');
   }
+  if (backend === 'sqlite') {
+    process.stdout.write(fmt.dim('  Use `horizon mem export <path>` to snapshot to JSON.\n'));
+  }
   return 0;
+}
+
+// Sprint 7B — Export SQLite → JSON snapshot. JSON is no longer the primary
+// store, but this lets users back up, diff in git, or move memory between
+// machines.
+function exportJson(runtime, rest, flags) {
+  const target = rest[0] || flags.out;
+  if (!target) {
+    process.stderr.write(fmt.err('Need an output path: horizon mem export <path>') + '\n');
+    return 2;
+  }
+  const path = require('path');
+  const outPath = path.resolve(target);
+  const memDb = runtime.agentMemory.memoryDb;
+  if (!memDb || !memDb.db) {
+    process.stderr.write(fmt.err('SQLite backend not active. Set HORIZON_MEMORY_BACKEND=sqlite (default) to use export.') + '\n');
+    return 1;
+  }
+  try {
+    const r = memDb.exportToJson(outPath);
+    if (flags.json) { process.stdout.write(JSON.stringify(r, null, 2) + '\n'); return 0; }
+    const s = r.stats || {};
+    process.stdout.write(fmt.ok(`✓ Exported to ${outPath}`) + '\n');
+    process.stdout.write(`  ${s.memories || 0} memories, ${s.facts || 0} facts, ${s.conversations || 0} conversations\n`);
+    process.stdout.write(fmt.dim(`  ${(r.bytes / 1024).toFixed(1)} KB written\n`));
+    return 0;
+  } catch (e) {
+    process.stderr.write(fmt.err('Export failed: ' + e.message) + '\n');
+    return 1;
+  }
+}
+
+// Sprint 7B — Import JSON snapshot → SQLite. Inverse of `mem export`.
+// Idempotent: duplicates are de-duped by stable memory key / fact key /
+// conversation id. Use this to restore a backup or seed a fresh DB.
+function importJson(runtime, rest, flags) {
+  const src = rest[0] || flags.in;
+  if (!src) {
+    process.stderr.write(fmt.err('Need an input path: horizon mem import <path>') + '\n');
+    return 2;
+  }
+  const path = require('path');
+  const fs = require('fs');
+  const inPath = path.resolve(src);
+  if (!fs.existsSync(inPath)) {
+    process.stderr.write(fmt.err(`File not found: ${inPath}`) + '\n');
+    return 1;
+  }
+  const memDb = runtime.agentMemory.memoryDb;
+  if (!memDb || !memDb.db) {
+    process.stderr.write(fmt.err('SQLite backend not active. Cannot import while HORIZON_MEMORY_BACKEND=json.') + '\n');
+    return 1;
+  }
+  try {
+    const before = memDb.stats();
+    const after = memDb.importFromJsonFile(inPath);
+    const added = {
+      memories: after.memories - before.memories,
+      facts: after.facts - before.facts,
+      conversations: after.conversations - before.conversations,
+    };
+    if (flags.json) {
+      process.stdout.write(JSON.stringify({ ok: true, before, after, added, source: inPath }, null, 2) + '\n');
+      return 0;
+    }
+    process.stdout.write(fmt.ok(`✓ Imported from ${inPath}`) + '\n');
+    process.stdout.write(`  + ${added.memories} memories\n`);
+    process.stdout.write(`  + ${added.facts} facts\n`);
+    process.stdout.write(`  + ${added.conversations} conversations\n`);
+    process.stdout.write(fmt.dim(`  total now: ${after.memories} mem / ${after.facts} facts / ${after.conversations} conv\n`));
+    // Hydrate the in-memory cache so the rest of the runtime sees the new rows.
+    try { runtime.agentMemory.setMemoryDb(memDb); } catch (_) {}
+    return 0;
+  } catch (e) {
+    process.stderr.write(fmt.err('Import failed: ' + e.message) + '\n');
+    return 1;
+  }
 }
 
 // PHASE 28 — SQLite + FTS5 mirror. The JSON file stays the source of

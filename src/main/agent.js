@@ -226,12 +226,72 @@ class AgentMemory {
     this.dialecticExtractor = typeof fn === 'function' ? fn : null;
   }
 
-  /** PHASE 28.2 — Inject the SQLite + FTS5 MemoryDb wrapper (created
-   *  in main.js after the boot-time mirror finishes). Once set, FTS
-   *  queries route through SQLite bm25 and live writes mirror through
-   *  so the DB stays in sync without waiting for the next boot. */
+  /** Sprint 7B — Inject the SQLite + FTS5 MemoryDb wrapper. SQLite is
+   *  now the PRIMARY store: on wire-up we hydrate _data from SQLite
+   *  (overwriting anything init() loaded from a stale JSON file), and
+   *  subsequent _save() calls become a no-op (writes go straight to
+   *  SQLite from remember/setFact/saveConversation).
+   *
+   *  Opt back to the old hybrid (JSON primary + SQLite mirror) by
+   *  setting HORIZON_MEMORY_BACKEND=json before boot — headless.js
+   *  and main.js both skip calling setMemoryDb() in that mode. */
   setMemoryDb(db) {
     this.memoryDb = db || null;
+    if (!db || !db.db) return;
+    // Hydrate _data from SQLite — SQLite is the source of truth now.
+    // The userProfile + meals + learning blocks live only in JSON;
+    // we keep whatever init() loaded for those (or the defaults).
+    try {
+      const memRows = db.db.prepare(`
+        SELECT id, content, category, importance, created_at, last_seen, seen, source, persona_id
+          FROM memories ORDER BY created_at ASC
+      `).all();
+      this._data.memories = memRows.map(r => ({
+        id: Date.now(), // legacy field — JSON had numeric ids
+        key: r.id,
+        content: r.content,
+        category: r.category || 'general',
+        importance: r.importance || 5,
+        created: r.created_at,
+        lastSeen: r.last_seen || r.created_at,
+        seen: r.seen || 1,
+        source: r.source || 'sqlite',
+        lastSource: r.source || 'sqlite',
+        personaId: r.persona_id || null,
+        personas: r.persona_id ? [r.persona_id] : [],
+      }));
+
+      const factRows = db.db.prepare('SELECT key, value, updated_at, source FROM facts').all();
+      this._data.facts = {};
+      for (const f of factRows) {
+        this._data.facts[f.key] = {
+          value: f.value,
+          updated: f.updated_at,
+          seen: 1,
+          source: f.source || 'sqlite',
+          lastSource: f.source || 'sqlite',
+        };
+      }
+
+      const convRows = db.db.prepare(`
+        SELECT id, user, assistant, source, persona_id, created_at
+          FROM conversations ORDER BY created_at ASC
+      `).all();
+      this._data.conversations = convRows.map(c => ({
+        id: Number(c.id) || c.id,
+        user: c.user || '',
+        assistant: c.assistant || '',
+        source: c.source || 'sqlite',
+        personaId: c.persona_id || null,
+        time: new Date(c.created_at || Date.now()).toISOString(),
+        meta: {},
+      }));
+
+      this._ensureShape();
+      this._rebuildFts();
+    } catch (e) {
+      console.warn('[memory] SQLite hydration failed, falling back to JSON _data:', e.message);
+    }
   }
 
   /** Inject the EmbeddingService instance (created in main.js so it shares
@@ -375,6 +435,31 @@ class AgentMemory {
   }
 
   _save() {
+    // Sprint 7B — SQLite is the primary store; when its handle is wired,
+    // remember/setFact/saveConversation each mirror straight into the DB
+    // via the methods below. We skip the JSON write here to avoid two
+    // sources of truth drifting. The userProfile + learning.stats blocks
+    // live only in JSON though, so when SQLite is primary we still write
+    // them to a small JSON sidecar (memory.json kept slim, no memories /
+    // facts / conversations duplicated).
+    if (this.memoryDb && this.memoryDb.db) {
+      try {
+        const slim = {
+          // Memories, facts, conversations all live in SQLite now —
+          // include just the count for crash-debug visibility, not the data.
+          _primary: 'sqlite',
+          _exportedAt: new Date().toISOString(),
+          userProfile: this._data.userProfile,
+          learning: this._data.learning,
+          meals: this._data.meals || [],
+        };
+        fs.writeFileSync(this.filePath, JSON.stringify(slim, null, 2));
+      } catch (e) {
+        console.error('Memory sidecar save error:', e.message);
+      }
+      return;
+    }
+    // Legacy JSON-primary path — used when HORIZON_MEMORY_BACKEND=json.
     try {
       fs.writeFileSync(this.filePath, JSON.stringify(this._data, null, 2));
     } catch (e) {
