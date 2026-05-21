@@ -69,7 +69,12 @@
     if (privilegedLabel) {
       label = privilegedLabel;
       title = `${privilegedLabel} access — Horizon is included for this account.`;
-      ctaText = 'ACCOUNT';
+      // Privileged accounts have nothing to upgrade/manage from this pill;
+      // the loud ACCOUNT CTA was just visual noise. Mark the wrapper so CSS
+      // can render a subtler informational chip without the bright CTA.
+      pill.classList.add('privileged');
+      ctaText = '';
+      ctaAction = null;
     } else if (state.reason === 'pro') {
       // Real paid subscriber. Show plan name only when it adds info
       // (monthly / yearly), drop generic "active" filler.
@@ -93,13 +98,15 @@
     pill.title = title;
     pill.textContent = label;
 
-    const cta = document.createElement('button');
-    cta.type = 'button';
-    cta.className = 'lp-cta';
-    cta.textContent = ctaText;
-    cta.addEventListener('click', (e) => { e.stopPropagation(); ctaAction(); });
-    pill.appendChild(cta);
-    pill.addEventListener('click', ctaAction);
+    if (ctaText && typeof ctaAction === 'function') {
+      const cta = document.createElement('button');
+      cta.type = 'button';
+      cta.className = 'lp-cta';
+      cta.textContent = ctaText;
+      cta.addEventListener('click', (e) => { e.stopPropagation(); ctaAction(); });
+      pill.appendChild(cta);
+      pill.addEventListener('click', ctaAction);
+    }
 
     host.replaceChildren(pill);
   }

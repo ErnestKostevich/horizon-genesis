@@ -1,0 +1,1342 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   chat-refinement.css — Last-in-cascade polish layer.
+
+   Reference DNA: Linear, Anthropic Claude.ai, Cursor, Windsurf, PearAI,
+   OpenAI ChatGPT, OpenCode.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ════ DIAGNOSTIC MARKER — remove after verifying file loads ════
+   If this file is loaded, you'll see a thin cyan strip ALONG THE TOP of
+   the chat area (above the wake bar). Check via DevTools Console with:
+     getComputedStyle(document.documentElement).getPropertyValue('--horizon-refinement-loaded')
+   Should return ' 1'. If it returns '' (empty), this file did NOT load. */
+:root {
+  --horizon-refinement-loaded: 1;
+}
+/* `chat-shell-polish.css:912-913` has `body::before { display:none!important }`
+   so this rule needs full !important to win the cascade. After the user
+   verifies they see this strip, we can remove the diagnostic. */
+body::before {
+  content: '' !important;
+  display: block !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 3px !important;
+  background: linear-gradient(90deg, #7ee6ff, #6366f1, #c084fc, #f59e0b) !important;
+  z-index: 99999 !important;
+  pointer-events: none !important;
+}
+
+/* ════ MODE / PERSONA / MODEL popover — bulletproof display rules ════
+   Earlier I added .show + display:block but the user still reports the
+   Mode picker doesn't open. Hardening with ID selectors (higher
+   specificity), explicit visibility/opacity, and pointer-events to
+   override any rule that might be hiding these. */
+#mode-popover.show,
+#persona-popover.show,
+#model-popover.show,
+.mode-popover.show,
+.persona-popover.show,
+.model-popover.show {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+
+/* ─── Wake bar — softer idle state ────────────────────────────────────── */
+.wake-bar.idle {
+  background: rgba(255, 255, 255, 0.018);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+.wake-bar.idle .wb-dot {
+  background: rgba(126, 230, 255, 0.45);
+}
+.wake-bar.idle .wb-txt {
+  color: rgba(255, 255, 255, 0.38);
+  font-weight: 400;
+  letter-spacing: 0.1px;
+}
+/* Slower, calmer pulse — 2.4s was anxious. */
+@keyframes wbpulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.86); }
+}
+.wake-bar.idle .wb-dot { animation: wbpulse 3.2s ease-in-out infinite; }
+
+
+/* ─── Message bubbles — refinement pass ───────────────────────────────── */
+.msg.usr .bub {
+  /* Less gradient noise. Solid translucent fill reads cleaner than
+     two-stop linear-gradient at small bubble sizes. */
+  background: rgba(126, 230, 255, 0.10) !important;
+  border-color: rgba(126, 230, 255, 0.22) !important;
+  box-shadow: none, var(--sh-1) !important;
+}
+.msg.bot .bub {
+  background: rgba(18, 21, 28, 0.78) !important;
+  border-color: rgba(255, 255, 255, 0.055) !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+}
+/* Amber stripe was too decorative for a calm shell — fade it out. */
+.msg.bot .bub::before {
+  opacity: 0;
+}
+
+/* Inline code — restrained, single accent, mono. */
+.msg.bot .bub code {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  color: var(--apex-amber-0, #ffb566) !important;
+  font-size: 12px !important;
+  padding: 1px 6px !important;
+  border-radius: 5px !important;
+}
+.msg.bot .bub pre {
+  background: rgba(7, 9, 14, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 10px !important;
+  padding: 13px 15px !important;
+  box-shadow: none !important;
+}
+.msg.bot .bub pre code {
+  color: #d4dcea !important;
+  font-size: 12.5px !important;
+}
+
+
+/* ─── Message meta row — Anthropic-style hover-revealed actions ───────── */
+.meta {
+  margin-top: 6px;
+  padding: 0 4px;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.32);
+  font-variant-numeric: tabular-nums;
+}
+.mtag {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--mono);
+  letter-spacing: 0.1px;
+  text-transform: none;
+}
+/* Action buttons — start faded, brighten on bubble hover (Anthropic) */
+.ab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 6px;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, background 0.12s ease, color 0.12s ease;
+}
+.msg:hover .ab { opacity: 1; }
+.ab:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+
+/* ─── Composer foot — bottom info row ─────────────────────────────────── */
+.composer-foot {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.1px;
+  padding: 0 4px;
+}
+.composer-foot-byok {
+  color: rgba(126, 230, 255, 0.55) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.4px !important;
+  text-transform: uppercase;
+}
+.composer-foot-tokens { color: rgba(255, 255, 255, 0.55); }
+.composer-foot-cost   { color: rgba(255, 255, 255, 0.6); }
+.composer-foot-agent {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.composer-foot-agent-dot {
+  width: 6px; height: 6px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.composer-foot-agent.running .composer-foot-agent-dot {
+  background: var(--apex-amber-0, #ffb566);
+  box-shadow: 0 0 6px rgba(255, 181, 102, 0.5);
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+.composer-foot-agent.done .composer-foot-agent-dot  { background: var(--c-ok, #7cf0b4); }
+.composer-foot-agent.error .composer-foot-agent-dot { background: var(--c-bad, #ff8c8c); }
+
+
+/* ─── Keyboard hint line — barely visible until needed ─────────────────── */
+.hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.22);
+  margin-top: 6px;
+  letter-spacing: 0.15px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+.inp-wrap:hover .hint,
+.inp-wrap:focus-within .hint { opacity: 1; }
+
+
+/* ─── Plan-Act toggle — calmer ─────────────────────────────────────────── */
+.composer-foot-toggle {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: 0.1px;
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.composer-foot-toggle.on {
+  background: rgba(232, 160, 80, 0.08);
+  border-color: rgba(232, 160, 80, 0.25);
+  color: var(--apex-amber-0, #ffb566);
+}
+
+
+/* ─── Input wrapper — Linear-style restraint ──────────────────────────── */
+.inp-wrap {
+  background: linear-gradient(180deg, rgba(6,8,12,0.5), rgba(5,7,11,0.85)) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: none !important;
+}
+.irow {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 6px 8px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.irow:focus-within {
+  border-color: rgba(126, 230, 255, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+}
+#inp {
+  background: transparent !important;
+  border: none !important;
+  color: var(--tx-1, #fff) !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  outline: none !important;
+}
+#inp::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+
+/* ─── Send / mic / attach buttons — consistent restraint ──────────────── */
+.ibtn {
+  width: 32px; height: 32px;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  border-radius: 8px !important;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ibtn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+.ibtn.btn-send {
+  background: linear-gradient(135deg, var(--apex-amber-0, #ffb566), var(--apex-amber-1, #e8a050)) !important;
+  color: #0a0a0a !important;
+  border-color: transparent !important;
+}
+.ibtn.btn-send:hover {
+  filter: brightness(1.08);
+  background: linear-gradient(135deg, var(--apex-amber-0, #ffb566), var(--apex-amber-1, #e8a050)) !important;
+}
+.mlbl {
+  font-size: 9px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.4px !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+
+/* ─── Top bar refinement — tighten typography ─────────────────────────── */
+.tb-name {
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  font-size: 13.5px;
+}
+.tb-sub {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.42);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  margin-left: 4px;
+}
+.shell-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.1px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.shell-chip.primary {
+  background: rgba(126, 230, 255, 0.06);
+  border-color: rgba(126, 230, 255, 0.18);
+  color: rgba(126, 230, 255, 0.95);
+}
+.shell-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.shell-chip.primary:hover {
+  background: rgba(126, 230, 255, 0.1);
+  border-color: rgba(126, 230, 255, 0.32);
+}
+
+
+/* ─── Title-bar icon buttons (⌘K, theme, settings) ────────────────────── */
+.ic-btn {
+  width: 28px; height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.55);
+  border-radius: 7px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ic-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.theme-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.55);
+  border-radius: 7px;
+  width: 28px; height: 28px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+
+/* ─── Logo — refine the H mark in title bar ───────────────────────────── */
+.tb .logo {
+  background: linear-gradient(135deg, rgba(126, 230, 255, 0.18), rgba(99, 102, 241, 0.12));
+  border: 1px solid rgba(126, 230, 255, 0.22);
+  color: rgba(126, 230, 255, 0.95);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.4px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+
+/* ─── Scrollbars — slim, neutral ───────────────────────────────────────── */
+.msgs::-webkit-scrollbar,
+.fbody::-webkit-scrollbar,
+.persona-popover::-webkit-scrollbar,
+.mode-popover::-webkit-scrollbar,
+.model-popover::-webkit-scrollbar { width: 8px; }
+.msgs::-webkit-scrollbar-thumb,
+.fbody::-webkit-scrollbar-thumb,
+.persona-popover::-webkit-scrollbar-thumb,
+.mode-popover::-webkit-scrollbar-thumb,
+.model-popover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.msgs::-webkit-scrollbar-thumb:hover,
+.fbody::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.14); background-clip: padding-box; }
+.msgs::-webkit-scrollbar-track,
+.fbody::-webkit-scrollbar-track { background: transparent; }
+
+
+/* ─── Typing indicator dots — calmer ──────────────────────────────────── */
+.msg.bot.typing .bub {
+  background: rgba(18, 21, 28, 0.55) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+.td {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+
+/* ─── Empty greeting refinement ───────────────────────────────────────── */
+.greet h3 {
+  font-weight: 600 !important;
+  letter-spacing: -0.5px !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+.greet p {
+  font-size: 13.5px !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
+}
+.ch {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  padding: 8px 14px !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.ch:hover {
+  background: rgba(126, 230, 255, 0.06) !important;
+  border-color: rgba(126, 230, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+
+/* ─── Sidebar — Linear-style restraint ────────────────────────────────── */
+.chat-sidebar-chat-item {
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.chat-sidebar-chat-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.95);
+}
+.chat-sidebar-chat-item.active {
+  background: rgba(126, 230, 255, 0.06);
+  color: rgba(126, 230, 255, 0.95);
+}
+
+
+/* ─── Window controls (.wbtn) — better hover affordance ───────────────── */
+.wbtn { position: relative; }
+.wbtn::after {
+  /* Icon glyph on hover — Mac-style. Mostly readable on small targets. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  font-family: var(--font);
+  pointer-events: none;
+}
+.wbtn.wy::after { content: '−'; font-size: 11px; line-height: 1; }
+.wbtn.wg::after { content: '+'; font-size: 9px; line-height: 1; }
+.wbtn.wr::after { content: '×'; font-size: 10px; line-height: 1; }
+.tb-r:hover .wbtn::after { opacity: 1; }
+
+
+/* ─── Focus rings — accessible, on-brand ──────────────────────────────── */
+*:focus-visible { outline: none; }
+.composer-chip:focus-visible,
+.persona-picker-row:focus-visible,
+.model-popover-opt:focus-visible,
+.ic-btn:focus-visible,
+.shell-chip:focus-visible,
+.ibtn:focus-visible,
+.theme-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(126, 230, 255, 0.35), 0 0 0 4px rgba(126, 230, 255, 0.1);
+  border-color: rgba(126, 230, 255, 0.45) !important;
+}
+
+
+/* ─── Selection — branded ─────────────────────────────────────────────── */
+::selection {
+  background: rgba(126, 230, 255, 0.28);
+  color: #fff;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   HERO POLISH — striking first impression. Empty greeting + logo treatment.
+   Reference: Anthropic Claude.ai empty state, Linear new-issue screen.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* The .g-mark is the big circular logo on the empty-state screen. Refined
+   from a clipped sphere to a soft brand mark with a slow breathing glow. */
+.g-mark {
+  width: 80px !important;
+  height: 80px !important;
+  border-radius: 50% !important;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(126, 230, 255, 0.22), transparent 60%),
+    radial-gradient(circle at 70% 70%, rgba(124, 109, 242, 0.18), transparent 65%),
+    rgba(15, 19, 28, 0.6) !important;
+  border: 1px solid rgba(126, 230, 255, 0.22) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 0 40px rgba(126, 230, 255, 0.16),
+    0 20px 60px rgba(0, 0, 0, 0.32) !important;
+  position: relative;
+  animation: heroBreath 5.5s ease-in-out infinite;
+}
+@keyframes heroBreath {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset, 0 0 38px rgba(126,230,255,0.14), 0 18px 55px rgba(0,0,0,0.30); }
+  50%      { box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 58px rgba(126,230,255,0.22), 0 22px 70px rgba(0,0,0,0.38); }
+}
+/* The Lucide sparkle inside — give it a brand-aware color */
+.g-mark svg {
+  color: rgba(126, 230, 255, 0.9) !important;
+  filter: drop-shadow(0 0 8px rgba(126, 230, 255, 0.4));
+  width: 32px !important;
+  height: 32px !important;
+}
+
+/* The greeting wrapper itself — center vertically too, add breathing room */
+.greet {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 64px 32px 48px !important;
+  min-height: calc(100vh - 280px);
+  gap: 18px;
+}
+.greet h3 {
+  font-size: 32px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.8px !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+  margin: 0 !important;
+  background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.7));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.greet p {
+  font-size: 14.5px !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-weight: 400 !important;
+  line-height: 1.65 !important;
+  max-width: 540px !important;
+  margin: 0 auto !important;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 760px;
+  margin: 12px auto 0 !important;
+}
+.ch {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  padding: 9px 16px !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.2s ease;
+  -webkit-app-region: no-drag;
+}
+.ch:hover {
+  background: rgba(126, 230, 255, 0.06) !important;
+  border-color: rgba(126, 230, 255, 0.25) !important;
+  color: rgba(255, 255, 255, 0.98) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(126, 230, 255, 0.08);
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   GLASS + AMBIENT MOTION — chrome surfaces, message-in, subtle layering
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Title bar — subtle frost so it sits ABOVE content without being opaque */
+.tb {
+  background: linear-gradient(180deg, rgba(11, 13, 18, 0.78), rgba(11, 13, 18, 0.55)) !important;
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Wake bar — keep transparent so the title bar frost reads through */
+.wake-bar {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+.wake-bar.idle {
+  background: rgba(126, 230, 255, 0.02) !important;
+  border-bottom: 1px solid rgba(126, 230, 255, 0.06) !important;
+}
+
+/* Sidebar — Linear-style restraint with subtle backdrop */
+.chat-sidebar,
+.chat-history-sidebar {
+  background: rgba(8, 10, 14, 0.6) !important;
+  backdrop-filter: blur(20px) saturate(130%);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Input wrapper — frosted at the bottom for separation from msgs */
+.inp-wrap {
+  backdrop-filter: blur(18px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
+}
+
+/* Message-in animation — replace the default 6px slide with 4px,
+   refine the easing curve. */
+@keyframes msgIn {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.msg {
+  animation: msgIn 280ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+/* Cursor blink in input — subtle, brand-aware */
+@keyframes caretBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.2; }
+}
+#inp:focus { caret-color: rgba(126, 230, 255, 0.9); }
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   SIDEBAR / CHAT-LIST POLISH
+   Real classes used by chat-multichat.js: .cs-item / .cs-title / .cs-preview
+   / .cs-meta / .cs-actions / .cs-act-btn. Earlier code targeted
+   .chat-sidebar-chat-item which doesn't exist in the DOM (zero effect).
+   ════════════════════════════════════════════════════════════════════════ */
+
+.cs-item {
+  margin: 1px 6px !important;
+  padding: 9px 11px !important;
+  border-radius: 8px !important;
+  border: 1px solid transparent !important;
+  border-left-width: 2px !important;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.cs-item:hover {
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+.cs-item.active {
+  background: rgba(126, 230, 255, 0.08) !important;
+  border-left-color: var(--apex-cyan-0, #7ee6ff) !important;
+}
+.cs-item .cs-title {
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-weight: 500 !important;
+  font-size: 12.5px !important;
+}
+.cs-item.active .cs-title {
+  color: rgba(126, 230, 255, 0.98) !important;
+}
+.cs-item .cs-preview {
+  color: rgba(255, 255, 255, 0.50) !important;
+  font-size: 10.5px !important;
+}
+.cs-item .cs-meta {
+  color: rgba(255, 255, 255, 0.36) !important;
+  font-size: 9.5px !important;
+}
+
+/* "Yesterday" / "Today" group headers */
+.chat-sidebar-group-h,
+.chat-history-group-header {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 14px 14px 6px;
+}
+
+/* Search input in sidebar */
+.chat-sidebar-search,
+.chat-history-search {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: var(--tx-1) !important;
+  padding: 7px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  margin: 8px !important;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.chat-sidebar-search:focus,
+.chat-history-search:focus {
+  border-color: rgba(126, 230, 255, 0.32) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  outline: none;
+}
+
+/* New-chat button in sidebar — Linear-style primary CTA */
+.chat-sidebar-new-chat,
+button[onclick*="newChat"] {
+  background: linear-gradient(135deg, rgba(126, 230, 255, 0.14), rgba(99, 102, 241, 0.10)) !important;
+  border: 1px solid rgba(126, 230, 255, 0.24) !important;
+  color: rgba(126, 230, 255, 0.95) !important;
+  font-weight: 500 !important;
+  font-size: 12.5px !important;
+  padding: 8px 14px !important;
+  border-radius: 10px !important;
+  margin: 8px !important;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.chat-sidebar-new-chat:hover {
+  background: linear-gradient(135deg, rgba(126, 230, 255, 0.20), rgba(99, 102, 241, 0.14)) !important;
+  border-color: rgba(126, 230, 255, 0.36) !important;
+}
+.chat-sidebar-new-chat:active {
+  transform: scale(0.98);
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   POPOVER POLISH — backdrop blur, accent border highlight
+   ════════════════════════════════════════════════════════════════════════ */
+
+.persona-popover,
+.mode-popover,
+.model-popover,
+.cmd-palette > .cmd-box {
+  backdrop-filter: blur(24px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(140%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 24px 64px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(0, 0, 0, 0.4) !important;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   LOGO IN TITLE BAR — refined H-mark with subtle pulse
+   ════════════════════════════════════════════════════════════════════════ */
+
+.tb .logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(126, 230, 255, 0.32), transparent 70%),
+    linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(124, 109, 242, 0.12));
+  border: 1px solid rgba(126, 230, 255, 0.28);
+  color: rgba(126, 230, 255, 0.95);
+  font-weight: 700;
+  font-size: 13px;
+  font-family: var(--font);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: -0.4px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+.tb .logo::after {
+  /* Subtle shimmer that traverses every 6s */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.18) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: logoShimmer 6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes logoShimmer {
+  0%, 70%, 100% { transform: translateX(-100%); }
+  85%           { transform: translateX(100%); }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — comprehensive overrides for everything refined above
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Background — Anthropic Claude.ai-inspired warm off-white */
+[data-theme="light"] body {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(124, 109, 242, 0.05), transparent 55%),
+    radial-gradient(circle at 85% 80%, rgba(126, 230, 255, 0.05), transparent 55%),
+    linear-gradient(180deg, #fbfbfd 0%, #f5f5f7 100%) !important;
+}
+
+
+/* ─── Title bar (light) — solid, clear separator ──────────────────────── */
+[data-theme="light"] .tb {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+[data-theme="light"] .tb-name {
+  color: #0f172a !important;
+  font-weight: 600;
+}
+[data-theme="light"] .tb-sub {
+  color: rgba(15, 23, 42, 0.55) !important;
+}
+[data-theme="light"] .tb .logo {
+  background:
+    radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.32), transparent 70%),
+    linear-gradient(135deg, #818cf8, #6366f1) !important;
+  border: 1px solid rgba(99, 102, 241, 0.45) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.24) !important;
+}
+[data-theme="light"] .tb .logo::after {
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.42) 50%, transparent 70%);
+}
+[data-theme="light"] .shell-chip {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  color: rgba(15, 23, 42, 0.78) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] .shell-chip.primary {
+  background: rgba(99, 102, 241, 0.10) !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  color: #4338ca !important;
+}
+[data-theme="light"] .shell-chip:hover {
+  background: #f9fafb !important;
+  border-color: rgba(15, 23, 42, 0.20) !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] .shell-chip.primary:hover {
+  background: rgba(99, 102, 241, 0.14) !important;
+  border-color: rgba(99, 102, 241, 0.45) !important;
+}
+[data-theme="light"] .ic-btn,
+[data-theme="light"] .theme-toggle {
+  color: rgba(15, 23, 42, 0.65) !important;
+  background: transparent;
+}
+[data-theme="light"] .ic-btn:hover,
+[data-theme="light"] .theme-toggle:hover {
+  background: rgba(15, 23, 42, 0.06) !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+/* OWNER pill in light theme — keep subtle */
+[data-theme="light"] .license-pill.privileged {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  color: rgba(15, 15, 18, 0.6) !important;
+}
+
+
+/* ─── Wake bar (light) ─────────────────────────────────────────────────── */
+[data-theme="light"] .wake-bar.idle {
+  background: rgba(99, 102, 241, 0.03) !important;
+  border-bottom-color: rgba(99, 102, 241, 0.08) !important;
+}
+[data-theme="light"] .wake-bar.idle .wb-dot {
+  background: rgba(99, 102, 241, 0.5);
+}
+[data-theme="light"] .wake-bar.idle .wb-txt {
+  color: rgba(15, 15, 18, 0.55);
+}
+
+
+/* ─── Sidebar (light) — real .cs-* classes, solid backgrounds ─────────── */
+[data-theme="light"] .chatside {
+  background: #f5f5f7 !important;
+  backdrop-filter: none !important;
+  border-right: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+[data-theme="light"] .chatside .cs-new {
+  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  border: 1px solid rgba(99, 102, 241, 0.45) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.28) !important;
+}
+[data-theme="light"] .chatside .cs-new:hover {
+  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  border-color: #4f46e5 !important;
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+[data-theme="light"] .cs-item {
+  background: transparent !important;
+  border-left-color: transparent !important;
+}
+[data-theme="light"] .cs-item:hover {
+  background: rgba(15, 23, 42, 0.05) !important;
+}
+[data-theme="light"] .cs-item.active {
+  background: rgba(99, 102, 241, 0.10) !important;
+  border-left-color: #6366f1 !important;
+}
+[data-theme="light"] .cs-item .cs-title {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+[data-theme="light"] .cs-item.active .cs-title {
+  color: #4338ca !important;
+}
+[data-theme="light"] .cs-item .cs-preview {
+  color: rgba(15, 23, 42, 0.65) !important;
+}
+[data-theme="light"] .cs-item .cs-meta {
+  color: rgba(15, 23, 42, 0.50) !important;
+}
+
+/* Sidebar action buttons (rename, delete) — dark gradient was hardcoded.
+   On light theme it reads as a dark blob; switch to white-ish. */
+[data-theme="light"] .cs-actions {
+  background: linear-gradient(90deg, transparent 0, rgba(245, 245, 247, 0.92) 18%, rgba(245, 245, 247, 0.98) 100%) !important;
+}
+[data-theme="light"] .cs-item.active .cs-actions {
+  background: linear-gradient(90deg, transparent 0, rgba(238, 238, 252, 0.95) 18%, rgba(238, 238, 252, 0.99) 100%) !important;
+}
+[data-theme="light"] .cs-act-btn {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.14) !important;
+  color: rgba(15, 23, 42, 0.65) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+[data-theme="light"] .cs-act-btn:hover {
+  background: rgba(99, 102, 241, 0.10) !important;
+  border-color: rgba(99, 102, 241, 0.42) !important;
+  color: #4338ca !important;
+}
+[data-theme="light"] .cs-act-btn.danger:hover {
+  background: rgba(220, 38, 38, 0.10) !important;
+  border-color: rgba(220, 38, 38, 0.42) !important;
+  color: #b91c1c !important;
+}
+
+/* Search input in sidebar */
+[data-theme="light"] .cs-search-input {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.14) !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+[data-theme="light"] .cs-search-input:focus {
+  border-color: rgba(99, 102, 241, 0.45) !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.10) !important;
+}
+[data-theme="light"] .cs-search-input::placeholder {
+  color: rgba(15, 23, 42, 0.42) !important;
+}
+[data-theme="light"] .cs-search-icon {
+  color: rgba(15, 23, 42, 0.55) !important;
+}
+
+
+/* ─── Messages (light) — solid bubbles with clear contrast ────────────── */
+[data-theme="light"] .msg.usr .bub {
+  background: rgba(99, 102, 241, 0.12) !important;
+  border: 1px solid rgba(99, 102, 241, 0.32) !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] .msg.bot .bub {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.10) !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] .msg.bot .bub code {
+  background: rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  color: #b6470d !important; /* Anthropic-style terracotta inline-code */
+}
+[data-theme="light"] .msg.bot .bub pre {
+  background: rgba(250, 250, 252, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.07) !important;
+}
+[data-theme="light"] .msg.bot .bub pre code {
+  color: rgba(15, 15, 18, 0.9) !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Meta row + action buttons (light) */
+[data-theme="light"] .meta {
+  color: rgba(15, 15, 18, 0.42);
+}
+[data-theme="light"] .mtag {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.07);
+  color: rgba(15, 15, 18, 0.55);
+}
+[data-theme="light"] .ab {
+  color: rgba(15, 15, 18, 0.45);
+}
+[data-theme="light"] .msg:hover .ab {
+  color: rgba(15, 15, 18, 0.85);
+}
+[data-theme="light"] .ab:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(15, 15, 18, 0.95);
+}
+
+/* Typing dots (light) */
+[data-theme="light"] .msg.bot.typing .bub {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+[data-theme="light"] .td {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+
+/* ─── Composer + input (light) ─────────────────────────────────────────── */
+/* CRITICAL contrast pass — earlier values (rgba(255,255,255,.6) on light page)
+   were effectively invisible. Anthropic Claude.ai's light mode uses solid
+   #ffffff cards with #e6e4dd borders on a #faf9f5 cream page. We do similar:
+   solid white card on warm off-white page, visible border. */
+[data-theme="light"] .composer-chip {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: rgba(15, 23, 42, 0.78) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] .composer-chip span {
+  color: rgba(15, 23, 42, 0.55) !important;
+}
+[data-theme="light"] .composer-chip b {
+  color: rgba(15, 23, 42, 0.98) !important;
+  font-weight: 600 !important;
+}
+[data-theme="light"] .composer-chip:hover {
+  background: #fafafa !important;
+  border-color: rgba(15, 23, 42, 0.20) !important;
+  color: rgba(15, 23, 42, 0.98) !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08) !important;
+}
+[data-theme="light"] .composer-chip.strong {
+  background: rgba(99, 102, 241, 0.08) !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+[data-theme="light"] .composer-chip.strong b {
+  color: #4338ca !important;
+}
+[data-theme="light"] .composer-chip.on {
+  background: rgba(217, 119, 6, 0.10) !important;
+  border-color: rgba(217, 119, 6, 0.38) !important;
+  color: #92400e !important;
+}
+
+[data-theme="light"] .inp-wrap {
+  background: linear-gradient(180deg, #ffffff, #fafafa) !important;
+  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+[data-theme="light"] .irow {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.14) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] .irow:focus-within {
+  background: #ffffff !important;
+  border-color: rgba(99, 102, 241, 0.45) !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.10), 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] #inp {
+  color: rgba(15, 15, 18, 0.98) !important;
+}
+[data-theme="light"] #inp::placeholder {
+  color: rgba(15, 15, 18, 0.38);
+}
+[data-theme="light"] .ibtn {
+  color: rgba(15, 15, 18, 0.55) !important;
+}
+[data-theme="light"] .ibtn:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: rgba(15, 15, 18, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .ibtn.btn-send {
+  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.32);
+}
+[data-theme="light"] .ibtn.btn-send:hover {
+  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  filter: brightness(1.06);
+}
+[data-theme="light"] .mlbl {
+  color: rgba(15, 15, 18, 0.5) !important;
+}
+
+
+/* ─── Composer foot (light) ────────────────────────────────────────────── */
+[data-theme="light"] .composer-foot {
+  color: rgba(15, 15, 18, 0.5);
+}
+[data-theme="light"] .composer-foot-tokens { color: rgba(15, 15, 18, 0.6); }
+[data-theme="light"] .composer-foot-cost   { color: rgba(15, 15, 18, 0.65); }
+[data-theme="light"] .composer-foot-byok {
+  color: #047857 !important;
+}
+[data-theme="light"] .composer-foot-agent {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(15, 15, 18, 0.65);
+}
+[data-theme="light"] .composer-foot-toggle {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(15, 15, 18, 0.7);
+}
+[data-theme="light"] .composer-foot-toggle.on {
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.25);
+  color: #92400e;
+}
+[data-theme="light"] .hint {
+  color: rgba(15, 15, 18, 0.3);
+}
+
+
+/* ─── Empty state / hero (light) — solid backgrounds ──────────────────── */
+[data-theme="light"] .g-mark {
+  background:
+    radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.28), transparent 60%),
+    radial-gradient(circle at 70% 70%, rgba(124, 109, 242, 0.22), transparent 65%),
+    #ffffff !important;
+  border: 1px solid rgba(99, 102, 241, 0.40) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 1) inset,
+    0 0 36px rgba(99, 102, 241, 0.16),
+    0 16px 40px rgba(15, 23, 42, 0.10) !important;
+}
+[data-theme="light"] .g-mark svg {
+  color: #4338ca !important;
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.4));
+}
+[data-theme="light"] .greet h3 {
+  /* Gradient text was unreadable on white. Solid dark slate works. */
+  color: #0f172a !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  -webkit-text-fill-color: #0f172a !important;
+  background: none !important;
+}
+[data-theme="light"] .greet p {
+  color: rgba(15, 23, 42, 0.65) !important;
+}
+[data-theme="light"] .ch {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  color: rgba(15, 23, 42, 0.85) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] .ch:hover {
+  background: #f9fafb !important;
+  border-color: rgba(99, 102, 241, 0.45) !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+
+/* ─── Popovers (light) — fully solid, defined edges ───────────────────── */
+[data-theme="light"] .persona-popover,
+[data-theme="light"] .mode-popover,
+[data-theme="light"] .model-popover {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.10) !important;
+  /* Solid drop shadow so the popover separates from the page */
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.04),
+    0 12px 32px rgba(15, 23, 42, 0.12),
+    0 28px 64px rgba(15, 23, 42, 0.10) !important;
+  backdrop-filter: none !important;
+}
+[data-theme="light"] .persona-picker-row,
+[data-theme="light"] .model-popover-opt {
+  color: #0f172a !important;
+  background: transparent !important;
+}
+[data-theme="light"] .persona-picker-row:hover,
+[data-theme="light"] .model-popover-opt:hover {
+  background: rgba(15, 23, 42, 0.05) !important;
+  border-color: rgba(15, 23, 42, 0.10) !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] .persona-picker-row.on,
+[data-theme="light"] .model-popover-opt.on {
+  background: rgba(99, 102, 241, 0.10) !important;
+  border-color: rgba(99, 102, 241, 0.32) !important;
+  color: #4338ca !important;
+}
+[data-theme="light"] .persona-picker-avatar {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.18);
+  color: rgba(67, 56, 202, 0.9);
+}
+[data-theme="light"] .persona-picker-row.on .persona-picker-avatar {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.36);
+  color: rgba(67, 56, 202, 0.98);
+}
+[data-theme="light"] .persona-picker-name small {
+  color: rgba(15, 15, 18, 0.5) !important;
+}
+[data-theme="light"] .persona-picker-meta {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.07);
+  color: rgba(15, 15, 18, 0.55);
+}
+[data-theme="light"] .persona-picker-row.on .persona-picker-meta {
+  background: rgba(99, 102, 241, 0.10);
+  border-color: rgba(99, 102, 241, 0.30);
+  color: rgba(67, 56, 202, 0.95);
+}
+[data-theme="light"] .picker-title { color: rgba(15, 15, 18, 0.95); }
+[data-theme="light"] .picker-sub   { color: rgba(15, 15, 18, 0.55); }
+[data-theme="light"] .picker-search {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(15, 15, 18, 0.95);
+}
+[data-theme="light"] .picker-search:focus {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: #ffffff;
+}
+[data-theme="light"] .picker-head .btn,
+[data-theme="light"] .picker-head .ghost {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(15, 15, 18, 0.65);
+}
+[data-theme="light"] .picker-head .btn:hover,
+[data-theme="light"] .picker-head .ghost:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(15, 15, 18, 0.95);
+  border-color: rgba(0, 0, 0, 0.14);
+}
+[data-theme="light"] .model-provider-title {
+  color: rgba(15, 15, 18, 0.45);
+}
+[data-theme="light"] .model-provider-title b {
+  color: rgba(15, 15, 18, 0.78);
+}
+[data-theme="light"] .model-popover-opt-meta {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.07);
+  color: rgba(15, 15, 18, 0.55);
+}
+
+
+/* ─── Scrollbars (light) ───────────────────────────────────────────────── */
+[data-theme="light"] .msgs::-webkit-scrollbar-thumb,
+[data-theme="light"] .fbody::-webkit-scrollbar-thumb,
+[data-theme="light"] .persona-popover::-webkit-scrollbar-thumb,
+[data-theme="light"] .mode-popover::-webkit-scrollbar-thumb,
+[data-theme="light"] .model-popover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.10);
+  background-clip: padding-box;
+}
+[data-theme="light"] .msgs::-webkit-scrollbar-thumb:hover,
+[data-theme="light"] .fbody::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+  background-clip: padding-box;
+}
+
+
+/* ─── Focus rings (light) ──────────────────────────────────────────────── */
+[data-theme="light"] .composer-chip:focus-visible,
+[data-theme="light"] .persona-picker-row:focus-visible,
+[data-theme="light"] .model-popover-opt:focus-visible,
+[data-theme="light"] .ic-btn:focus-visible,
+[data-theme="light"] .shell-chip:focus-visible,
+[data-theme="light"] .ibtn:focus-visible,
+[data-theme="light"] .theme-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.32), 0 0 0 4px rgba(99, 102, 241, 0.10);
+  border-color: rgba(99, 102, 241, 0.45) !important;
+}
+
+
+/* ─── Selection (light) ────────────────────────────────────────────────── */
+[data-theme="light"] ::selection {
+  background: rgba(99, 102, 241, 0.18);
+  color: rgba(15, 15, 18, 0.98);
+}
+
+
+/* ─── Window controls (light) — readable glyphs on light gradient ──────── */
+[data-theme="light"] .wbtn::after {
+  color: rgba(0, 0, 0, 0.7);
+}
+[data-theme="light"] .wbtn {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06) inset;
+}
+
+
+/* ─── Inspector / step rail / agent UI (defensive light overrides) ─────── */
+[data-theme="light"] .step-rail,
+[data-theme="light"] .tool-report,
+[data-theme="light"] .agent-step {
+  color: rgba(15, 15, 18, 0.85);
+}
+[data-theme="light"] .step-rail .dim,
+[data-theme="light"] .tool-report .dim {
+  color: rgba(15, 15, 18, 0.55);
+}
+
+
+/* ─── Code blocks elsewhere (settings/docs/inspector) ──────────────────── */
+[data-theme="light"] code:not(.bub code) {
+  background: rgba(0, 0, 0, 0.04);
+  color: #b6470d;
+  border-radius: 4px;
+  padding: 1px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+
+/* ─── Anywhere we wrote rgba(255,255,255,0.xx) as a "subtle surface"
+   defensive override for unknown leaf elements. White-on-near-white is
+   usually invisible — clamp it. */
+[data-theme="light"] [style*="rgba(255,255,255"] {
+  /* Note: inline style overrides are weak signals; this is a safety net */
+}
+[data-theme="light"] .step-rail,
+[data-theme="light"] .step-rail *,
+[data-theme="light"] .tool-card,
+[data-theme="light"] .tool-card * {
+  color: inherit;
+}

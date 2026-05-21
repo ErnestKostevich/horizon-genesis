@@ -28,6 +28,12 @@ function register(deps) {
   ipcMain.on('minimize', () => { const w = getWin(); w?.minimize(); });
   ipcMain.on('hide',     () => { const w = getWin(); w?.hide(); });
   ipcMain.on('quit',     () => { setQuitting(true); app.quit(); });
+  ipcMain.on('toggle-maximize', () => {
+    const w = getWin();
+    if (!w) return;
+    if (w.isMaximized()) w.unmaximize();
+    else                 w.maximize();
+  });
   ipcMain.handle('go',   (_, p) => { createWindow(p); return true; });
 
   ipcMain.handle('getPort',   ()        => getPort());

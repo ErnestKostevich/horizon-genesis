@@ -194,9 +194,12 @@ function bannerHeader(rt, engine) {
     }
   } catch (_) {}
 
+  // Anthropic/Linear restraint: all sections start collapsed by default so
+  // the first frame is calm. User can press Tab or click ▸ to expand any.
+  // This keeps the startup banner under 8 lines instead of 14+.
   const sections = (engine && engine.getSections && engine.getSections())
     || {
-      tools:  { expanded: true,  name: 'Tools' },
+      tools:  { expanded: false, name: 'Tools' },
       skills: { expanded: false, name: 'Skills' },
       prompt: { expanded: false, name: 'System prompt' },
       mcp:    { expanded: false, name: 'MCP servers' },
@@ -264,7 +267,10 @@ function bannerHeader(rt, engine) {
     ...(todArt ? [todArt] : []),
     // Sprint 4 — Task 1: surface click + Tab in the help footer so the user
     // discovers the new interaction instead of guessing.
-    fmt.dim('  /help · click ▸/▾ to toggle · Tab cycles section · /sections <id> · Ctrl+F search · /quit to exit'),
+    // Concise help line — only the four most-used surfaces. Full keyboard
+    // reference lives in `/help`. References: Claude Code, Linear, Cursor
+    // all keep their startup hint under ~50 chars.
+    fmt.dim('  ⏎ send  ·  ⇧⏎ newline  ·  /help  ·  Esc interrupt'),
     '',
   ];
 
@@ -1234,9 +1240,49 @@ async function runOne(runtime, state, engine, message, modeOverride) {
   else                  await runChat(runtime, state, engine, message);
 }
 
+// Hard wall-clock budget for any single provider call. If the network
+// stalls or a provider silently drops a stream, we don't want the TUI
+// locked forever — kick the promise after 5 minutes so the composer
+// re-opens and the user can retry.
+const PROVIDER_HARD_TIMEOUT_MS = 5 * 60 * 1000;
+
+// Promise.race against an AbortController + wall-clock timer. Returns
+// { value, aborted, timedOut } so callers can suppress post-abort UI
+// writes without throwing through user code paths.
+function _interruptibleRace(work, controller, signalAborted, timeoutMs) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('provider timed out')), timeoutMs);
+    if (timer.unref) timer.unref();
+  });
+  const aborted = new Promise((_, reject) => {
+    controller.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+  });
+  return Promise.race([work, timeout, aborted])
+    .then(v => ({ value: v, aborted: signalAborted(), timedOut: false }))
+    .catch(err => {
+      if (signalAborted()) return { value: null, aborted: true, timedOut: false };
+      if (err && /timed out/i.test(err.message)) return { value: null, aborted: false, timedOut: true };
+      throw err;
+    })
+    .finally(() => { if (timer) clearTimeout(timer); });
+}
+
 async function runChat(runtime, state, engine, message) {
   engine.setSending(true);
   engine.print('');
+
+  // Soft-cancel plumbing: Esc during sending → abort signal → composer reopens
+  // even if the provider stream is wedged. The runtime/providers don't honor
+  // opts.signal yet, but the UI side aborts cleanly and the orphan resolve
+  // (if any) is suppressed via the `aborted` closure flag below.
+  const controller = new AbortController();
+  let aborted = false;
+  controller.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+  engine.setAbortHandler(() => {
+    controller.abort('user-esc');
+    engine.print(fmt.warn('  ⟂ interrupted'));
+  });
 
   try {
     if (state.stream) {
@@ -1256,7 +1302,8 @@ async function runChat(runtime, state, engine, message) {
       engine.startStreamingMessage(fmt.dim('| '));
       let buf = '';
       let lastRender = 0;
-      const r = await runtime.runChatStream(message, { history: state.history }, (chunk) => {
+      const work = runtime.runChatStream(message, { history: state.history, signal: controller.signal }, (chunk) => {
+        if (aborted) return; // suppress post-interrupt UI writes
         buf += chunk;
         const now = Date.now();
         if (now - lastRender >= 120) {
@@ -1264,6 +1311,14 @@ async function runChat(runtime, state, engine, message) {
           lastRender = now;
         }
       });
+      const race = await _interruptibleRace(work, controller, () => aborted, PROVIDER_HARD_TIMEOUT_MS);
+      if (race.aborted) { engine.finishStreamingMessage(); return; }
+      if (race.timedOut) {
+        engine.finishStreamingMessage();
+        engine.print(fmt.err('  ⟂ provider timed out after 5 min — try /model to switch'));
+        return;
+      }
+      const r = race.value || {};
       // Final render — use r.reply if the provider returned a fully-assembled
       // string, otherwise the streamed buf. Either way: one last full pass
       // through the markdown renderer guarantees an unterminated fence is
@@ -1279,7 +1334,11 @@ async function runChat(runtime, state, engine, message) {
       // Sprint 2 — feed token/cost into the status bar.
       if (r.usage) engine.recordUsage(r.usage, { model: r.model });
     } else {
-      const r = await runtime.runChat(message, { history: state.history });
+      const work = runtime.runChat(message, { history: state.history, signal: controller.signal });
+      const race = await _interruptibleRace(work, controller, () => aborted, PROVIDER_HARD_TIMEOUT_MS);
+      if (race.aborted) return;
+      if (race.timedOut) { engine.print(fmt.err('  ⟂ provider timed out after 5 min — try /model to switch')); return; }
+      const r = race.value || {};
       if (r.reply) {
         // Sprint 2.1 — captioned reply matching the streaming layout.
         const _now = new Date();
@@ -1296,6 +1355,7 @@ async function runChat(runtime, state, engine, message) {
       if (r.usage) engine.recordUsage(r.usage, { model: r.model });
     }
   } finally {
+    engine.clearAbortHandler();
     engine.setSending(false);
   }
 }
@@ -1304,8 +1364,20 @@ async function runAgent(runtime, state, engine, task) {
   const rail = new StepRail(engine, runtime);
   engine.setSending(true);
   rail.startThinking('⌁ planning…');
+
+  // Same abort plumbing as runChat — Esc gives a soft cancel.
+  const controller = new AbortController();
+  let aborted = false;
+  controller.signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+  engine.setAbortHandler(() => {
+    controller.abort('user-esc');
+    rail.stop();
+    engine.print(fmt.warn('  ⟂ interrupted'));
+  });
+
   try {
-    const r = await runtime.runAgent(task, {
+    const work = runtime.runAgent(task, {
+      signal: controller.signal,
       history: state.history,
       onStep: (event) => {
         switch (event.type) {
@@ -1318,20 +1390,35 @@ async function runAgent(runtime, state, engine, task) {
       askPermission: async ({ tool, args, reason }) => {
         const dangerous = /^(run_code|run_shell|run_python|write_file|delete_file|move_file|conn_.*_send|conn_.*_post|conn_.*_create|mouse_click|keyboard_type|smart_click)$/i.test(tool);
         if (!dangerous) return true;
-        // Inline confirm via a simple prompt — pause engine, read line, resume
+        // Inline confirm via a simple prompt — pause engine, read line, resume.
+        // The 60s timeout guards against the user walking away and locking the
+        // TUI on a hung prompt; on timeout we conservatively deny the dangerous
+        // action and resume.
         rail.stop();
         engine.pause();
         process.stdout.write(fmt.warn(`approve ${fmt.bold(tool)} ${fmt.dim(fmtArgs(args))} (${reason || 'agent step'}) y/N: `));
-        const ans = await new Promise(resolve => {
-          process.stdin.once('data', d => resolve(d.toString().trim()));
-          process.stdin.resume();
-        });
+        let ans = '';
+        try {
+          ans = await new Promise((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error('approval timed out')), 60_000);
+            if (t.unref) t.unref();
+            process.stdin.once('data', d => { clearTimeout(t); resolve(d.toString().trim()); });
+            process.stdin.resume();
+          });
+        } catch (_) {
+          process.stdout.write('\n');
+          engine.print(fmt.warn('  ⟂ approval timed out — denying'));
+        }
         engine.resume();
         rail.startThinking('⌁ thinking…');
         return /^(y|yes|д|да)/i.test(ans);
       },
     });
+    const race = await _interruptibleRace(work, controller, () => aborted, PROVIDER_HARD_TIMEOUT_MS);
     rail.stop();
+    if (race.aborted) return;
+    if (race.timedOut) { engine.print(fmt.err('  ⟂ agent timed out after 5 min — partial run discarded')); return; }
+    const r = race.value || {};
     if (r.answer) {
       // Sprint 2.1 — captioned final answer matching the streaming layout.
       const _now = new Date();
@@ -1347,6 +1434,7 @@ async function runAgent(runtime, state, engine, task) {
       engine.print(fmt.err(friendlyError(r.error)));
     }
   } finally {
+    engine.clearAbortHandler();
     engine.setSending(false);
   }
 }

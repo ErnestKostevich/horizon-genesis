@@ -27,7 +27,7 @@
   "scripts": {
     "start": "electron .",
     "stamp-build": "node scripts/stamp-build-info.js",
-    "rebuild:native": "electron-rebuild -f -w node-pty",
+    "rebuild:native": "electron-rebuild -f -w node-pty -w better-sqlite3",
     "icon:generate": "node scripts/generate-icon.js",
     "cli": "node bin/horizon.js",
     "tui": "node bin/horizon-tui.js",
@@ -72,7 +72,14 @@
     "asar": true,
     "asarUnpack": [
       "**/*.node",
-      "node_modules/node-pty/**/*"
+      "node_modules/node-pty/**/*",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/uiohook-napi/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*",
+      "node_modules/prebuild-install/**/*",
+      "node_modules/tesseract.js/**/*",
+      "node_modules/tesseract.js-core/**/*"
     ],
     "npmRebuild": false,
     "files": [

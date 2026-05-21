@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('H', {
   minimize:             ()           => ipcRenderer.send('minimize'),
   hide:                 ()           => ipcRenderer.send('hide'),
   quit:                 ()           => ipcRenderer.send('quit'),
+  toggleMaximize:       ()           => ipcRenderer.send('toggle-maximize'),
   // ── Clipboard & URLs ─────────────────────────────────────────────────────────
   copy:                 (t)          => ipcRenderer.invoke('copy', t),
   paste:                ()           => ipcRenderer.invoke('paste'),

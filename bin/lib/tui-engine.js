@@ -742,6 +742,25 @@ class TuiEngine {
     if (process.stdin.isTTY && !this._closed) this._forceRedraw();
   }
 
+  /**
+   * Register a callback that the engine will invoke when the user presses
+   * Esc while a chat/agent request is in flight (i.e. while _sending is
+   * true). The callback is expected to:
+   *   - abort the in-flight AbortController so the provider stream tears down
+   *   - release the composer (engine.setSending(false))
+   *   - print a visible "interrupted" line
+   *
+   * Without this, a stalled provider call could lock the TUI forever — the
+   * input bar refuses Enter, and Ctrl+C is the only escape (which exits the
+   * whole process). This handler gives the user a soft cancel that keeps
+   * the session alive.
+   *
+   * The handler is auto-cleared after firing so the same controller isn't
+   * aborted twice. Callers re-register on each new request.
+   */
+  setAbortHandler(fn) { this._abortHandler = typeof fn === 'function' ? fn : null; }
+  clearAbortHandler() { this._abortHandler = null; }
+
   /** Sprint 2.12 — public setters for the soft session counters. */
   setBgTaskCount(n) {
     this._bgTaskCount = Math.max(0, n | 0);
@@ -1174,6 +1193,17 @@ class TuiEngine {
 
     // Fix 6 — Esc closes autocomplete menu if open
     if (key.name === 'escape' && this._completionHits) { this._cancelCompletion(); return; }
+
+    // Soft-cancel an in-flight request with Esc. Without this a stalled
+    // provider stream (no first token, dead network, rate-limit hang) would
+    // lock the composer forever — _submit returns early while _sending is
+    // true, leaving Ctrl+C (which kills the whole TUI) as the only escape.
+    if (key.name === 'escape' && this._sending && this._abortHandler) {
+      const fn = this._abortHandler;
+      this._abortHandler = null; // one-shot
+      try { fn(); } catch (_) {}
+      return;
+    }
 
     if (key.name === 'return' || key.name === 'enter') {
       // Fix 6 — Enter accepts highlighted autocomplete if menu is open
@@ -1882,8 +1912,14 @@ class TuiEngine {
         process.stdout.write(status + '\n');
         height += status.split('\n').length;
       }
-      const bar = fmt.dim('  …sending — press Ctrl+C to interrupt');
-      process.stdout.write(bar);
+      // Sending indicator with a soft-cancel hint. Esc interrupts the
+      // in-flight call via _abortHandler (set by runChat / runAgent) and
+      // releases the composer without killing the process; Ctrl+C still
+      // hard-exits the TUI.
+      const hint = this._abortHandler
+        ? '  …sending — press Esc to interrupt'
+        : '  …sending — press Ctrl+C to abort';
+      process.stdout.write(fmt.dim(hint));
       this._lastDrawHeight = height + 1;
       return;
     }
@@ -1944,7 +1980,10 @@ class TuiEngine {
     for (let i = 0; i < lineCount; i++) {
       const prefix = i === 0 ? fmt.cyan(PROMPT) : fmt.dim('  ');
       if (i === 0 && placeholderActive) {
-        process.stdout.write(prefix + fmt.cyan('▌ ') + fmt.dim('Type a message · /help for commands'));
+        // Linear/Claude-Code style — short placeholder, no decorative bar.
+        // The "› " prompt itself is the anchor; the placeholder is just a
+        // hint about what to do. Full help is in /help.
+        process.stdout.write(prefix + fmt.dim('Message Horizon, or type / for commands'));
       } else {
         process.stdout.write(prefix + this.lines[i]);
       }

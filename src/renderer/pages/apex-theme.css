@@ -1084,6 +1084,22 @@ textarea:focus, input:focus, .cmd-input:focus {
   color: var(--c-bad);
   animation: pillBlink 1.6s ease-in-out infinite;
 }
+/* OWNER / OFFICIAL / ADMIN / TEAM / LIFETIME — informational, not actionable.
+   Subtle chip so it doesn't dominate the title bar centre. */
+.license-pill.privileged {
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  color: var(--t2, #a8a8b3) !important;
+  box-shadow: none !important;
+  cursor: default;
+  opacity: 0.78;
+  transition: opacity .15s ease;
+}
+.license-pill.privileged:hover { opacity: 1; }
 @keyframes pillBlink {
   0%, 100% { box-shadow: 0 0 0 0 rgba(255, 140, 140, 0.35); }
   50%      { box-shadow: 0 0 0 6px rgba(255, 140, 140, 0); }
