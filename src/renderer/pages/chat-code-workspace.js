@@ -181,7 +181,22 @@ function initCodeEditor(){
         resolve(true);
         return;
       }
-      window.require.config({ paths: { vs: '/vendor/monaco' } });
+      // Configure once. `require.config` is idempotent for the `paths`
+      // field but the Monaco loader internally re-runs its module
+      // initialisation if called repeatedly — which is the trigger for the
+      // `Duplicate definition of module 'vs/editor/editor.main'` warning
+      // visible in DevTools. Gate behind a flag and pass
+      // `ignoreDuplicateModules` so that even if a downstream caller
+      // bypasses the gate, the warning is suppressed. (The loader's
+      // `isDuplicateMessageIgnoredFor` check is a first-class config; see
+      // node_modules/monaco-editor/min/vs/loader.js lines 204-260.)
+      if (!window.__monacoConfigured) {
+        window.require.config({
+          paths: { vs: '/vendor/monaco' },
+          ignoreDuplicateModules: ['vs/editor/editor.main'],
+        });
+        window.__monacoConfigured = true;
+      }
       window.require(['vs/editor/editor.main'], () => {
         const host = document.getElementById('code-monaco');
         const ta = document.getElementById('code-editor');
