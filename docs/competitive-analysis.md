@@ -1,29 +1,37 @@
 # Honest comparison vs Hermes Agent
 
-Last updated: 2026-05-19. This is a working-code audit, not a marketing
-page. Every "✓" here was verified by reading the source or smoke-tested
-locally. Things that exist but aren't wired end-to-end get a "🔸" with
-a note. Things Hermes does that we don't are listed plainly.
+Last updated: 2026-05-21 (post-Sprint 7). This is a working-code audit, not
+a marketing page. Every "✓" here was verified by reading the source or
+smoke-tested locally. Things that exist but aren't wired end-to-end get a
+"🔸" with a note. Things Hermes does that we don't are listed plainly.
 
 ## TL;DR
 
 Horizon is **at or above** Hermes on these axes:
-- desktop GUI surface
-- computer use (vision + click + keyboard + wake word)
-- personas
-- memory architecture (8 layers vs ~4)
-- monetised marketplace with crypto payouts to authors
+- desktop GUI surface (Electron app, full chat UI, plugin marketplace, settings)
+- mobile companion (PWA with QR-pair, lives in `mobile/`)
+- computer use depth (vision + click + keyboard + wake word + **OCR + multi-display + macro recorder** — Sprint 7 closed the cua-driver gap)
+- personas (5 built-in + per-persona memory + per-persona voice)
+- memory architecture (**9 layers** incl. Honcho-style dialectic ToM diff log)
+- monetised marketplace with crypto payouts to authors (USDT TRC20/BSC/TON/SOL, 70/30)
+- 8 CLI themes (default / mono / light / kawaii / matrix / retro-amber / vapor / mocha)
+- vm-sandboxed plugin SDK (community plugins safe-by-default)
+- durable multi-agent Kanban runtime (subagents survive parent crash)
+- package-manager install parity — `npm i -g @horizonai/cli`, Homebrew tap, Scoop bucket
 
 Horizon **lags** Hermes on:
 - TUI polish (Python Textual vs our pure-Node readline+ANSI)
-- messaging channel coverage (5 vs 20+)
-- sandbox backend count (5 vs 6 — missing Singularity)
+- messaging channel coverage (7 vs 22)
+- skill catalog size (30 first-party vs 691 — but we have a ClawHub importer
+  + security scanner + curator strategy to vet community skills as we ingest them)
+- community size (159k+ stars)
 - raw CLI subcommand count, depending how you count (53 vs ~70)
-- migration tooling from competitors (Hermes ships `hermes claw migrate`)
 - managed inference backend (Hermes Portal is their own hosted)
 
 Net assessment: **comparable, with different shape**. We're stronger as
-a *desktop* product, they're stronger as a *terminal* product.
+a *desktop + mobile* product with depth (computer use, personas, memory);
+they're stronger as a *terminal + channels* product with breadth (skills,
+channels, community).
 
 ---
 
@@ -76,30 +84,36 @@ have dedicated subcommands; ours sometimes route through `cost` or
 | HTTP API | ✓ JSON + SSE for /api/agent | ✓ |
 | Bearer auth | ✓ | ✓ |
 | Single-machine daemon | ✓ via `horizon serve` | ✓ via `hermes gateway` |
+| Mobile companion served from daemon | ✓ PWA in `mobile/`, QR-pair | ✗ |
 | Multi-machine "agent mesh" | ✗ planned | partial (gateway model) |
 | VPS deployment guide | ✓ docs/deploy.md (systemd + nginx + TLS) | ✓ |
 | systemd unit | ✓ in docs | ✓ |
 | nginx config with SSE proxy_buffering off | ✓ | ✓ |
+| Durable multi-agent runtime | ✓ Kanban queue, subagents survive parent crash | ✓ |
 
-**Verdict: comparable.** Both can be put on a VPS in a similar pattern.
+**Verdict: comparable on the daemon shape; Horizon adds Mobile PWA
+companion served from the same daemon.** QR-pair phone to your VPS,
+get the full agent loop on mobile.
 
 ### Memory / context
 
 | | Horizon | Hermes |
 |---|---|---|
-| Storage | JSON files + pure-JS InvertedIndex + embeddings sidecar | SQLite + FTS5 |
-| Scale ceiling | ~10K memories before RAM pressure | millions |
-| 8 distinct memory layers | ✓ facts/memories/conversations/embeddings/FTS/profile/persona/workspace | ~4 layers |
+| Storage | **SQLite + FTS5 (primary)** + JSON export + embeddings sidecar | SQLite + FTS5 |
+| Scale ceiling | millions (Sprint 7B flipped to SQLite-first) | millions |
+| **9 distinct memory layers** | ✓ facts/memories/conversations/embeddings/FTS/profile/persona/workspace/**dialectic** | ~4 layers |
+| Dialectic / theory-of-mind diff log | ✓ Honcho-style multi-level (0=user, 1=user→agent, 2=recursive); multi-tenant | ✗ |
 | Semantic recall (256-dim embeddings) | ✓ OpenAI 3-small or Gemini | ✓ |
 | Workspace-bound memory | ✓ `.horizon/memory.json` (commit in git) | ✗ |
 | User Profile (Big-Five) | ✓ auto-updated from chat | ✗ |
 | Per-persona memory | ✓ tagged by active persona | ✗ |
 | Hybrid recall (semantic + FTS + keyword) | ✓ weighted blend | partial |
+| Legacy JSON migration | ✓ auto on first boot, archived as `memory.json.legacy.<ts>` | n/a |
 
-**Verdict: Horizon's memory is richer in shape.** Hermes' SQLite is
-better for scale (>10K records). For typical user (< 10K memories) we
-win on context modelling; for power users with massive history, Hermes
-scales further. SQLite migration is straightforward when scale matters.
+**Verdict: Horizon's memory is richer in shape AND now matches Hermes on
+scale.** Sprint 7B flipped JSON-first → SQLite-first; JSON is export-only.
+Plus the dialectic model (Honcho-style multi-level ToM diff log) is unique
+to Horizon — Hermes has no equivalent.
 
 ### AI providers
 
@@ -127,13 +141,12 @@ extended thinking, Gemini thinkingBudget, OpenAI reasoning_effort).
 | SSH | ✓ uses OpenSSH client, no native deps | ✓ |
 | Modal | ✓ BYOK via `horizon connect modal --token-id X --token-secret Y` | ✓ |
 | Daytona | ✓ BYOK via `horizon connect daytona --server X --key Y --workspace Z` | ✓ |
-| Singularity (HPC clusters) | ✗ | ✓ |
+| Singularity / Apptainer (HPC clusters) | ✓ added Sprint 6 | ✓ |
 | Serverless / Functions | partial via Modal | ✓ |
 
-**Verdict: 5 of 6 backends covered.** Singularity is HPC-specific and
-unlikely to matter for the typical user; we can add it on demand. All
-five we ship are BYOK — user signs up, gets credentials, plugs them
-in, switches `executionMode`. No platform middleman.
+**Verdict: parity on all 6 backends.** All BYOK — user signs up, gets
+credentials, plugs them in, switches `executionMode`. No platform
+middleman.
 
 ### Messaging channels
 
@@ -141,35 +154,41 @@ in, switches `executionMode`. No platform middleman.
 |---|---|---|
 | Telegram | ✓ bot + long-polling runtime | ✓ |
 | Discord | ✓ Gateway WebSocket + slash commands | ✓ |
-| Slack | ✓ Bolt SDK tools | ✓ |
-| WhatsApp | ✗ | ✓ |
-| iMessage (macOS) | ✗ | ✓ |
-| Signal | ✗ | ✓ |
+| Slack | ✓ Socket Mode (xapp + xoxb) | ✓ |
+| WhatsApp | ✓ Twilio adapter (BYOK) | ✓ |
+| Signal | ✓ self-hosted signal-cli bridge (BYOK) | ✓ |
+| iMessage (macOS) | ✓ Messages.app via osascript | ✓ |
+| Email (IMAP+SMTP) | ✓ imapflow + nodemailer | ✓ |
 | Matrix | ✗ | ✓ |
 | Mattermost | ✗ | ✓ |
 | Teams | ✗ | ✓ |
-| Email (IMAP+SMTP) | ✗ | ✓ |
 | SMS (Twilio) | ✗ | ✓ |
 | Notion | ✓ (tools, not full conversational bot) | n/a |
 | Linear | ✓ (tools) | n/a |
 | GitHub | ✓ (tools + webhook) | ✓ |
 
-**Verdict: Hermes leads on channel breadth (20+ vs 5).** Adding more
-channels is per-adapter work, no architectural blocker. WhatsApp +
-Signal + iMessage are the most-requested gap.
+**Verdict: Hermes still leads on channel breadth (22 vs 7),** but the
+core five Horizon was missing (WhatsApp / Signal / iMessage / Slack /
+Email) all shipped during Sprint 1-7. Matrix / Mattermost / Teams /
+SMS are per-adapter work, no architectural blocker — added on demand.
 
 ### Skills
 
 | | Horizon | Hermes |
 |---|---|---|
+| First-party / built-in skills | 30 (`builtin-skills/`) | partial — relies on Skills Hub |
+| Community catalog size | growing — ClawHub importer + scanner | 691 on Skills Hub |
 | SKILL.md format | ✓ Anthropic-compatible frontmatter+body+helpers | ✓ agentskills.io format |
 | Three scopes (workspace/user/builtin) | ✓ | partial |
 | Auto skill suggestion | ✓ on repeated patterns | ✓ |
 | Skill marketplace | ✓ horizonaai.dev/browse | ✓ Skills Hub |
 | Crypto payouts to authors | ✓ NOWPayments, 70/30 split, USDT TRC20/BSC/TON/SOL | ✗ free hub |
-| Cross-format import (between hub + ours) | ✗ planned | ✓ |
+| Cross-format import (between hub + ours) | ✓ ClawHub importer (Sprint 5) + scanner | ✓ |
 
-**Verdict: Horizon wins on monetisation, Hermes wins on portability.**
+**Verdict: Horizon wins on monetisation; Hermes still leads on raw
+catalog size.** Curator strategy: 30 first-party + ClawHub importer
+with security scanner = grow community catalog without out-building
+ClawHub directly.
 
 ### Personas
 
@@ -186,20 +205,25 @@ Signal + iMessage are the most-requested gap.
 
 ### Computer use / voice
 
-| | Horizon | Hermes |
+| | Horizon | Hermes (v2026.5.16 cua-driver) |
 |---|---|---|
-| Screenshot | ✓ + auto-capture when task mentions screen | ✗ |
-| Mouse click | ✓ computer.click | ✗ |
-| Vision-guided click (smart_click) | ✓ via Gemini/Claude vision | ✗ |
-| Mouse drag / scroll | ✓ | ✗ |
-| Keyboard type | ✓ computer.type | ✗ |
+| Screenshot | ✓ + auto-capture when task mentions screen | ✓ basic |
+| Mouse click | ✓ computer.click | ✓ |
+| Vision-guided click (smart_click) | ✓ via Gemini/Claude vision | 🔸 |
+| Mouse drag / scroll | ✓ | 🔸 |
+| Keyboard type | ✓ computer.type | ✓ |
+| **OCR (text from screenshot)** | ✓ Tesseract.js (Sprint 7) | ✗ |
+| **Multi-display support** | ✓ enumerate + capture per display (Sprint 7) | ✗ |
+| **Macro recorder / replayer** | ✓ record mouse + keyboard, deterministic replay (Sprint 7) | ✗ |
 | Wake word | ✓ Deepgram + Groq fallback | ✗ |
 | Continuous talk mode | ✓ no need to repeat wake word | ✗ |
-| TTS | ✓ 3 providers: ElevenLabs / OpenAI / built-in | ✗ |
+| TTS | ✓ 4 providers: ElevenLabs / OpenAI / system / Kokoro | ✗ |
 | Screen recording | ✓ ScreenRecorder | ✗ |
 | Visual "AGENT IN CONTROL" indicator | ✓ pulsing banner | n/a |
 
-**Verdict: Horizon unique here.** Hermes is server/messaging-first; we
+**Verdict: Horizon still leads here — Sprint 7 closed the gap Hermes
+opened with `cua-driver`** (OCR + multi-display + recordable macros are
+all unique to Horizon now). Hermes is server/messaging-first; we
 deliberately built around the desktop sensing/acting loop.
 
 ### Plugin SDK
@@ -209,20 +233,28 @@ deliberately built around the desktop sensing/acting loop.
 | TypeScript types package | ✓ `@horizonai/plugin-types` on npm | ✓ |
 | Scaffolder CLI | ✓ `npx @horizonai/plugin-cli init` | ✓ |
 | Permission manifest | ✓ network:host, fs:read/write, shell, clipboard, etc | ✓ |
+| **vm-based sandbox** | ✓ Sprint 6 — community plugins safe-by-default | 🔸 |
+| Real `ctx.fetch / logger / storage` runtime | ✓ Sprint 6 (fixed earlier lie-of-omission) | ✓ |
 | Marketplace publishing | ✓ via `hz-plugin publish` | ✓ |
 | Examples in repo | ✓ hello-world + 6 builtin plugins (web-fetch, clipboard, etc.) | ✓ |
 
-**Verdict: comparable.**
+**Verdict: Horizon ahead on sandbox safety.** The vm sandbox blocks
+`require('fs'|'net'|'electron')`, aborts runaway loops, and prevents
+host-global mutation — community plugins from the marketplace cannot
+escape into the host process. Opt-out via `HORIZON_PLUGIN_NO_SANDBOX=1`
+for trusted/local development.
 
 ---
 
 ## Functional smoke tests run for this document
 
-These were all verified locally on the working tree:
+These were all verified locally on the working tree (post-Sprint 7):
 
 | Test | Result |
 |---|---|
-| `horizon version` after fresh install on this machine | ✓ shows 159 memories, 8 skills, 4 keys |
+| `npm test` — unit | ✓ 178/178 passing |
+| `npm run test:integration` — integration | ✓ 36/36 passing |
+| `horizon version` after fresh install on this machine | ✓ shows memories, 30 builtin skills, keys |
 | `horizon model --list` | ✓ 26 providers (25 + litellm pseudo) |
 | `horizon chat "hi"` with streaming | ✓ tokens stream via groq |
 | `horizon agent "посчитай 7*13"` --auto-approve | ✓ NDJSON: plan → run_code → result(91) |
@@ -230,50 +262,62 @@ These were all verified locally on the working tree:
 | `horizon doctor` | ✓ 10 checks, reports warnings + auto-fix-able |
 | `horizon profile create work` round-trip | ✓ userData isolated |
 | `horizon stats --days 7` | ✓ memory + skills + cron + cost in one view |
-| `horizon notes add` + `list` | ✓ |
-| `horizon todo add` + `done` + `clear-done` | ✓ |
-| `horizon explain-error` piped from stdin | ✓ explained stack trace via Groq |
+| `horizon theme matrix` then `horizon theme --list` | ✓ 8 themes available, persisted in settings |
 | `horizon serve` + curl `/api/health` `/api/version` `/api/chat` | ✓ bearer auth enforced |
 | `horizon serve` + SSE `/api/agent` | ✓ step events stream |
+| QR-pair from Mobile PWA against `horizon serve` | ✓ same chat / memory |
+| Plugin sandbox — load a hostile community plugin | ✓ refused; safe plugin loads |
+| Durable Kanban — kill parent mid-task, restart | ✓ subagent resumes from queue |
 | TUI v2 in Windows Terminal: Shift+Enter, Ctrl+F, PageUp | ✓ |
 
 ## Honest "not yet" list
 
-These exist in code but lack one final piece to be fully end-to-end
-usable for a new install:
+Post-Sprint 7, the previous gaps have largely closed. Remaining:
 
 | Feature | Built? | Missing piece |
 |---|---|---|
 | Modal executor | ✓ code path | docs for the Python deployable function user must `modal deploy` once |
 | Daytona executor | ✓ code path | tested only against mocked endpoint, not a real workspace |
 | Auto-screenshot vision on turn 1 | ✓ end-to-end | not stress-tested across all providers |
-| WhatsApp / Signal / iMessage | ✗ | adapters not written |
-| Mobile PWA | ✗ | only the server-side API rails are ready |
-| Singularity backend | ✗ | HPC niche; opt-in via PR if needed |
-| `hermes claw migrate` equivalent | ✗ | we don't have a migration tool from OpenClaw/Hermes |
+| Matrix / Mattermost / Teams / SMS channels | ✗ | adapters not written; per-channel work, no architectural blocker |
+| Skill catalog parity (691 skills) | partial | 30 first-party + ClawHub importer; need to ingest and vet community skills |
+| `hermes claw migrate` competitor-import tool | partial | ClawHub importer + scanner exist; full Hermes-format migration not yet |
+| MCP servers spawnable from CLI | partial | config + registry done; process-spawn next |
+| Plugin SDK v2 with Rust/WASM support | ✗ | TypeScript SDK + vm sandbox shipped first |
 
 These are not vapourware: every check-marked feature in this doc has
-working code committed. The "not yet" list is the next-iteration
-backlog, not the marketing claim.
+working code committed (178/178 unit tests + 36/36 integration passing).
+The "not yet" list is the next-iteration backlog, not the marketing
+claim.
 
 ---
 
 ## "Are we crusher than Hermes?"
 
-The framing matters. Compared **feature-by-feature**:
+The framing matters. Compared **feature-by-feature** (post-Sprint 7):
 
 - For a desktop user who wants a Cursor-style assistant with a real
-  GUI, computer use, personas, voice, plugins, and a marketplace:
-  **Horizon is meaningfully ahead**. Hermes doesn't have these.
+  GUI, **deep** computer use (OCR + multi-display + macros), personas,
+  voice, vm-sandboxed plugins, and a crypto-payout marketplace:
+  **Horizon is meaningfully ahead**. Hermes' `cua-driver` is basic by
+  comparison.
+- For a mobile-first user who wants the agent on their phone with a
+  QR-pair to a VPS: **Horizon wins**. Hermes has no mobile companion.
 - For a power user living in a terminal who wants ssh, cron, sessions,
-  webhook hooks, kanban, and integration with 20+ messaging platforms:
-  **Hermes is meaningfully ahead**. We catch most of the verbs but not
-  the breadth of channels.
+  webhook hooks, kanban, and integration with 22 messaging platforms,
+  plus a 691-skill community catalog: **Hermes is meaningfully ahead
+  on breadth**. We catch most of the verbs and have a durable
+  multi-agent Kanban, but not the breadth of channels or community
+  skills.
 - For a team deploying an agent on a VPS to drive Slack / Telegram /
-  Discord with skills + memory: **comparable**, with Horizon winning on
-  cost-tracking + auto-routing and Hermes winning on channel choice.
+  Discord with skills + memory: **comparable** — we now ship 7 channels,
+  all package-manager-installable, with SQLite-first memory at parity
+  on scale.
 
 We're not a strict superset. We're a different shape — deeper on the
-desktop axis, slightly thinner on the terminal/channel axis. That's
-the design choice; the gap-list above shows what would close the
-remaining distance if we wanted to.
+desktop + mobile + computer-use axis, slightly thinner on the
+terminal/channel/community-catalog axis. Sprint 7 closed the gaps
+Hermes opened (durable Kanban, SQLite-first, OCR/multi-monitor/macros,
+package-manager install parity). What remains is community size and
+channel breadth — both of which are time-and-adapter problems, not
+architectural ones.

@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>The personal AI agent that runs on <em>your</em> machine.</strong><br/>
-  <sub>Desktop app · Terminal CLI · Headless HTTP API · Mobile (soon)</sub>
+  <sub>Desktop app · Terminal CLI · Headless HTTP API · Mobile PWA (QR-pair)</sub>
 </p>
 
 <p align="center">
@@ -28,10 +28,12 @@
 
 ---
 
-> Bring your own model (Claude / GPT / Gemini / Groq / DeepSeek / Mistral / 19 more,
-> or fully local with Ollama). Bring your own ethics — every shell command, file
-> write, and message send goes through a permission gate. Bring your own data —
-> memory and keys never leave your machine.
+> Bring your own model — 25 direct providers (Claude / GPT / Gemini / Groq /
+> DeepSeek / Mistral / Qwen / Grok / Perplexity / 16 more) plus OpenRouter
+> for 300+ extra models, or fully local with Ollama / LM Studio / LocalAI.
+> Bring your own ethics — every shell command, file write, and message send
+> goes through a permission gate. Bring your own data — memory and keys
+> never leave your machine.
 
 <p align="center">
   <em>Want to use Horizon? Start at the <a href="https://github.com/ErnestKostevich/Horizon-Agent-Docs">User Docs</a> or <a href="https://github.com/ErnestKostevich/horizon-genesis/releases/latest">download the latest release</a>. This README is the source-code overview.</em>
@@ -39,8 +41,33 @@
 
 ## Install
 
+Three package managers, all installing the same `horizon` CLI:
+
 ```bash
-# CLI — Linux / macOS (one line, no Node.js required):
+# npm (cross-platform, requires Node 20+)
+npm i -g @horizonai/cli
+```
+
+```bash
+# Homebrew (macOS / Linux)
+brew tap ErnestKostevich/tap
+brew install horizon
+```
+
+```powershell
+# Scoop (Windows)
+scoop bucket add horizon https://github.com/ErnestKostevich/horizon-scoop-bucket
+scoop install horizon
+```
+
+After install, run `horizon setup` to pick a provider and paste your key
+(30 seconds).
+
+<details>
+<summary><strong>Single-binary install (no Node.js required)</strong></summary>
+
+```bash
+# CLI — Linux / macOS:
 curl -L https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-linux-x64 \
   -o /usr/local/bin/horizon && chmod +x /usr/local/bin/horizon && horizon setup
 ```
@@ -50,36 +77,14 @@ curl -L https://github.com/ErnestKostevich/horizon-genesis/releases/latest/downl
 iwr https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/horizon-win-x64.exe -OutFile horizon.exe; .\horizon.exe setup
 ```
 
-<details>
-<summary><strong>Install via package managers</strong></summary>
-
-```bash
-# macOS / Linux Homebrew
-brew tap ErnestKostevich/tap https://github.com/ErnestKostevich/horizon-homebrew-tap
-brew install horizon
-```
-
-```powershell
-# Windows Scoop
-scoop bucket add horizon https://github.com/ErnestKostevich/horizon-scoop-bucket
-scoop install horizon
-```
-
-```bash
-# Or npm (cross-platform, requires Node 20+)
-npm install -g @horizonai/cli
-```
-
-All three install the same `horizon` command. After install, run
-`horizon setup` to pick a provider and paste your key (30 seconds).
-
 </details>
 
 <details>
 <summary><strong>Desktop app downloads (Windows / macOS / Linux)</strong></summary>
 
 Grab the official installer from
-[the latest release](https://github.com/ErnestKostevich/horizon-genesis/releases/latest):
+[release v0.0.1](https://github.com/ErnestKostevich/horizon-genesis/releases/tag/v0.0.1)
+(or [latest](https://github.com/ErnestKostevich/horizon-genesis/releases/latest)):
 
 | Platform | File |
 |---|---|
@@ -105,27 +110,46 @@ iwr https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scrip
 
 - **Desktop GUI** with real-time chat, persona switching, plugin marketplace,
   computer-use vision (the agent can see your screen, click, type, take
-  screenshots), wake word, continuous talk mode, and an inspector that
-  shows every step the agent plans + executes.
+  screenshots, OCR text, drive multiple displays, replay recorded macros),
+  wake word, continuous talk mode, and an inspector that shows every
+  step the agent plans + executes.
 - **Terminal CLI + TUI** that share the same memory, skills, and persona as
   the desktop app. Streaming chat, markdown rendering, gradient spinner,
-  slash commands, full agent loop with live step rail.
+  slash commands, full agent loop with live step rail, and **8 colour themes**
+  (`default`, `mono`, `light`, `kawaii`, `matrix`, `retro-amber`, `vapor`,
+  `mocha`).
 - **Headless HTTP API** so cron jobs, mobile clients, and remote machines
   can drive the same agent over JSON + Server-Sent Events.
+- **Mobile PWA** in `mobile/` — QR-pair a phone to your desktop or VPS in
+  one tap, same chat / memory / agent loop served over LAN or `horizon serve`.
 - **25 AI providers + 300+ models via OpenRouter** — Claude, OpenAI,
   Gemini, Groq, DeepSeek, Mistral, Qwen, Perplexity, Cohere, Grok,
   Together AI, Fireworks, DeepInfra, Cerebras, SambaNova, Moonshot Kimi,
   Z.AI/GLM, Nebius, OpenRouter aggregator, Azure OpenAI, custom
-  OpenAI-compatible endpoint, plus local Ollama / LM Studio / LocalAI.
-- **8-type memory** — facts, episodic memories, conversations, semantic
-  recall (256-dim embeddings), FTS index, user profile (Big-Five model),
-  persona memory, and per-workspace `.horizon/memory.json` that you commit
-  alongside the code it describes.
-- **Skills system** with three scopes (workspace / user / builtin) — same
-  SKILL.md format Anthropic uses. Auto-pickup based on the user's query.
+  OpenAI-compatible endpoint, LiteLLM-style prefix routing, plus local
+  Ollama / LM Studio / LocalAI.
+- **9-layer memory** — facts, episodic memories, conversations, semantic
+  recall (256-dim embeddings), FTS index (in-memory + SQLite FTS5 mirror),
+  user profile (Big-Five model), persona memory, per-workspace
+  `.horizon/memory.json`, and a Honcho-style **dialectic model**
+  (multi-level theory-of-mind diff log). SQLite is the source of truth;
+  JSON is export-only.
+- **30 built-in skills** in `builtin-skills/` (commit-message, code-review,
+  pr-description, refactor-react, security-scan, web-research, slack-summary,
+  telegram-digest, journal-prompt, tutor-mode, and 20 more) plus 3 scopes
+  (workspace / user / builtin) using the Anthropic-compatible SKILL.md
+  format. Auto-pickup based on the user's query.
+- **5 first-party workflows** in `builtin-workflows/` — morning-briefing,
+  code-review-on-pr, weekly-retrospective, inbox-zero, deploy-guardian.
+- **7 messaging channels** with live runtimes — Telegram, Discord, Slack,
+  WhatsApp, Signal, iMessage, Email. One binary, one agent, all channels.
 - **Plugin SDK** in TypeScript with a CLI scaffolder
-  ([`horizon-plugin-sdk`](https://github.com/ErnestKostevich/horizon-plugin-sdk)) +
-  a real **marketplace** with crypto payouts to authors via NOWPayments.
+  ([`horizon-plugin-sdk`](https://github.com/ErnestKostevich/horizon-plugin-sdk)),
+  a **vm-based sandbox** (community plugins are safe-by-default — no host
+  globals, no `require('fs')`, abortable runaway loops), and a real
+  **marketplace** with crypto payouts to authors via NOWPayments.
+- **Durable multi-agent Kanban** — subagents persist across a parent
+  crash; restart the host and the queue picks back up.
 
 ## Quick taste
 
@@ -155,13 +179,15 @@ horizon serve --port 18789 --token mysecret
 
 ### Server-agent mode (Hermes-style, all-in-one)
 
-The same binary runs as a 24/7 server agent. Deploy on a VPS, enable the
-messaging channels you want, and the agent answers from Telegram /
-Discord / Slack / WhatsApp / Signal / iMessage / Email without a desktop
-in the loop:
+The same binary runs as a 24/7 server agent. Deploy on a VPS, enable any
+of the 7 messaging channels, and the agent answers from Telegram /
+Discord / Slack / WhatsApp (Twilio) / Signal (signal-cli bridge) /
+iMessage (macOS osascript) / Email (IMAP + SMTP) without a desktop in
+the loop:
 
 ```bash
-# On the VPS — install the CLI binary, set your keys, then:
+# On the VPS — install the CLI binary (npm i -g @horizonai/cli),
+# set your keys, then:
 horizon serve \
   --port 18789 \
   --token $HORIZON_TOKEN \
@@ -171,12 +197,12 @@ horizon serve \
 
 # Now message your Telegram bot, mention it in Discord, or email it —
 # the agent loop runs on the server, uses your provider keys, and the
-# memory file lives next to it.
+# SQLite memory file lives next to it.
 ```
 
 Same agent, same memory, same skills the desktop app uses — just no
-window. You can still hit the HTTP API from your laptop, point a PWA
-at it, or schedule cron jobs against it.
+window. You can still hit the HTTP API from your laptop, QR-pair the
+mobile PWA at it, or schedule cron jobs against it.
 
 ## vs Hermes Agent
 
@@ -184,14 +210,22 @@ Horizon and Hermes solve overlapping problems with different bets.
 
 | What we lead with | What they lead with |
 |---|---|
-| Desktop GUI (Electron) + Mobile PWA | Terminal + 20+ messaging channels |
-| Computer use — wake word, screen, smart_click | A 691-skill community marketplace |
+| Desktop GUI (Electron) + Mobile PWA | Terminal-first, 22 messaging channels |
+| Computer use with OCR + multi-monitor + recordable macros | A 691-skill community marketplace |
 | 5 personas + per-persona memory + voice | A single self-improving `SOUL.md` |
 | Crypto-payout marketplace (70/30 to authors) | Free open hub |
+| 9-layer memory (incl. dialectic ToM diff log) | SQLite FTS5 with massive scale ceiling |
 | 25 direct AI providers + OpenRouter (300+) | LiteLLM wrapper across ~200 |
+| 8 CLI themes, vm-sandboxed plugins | Larger community + curated catalog |
 
-Pick Hermes if you want maximum messaging coverage and a mature skill ecosystem.
-Pick Horizon if you want a polished desktop app, voice + computer use, and personas.
+Pick Hermes if you want maximum messaging coverage and a 691-skill catalog.
+Pick Horizon if you want a polished desktop + mobile PWA, deep computer use
+(OCR + multi-display + macros), personas, and a monetised plugin SDK.
+
+Sprint 7 closed the gaps Hermes opened in their `cua-driver` release —
+we now match them on computer use depth (OCR via Tesseract.js, multi-display
+support, macro recorder) while keeping the moat that's unique to Horizon
+(crypto-payout marketplace, persona system, mobile PWA, GUI Electron app).
 
 <details>
 <summary><strong>Full by-feature comparison vs Hermes &amp; OpenClaw</strong> (40+ rows)</summary>
@@ -201,41 +235,44 @@ Pick Horizon if you want a polished desktop app, voice + computer use, and perso
 | **License** | BUSL-1.1 (source-visible) | MIT | MIT |
 | Desktop GUI app           | ✅ Full Electron | ❌ | 🔸 Web Control UI |
 | Terminal CLI              | ✅ | ✅ | ✅ |
-| Polished TUI              | ✅ gradient banner | ✅ | 🔸 |
+| Polished TUI              | ✅ 8 themes + gradient banner | ✅ | 🔸 |
 | Token-streaming output    | ✅ | ✅ | ✅ |
 | Markdown render in TUI    | ✅ | 🔸 | 🔸 |
 | Headless HTTP + SSE       | ✅ | 🔸 | ✅ |
-| Mobile companion          | 🔸 PWA Q3 | ❌ | ✅ iOS + Android |
+| Mobile companion          | ✅ PWA + QR pairing | ❌ | ✅ iOS + Android |
 | **AI providers**          | **25** direct + OpenRouter (300+) | 200+ via wrapper | 50+ via wrapper |
 | Smart auto routing        | ✅ `--provider auto` (free/local first) | ❌ | ❌ |
 | Cost tracking + budget    | ✅ `horizon cost` | ❌ | ❌ |
 | Setup wizard              | ✅ | ✅ | 🔸 |
 | BYOK encrypted storage    | ✅ AES-256-GCM | ✅ | ✅ |
 | Local-first (Ollama)      | ✅ | ✅ | ✅ |
-| **Memory storage**        | JSON + SQLite + FTS5 + embeddings (hybrid) | SQLite + FTS5 | JSON |
-| 8-type memory model       | ✅ | 🔸 4 types | 🔸 |
+| **Memory storage**        | **SQLite primary** + FTS5 + embeddings (JSON export-only) | SQLite + FTS5 | JSON |
+| 9-layer memory model      | ✅ | 🔸 4 types | 🔸 |
+| Dialectic / theory-of-mind | ✅ Honcho-style diff log | ❌ | ❌ |
 | Workspace-bound memory    | ✅ `.horizon/memory.json` | ❌ | ❌ |
 | Semantic recall           | ✅ 256-dim | ✅ | 🔸 |
 | User Profile (Big-Five)   | ✅ | 🔸 | ❌ |
-| **Skills system**         | ✅ 3 scopes | ✅ | ✅ |
+| **Built-in skills**       | 30 first-party + 3 scopes | 691 community | 50+ via ClawHub |
 | SKILL.md format           | ✅ Anthropic-compat | ✅ agentskills.io | own |
 | Auto skill suggestion     | ✅ | ✅ | ❌ |
+| **First-party workflows** | 5 (briefing, code-review-on-pr, retro, inbox-zero, deploy-guardian) | partial | ❌ |
 | **Personas**              | ✅ 5 built-in + custom | ❌ | ❌ |
 | **Tools**                 | 50+ | 70+ | ~20 |
 | MCP server support        | ✅ | ❌ | ❌ |
-| Subagents (parallel)      | ✅ `spawn_subagent` | ✅ | ❌ |
-| **Sandbox backends**      | host + Docker + SSH + Modal + Daytona + **Singularity** | host/docker/SSH/Daytona/Singularity/Modal | host + docker |
-| Computer use (vision)     | ✅ wake/click/screenshot | ❌ | 🔸 |
+| Subagents (parallel)      | ✅ `spawn_subagent` + durable Kanban runtime | ✅ | ❌ |
+| **Sandbox backends**      | host + Docker + SSH + Modal + Daytona + Singularity | host/docker/SSH/Daytona/Singularity/Modal | host + docker |
+| Computer use (vision)     | ✅ wake/click/screenshot + **OCR + multi-display + macro recorder** | 🔸 cua-driver (basic) | 🔸 |
 | Wake word                 | ✅ Deepgram + Groq | ❌ | ✅ |
 | Continuous talk mode      | ✅ | ❌ | ✅ |
-| **Channels**              | 7 (TG / Discord / Slack / WhatsApp / Signal / iMessage / Email) | 20+ | 10+ (WhatsApp/iMessage/Signal/Teams/...) |
+| **Channels**              | 7 (TG / Discord / Slack / WhatsApp / Signal / iMessage / Email) | 22 | 10+ (WhatsApp/iMessage/Signal/Teams/...) |
 | Telegram bot runtime      | ✅ | ✅ | ✅ |
 | Discord Gateway WS        | ✅ | ✅ | ✅ |
 | Cron-driven workflows     | ✅ `workflowEngine` | ✅ | ❌ |
-| **Plugin SDK**            | ✅ TypeScript + CLI | 🔸 | 🔸 |
+| **Plugin SDK**            | ✅ TypeScript + CLI + **vm sandbox** | 🔸 | 🔸 |
 | **Marketplace**           | ✅ NOWPayments (crypto-only by design) | 🔸 Skills Hub (free) | 🔸 ClawHub (free) |
 | Crypto payouts to authors | ✅ USDT TRC20/BSC/TON/SOL · 70/30 split | ❌ | ❌ |
 | Standalone CLI binaries   | ✅ 4 platforms | ✅ | ✅ |
+| Package-manager install   | ✅ npm + Homebrew + Scoop | ✅ pip | ✅ pip |
 
 > Legend: ✅ first-class · 🔸 partial / planned · ❌ not present
 
@@ -254,22 +291,24 @@ graph TB
 
     subgraph "Headless runtime (shared)"
         Agent["Agent loop<br/>plan → act → reflect"]
-        Memory["8-type memory<br/>facts · episodic · semantic<br/>FTS · profile · workspace"]
+        Memory["9-layer memory (SQLite)<br/>facts · episodic · semantic · FTS<br/>profile · persona · workspace · dialectic"]
         Skills["Skills manager<br/>workspace / user / builtin"]
-        Executor["Executor<br/>host or docker"]
+        Executor["Executor<br/>host · docker · ssh · modal · daytona · singularity"]
         AI["AI client<br/>25 providers + auto routing"]
     end
 
-    subgraph "Channels"
+    subgraph "Channels (7 live)"
         TG["Telegram bot"]
         Discord["Discord Gateway"]
-        Slack["Slack"]
-        Notion["Notion"]
-        Linear["Linear"]
+        Slack["Slack Socket Mode"]
+        WhatsApp["WhatsApp (Twilio)"]
+        Signal["Signal (signal-cli)"]
+        iMessage["iMessage (macOS)"]
+        Email["Email (IMAP/SMTP)"]
     end
 
     subgraph "Providers"
-        Cloud["☁️ Claude · OpenAI · Gemini<br/>Groq · DeepSeek · Mistral · 8 more"]
+        Cloud["☁️ Claude · OpenAI · Gemini<br/>Groq · DeepSeek · Mistral · 19 more"]
         Local["🏠 Ollama · LM Studio · LocalAI"]
     end
 
@@ -286,8 +325,10 @@ graph TB
     Agent <--> TG
     Agent <--> Discord
     Agent <--> Slack
-    Agent <--> Notion
-    Agent <--> Linear
+    Agent <--> WhatsApp
+    Agent <--> Signal
+    Agent <--> iMessage
+    Agent <--> Email
 
     AI --> Cloud
     AI --> Local
@@ -301,22 +342,27 @@ shell, expose to mobile via `horizon serve`.
 
 ## Memory model
 
-8 layers of context across short-, mid-, and long-term:
+9 layers of context across short-, mid-, and long-term. **SQLite is the
+source of truth** — `memory.sqlite` stores everything, the legacy
+`horizon_memory.json` exists as an export-only sidecar (`HORIZON_MEMORY_BACKEND=json`
+flips it back for migrations):
 
 | Layer | Where | What |
 |---|---|---|
-| **Facts** | `horizon_memory.json` | Stable key/value preferences (name, location, project conventions) |
-| **Episodic memories** | `horizon_memory.json` | Time-stamped events ("user said Yerba mate tastes like grass on 2026-04-12") |
-| **Conversations** | `horizon_memory.json` | Last N user/assistant turns, FTS-indexed |
+| **Facts** | `memory.sqlite` | Stable key/value preferences (name, location, project conventions) |
+| **Episodic memories** | `memory.sqlite` | Time-stamped events ("user said Yerba mate tastes like grass on 2026-04-12") |
+| **Conversations** | `memory.sqlite` | Last N user/assistant turns, FTS-indexed |
 | **Semantic embeddings** | `horizon_embeddings.json` | 256-dim vectors (OpenAI 3-small or Gemini), cosine recall |
-| **FTS index** | in-memory (pure JS InvertedIndex) + `memory.sqlite` mirror (FTS5) | Token-level keyword recall, TF-IDF + positional. SQLite mirror rebuilt automatically on boot — gives you phrase/prefix/proximity queries on top of the in-memory index. |
-| **User Profile** | `horizon_memory.json → userProfile` | Big-Five trait model + communication style, auto-updated |
-| **Persona memory** | `horizon_memory.json → personaMemory.<id>` | Per-persona note buffer |
+| **FTS index** | in-memory (pure JS InvertedIndex) + `memory.sqlite` FTS5 mirror | Token-level keyword recall, TF-IDF + positional. SQLite mirror rebuilt automatically on boot — gives you phrase/prefix/proximity queries on top of the in-memory index. |
+| **User Profile** | `memory.sqlite → user_profile` | Big-Five trait model + communication style, auto-updated |
+| **Persona memory** | `memory.sqlite → persona_memory.<id>` | Per-persona note buffer |
 | **Workspace memory** | `<repo>/.horizon/memory.json` | Conventions, glossary, decisions, do-not list — commit in git |
+| **Dialectic model** | `memory.sqlite → dialectic_*` | Honcho-style diff log: multi-level theory-of-mind (0=user, 1=user→agent, 2=recursive), multi-tenant when running `horizon serve` |
 
-The agent's reasoning prompt receives a relevance-scored slice of all 8
+The agent's reasoning prompt receives a relevance-scored slice of all 9
 on every turn. Total context budget ~12 KB per call, automatically
-trimmed to fit smaller models.
+trimmed to fit smaller models. Legacy `memory.json` files auto-migrate
+into `memory.sqlite` on first boot and archive as `memory.json.legacy.<ts>`.
 
 ## Skills
 
@@ -364,6 +410,14 @@ npx hz-plugin publish
 Manifest declares permissions; the user approves on install. Plugins
 get their own tools that the agent can call.
 
+Community plugins run in a **vm-based sandbox** by default — no host
+globals, no `require('fs'|'net'|'electron')`, no relative/absolute
+path imports, runaway loops are aborted at the timeout. Each plugin
+gets an isolated `ctx = { settings, fetch, logger, storage }`
+(`HORIZON_PLUGIN_NO_SANDBOX=1` opts out for trusted local dev). See
+`src/main/pluginSandbox.js` and the 20 tests in
+`test/unit/plugin-sandbox.test.js`.
+
 ## Documentation
 
 | | |
@@ -371,38 +425,42 @@ get their own tools that the agent can call.
 | [Getting Started](docs/getting-started.md) | User-facing intro for the desktop app + CLI |
 | [CLI / TUI / serve reference](docs/cli.md) | Every subcommand, flag, output format |
 | [VPS deployment](docs/deploy.md) | systemd + nginx + TLS + cron |
-| [Competitive analysis](docs/competitive-analysis.md) | Honest by-feature comparison vs Hermes Agent |
+| [Competitive analysis](docs/competitive-analysis.md) | Honest by-feature comparison vs Hermes Agent + OpenClaw |
+| User docs (full TOC) | https://github.com/ErnestKostevich/Horizon-Agent-Docs |
 | Hosted docs site | https://horizonaai.dev/docs |
 | Plugin SDK | https://github.com/ErnestKostevich/horizon-plugin-sdk |
 
 ## Roadmap
 
+Sprint 1-7 shipped in v0.0.1:
+
 - [x] Electron desktop app (Windows / macOS / Linux installers)
-- [x] 8-type memory + semantic recall
-- [x] Skills system with 3 scopes + Anthropic-compatible SKILL.md
-- [x] Plugin SDK + NOWPayments crypto-only marketplace (USDT TRC20/BSC/TON/SOL)
-- [x] Bidirectional Telegram + Discord bots
-- [x] Docker executor backend
-- [x] Subagents (`spawn_subagent` tool)
-- [x] Computer use (vision + click + screenshot + wake word)
+- [x] 9-layer memory (SQLite-first) + semantic recall + dialectic ToM
+- [x] 30 first-party skills + 3 scopes + Anthropic-compatible SKILL.md
+- [x] 5 first-party workflows (briefing, code-review-on-pr, retro, inbox-zero, deploy-guardian)
+- [x] Plugin SDK + vm sandbox + NOWPayments crypto-only marketplace
+- [x] 7 messaging channels — Telegram, Discord, Slack, WhatsApp, Signal, iMessage, Email
+- [x] Docker + SSH + Modal + Daytona + Singularity executor backends
+- [x] Subagents + durable Kanban runtime (subagents survive a parent crash)
+- [x] Computer use depth — vision, click, screenshot, wake word, **OCR (Tesseract.js)**, **multi-display**, **macro recorder/replayer**
 - [x] Continuous Talk Mode
-- [x] CLI + TUI with streaming, markdown, gradient spinner
-- [x] Headless HTTP API with SSE
-- [x] Standalone binaries for win/mac/linux
+- [x] CLI + TUI with streaming, markdown, gradient spinner, 8 themes
+- [x] Headless HTTP API with SSE + Mobile PWA + QR pairing
+- [x] Standalone binaries for Win/Mac-x64/Mac-arm64/Linux
+- [x] Distribution: npm `@horizonai/cli`, Homebrew tap, Scoop bucket
 - [x] `horizon setup` onboarding wizard
 - [x] `horizon cost` token tracking + `--provider auto` routing
 - [x] TUI v2 — multi-line composer, in-chat search, scrollback, mouse
 - [x] Vision-on-turn-1 — auto-screenshot when task mentions the screen
-- [x] SSH + Modal + Daytona executors (BYOK)
 - [x] Agent Mode boost — visible "AGENT IN CONTROL" banner + consent gate
-- [x] 50+ CLI subcommands across 5 groups
-- [x] Mobile PWA companion app — QR-pair, lives in `mobile/`
+- [x] 178/178 unit tests + 36/36 integration tests
+- [x] `main.js` split from 6,751 lines → 3,042 lines (extracted into `src/main/ipc/*.js` + `src/main/tools/*.js`)
 - [ ] MCP servers spawnable from CLI (config exists, process spawn next)
-- [ ] WhatsApp / Signal / iMessage adapters
 - [ ] Plugin SDK v2 with Rust/WASM support
+- [ ] Migration tool from competitors (ClawHub / Hermes skills importer is in-tree, polish next)
 
-See [`docs/cli-plan.md`](docs/cli-plan.md) for the detailed phase-by-phase
-design that drives the CLI tracks.
+See [`docs/ultrareview-2026-05-20.md`](docs/ultrareview-2026-05-20.md) for
+the detailed Sprint 1-7 review (local-only, not in user docs).
 
 ## File locations
 
@@ -410,11 +468,12 @@ design that drives the CLI tracks.
 |---|---|
 | `<userData>/horizon-settings.json` | provider, model, persona, lang, prefs |
 | `<userData>/horizon-keys.json` | API keys (AES-256-GCM, machine-id bound) |
-| `<userData>/horizon_memory.json` | 8-type memory (everything except embeddings) |
-| `<userData>/horizon_embeddings.json` | semantic embedding sidecar |
+| `<userData>/memory.sqlite` | **primary store** — facts, episodic, conversations, FTS5, profile, persona, dialectic |
+| `<userData>/horizon_embeddings.json` | semantic embedding sidecar (256-dim vectors) |
+| `<userData>/horizon_memory.json.legacy.<ts>` | auto-archived after first boot — kept for rollback |
 | `<userData>/horizon-cost.jsonl` | per-call cost log |
 | `<userData>/skills/<id>/` | user-installed skills |
-| `<userData>/plugins/<id>/` | installed plugins |
+| `<userData>/plugins/<id>/` | installed plugins (run in vm sandbox) |
 | `<workspace>/.horizon/memory.json` | workspace-bound memory (commit in git) |
 | `<workspace>/.horizon/skills/<id>/` | workspace-scoped skills (commit in git) |
 | `<workspace>/.horizon/rules.md` | per-project rules injected into every prompt |
@@ -431,18 +490,24 @@ License: BUSL-1.1 — free for personal use, paid commercial. See [details below
 <summary><strong>Repo layout</strong> (click to expand — for contributors and curious readers)</summary>
 
 ```
-src/main/              Electron main process — IPC, plugin runtime, providers
+src/main/              Electron main process — entry point, plugin runtime, providers
+src/main/ipc/          IPC handlers split out of main.js (Sprint 6 refactor)
+src/main/tools/        Agent tool registry (file, exec, web, memory, skills, …)
 src/main/runtime/      Headless runtime (shared by CLI/TUI/serve)
-src/main/channels/     Messaging adapters (telegram/discord/whatsapp/signal/imessage)
+src/main/channels/     Messaging adapters (telegram/discord/slack/whatsapp/signal/imessage/email)
+src/main/mcp/          MCP server registry + discovery
 src/renderer/          Electron chat UI, settings, voice
 bin/                   CLI + TUI + HTTP serve entry points
-bin/lib/               argv parser, ANSI helpers, banner, markdown, commands
-builtin-skills/        SKILL.md bundles that ship with the app
-builtin-plugins/       Plugins that ship with the app
-mobile/                PWA companion (served by horizon-serve)
-test/                  node --test unit + integration tests
+bin/lib/               argv parser, ANSI helpers, banner, themes, markdown, commands
+builtin-skills/        30 SKILL.md bundles that ship with the app
+builtin-plugins/       6 plugins that ship (clipboard, crypto-pulse, screenshot, spotify-control, system-monitor, web-fetch)
+builtin-workflows/     5 first-party workflows (briefing, code-review-on-pr, retro, inbox-zero, deploy-guardian)
+mobile/                PWA companion (served by horizon-serve, QR-pair)
+test/unit/             178 node --test unit tests
+test/integration/      36 integration tests (cli-smoke + serve-api)
 docs/                  Technical / contributor docs (CLI ref, deploy guide, …)
 scripts/               install-cli.{sh,ps1}, icon generator
+npm-cli/               @horizonai/cli npm package shim
 .github/workflows/     CI workflows
 ```
 
