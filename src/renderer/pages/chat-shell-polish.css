@@ -1880,3 +1880,96 @@ textarea#inp{background:transparent!important}
 [data-theme="light"] .persona-picker-row small {
   color: #52525b !important;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PERMISSION / CONFIRM MODAL — light theme contrast pass
+   ════════════════════════════════════════════════════════════════════════
+   chat-base.css already overrides `.perm-card` background to white in
+   light theme (so the modal surface reads correctly) but inner text used
+   `var(--t2)` / `var(--t3)` — fine on dark but reads as soft grey on
+   white. The `.perm-detail` block additionally hardcoded
+   `background:rgba(0,0,0,.35)` (~35% black) which compounds the
+   readability problem: dark-grey text on a translucent black panel
+   sitting inside a white card. Repaint the entire modal subtree with
+   near-black text on neutral light surfaces. The Deny / Allow buttons
+   also need toning: the gradient `linear-gradient(135deg,var(--acc),
+   #ffcf7a)` on `.perm-btn.always` becomes a saturated purple→amber
+   stripe on white that yells louder than the action warrants. */
+[data-theme="light"] .perm-eyebrow {
+  /* amber #fbbf24 → too soft on white (3.3:1). Use the accent purple
+     used elsewhere in the light-theme settings for "label" eyebrows. */
+  color: #6d28d9 !important; /* 7.4:1 AA on white */
+}
+[data-theme="light"] .perm-title {
+  color: #09090b !important; /* black */
+}
+[data-theme="light"] .perm-desc {
+  color: #18181b !important; /* near-black, was var(--t2) */
+}
+[data-theme="light"] .perm-detail {
+  background: #f4f4f5 !important; /* neutral light surface, was 35% black */
+  border-color: rgba(0,0,0,.10) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .perm-hint {
+  color: #52525b !important; /* var(--t3) tier, ~6.5:1 on white */
+}
+
+/* Buttons — keep the bold accent on the primary action ("Allow once") but
+   tone down "Always allow" so the gradient isn't a saturated purple→amber
+   stripe on white. Deny stays subtle (was `color:var(--t2)` which read
+   fine on dark, faded on white). */
+[data-theme="light"] .perm-btn {
+  /* var(--mono) on a white panel: bump weight so 10px caps read. */
+  font-weight: 600;
+}
+[data-theme="light"] .perm-btn.deny {
+  background: #ffffff !important;
+  color: #3f3f46 !important;
+  border-color: rgba(0,0,0,.14) !important;
+}
+[data-theme="light"] .perm-btn.deny:hover {
+  background: #fef2f2 !important;
+  color: #b91c1c !important; /* clearer "no" affordance than pink */
+  border-color: rgba(220,38,38,.34) !important;
+}
+[data-theme="light"] .perm-btn.once {
+  /* Primary CTA — clean solid purple instead of translucent tint. */
+  background: #7c6df2 !important;
+  color: #ffffff !important;
+  border-color: #7c6df2 !important;
+}
+[data-theme="light"] .perm-btn.once:hover {
+  background: #6d5fe4 !important;
+  border-color: #6d5fe4 !important;
+}
+[data-theme="light"] .perm-btn.always {
+  /* Secondary CTA — was a saturated purple→amber gradient on white.
+     Use a flat lavender tint so it reads as "permanent" without
+     out-shouting the primary "Allow once" CTA next to it. */
+  background: rgba(124,109,242,.10) !important;
+  color: #4c40ad !important;
+  border-color: rgba(124,109,242,.34) !important;
+  filter: none !important;
+}
+[data-theme="light"] .perm-btn.always:hover {
+  background: rgba(124,109,242,.18) !important;
+  border-color: rgba(124,109,242,.55) !important;
+  filter: none !important;
+}
+/* The legacy single-action `.allow` button (used by the simple
+   requestPermission boolean flow). Keep parity with `.perm-btn.once`. */
+[data-theme="light"] .perm-btn.allow {
+  background: #7c6df2 !important;
+  color: #ffffff !important;
+  border-color: #7c6df2 !important;
+}
+[data-theme="light"] .perm-btn.allow:hover {
+  background: #6d5fe4 !important;
+  filter: none !important;
+}
+
+/* The same modal surface is reused by `customConfirm` (Persona delete,
+   Forget fact, Dialectic wipe, etc) — those use the default eyebrow
+   "Confirm" instead of "Human-in-the-loop approval", but every inner
+   element is the same so the rules above already cover them. */

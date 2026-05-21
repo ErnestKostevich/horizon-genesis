@@ -2884,6 +2884,43 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModePicker(); });
 
+// Make openModePicker reachable from inline onclick attributes regardless of
+// script eval order — inline `onclick="openModePicker(event)"` resolves names
+// off the global scope, and the surrounding IIFE / module wrapping that some
+// scripts pick up can hide function declarations. Belt-and-braces: also
+// attach a programmatic delegated click listener on the composer Mode chip,
+// so if the inline attribute is ever stripped by sanitizers or shadowed by a
+// duplicated handler, the picker still opens. Both paths converge on the
+// same openModePicker(ev) above, so behaviour stays consistent.
+try { window.openModePicker = openModePicker; } catch (_) {}
+try { window.closeModePicker = closeModePicker; } catch (_) {}
+try { window.pickMode = pickMode; } catch (_) {}
+document.addEventListener('click', (e) => {
+  try {
+    const btn = e.target?.closest?.('button.composer-chip');
+    if (!btn) return;
+    // Identify the Mode chip specifically — it contains
+    // `#composer-mode-chip` inside its <b> tag. Don't match other chips.
+    if (!btn.querySelector?.('#composer-mode-chip')) return;
+    // If the popover is already shown, treat second click as a toggle
+    // (close + re-anchor is the prior fix's pattern — easier to just
+    // close here and let the inline onclick re-open on the next click).
+    const pop = document.getElementById('mode-popover');
+    if (pop?.classList.contains('show')) return; // outside-click handler above closes it
+    // The inline onclick should already have fired by now. This fallback
+    // only acts if the picker isn't shown — i.e. inline handler failed.
+    // Defer to a microtask so we don't double-fire when both paths work.
+    queueMicrotask(() => {
+      try {
+        const stillClosed = !document.getElementById('mode-popover')?.classList.contains('show');
+        if (stillClosed && typeof openModePicker === 'function') {
+          openModePicker({ stopPropagation: () => {}, currentTarget: btn });
+        }
+      } catch (err) { console.warn('mode chip fallback failed:', err?.message); }
+    });
+  } catch (_) {}
+}, true);
+
 // PR-LAYOUT-V3 — .mode-popover inherits .persona-popover visual style.
 // Wired as a sibling selector so any tweaks to .persona-popover stay
 // in sync. (No JS injection — pure CSS in the <style> block.)
