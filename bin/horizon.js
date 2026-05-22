@@ -73,7 +73,7 @@ process.on('unhandledRejection', (r) => {
 const path = require('path');
 const { parseArgv } = require(path.join(__dirname, 'lib', 'argv'));
 const { fmt } = require(path.join(__dirname, 'lib', 'tty'));
-const { helpTable, bannerCompact } = require(path.join(__dirname, 'lib', 'banner'));
+const { helpTable, bannerCompact, panel, visibleLen, stripAnsi } = require(path.join(__dirname, 'lib', 'banner'));
 
 const SPEC = {
   aliases: { h: 'help', v: 'version', j: 'json', q: 'quiet', m: 'model', p: 'persona' },
@@ -87,6 +87,293 @@ const SPEC = {
   negatables: ['reflect', 'semantic'],
 };
 
+// Sprint-2.10 — per-command help cards. Keyed by command name, each
+// entry expands into a framed panel with description, usage line,
+// common flags, examples, and related commands. Falls through to the
+// generic printHelp() when the user asks for a command we don't have
+// a detailed card for.
+const _CMD_HELP = {
+  agent: {
+    desc: 'Run a multi-step agent loop with tools. Each tool call asks permission unless --auto-approve is set. The agent plans, executes, reflects, and iterates up to --max-steps.',
+    usage: 'horizon agent "task description" [flags]',
+    flags: [
+      ['--auto-approve',  'approve every tool call (cron-friendly)'],
+      ['--never-approve', 'read-only: reject all tool calls'],
+      ['--max-steps N',   'cap the agent loop at N iterations'],
+      ['--no-reflect',    'skip the reflection epilogue'],
+      ['--provider X',    'override active provider'],
+    ],
+    examples: [
+      'horizon agent "find all TODOs in src/ and group them"',
+      'horizon agent --auto-approve "deploy staging"',
+      'horizon agent --max-steps 4 "summarise this week\'s commits"',
+    ],
+    related: ['chat', 'skill', 'sessions', 'cost', 'agents'],
+  },
+  chat: {
+    desc: 'Single-turn chat with the active provider. Tokens stream live; markdown is rendered on completion (code blocks, lists, links).',
+    usage: 'horizon chat "your message" [flags]',
+    flags: [
+      ['--no-stream',     'wait for full reply, then print'],
+      ['--plain',         'disable markdown rendering'],
+      ['--json',          'machine-readable single-line output'],
+      ['--quiet',         'only the reply, no metadata'],
+    ],
+    examples: [
+      'horizon chat "what is rate limiting?"',
+      'horizon chat --provider claude "explain async/await"',
+      'echo "summarise this" | horizon chat',
+    ],
+    related: ['ask', 'agent', 'model'],
+  },
+  skill: {
+    desc: 'Manage skills (.horizon/skills/*.md): list, view, create, run, enable/disable. Skills are markdown files with frontmatter that the agent loads contextually.',
+    usage: 'horizon skill <list|show|new|run|enable|disable|improve> [args]',
+    flags: [
+      ['--all',           'include disabled skills in list'],
+      ['--json',          'machine-readable output'],
+    ],
+    examples: [
+      'horizon skill list',
+      'horizon skill new code-review',
+      'horizon skill run summarise-pr',
+      'horizon skill improve code-review',
+    ],
+    related: ['mem', 'rules', 'ws'],
+  },
+  setup: {
+    desc: 'First-time wizard. Walks through provider selection, API key entry, persona pick, language, and writes settings to userData. Re-run any time to reconfigure.',
+    usage: 'horizon setup [--provider X]',
+    flags: [
+      ['--provider X',    'pre-select provider (skip the picker step)'],
+      ['--quiet',         'minimal output'],
+    ],
+    examples: [
+      'horizon setup',
+      'horizon setup --provider claude',
+    ],
+    related: ['doctor', 'model', 'connect'],
+  },
+  doctor: {
+    desc: 'Health check across every subsystem. Reports green/yellow/red for userData dir, key stores, provider config, memory file, embeddings, workspace, executor, cost log. With --fix, repairs what it can without asking.',
+    usage: 'horizon doctor [--fix] [--json]',
+    flags: [
+      ['--fix',           'auto-repair warnings (mkdir, rewrite, etc)'],
+      ['--json',          'machine-readable check list'],
+    ],
+    examples: [
+      'horizon doctor',
+      'horizon doctor --fix',
+    ],
+    related: ['status', 'version', 'setup'],
+  },
+  model: {
+    desc: 'Read or set the active provider and per-provider model. With --list, prints a panel of every known provider with its default + current model + key status.',
+    usage: 'horizon model [provider] [--model X] [--list] [--fallback X]',
+    flags: [
+      ['--list',          'all providers in a panel'],
+      ['--model X',       'pin a specific model for this provider'],
+      ['--fallback X',    'set fallback provider (or "none")'],
+    ],
+    examples: [
+      'horizon model',
+      'horizon model claude --model claude-sonnet-4-6',
+      'horizon model --fallback claude',
+    ],
+    related: ['persona', 'doctor'],
+  },
+  persona: {
+    desc: 'Read or set the active persona. Personas tune the system prompt style (JARVIS, Friday, Alfred, custom). With --list, prints every available persona.',
+    usage: 'horizon persona [id] [--list]',
+    flags: [
+      ['--list',          'every persona with description'],
+    ],
+    examples: [
+      'horizon persona',
+      'horizon persona jarvis',
+      'horizon persona --list',
+    ],
+    related: ['model', 'rules'],
+  },
+  serve: {
+    desc: 'Launch the headless HTTP API server. Used by the PWA, cron daemon, and mobile companion. Exposes /v1/chat, /v1/agent, /v1/run + WebSocket for events.',
+    usage: 'horizon serve [--port N] [--token X] [--enable-*]',
+    flags: [
+      ['--port N',                  'listen port (default 18789)'],
+      ['--token X',                 'require Authorization: Bearer X'],
+      ['--enable-telegram',         'start the Telegram runtime'],
+      ['--enable-discord',          'start the Discord runtime'],
+      ['--enable-slack',            'start the Slack runtime'],
+      ['--enable-whatsapp',         'start the WhatsApp runtime (Twilio)'],
+      ['--enable-signal',           'start the Signal runtime'],
+      ['--enable-email',            'start the Email runtime (IMAP+SMTP)'],
+    ],
+    examples: [
+      'horizon serve',
+      'horizon serve --port 18789 --token mysecret',
+      'horizon serve --enable-telegram --enable-email',
+    ],
+    related: ['mobile', 'connect', 'cron'],
+  },
+  connect: {
+    desc: 'Manage messaging-channel connections. Stores tokens in the keystore; runtime is started by `horizon serve`.',
+    usage: 'horizon connect <list|test|telegram|discord|slack|...> [args]',
+    flags: [
+      ['--token X',       'channel-specific auth token'],
+      ['--list',          'every configured connector'],
+    ],
+    examples: [
+      'horizon connect list',
+      'horizon connect telegram --token 1234567890:abcdef',
+      'horizon connect test discord',
+    ],
+    related: ['serve', 'mcp'],
+  },
+  mcp: {
+    desc: 'Manage MCP (Model Context Protocol) servers. Each server runs as a subprocess; its tools are auto-discovered and become available to the agent.',
+    usage: 'horizon mcp <list|add|remove|tools|test> [args]',
+    flags: [
+      ['--json',          'machine-readable server list'],
+    ],
+    examples: [
+      'horizon mcp list',
+      'horizon mcp add my-server --cmd "node /path/to/server.js"',
+      'horizon mcp tools',
+    ],
+    related: ['plugins', 'connect'],
+  },
+  theme: {
+    desc: 'Switch the CLI/TUI visual theme. Affects accent colours, spinner frames, and the welcome wordmark gradient. 13 themes available.',
+    usage: 'horizon theme [name] [--list]',
+    flags: [
+      ['--list',          'all themes with previews'],
+    ],
+    examples: [
+      'horizon theme',
+      'horizon theme cyberpunk',
+      'horizon theme --list',
+    ],
+    related: ['persona'],
+  },
+  cron: {
+    desc: 'Schedule recurring agent tasks. Each cron entry runs `horizon agent "task"` on a cron expression. Daemon mode keeps a background scheduler alive.',
+    usage: 'horizon cron <list|create|run|pause|resume|daemon> [args]',
+    flags: [
+      ['--at "5 * * * *"', 'cron expression for create'],
+      ['--no-reflect',    'skip reflection in scheduled runs'],
+    ],
+    examples: [
+      'horizon cron list',
+      'horizon cron create "daily-brief" --at "0 9 * * *" "morning briefing"',
+      'horizon cron daemon',
+    ],
+    related: ['agent', 'serve'],
+  },
+};
+
+function printCommandHelp(name) {
+  const card = _CMD_HELP[name];
+  if (!card) return false;  // caller falls back to printHelp()
+  const icon = _GROUP_ICONS[
+    name === 'agent' || name === 'chat' || name === 'ask' || name === 'tui' ? 'Chat & Agent' :
+    name === 'skill' || name === 'mem' || name === 'sessions' || name === 'persona' || name === 'model' ? 'Skills & Memory' :
+    name === 'connect' || name === 'mcp' || name === 'serve' ? 'Connectors' :
+    'System'
+  ] || '•';
+  const accent = 'cyan';
+  // Wrap long desc to width.
+  const cols = Math.min(86, (process.stdout.columns || 86) - 2);
+  const wrapW = cols - 4;
+  const wrapped = [];
+  const words = card.desc.split(/\s+/);
+  let cur = '';
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length > wrapW) { wrapped.push(cur.trim()); cur = w; }
+    else cur += ' ' + w;
+  }
+  if (cur.trim()) wrapped.push(cur.trim());
+
+  const flagW = Math.max(8, ...card.flags.map(f => f[0].length));
+  const lines = [];
+  for (const w of wrapped) lines.push(' ' + fmt.dim(w));
+  lines.push('');
+  lines.push(' ' + fmt.bold('Usage'));
+  lines.push('  ' + fmt.cyan(card.usage));
+  if (card.flags.length) {
+    lines.push('');
+    lines.push(' ' + fmt.bold('Flags'));
+    for (const [f, d] of card.flags) {
+      lines.push('  ' + fmt.cyan(f.padEnd(flagW)) + '  ' + fmt.dim(d));
+    }
+  }
+  if (card.examples.length) {
+    lines.push('');
+    lines.push(' ' + fmt.bold('Examples'));
+    for (const e of card.examples) lines.push('  ' + fmt.dim('$ ') + e);
+  }
+  if (card.related && card.related.length) {
+    lines.push('');
+    lines.push(' ' + fmt.bold('Related') + '   ' + card.related.map(r => fmt.cyan(r)).join(fmt.dim(' · ')));
+  }
+
+  process.stdout.write('\n');
+  process.stdout.write(panel({
+    title: icon + '  horizon ' + name,
+    accent,
+    lines,
+    width: cols,
+  }) + '\n\n');
+  return true;
+}
+
+// Sprint-2.10 — premium help layout. Each group becomes a rounded
+// panel with an icon glyph in its title; commands inside are rendered
+// with a fixed-width name column and dim description column. Replaces
+// the old flat helpTable() which felt like a dump.
+const _GROUP_ICONS = {
+  'Chat & Agent':     '◈',
+  'Skills & Memory':  '✦',
+  'Connectors':       '⌬',
+  'System':           '⚙',
+  'AI helpers':       '✶',
+  'Management':       '▤',
+  'Utilities':        '◆',
+  'Dev helpers':      '▣',
+  'Common flags':     '◇',
+};
+const _GROUP_ACCENTS = {
+  'Chat & Agent':     'cyan',
+  'Skills & Memory':  'magenta',
+  'Connectors':       'green',
+  'System':           'yellow',
+  'AI helpers':       'cyan',
+  'Management':       'magenta',
+  'Utilities':        'cyan',
+  'Dev helpers':      'green',
+  'Common flags':     'yellow',
+};
+
+function _renderHelpGroup(title, rows) {
+  // Each row is [cmd, args, desc] — render as "cmd args  · desc" with
+  // padded columns. Strip ANSI for width calc.
+  const cmdW  = Math.max(8, ...rows.map(r => visibleLen(r[0] || '')));
+  const argsW = Math.max(0, ...rows.map(r => visibleLen(r[1] || '')));
+  const lines = rows.map(([cmd, args, desc]) => {
+    const cmdPad  = ' '.repeat(Math.max(0, cmdW - visibleLen(cmd || '')));
+    const argsPad = ' '.repeat(Math.max(0, argsW - visibleLen(args || '')));
+    const argsCol = args ? fmt.dim(args) + argsPad : ' '.repeat(argsW);
+    return ' ' + (cmd || '') + cmdPad + '  ' + argsCol + '  ' + fmt.dim(desc || '');
+  });
+  const icon = _GROUP_ICONS[title] || '·';
+  const accent = _GROUP_ACCENTS[title] || 'cyan';
+  return panel({
+    title: icon + '  ' + title,
+    accent,
+    lines,
+    width: Math.min(86, (process.stdout.columns || 86) - 2),
+  });
+}
+
 function printHelp(opts = {}) {
   // Fix 7 — compact 25-line help by default. Two-column layout, four
   // groups, brief phrases. `--all` shows everything (the previous full
@@ -97,7 +384,7 @@ function printHelp(opts = {}) {
   const head = [
     bannerCompact(),
     '',
-    fmt.bold('Usage') + fmt.dim('  horizon [command] [args] [flags]'),
+    fmt.bold('Usage') + '   ' + fmt.dim('horizon [command] [args] [flags]'),
   ].join('\n');
 
   // Default: four groups, ~25 lines total
@@ -211,7 +498,15 @@ function printHelp(opts = {}) {
     tail = '\n' + fmt.dim('  Run ') + fmt.cyan('horizon help --all') + fmt.dim('  for the full command surface (AI helpers, utilities, dev tools).') + '\n';
   }
 
-  process.stdout.write(head + '\n' + helpTable(tables) + tail);
+  // Sprint-2.10 — render each group as a premium framed panel instead
+  // of dumping a flat helpTable. The panels stack vertically; on narrow
+  // terminals each scales down via Math.min(86, cols - 2).
+  let body = '';
+  for (const [title, rows] of Object.entries(tables)) {
+    if (!rows || !rows.length) continue;
+    body += '\n' + _renderHelpGroup(title, rows) + '\n';
+  }
+  process.stdout.write(head + '\n' + body + tail);
 }
 
 function resolveProfileUserDataDir(baseUserDataDir, explicitProfile) {
@@ -363,7 +658,18 @@ async function dispatch(argv) {
   const DEV_HELPERS = ['git', 'shell', 'web', 'image', 'screen',
                        'todo', 'explain-error'];
 
-  if (cmd === 'help') { printHelp({ all: !!flags.all }); return 0; }
+  if (cmd === 'help') {
+    // Sprint-2.10 — `horizon help <cmd>` shows a detailed per-command
+    // panel for the top ~12 commands. Falls back to the general help
+    // panel when no name is given or the command isn't in the card map.
+    const target = positional[1];
+    if (target && printCommandHelp(target)) return 0;
+    if (target) {
+      process.stdout.write(fmt.dim('  No detailed help for "' + target + '". Showing general help.') + '\n\n');
+    }
+    printHelp({ all: !!flags.all });
+    return 0;
+  }
   if (cmd === 'tui') {
     const tuiPath = path.join(__dirname, 'horizon-tui.js');
     // CRITICAL — must await. Without await, dispatch returns 0
