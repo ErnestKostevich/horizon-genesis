@@ -136,6 +136,9 @@ contextBridge.exposeInMainWorld('H', {
   agentRun:    (msg, opts)     => ipcRenderer.invoke('agentRun', msg, opts),
   agentControl:(runId, action) => ipcRenderer.invoke('agentControl', runId, action),
   agentStep:   (stepId, decision) => ipcRenderer.invoke('agentStep', stepId, decision),
+  // Sprint-2.9 — subagent abort. Called from Inspector → Subagents tab
+  // when the user clicks "stop" on a running sub-run card.
+  subagentAbort: (childRunId)  => ipcRenderer.invoke('subagentAbort', childRunId),
   agentRuns:   (limit)         => ipcRenderer.invoke('agentRuns', limit),
   agentRunDetails: (runId)     => ipcRenderer.invoke('agentRunDetails', runId),
   permissionAllowlistList:   () => ipcRenderer.invoke('permissionAllowlistList'),
