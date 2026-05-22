@@ -18,10 +18,12 @@ promoted this from prototype to **functional opt-in alternative TUI**.
   eighths-block precision (▏▎▍▌▋▊▉█)
 - Big multi-row HORIZON wordmark from `bannerBig()` on cols ≥ 70
 
-**Not yet:**
-- Agent loop with live tool cards on a step rail
-- Scrollback search (Ctrl-R)
-- Mouse handling (would need ink-mouse community pkg or stdin SGR parsing)
+**Sprint 2.12-2.13 additions (all working):**
+- Agent loop with live `StepRail` (pulsing chips) + tool cards
+- Plan/Act approval gate — Enter/Y approve, Esc/N reject
+- Multi-line composer — Shift+Enter newline, full cursor edit keys
+- Scrollback search — Ctrl-R opens overlay, ↑↓ navigate, Enter quotes
+- Mouse wheel — scrolls search hits (basic SGR-1006 parser)
 
 The readline TUI in `bin/horizon-tui.js` remains the default; Ink is
 opt-in via `--ink` or `HORIZON_INK_TUI=1`.
