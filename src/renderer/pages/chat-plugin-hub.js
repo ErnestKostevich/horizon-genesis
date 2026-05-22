@@ -306,4 +306,13 @@ async function installFromUrl() {
   } catch(e) { H.notify('Plugin Hub', e.message); }
 }
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+if (typeof window !== 'undefined') {
+  ['openHub','closeHub','hubTab'].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}
 

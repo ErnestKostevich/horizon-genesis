@@ -502,6 +502,19 @@ async function finish() {
     }
   } catch (_) {}
 })();
+
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+// Same defensive pattern as chat.html. setup.html only uses two inline
+// handlers (sk + finish), but explicit window binding is cheap insurance
+// against any future Electron wrapping changes.
+if (typeof window !== 'undefined') {
+  ['sk','finish'].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}
 </script>
 </body>
 </html>

@@ -153,3 +153,13 @@ async function safeWorkspaceShell(cmd){
 }
 function setStatus(text,active=false){document.getElementById('stl').textContent=text;document.getElementById('pulse').classList.toggle('on',active);}
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+if (typeof window !== 'undefined') {
+  ['refreshPermissionAllowlist'].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}
+

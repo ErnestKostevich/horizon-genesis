@@ -426,3 +426,13 @@ async function speakAndThen(text, callback){
 }
 function speak(text){ speakAndThen(text, null); }
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+if (typeof window !== 'undefined') {
+  ['testMic','toggleVoice','speak'].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}
+

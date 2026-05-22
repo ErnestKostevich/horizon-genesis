@@ -204,3 +204,13 @@ async function dcClearCurrent() {
     H.notify?.('Discord', e.message);
   }
 }
+
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+if (typeof window !== 'undefined') {
+  ['openDiscordHub','closeDiscordHub'].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}
