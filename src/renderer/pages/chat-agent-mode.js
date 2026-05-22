@@ -66,31 +66,20 @@
     const lang = (typeof window !== 'undefined' && window.lang) || 'en';
     const isRu = lang === 'ru';
 
+    // Sprint-2.14 — class extraction. The 70-line inline style block
+    // for the consent modal had a heavy shadow that overpowered light
+    // theme + made every tweak require editing JS strings. All styling
+    // now lives in chat-base.css as .consent-* classes; this function
+    // just produces the markup. Light theme gets a softer shadow via
+    // a [data-theme="light"] override (audit caught the dark shadow
+    // bleeding onto white).
+
     const overlay = document.createElement('div');
-    overlay.className = 'modal-backdrop';
+    overlay.className = 'modal-backdrop consent-overlay';
     overlay.id = 'agent-consent-overlay';
-    overlay.style.cssText = `
-      position: fixed; inset: 0; z-index: 9999;
-      background: rgba(0,0,0,0.66);
-      display: flex; align-items: center; justify-content: center;
-      backdrop-filter: blur(4px);
-    `;
 
     const dialog = document.createElement('div');
-    // `--fg` is not a defined CSS variable in this app (only `--tx` is); the
-    // old fallback `#d6d8db` was a light-grey that is invisible on a light
-    // paper bg under [data-theme="light"]. Pivot to `--tx` so both themes
-    // resolve to a readable contrast (dark theme: #e8ecf4, light: #09090b).
-    dialog.style.cssText = `
-      background: var(--bg, #0f1115);
-      color: var(--tx, #18181b);
-      border: 1px solid var(--accent, #7c6df2);
-      border-radius: 12px;
-      padding: 22px 28px;
-      max-width: 580px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.45),
-                  0 0 30px rgba(124,109,242,0.18);
-    `;
+    dialog.className = 'consent-dialog';
 
     const title = isRu ? 'Включить режим Агента?' : 'Enable Agent mode?';
     const intro = isRu
@@ -100,14 +89,14 @@
     const cancelLabel = isRu ? 'Отмена' : 'Cancel';
 
     dialog.innerHTML = `
-      <h2 style="margin:0 0 8px;font-size:18px;font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:8px;">
+      <h2 class="consent-title">
         <svg class="licon"><use href="#i-zap"/></svg>${title}
       </h2>
-      <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--t2,#3f3f46);">${intro}</p>
-      <div id="agent-consent-caps" style="display:grid;gap:8px;margin:0 0 18px;"></div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button id="agent-consent-cancel"  class="hub-btn" style="padding:8px 16px;">${cancelLabel}</button>
-        <button id="agent-consent-confirm" class="hub-btn primary" style="padding:8px 16px;background:var(--accent-grad,linear-gradient(135deg,#7c6df2,#a78bfa));color:#fff;font-weight:600;">${confirmLabel}</button>
+      <p class="consent-intro">${intro}</p>
+      <div id="agent-consent-caps" class="consent-caps"></div>
+      <div class="consent-actions">
+        <button id="agent-consent-cancel" class="hub-btn consent-cancel">${cancelLabel}</button>
+        <button id="agent-consent-confirm" class="hub-btn primary consent-confirm">${confirmLabel}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -115,19 +104,12 @@
     const caps = dialog.querySelector('#agent-consent-caps');
     for (const c of CAPABILITIES) {
       const row = document.createElement('div');
-      // `rgba(255,255,255,0.x)` borders and bg become invisible on a light
-      // paper substrate. Switch to neutral var(--b1) borders + transparent
-      // bg so both themes get a visible cell outline.
-      row.style.cssText = `
-        display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;
-        padding:8px 10px;border:1px solid var(--b1, rgba(0,0,0,.08));border-radius:8px;
-        background: var(--bg2, rgba(0,0,0,0.02));
-      `;
+      row.className = 'consent-cap-row';
       row.innerHTML = `
-        <div style="line-height:1;color:var(--accent,#7c6df2);"><svg class="licon"><use href="#${c.iconId}"/></svg></div>
+        <div class="consent-cap-icon"><svg class="licon"><use href="#${c.iconId}"/></svg></div>
         <div>
-          <div style="font-weight:600;font-size:13px;color:var(--tx,#18181b);">${c.label}</div>
-          <div style="font-size:11px;color:var(--t3,#52525b);line-height:1.45;">${c.detail}</div>
+          <div class="consent-cap-label">${c.label}</div>
+          <div class="consent-cap-detail">${c.detail}</div>
         </div>
       `;
       caps.appendChild(row);

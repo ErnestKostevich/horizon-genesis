@@ -1825,6 +1825,115 @@ button:where(:not([class])){
 }
 .ph-create-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
 @media (max-width:760px){.ph-create-grid{grid-template-columns:1fr}}
+/* Sprint-2.14 — `.pf-subgroup` extracts the repeated inline
+   `style="margin-top:10px;padding:10px;background:var(--bg2,rgba(10,18,28,.55))"`
+   that the polish audit flagged across Telegram-allowed-users,
+   Discord-allowed-guilds, Email IMAP, Email SMTP sub-blocks. Same
+   visual; one class to keep them consistent. */
+.pf.pf-subgroup{
+  margin-top:10px;
+  padding:10px 12px;
+  background:var(--bg2, rgba(10,18,28,.55));
+  border:1px solid var(--b1);
+  border-radius:8px;
+}
+[data-theme="light"] .pf.pf-subgroup{
+  background:rgba(0,0,0,.025) !important;
+  border-color:rgba(0,0,0,.08) !important;
+}
+
+/* Sprint-2.14 — Consent modal (Agent mode capabilities confirmation).
+   Audit flagged inline `padding:22px 28px` + heavy shadow
+   `0 20px 60px rgba(0,0,0,0.45), 0 0 30px rgba(124,109,242,0.18)`.
+   Now class-based with a theme-aware shadow — lighter on light bg. */
+.consent-overlay{
+  position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,.66);
+  display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+}
+.consent-dialog{
+  background:var(--bg, #0f1115);
+  color:var(--tx, #18181b);
+  border:1px solid var(--accent, #7c6df2);
+  border-radius:14px;
+  padding:22px 28px;
+  max-width:580px;
+  width:calc(100vw - 64px);
+  box-shadow:
+    0 24px 60px -16px rgba(0,0,0,.55),
+    0 0 0 1px rgba(124,109,242,.18),
+    0 0 32px -6px rgba(124,109,242,.22);
+}
+.consent-title{
+  margin:0 0 8px;
+  font:700 18px/1.2 var(--font);
+  letter-spacing:.3px;
+  display:flex;align-items:center;gap:8px;
+  color:var(--tx);
+}
+.consent-intro{
+  margin:0 0 14px;
+  font:500 13px/1.55 var(--font);
+  color:var(--t2);
+}
+.consent-caps{display:grid;gap:8px;margin:0 0 18px}
+.consent-cap-row{
+  display:grid;grid-template-columns:28px 1fr;gap:10px;
+  align-items:start;
+  padding:8px 10px;
+  border:1px solid var(--b1);
+  border-radius:8px;
+  background:var(--bg2, rgba(255,255,255,.02));
+}
+.consent-cap-icon{line-height:1;color:var(--accent,#7c6df2)}
+.consent-cap-label{font:600 13px/1.2 var(--font);color:var(--tx)}
+.consent-cap-detail{font:500 11px/1.45 var(--font);color:var(--t3);margin-top:2px}
+.consent-actions{display:flex;gap:10px;justify-content:flex-end}
+.consent-cancel{padding:8px 16px}
+.consent-confirm{
+  padding:8px 16px;
+  background:var(--accent-grad, linear-gradient(135deg,#7c6df2,#a78bfa));
+  color:#fff;font-weight:600;border:none;
+}
+/* Sprint-2.14 — light-theme override. Dark shadow was bleeding onto
+   white paper; replace with subtler indigo-tinted shadow + softer
+   border ring so the modal feels premium not heavy. */
+[data-theme="light"] .consent-overlay{background:rgba(31,32,52,.34)}
+[data-theme="light"] .consent-dialog{
+  background:#ffffff;
+  border-color:rgba(124,109,242,.42);
+  box-shadow:
+    0 24px 50px -14px rgba(31,32,52,.25),
+    0 0 0 1px rgba(124,109,242,.16),
+    0 0 28px -8px rgba(124,109,242,.18) !important;
+}
+[data-theme="light"] .consent-cap-row{
+  background:rgba(0,0,0,.025);
+  border-color:rgba(0,0,0,.08);
+}
+
+/* Sprint-2.14 — Workflow Editor "AI generated steps" flash. When the
+   user clicks Generate with AI, the step builder list gets populated
+   AND briefly flashes cyan so it's obvious where to look. */
+@keyframes wf-preview-flash-kf {
+  0%   { box-shadow: 0 0 0 0 rgba(86,210,255,0); background: rgba(86,210,255,0); }
+  25%  { box-shadow: 0 0 0 4px rgba(86,210,255,.32); background: rgba(86,210,255,.10); }
+  100% { box-shadow: 0 0 0 0 rgba(86,210,255,0); background: rgba(86,210,255,0); }
+}
+.wf-preview-flash {
+  animation: wf-preview-flash-kf 1.4s ease-out;
+  border-radius: 8px;
+}
+
+/* Sprint-2.14 — utility classes that replaced 52 inline `style="..."`
+   instances flagged by the polish audit ("60+ inline styles are a
+   future drift point"). One source of truth per pattern. */
+.mt-6       { margin-top: 6px; }
+.fs-sm-105  { font-size: 10.5px; }
+.t3-norm    { color: var(--t3); font-weight: 400; }
+.t3-xs      { color: var(--t3); font-size: 10px; }
 .tg-empty-spinner{
   width:14px;height:14px;
   border:2px solid rgba(124,109,242,.2);
