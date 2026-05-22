@@ -1787,13 +1787,23 @@ class TuiEngine {
       : '$0.00';
 
     // Bar render: 10-cell wide for full mode, 6-cell for medium.
+    // Sprint 2.13 — use eighths-block characters (▏▎▍▌▋▊▉█) so the bar
+    // animates in 8 sub-steps per cell instead of full-cell jumps. Same
+    // total width on screen, but visibly smoother during streaming as
+    // tokens accumulate. Falls back to plain █/░ when the terminal
+    // can't render unicode (Windows legacy console).
     const cols = process.stdout.columns || 80;
     const wantFull   = cols >= 100;
     const wantMedium = cols >= 70 && cols < 100;
     const barCells = wantFull ? 10 : 6;
-    const filled = Math.max(0, Math.min(barCells, Math.round((pct / 100) * barCells)));
-    const empty = barCells - filled;
-    const barRaw = '█'.repeat(filled) + '░'.repeat(empty);
+    const BLOCKS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+    const sub = Math.max(0, Math.min(barCells * 8, Math.round((pct / 100) * barCells * 8)));
+    const fullCells = Math.floor(sub / 8);
+    const remainder = sub % 8;  // 0-7 → maps to ▏..▉
+    const empty = barCells - fullCells - (remainder > 0 ? 1 : 0);
+    const barRaw = '█'.repeat(fullCells)
+                 + (remainder > 0 ? BLOCKS[remainder] : '')
+                 + '░'.repeat(Math.max(0, empty));
 
     // Colour by usage
     let barFn;

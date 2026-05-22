@@ -27,12 +27,33 @@ const { fmt } = require('../tty');
 const { renderArt } = require('../banner');
 const { DEFAULT_PROVIDER_MODELS } = require('../../../src/main/runtime/ai-providers');
 
+// Sprint 2.13 — detect "fix-it suggestion" detail strings and render
+// the actionable hint in magenta so it stands out from the dim factual
+// detail. We split on common separators ("· ", " — ", "; ") and any
+// segment that contains a verbed fix-it phrase (`run`, `set`, `pick`,
+// `start`, `enable`, `disable`, "--fix") is painted accent.
+function _highlightFix(detail) {
+  if (!detail) return '';
+  const FIX_RX = /(?:^|\s)(run\s+`?[\w-]|run\s+--fix|set\s+\w|pick\s+\w|start\s+\w|enable\s+\w|disable\s+\w|--fix\b)/i;
+  // Split on common separators while keeping them visually intact.
+  const parts = String(detail).split(/(\s+·\s+|\s+—\s+|;\s+)/);
+  return parts.map(p => {
+    if (FIX_RX.test(p)) return fmt.magenta(p);
+    return fmt.dim(p);
+  }).join('');
+}
+
 function row(state, label, detail) {
   const icon = state === 'ok'   ? fmt.green('✓')
              : state === 'warn' ? fmt.yellow('⚠')
              : state === 'fail' ? fmt.red('✗')
              : fmt.dim('·');
-  const det = detail ? '   ' + fmt.dim(detail) : '';
+  // Only highlight fix-it phrases on warn/fail rows — ok rows are
+  // factual context that should stay calm and dim.
+  const detPainted = (state === 'warn' || state === 'fail')
+    ? _highlightFix(detail)
+    : (detail ? fmt.dim(detail) : '');
+  const det = detail ? '   ' + detPainted : '';
   process.stdout.write(`  ${icon} ${label}${det}\n`);
 }
 

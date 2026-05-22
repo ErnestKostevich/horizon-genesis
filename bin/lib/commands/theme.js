@@ -7,8 +7,21 @@
 // Themes are defined in bin/lib/themes.js. Active theme is stored in
 // settingsStore as 'cliTheme'.
 
-const { fmt } = require('../tty');
+const { fmt, supportsColor, supportsTruecolor, rgb } = require('../tty');
 const { listThemes, getTheme } = require('../themes');
+
+// Sprint 2.13 — paint a string in a specific theme's accent colour
+// without flipping the global active theme. Used by the transition
+// line in `horizon theme <name>` so the "switching..." text reads in
+// the OLD palette and the "active" line in the NEW palette.
+function _paintIn(themeName, text) {
+  if (!supportsColor) return text;
+  const t = getTheme(themeName);
+  const acc = t && Array.isArray(t.accent) ? t.accent : [124, 109, 242];
+  const RESET = '\x1b[0m';
+  if (supportsTruecolor) return rgb(acc[0], acc[1], acc[2]) + text + RESET;
+  return '\x1b[35m' + text + RESET;
+}
 
 function run({ runtime, args, flags }) {
   const themes = listThemes();
@@ -62,9 +75,23 @@ function run({ runtime, args, flags }) {
     return 2;
   }
 
+  // Sprint 2.13 — small theme-switch transition. Print one line in the
+  // OLD theme's accent palette, set the theme, then print the "active"
+  // line in the NEW palette. Skipped in --json mode (machine consumers
+  // don't want decoration) and in non-TTY pipes (no point colouring).
+  const isPiped = !process.stdout.isTTY;
+  if (!flags.json && !isPiped && name !== current) {
+    process.stdout.write('  ' + _paintIn(current, '⌁') + ' '
+                       + fmt.dim('switching to ') + _paintIn(current, name)
+                       + fmt.dim(' theme...') + '\n');
+  }
+
   runtime.settingsStore.set('cliTheme', name);
   if (flags.json) {
     process.stdout.write(JSON.stringify({ ok: true, active: name }) + '\n');
+  } else if (!isPiped && name !== current) {
+    process.stdout.write('  ' + _paintIn(name, '⌁') + ' '
+                       + _paintIn(name, name) + fmt.dim(' active') + '\n');
   } else {
     process.stdout.write(fmt.ok('theme → ' + fmt.cyan(name)) + '\n');
   }
