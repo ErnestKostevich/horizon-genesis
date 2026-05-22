@@ -2604,14 +2604,33 @@ console.error = function(...args) {
   if(operatorModeActive) opLog(args.join(' '), 'error');
 };
 
-// Defensive: explicitly expose toggleOperatorMode + opLog on window.
+// Sprint 2.8 — sandbox-proof inline onclick exposure for this module.
 // Function declarations at script-top bind globally in classic <script>
-// contexts, but if Electron / nodeIntegration ever sandboxes this file
-// into a CommonJS-ish wrap (which it has done in past Electron upgrades),
-// the inline onclick="toggleOperatorMode()" would throw ReferenceError.
-// Explicit window assignment makes the wire-up version-proof.
+// contexts, but Electron renderer wrapping has on multiple occasions
+// promoted external scripts into a CommonJS-ish closure where module-
+// level function declarations DON'T leak to window. When that happens,
+// inline onclick="toggleCodeMode()" / onclick="opClear()" / etc. throw
+// ReferenceError. Explicit window assignment is version-proof.
+// Add new handler names to the list below when you wire a new inline
+// onclick="" attribute to a function declared in this file.
 if (typeof window !== 'undefined') {
-  window.toggleOperatorMode = toggleOperatorMode;
-  window.opLog = opLog;
+  var _ccwExpose = function (names) {
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i];
+      try {
+        var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+        if (fn) window[n] = fn;
+      } catch (_) { /* not defined in this scope */ }
+    }
+  };
+  _ccwExpose([
+    'toggleCodeMode','toggleOperatorMode','toggleCodeChat',
+    'toggleCodeTerminal','opClear','opCopy','opPause','opStep',
+    'opStop','opTab','opLog','askCodeAi','applyLastCodeAi',
+    'cekHistoryToggle','cekToggleAutoCommit','cekUndoLast',
+    'chooseCodeWorkspace','refreshCodeWorkspace','restartWorkspaceTerminal',
+    'runCodeSelection','runWorkspaceCommand','saveCodeFile',
+    'searchCodeWorkspace'
+  ]);
 }
 

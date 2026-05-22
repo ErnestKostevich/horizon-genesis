@@ -617,4 +617,15 @@ async function publishPlugin() {
   }
 }
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+// See chat-code-workspace.js for the full rationale.
+if (typeof window !== 'undefined') {
+  ['openStore','closeStore','storeTab','openAccount','closeAccount','acctTab']
+    .forEach(function (n) {
+      try {
+        var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+        if (fn) window[n] = fn;
+      } catch (_) {}
+    });
+}
 

@@ -277,3 +277,13 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeCmdPalette();
 });
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+if (typeof window !== 'undefined') {
+  ['openCmdPalette','closeCmdPalette'].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}
+

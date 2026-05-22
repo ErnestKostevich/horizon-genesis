@@ -1190,3 +1190,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   } catch(_) {}
 });
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+if (typeof window !== 'undefined') {
+  ['toggleInspectorMode','setInspectorTab'].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}
+

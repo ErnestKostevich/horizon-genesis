@@ -1174,3 +1174,25 @@ function loadKokoro(){
 }
 async function psvk(svc,iid,bid,did){const v=document.getElementById(iid).value.trim();if(!v)return;await H.saveKey(svc,v);const btn=document.getElementById(bid);btn.textContent='✓';btn.classList.add('ok');document.getElementById(did)?.classList.add('on');document.getElementById(iid).value='';document.getElementById(iid).placeholder='••••••••••';setTimeout(()=>{btn.textContent='Save';btn.classList.remove('ok');},2000);}
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+// Most names below are already wired via the per-function window.X
+// assignments scattered through this file (see lines ~780-890); the
+// loop is idempotent and resolves any that were missed.
+if (typeof window !== 'undefined') {
+  [
+    'setSettingsTab','psvk','savePf','saveElVoice','saveLocalProvider',
+    'testLocalProvider','refreshLocalModels','refreshOpenRouterModels',
+    'connectGithub','disconnectGoogle','openSettingsFolder',
+    'loadSettingsHealth','verifySettingsPersistence',
+    'saveTokenConnection','testTokenConnection','saveSignalConnection',
+    'saveWhatsAppConnection','saveImessageConnection','toggleEmailLive',
+    'saveTelegramAllowedUsers','refreshTelegramRuntimeStatus',
+    'toggleTelegramLive','saveDiscordAllowedGuilds',
+    'refreshDiscordRuntimeStatus','toggleDiscordLive'
+  ].forEach(function (n) {
+    try {
+      var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+      if (fn) window[n] = fn;
+    } catch (_) {}
+  });
+}

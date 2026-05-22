@@ -178,3 +178,14 @@ async function refreshMcpTools(){
 async function toggleMcpServer(id,on){await H.mcpServerEnable(id,on).catch(()=>null);await refreshMcpTools();}
 async function removeMcpServer(id){await H.mcpServerRemove(id).catch(()=>null);await loadMcpServers();}
 
+// Sprint 2.8 — sandbox-proof inline onclick exposure.
+if (typeof window !== 'undefined') {
+  ['attachGithubRepo','saveMcpServer','testMcpServer','refreshMcpTools']
+    .forEach(function (n) {
+      try {
+        var fn = eval('typeof ' + n + " === 'function' ? " + n + ' : null');
+        if (fn) window[n] = fn;
+      } catch (_) {}
+    });
+}
+
