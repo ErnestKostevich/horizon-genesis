@@ -80,6 +80,15 @@ window.addEventListener('DOMContentLoaded', () => {
 // line ("First tool: <code>") that always renders even when `reason`
 // is absent. Detail line is kept in sync with the markup contract:
 //
+// Sprint-2.9.1: dynamic positioning. The previous static top:60px
+// assumed only the 52px title bar + 8px gap above the gate; when the
+// wake-bar is open (+28px) or the step-rail is showing (+24px), the
+// gate would overlap them. Now position is computed from actual
+// element rects at show time. Width also accounts for the chatside
+// (left, 280px when open) and the inspector-pane (right, ~360px when
+// open) so the gate lives in the visible chat surface, not the full
+// viewport.
+//
 //   <span id="plan-act-gate-detail">
 //     First tool: <code id="plan-act-gate-tool">tool</code>
 //   </span>
@@ -89,10 +98,56 @@ window.addEventListener('DOMContentLoaded', () => {
 // surface step.reason on a second line.
 var _planActActiveRunId = null;
 var _planActKeyHandler = null;
+var _planActResizeHandler = null;
+
+// Compute live top/left/width for the gate based on what's currently
+// visible: title bar (.tb), wake bar (.wake-bar.show), step rail
+// (.step-rail.show), chat sidebar (.chatside / body.with-sidebar) and
+// inspector pane (body.inspector-active). The audit found the gate
+// "floating" because all of these had hard-coded assumptions baked in.
+function _planActPositionGate(gate) {
+  if (!gate) return;
+  // Vertical anchor — bottom of the bottom-most top-of-screen element.
+  let top = 0;
+  const tb = document.querySelector('.tb');
+  if (tb) top = Math.max(top, tb.getBoundingClientRect().bottom);
+  const wakeBar = document.querySelector('.wake-bar.show');
+  if (wakeBar) top = Math.max(top, wakeBar.getBoundingClientRect().bottom);
+  // Sprint-2.9.1 — step-rail is hidden while gate is up (see show fn)
+  // so we don't probe it here, but leave a guard for future layouts.
+  // Add an 8px gap below the bottom-most fixed element.
+  top = Math.max(60, Math.round(top + 8));
+  gate.style.top = top + 'px';
+
+  // Horizontal — span the visible chat surface, not the full viewport.
+  const sidebarOpen = document.body.classList.contains('with-sidebar') &&
+                      !document.body.classList.contains('chat-sidebar-collapsed');
+  const inspectorOpen = document.body.classList.contains('inspector-active');
+  const sidebar = sidebarOpen ? (document.getElementById('chatside')?.offsetWidth || 280) : 0;
+  const inspector = inspectorOpen ? (document.getElementById('inspector-pane')?.offsetWidth || 360) : 0;
+  // Available width for centring; subtract 32px breathing room (16 each side).
+  const avail = window.innerWidth - sidebar - inspector - 32;
+  const w = Math.max(320, Math.min(720, avail));
+  gate.style.width = w + 'px';
+  // Center of available region — left edge of the available band + half its width.
+  const centerOfAvail = sidebar + (window.innerWidth - sidebar - inspector) / 2;
+  gate.style.left = centerOfAvail + 'px';
+  // The CSS still applies translateX(-50%) so the gate is centred on `left`.
+}
+
 function planActShowGate(step) {
   const gate = document.getElementById('step-rail-gate');
   if (!gate) return;
   _planActActiveRunId = step?.runId || null;
+  // Sprint-2.9.1 — hide the step-rail while the gate is up so they
+  // don't compete for the same vertical strip. The agent loop re-emits
+  // the plan event after approval which re-shows the rail.
+  const rail = document.getElementById('step-rail');
+  if (rail) rail.classList.add('plan-act-suppressed');
+  _planActPositionGate(gate);
+  if (_planActResizeHandler) window.removeEventListener('resize', _planActResizeHandler);
+  _planActResizeHandler = () => _planActPositionGate(gate);
+  window.addEventListener('resize', _planActResizeHandler);
   const toolEl = document.getElementById('plan-act-gate-tool');
   if (toolEl) toolEl.textContent = String(step?.firstTool || 'unknown');
   // If we have a richer reason, append it after the inline <code>.
@@ -142,9 +197,16 @@ function planActShowGate(step) {
 function planActHideGate() {
   document.getElementById('step-rail-gate')?.classList.remove('show');
   _planActActiveRunId = null;
+  // Sprint-2.9.1 — unsuppress the step-rail (which was hidden in show).
+  const rail = document.getElementById('step-rail');
+  if (rail) rail.classList.remove('plan-act-suppressed');
   if (_planActKeyHandler) {
     document.removeEventListener('keydown', _planActKeyHandler, true);
     _planActKeyHandler = null;
+  }
+  if (_planActResizeHandler) {
+    window.removeEventListener('resize', _planActResizeHandler);
+    _planActResizeHandler = null;
   }
 }
 window.planActShowGate = planActShowGate;

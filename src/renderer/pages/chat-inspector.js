@@ -317,8 +317,23 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════════════════════════════
 var stepRailState = { steps: [], currentIdx: -1 };
 
+// Sprint-2.9.1 — normalize plan steps to strings. Some models (Codestral,
+// Mistral coders) return steps as objects like {title:'…', reason:'…'}
+// or {step:'…', tool:'…'} instead of plain strings. Without normalization
+// the step rail rendered "[object Object] → [object Object] → …" across
+// the top of the chat. Accepts: string | {title|step|name|text|content}.
+function _normalizePlanStep(s) {
+  if (s == null) return '';
+  if (typeof s === 'string') return s;
+  if (typeof s === 'object') {
+    return String(s.title || s.step || s.name || s.text || s.content || s.description || s.label || JSON.stringify(s).slice(0, 60));
+  }
+  return String(s);
+}
+
 function setStepRail(steps, currentIdx){
-  stepRailState.steps = Array.isArray(steps) ? steps.slice(0, 7) : [];
+  const raw = Array.isArray(steps) ? steps.slice(0, 7) : [];
+  stepRailState.steps = raw.map(_normalizePlanStep).filter(Boolean);
   stepRailState.currentIdx = (typeof currentIdx === 'number') ? currentIdx : -1;
   renderStepRail();
 }

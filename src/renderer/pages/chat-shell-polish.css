@@ -1404,6 +1404,10 @@ textarea#inp{background:transparent!important}
 .step-rail-gate {
   display: none;
   position: fixed;
+  /* Sprint-2.9.1 — top + left + width now set by JS at show time via
+     _planActPositionGate() to account for title-bar / wake-bar /
+     sidebar / inspector widths. The fallback values here are used
+     only if JS hasn't run yet (e.g. animation pre-render flash). */
   top: 60px;
   left: 50%;
   transform: translateX(-50%);
@@ -1433,6 +1437,13 @@ textarea#inp{background:transparent!important}
     step-rail-gate-in 220ms cubic-bezier(.22, 1.2, .36, 1),
     step-rail-gate-glow 2.6s ease-in-out 220ms infinite;
 }
+
+/* Sprint-2.9.1 — when the Plan/Act gate is up, hide the step-rail so
+   they don't compete for vertical strip below the title bar. The gate's
+   body line ("First tool: <code>…") already conveys what the plan is.
+   After approval/reject, the agent loop re-emits the plan event and the
+   rail returns. */
+.step-rail.plan-act-suppressed { display: none !important; }
 
 /* Icon column — tinted circular badge for the shield glyph. */
 .step-rail-gate-icon {
