@@ -79,7 +79,7 @@ async function renderHubBody() {
         </div>
       `).join('');
     } catch(e) {
-      body.innerHTML = `<div style="color:var(--red);font-size:11px">❌ ${e.message}</div>`;
+      body.innerHTML = `<div class="empty-state"><div class="es-icon"><svg class="licon lg"><use href="#i-x"/></svg></div><h3>Couldn't load plugins</h3><p>${(e.message || String(e)).replace(/[<>]/g,'')}</p><button class="sc-btn" onclick="renderHubBody()">Try again</button></div>`;
     }
   } else if (hubCurrentTab === 'create') {
     body.innerHTML = `

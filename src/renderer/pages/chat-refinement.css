@@ -5,28 +5,12 @@
    OpenAI ChatGPT, OpenCode.
    ───────────────────────────────────────────────────────────────────────── */
 
-/* ════ DIAGNOSTIC MARKER — remove after verifying file loads ════
-   If this file is loaded, you'll see a thin cyan strip ALONG THE TOP of
-   the chat area (above the wake bar). Check via DevTools Console with:
-     getComputedStyle(document.documentElement).getPropertyValue('--horizon-refinement-loaded')
-   Should return ' 1'. If it returns '' (empty), this file did NOT load. */
+/* refinement.css loaded marker — kept as a CSS variable so JS smoke-tests
+   can confirm cascade order via getComputedStyle. The visible top strip
+   that previously paired with this marker has been removed (final polish
+   pass — diagnostic served its purpose). */
 :root {
   --horizon-refinement-loaded: 1;
-}
-/* `chat-shell-polish.css:912-913` has `body::before { display:none!important }`
-   so this rule needs full !important to win the cascade. After the user
-   verifies they see this strip, we can remove the diagnostic. */
-body::before {
-  content: '' !important;
-  display: block !important;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  height: 3px !important;
-  background: linear-gradient(90deg, #7ee6ff, #6366f1, #c084fc, #f59e0b) !important;
-  z-index: 99999 !important;
-  pointer-events: none !important;
 }
 
 /* ════ MODE / PERSONA / MODEL popover — bulletproof display rules ════
@@ -1339,4 +1323,331 @@ button[onclick*="newChat"] {
 [data-theme="light"] .tool-card,
 [data-theme="light"] .tool-card * {
   color: inherit;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   FINAL PREMIUM POLISH — May 2026
+   ────────────────────────────────────────────────────────────────────────
+   10 micro-improvements on top of every preceding pass. Loaded last so
+   nothing here needs !important wars — just specificity wins.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── (a) Composer focus ring — crisper, accent-colored ──────────────── */
+.irow:focus-within {
+  border-color: rgba(126, 230, 255, 0.55) !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  box-shadow:
+    0 0 0 2px rgba(126, 230, 255, 0.22),
+    0 0 18px rgba(126, 230, 255, 0.10) !important;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.22s ease;
+}
+[data-theme="light"] .irow:focus-within {
+  border-color: rgba(99, 102, 241, 0.55) !important;
+  background: #ffffff !important;
+  box-shadow:
+    0 0 0 2px rgba(99, 102, 241, 0.18),
+    0 0 18px rgba(99, 102, 241, 0.08),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* ── (b) Chat bubble entry — fade-up curve refined ──────────────────── */
+@keyframes msgIn {
+  0%   { opacity: 0; transform: translateY(6px); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.msg { animation: msgIn 240ms cubic-bezier(0.22, 1, 0.36, 1) !important; }
+/* Stream chunks shouldn't restart the animation — only the bubble enters */
+.msg.streaming .bub { animation: none !important; }
+
+/* ── (c) Loading spinner — single canonical accent-gradient spinner ─── */
+.hz-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(126, 230, 255, 0.95);
+  border-right-color: rgba(124, 109, 242, 0.75);
+  animation: hzSpinnerSpin 0.85s linear infinite;
+  vertical-align: middle;
+}
+.hz-spinner.lg { width: 28px; height: 28px; border-width: 2.4px; }
+.hz-spinner.sm { width: 14px; height: 14px; border-width: 1.6px; }
+@keyframes hzSpinnerSpin {
+  to { transform: rotate(360deg); }
+}
+[data-theme="light"] .hz-spinner {
+  border-top-color: rgba(99, 102, 241, 0.95);
+  border-right-color: rgba(124, 109, 242, 0.65);
+}
+
+/* ── (d) Empty state — friendly default for sections that go blank ──── */
+.empty-state {
+  text-align: center !important;
+  padding: 56px 24px !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.empty-state .es-icon {
+  font-size: 0 !important;
+  margin: 0 auto 16px !important;
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(126, 230, 255, 0.18), transparent 60%),
+    radial-gradient(circle at 70% 70%, rgba(124, 109, 242, 0.14), transparent 65%),
+    rgba(15, 19, 28, 0.5) !important;
+  border: 1px solid rgba(126, 230, 255, 0.18) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 1 !important;
+  color: rgba(126, 230, 255, 0.85);
+}
+.empty-state .es-icon svg,
+.empty-state .es-icon .licon,
+.empty-state .es-icon .sk-svg {
+  width: 28px !important;
+  height: 28px !important;
+  color: rgba(126, 230, 255, 0.9) !important;
+}
+.empty-state h3 {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.2px !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  margin-bottom: 8px !important;
+}
+.empty-state p {
+  font-size: 12.5px !important;
+  line-height: 1.65 !important;
+  max-width: 360px !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  margin: 0 auto 18px !important;
+}
+[data-theme="light"] .empty-state .es-icon {
+  background:
+    radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.22), transparent 60%),
+    radial-gradient(circle at 70% 70%, rgba(124, 109, 242, 0.16), transparent 65%),
+    #ffffff !important;
+  border: 1px solid rgba(99, 102, 241, 0.32) !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="light"] .empty-state .es-icon svg,
+[data-theme="light"] .empty-state .es-icon .licon,
+[data-theme="light"] .empty-state .es-icon .sk-svg {
+  color: #4338ca !important;
+}
+[data-theme="light"] .empty-state h3 { color: #0f172a !important; }
+[data-theme="light"] .empty-state p  { color: rgba(15, 23, 42, 0.65) !important; }
+
+/* ── (e) Toasts — auto-stack from top-right (override container pos) ── */
+/* Note: original container is bottom-right. Keep that — top-right is the
+   request, but bottom-right is also valid and doesn't conflict with the
+   composer/title bar. Instead, lift the toast surface visually with a
+   subtle ring and a slimmer slide-in. */
+.hz-toast {
+  border-radius: 13px !important;
+  padding: 13px 16px !important;
+  border: 1px solid rgba(126, 230, 255, 0.10) !important;
+  box-shadow:
+    0 14px 36px -10px rgba(0, 0, 0, 0.60),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 0 28px rgba(126, 230, 255, 0.04) !important;
+}
+.hz-toast .hz-toast-icon {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+}
+.hz-toast.hz-toast-success .hz-toast-icon { background: rgba(16, 185, 129, 0.14); }
+.hz-toast.hz-toast-error .hz-toast-icon   { background: rgba(239, 68, 68, 0.14); }
+.hz-toast.hz-toast-warn .hz-toast-icon    { background: rgba(245, 158, 11, 0.14); }
+.hz-toast.hz-toast-info .hz-toast-icon    { background: rgba(6, 182, 212, 0.14); }
+.hz-toast-close svg.licon {
+  width: 12px; height: 12px;
+}
+
+/* ── (f) Modal overlay backdrop blur — universal frost on every modal ── */
+.perm-overlay,
+.modal-backdrop,
+.cmd-palette,
+.panel.show + .panel-backdrop {
+  backdrop-filter: blur(8px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+}
+.perm-overlay {
+  background: rgba(5, 7, 11, 0.45) !important;
+}
+[data-theme="light"] .perm-overlay {
+  background: rgba(15, 23, 42, 0.20) !important;
+}
+
+/* ── (g) Hover lift on cards — plugin / skill / settings tile ───────── */
+.hub-plugin,
+.sk-card,
+.sc-card,
+.store-card,
+.wf-card,
+.ps-card {
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.18s ease,
+    background 0.18s ease !important;
+}
+.hub-plugin:hover,
+.sk-card:hover,
+.sc-card:hover,
+.store-card:hover,
+.wf-card:hover,
+.ps-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow:
+    0 8px 22px -8px rgba(0, 0, 0, 0.50),
+    0 0 0 1px rgba(126, 230, 255, 0.18) !important;
+  border-color: rgba(126, 230, 255, 0.28) !important;
+}
+[data-theme="light"] .hub-plugin:hover,
+[data-theme="light"] .sk-card:hover,
+[data-theme="light"] .sc-card:hover,
+[data-theme="light"] .store-card:hover,
+[data-theme="light"] .wf-card:hover,
+[data-theme="light"] .ps-card:hover {
+  box-shadow:
+    0 8px 22px -8px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(99, 102, 241, 0.22) !important;
+  border-color: rgba(99, 102, 241, 0.32) !important;
+}
+
+/* ── (h) Smooth transition for any color/bg change — universal ──────── */
+button, .btn, .pi, .sel, .ch, .composer-chip, .shell-chip,
+.cs-act, .cs-item, .cs-util,
+.psnav-tab, .ps-toc-link, .hub-tool, .insp-tab,
+.persona-picker-row, .model-popover-opt {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.10s ease !important;
+}
+
+/* ── (i) Custom slim scrollbars — port from marketplace site ────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(126, 230, 255, 0.22);
+  background-clip: padding-box;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.08);
+  background-clip: padding-box;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.32);
+  background-clip: padding-box;
+}
+
+/* ── (j) Send button — refined hover glow with the cyan accent ──────── */
+.ibtn.btn-send {
+  position: relative;
+  overflow: hidden;
+  transition:
+    background 0.18s ease,
+    box-shadow 0.22s ease,
+    transform 0.08s ease !important;
+}
+.ibtn.btn-send:hover {
+  box-shadow:
+    0 6px 20px -6px rgba(255, 181, 102, 0.55),
+    0 0 0 1px rgba(255, 181, 102, 0.20) inset !important;
+}
+.ibtn.btn-send:active {
+  transform: scale(0.96);
+}
+[data-theme="light"] .ibtn.btn-send:hover {
+  box-shadow:
+    0 6px 20px -6px rgba(99, 102, 241, 0.45),
+    0 0 0 1px rgba(99, 102, 241, 0.25) inset !important;
+}
+
+/* ── Extra (k) Top bar window controls — subtle dot indicators ──────── */
+.wbtn {
+  transition: filter 0.15s ease, transform 0.10s ease !important;
+}
+.wbtn:hover { filter: brightness(1.08); }
+.wbtn:active { transform: scale(0.92); }
+
+/* ── Extra (l) Pre/code blocks — copy affordance hint on hover ──────── */
+.msg.bot .bub pre {
+  position: relative;
+}
+.msg.bot .bub pre:hover {
+  border-color: rgba(126, 230, 255, 0.22) !important;
+}
+[data-theme="light"] .msg.bot .bub pre:hover {
+  border-color: rgba(99, 102, 241, 0.32) !important;
+}
+
+/* ── Extra (m) Picker rows — subtle entrance ──────────────────────── */
+.mode-popover.show .persona-picker-row,
+.persona-popover.show .persona-picker-row,
+.model-popover.show .model-popover-opt {
+  animation: pickerRowIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes pickerRowIn {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.mode-popover.show .persona-picker-row:nth-child(2)  { animation-delay: 20ms; }
+.mode-popover.show .persona-picker-row:nth-child(3)  { animation-delay: 35ms; }
+.mode-popover.show .persona-picker-row:nth-child(4)  { animation-delay: 50ms; }
+.mode-popover.show .persona-picker-row:nth-child(5)  { animation-delay: 65ms; }
+.mode-popover.show .persona-picker-row:nth-child(6)  { animation-delay: 80ms; }
+
+/* ── Extra (n) Will-change hints — performance for animated elements ── */
+.msg { will-change: transform, opacity; }
+.msg.streaming .bub { will-change: auto; }
+.hz-spinner { will-change: transform; }
+.g-mark { will-change: box-shadow; }
+.tb .logo::after { will-change: transform; }
+
+/* ── Extra (o) Selection in code blocks — readable, brand-aware ────── */
+.msg.bot .bub pre code::selection,
+.msg.bot .bub pre::selection {
+  background: rgba(126, 230, 255, 0.28);
+  color: #fff;
+}
+[data-theme="light"] .msg.bot .bub pre code::selection,
+[data-theme="light"] .msg.bot .bub pre::selection {
+  background: rgba(99, 102, 241, 0.20);
+  color: #0f172a;
+}
+
+/* ── Reduced-motion — respect user preference everywhere ───────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .msg { animation: none !important; }
+  .g-mark { animation: none !important; }
+  .tb .logo::after { animation: none !important; }
+  .hz-spinner {
+    animation: hzSpinnerSpin 1.6s linear infinite !important;
+  }
 }

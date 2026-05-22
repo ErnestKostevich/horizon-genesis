@@ -46,6 +46,10 @@
      dominate the cascade without needing !important wars. Reference DNA:
      Linear / Anthropic Claude.ai / Cursor / Windsurf / OpenAI ChatGPT. -->
 <link rel="stylesheet" href="chat-refinement.css"/>
+<!-- Hermes-style desktop dashboard. Loaded after refinement so its card
+     rules sit on top of the base cascade. The panel itself is injected
+     dynamically by chat-dashboard.js — no DOM here. -->
+<link rel="stylesheet" href="chat-dashboard.css"/>
 </head>
 <body>
 <!-- ═══════════ ICON LIBRARY (lucide.dev) ═══════════
@@ -158,6 +162,9 @@
     </div>
   </div>
   <nav class="cs-activity" id="shell-nav" aria-label="Horizon workspace navigation">
+    <button class="cs-act" data-shell-target="dashboard" onclick="openDashboard()" title="Dashboard — home screen with today's stats, active tasks, and recent activity">
+      <svg class="licon"><use href="#i-layout"/></svg><span>Home</span>
+    </button>
     <button class="cs-act on" data-shell-target="chat" onclick="showChatSurface()" title="Chat">
       <svg class="licon"><use href="#i-message"/></svg><span>Chat</span>
     </button>
@@ -1824,8 +1831,8 @@ var audioStream=null, mediaRec=null, audioChunks=[], analyserAnim=null;
 // window.history, so history.push(...) can crash before the AI request starts.
 var chatHistory=[];
 
-var SURFACE_NAMES = ['chat','code','workflows','plugins','skills','telegram','discord','marketplace','personas','settings','account','recorder'];
-var SURFACE_PANEL_IDS = ['hub-panel','skills-panel','telegram-panel','discord-panel','store-panel','acct-panel','wf-panel','recorder-panel','panel'];
+var SURFACE_NAMES = ['chat','dashboard','code','workflows','plugins','skills','telegram','discord','marketplace','personas','settings','account','recorder'];
+var SURFACE_PANEL_IDS = ['hub-panel','skills-panel','telegram-panel','discord-panel','store-panel','acct-panel','wf-panel','recorder-panel','dashboard-panel','panel'];
 var activeSurface = 'chat';
 var chatSidebarCollapsed = false;
 
@@ -1965,6 +1972,7 @@ function shellSurfaceName(surface){
   if (typeof operatorModeActive !== 'undefined' && operatorModeActive) return 'Agent';
   const names = {
     chat: 'Chat',
+    dashboard: 'Home',
     code: 'Code',
     workflows: 'Workflows',
     plugins: 'Plugins',
@@ -3817,13 +3825,16 @@ async function sendMsg(){
   activeMessageRun = opStartRun('chat', text || 'attachments');
   window.speechSynthesis?.cancel();
 
-  // Show user message with attachment names
+  // Show user message with attachment names. Was using `?` as a literal
+  // placeholder for an attachment glyph (likely a mojibaked paperclip).
+  // Use a clean prefix that renders the same on every font.
   let displayText = text;
   if(hasAttachments){
     const names=attachments.map(a=>a.name).join(', ');
+    const prefix = '📎';
     displayText = text ? `${text}
 
-? *${names}*` : `? *${names}*`;
+${prefix} *${names}*` : `${prefix} *${names}*`;
   }
   addMsg('user', displayText || text);
   addTyping();
@@ -4791,5 +4802,11 @@ H.onMarketAuthenticated?.(async (user) => {
      Routes sendMsg through generateImageFromPrompt when mode='image'.
      Provider auto-detected from active chip + key availability. -->
 <script src="chat-image-mode.js"></script>
+<!-- Hermes-style desktop dashboard. Exposes openDashboard / closeDashboard /
+     dashRefresh / maybeAutoOpenDashboard on window. The sidebar's "Home"
+     button calls openDashboard(); on a fresh app launch the inline boot
+     IIFE calls maybeAutoOpenDashboard() so the user sees the home screen
+     when there's no chat to resume. -->
+<script src="chat-dashboard.js"></script>
 </body>
 </html>

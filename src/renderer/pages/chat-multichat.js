@@ -342,6 +342,12 @@ async function bootCurrentChat(){
     try { document.getElementById('cs-search').placeholder = lang==='ru'?'Поиск чатов…':'Search chats…'; } catch(_){}
     await loadChatList();
     refreshLicensePill();
+    // Hermes-style desktop dashboard. When the app launches without an
+    // active chat, swap the empty-state hero for the home screen so the
+    // user sees today's stats + recent activity at a glance. The helper
+    // is defined on window by chat-dashboard.js and silently no-ops if
+    // the user has disabled the home screen via localStorage.
+    try { window.maybeAutoOpenDashboard?.(); } catch(_){}
   } catch (e) { console.warn('bootCurrentChat failed:', e?.message); }
 }
 // Debounced sidebar refresh — persistChatMessage fires 2-4 times per turn
@@ -383,10 +389,10 @@ async function _ensureCurrentChatIdForPersist(){
 
 function _persistChatMessage(role, content, meta){
   currentChatId = currentChatId || null;
-  if (false && !currentChatId) {
-    console.warn('[chat] _persistChatMessage skipped — no currentChatId');
-    return;
-  }
+  // Don't bail when currentChatId is null — _ensureCurrentChatIdForPersist
+  // below will create one on demand. This used to early-return; the gate is
+  // now disabled (kept the if-block as a no-op marker for diff archaeology
+  // until the next sprint, then deleted in this polish pass).
   // chatAddMessage is an IPC invoke — it returns a Promise. The previous
   // try/catch only caught synchronous errors and silently dropped any IPC
   // rejection. Log the rejection so persistence failures show up in

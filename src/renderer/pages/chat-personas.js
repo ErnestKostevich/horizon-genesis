@@ -76,7 +76,7 @@ async function renderPersonasEditor() {
       </aside>
       <main class="pe-detail" id="pe-detail">
         <div class="pe-detail-empty">
-          <div class="pe-detail-empty-icon">⏳</div>
+          <div class="pe-detail-empty-icon"><span class="hz-spinner" aria-hidden="true"></span></div>
           <div class="pe-detail-empty-text">Loading…</div>
         </div>
       </main>
