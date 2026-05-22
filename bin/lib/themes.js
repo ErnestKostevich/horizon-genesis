@@ -121,6 +121,70 @@ const THEMES = {
     banner: '❀',
     description: 'Catppuccin Mocha. Warm cream tones.',
   },
+  // Sprint-2.10 — four new premium themes. Each has a curated 7-frame
+  // spinner unique to the theme's mood, plus carefully chosen RGB stops
+  // for accent / success / warn / err so the wordmark gradient flows
+  // naturally without dead spots.
+  sunset: {
+    accent:  [255, 122,  89],   // burnt orange
+    success: [255, 198, 122],   // honey
+    warn:    [255, 174,  66],   // amber-orange
+    err:     [220,  60,  60],
+    dim:     [140,  92,  72],
+    cyan:    [255, 160, 120],
+    magenta: [232,  88, 140],   // rose
+    spinnerFrames: ['◜','◠','◝','◞','◡','◟','◜','◠'],
+    banner: '☀',
+    description: 'Sunset over mountains. Warm orange + rose.',
+  },
+  ocean: {
+    accent:  [ 86, 178, 222],   // sky blue
+    success: [ 80, 220, 198],   // turquoise
+    warn:    [255, 196,  82],
+    err:     [255, 110, 130],
+    dim:     [ 86, 110, 130],
+    cyan:    [134, 222, 226],
+    magenta: [180, 140, 230],
+    spinnerFrames: ['⠁','⠉','⠙','⠹','⠸','⠼','⠴','⠦'],
+    banner: '≈',
+    description: 'Deep ocean. Cool blues with turquoise lift.',
+  },
+  forest: {
+    accent:  [102, 187, 106],   // leaf green
+    success: [165, 214, 167],
+    warn:    [255, 213, 79],
+    err:     [229, 115, 115],
+    dim:     [121, 144, 121],
+    cyan:    [128, 200, 168],
+    magenta: [190, 168, 102],   // muted gold
+    spinnerFrames: ['❀','✿','❁','✾','❀','✿','❁','✾'],
+    banner: '♣',
+    description: 'Pine forest. Earthy greens, mossy depth.',
+  },
+  cyberpunk: {
+    accent:  [255,  60, 180],   // hot pink
+    success: [120, 255, 200],
+    warn:    [255, 220,  60],
+    err:     [255,  70,  85],
+    dim:     [120,  90, 140],
+    cyan:    [ 80, 230, 255],
+    magenta: [255,  80, 220],
+    spinnerFrames: ['▰','▱','▰','▱','▰','▱','▰','▱'],
+    banner: '⌬',
+    description: 'Cyberpunk neon. Hot pink + electric cyan.',
+  },
+  dracula: {
+    accent:  [189, 147, 249],   // Dracula purple
+    success: [ 80, 250, 123],   // Dracula green
+    warn:    [241, 250, 140],   // Dracula yellow
+    err:     [255,  85,  85],   // Dracula red
+    dim:     [ 98, 114, 164],   // Dracula comment
+    cyan:    [139, 233, 253],   // Dracula cyan
+    magenta: [255, 121, 198],   // Dracula pink
+    spinnerFrames: ['⢀','⡀','⠄','⠂','⠁','⠈','⠐','⠠'],
+    banner: '⌁',
+    description: 'Dracula. The classic dev-favourite palette.',
+  },
 };
 
 function listThemes() {
