@@ -556,6 +556,28 @@ async function main({ flags } = {}) {
     verbose: !!flags?.verbose,
   });
 
+  // Experiment — Ink-based TUI prototype lives in bin/tui-ink/. Opt in
+  // via --ink or HORIZON_INK_TUI=1. Ink 7 is ESM-only so we dynamic-import
+  // the entry point from this CJS launcher. Under pkg-bundled builds the
+  // import will fail and we fall back to the readline TUI with a notice.
+  const wantInk = !!flags?.ink || process.env.HORIZON_INK_TUI === '1';
+  if (wantInk) {
+    try {
+      const inkUrl = require('url').pathToFileURL(
+        path.join(__dirname, 'tui-ink', 'index.mjs')
+      ).href;
+      const inkMod = await import(inkUrl);
+      await inkMod.start({ runtime, flags });
+      return;
+    } catch (e) {
+      process.stderr.write(
+        fmt.warn('Ink TUI unavailable in this build — falling back to readline TUI.') + '\n' +
+        fmt.dim('  reason: ' + (e?.message || String(e))) + '\n'
+      );
+      // Fall through to the readline path below.
+    }
+  }
+
   if (!isTTY) process.stderr.write(fmt.warn('TUI works best in an interactive terminal') + '\n');
 
   // Fix 2 — welcome reveal is now OPT-IN. Default first launch is silent.

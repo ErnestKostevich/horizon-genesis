@@ -53,9 +53,13 @@
     "conf": "^10.2.0",
     "electron-store": "^8.1.0",
     "form-data": "^4.0.0",
+    "ink": "^7.0.3",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
     "monaco-editor": "^0.55.1",
     "node-fetch": "^2.7.0",
     "qrcode": "^1.5.4",
+    "react": "^19.2.6",
     "ws": "^8.18.0"
   },
   "devDependencies": {
