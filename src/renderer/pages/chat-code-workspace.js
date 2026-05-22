@@ -2604,3 +2604,14 @@ console.error = function(...args) {
   if(operatorModeActive) opLog(args.join(' '), 'error');
 };
 
+// Defensive: explicitly expose toggleOperatorMode + opLog on window.
+// Function declarations at script-top bind globally in classic <script>
+// contexts, but if Electron / nodeIntegration ever sandboxes this file
+// into a CommonJS-ish wrap (which it has done in past Electron upgrades),
+// the inline onclick="toggleOperatorMode()" would throw ReferenceError.
+// Explicit window assignment makes the wire-up version-proof.
+if (typeof window !== 'undefined') {
+  window.toggleOperatorMode = toggleOperatorMode;
+  window.opLog = opLog;
+}
+

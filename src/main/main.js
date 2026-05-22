@@ -1928,7 +1928,17 @@ function loadAgentModules() {
             const s = liveDb.stats();
             console.log(`✓ MemoryDb wired (SQLite primary @ ${path.basename(sqlitePath)} — ${s.memories} mem, ${s.facts} facts, ${s.conversations} conv)`);
           } catch (e) {
-            console.log('[memoryDb] live wire-up skipped:', e.message);
+            // Same ABI-mismatch sniff as the kanban path — degrade to
+            // JSON-only mode with a clear fix instead of a raw stack.
+            const msg = String(e && e.message || e);
+            const isAbi = /NODE_MODULE_VERSION/i.test(msg) || /was compiled against a different Node\.js/i.test(msg);
+            if (isAbi) {
+              console.warn('[memoryDb] better-sqlite3 native module not compatible with Electron.');
+              console.warn('[memoryDb] Fix: run `npm run rebuild:native` in the project root, then `npm start` again.');
+              console.warn('[memoryDb] Falling back to JSON-only memory backend for this session.');
+            } else {
+              console.log('[memoryDb] live wire-up skipped:', msg);
+            }
           }
         }
 
@@ -2358,7 +2368,19 @@ function loadAgentModules() {
 
       console.log(`Kanban queue ready @ ${path.basename(kanbanPath)} (${wantWorkers} worker${wantWorkers === 1 ? '' : 's'})`);
     } catch (e) {
-      console.warn('Kanban queue unavailable:', e.message);
+      // Friendly hint for the common dev-mode ABI mismatch where the
+      // user's local better-sqlite3 was compiled against system Node
+      // (NMV 137+) but Electron 28 ships V8 with NMV 119. Tell them
+      // exactly which command to run instead of dumping a raw stack.
+      const msg = String(e && e.message || e);
+      const isAbi = /NODE_MODULE_VERSION/i.test(msg) || /was compiled against a different Node\.js/i.test(msg);
+      if (isAbi) {
+        console.warn('[kanban] better-sqlite3 native module not compatible with Electron.');
+        console.warn('[kanban] Fix: run `npm run rebuild:native` in the project root, then `npm start` again.');
+        console.warn('[kanban] Kanban runtime disabled for this session.');
+      } else {
+        console.warn('Kanban queue unavailable:', msg);
+      }
     }
   }
 }

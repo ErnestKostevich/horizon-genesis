@@ -8,8 +8,19 @@ How to iterate on Horizon AI without rebuilding the installer every time.
 git clone https://github.com/ErnestKostevich/horizon-genesis.git
 cd horizon-genesis
 npm install
+npm run rebuild:native   # ← REQUIRED once after install
 npm start
 ```
+
+> **You must run `npm run rebuild:native` once after `npm install`.**
+> Horizon uses native modules (`better-sqlite3` for the Kanban queue and
+> SQLite memory backend, `node-pty` for the workspace terminal). `npm
+> install` compiles them against your system Node, but Electron 28 ships
+> a different V8 / Node ABI (NODE_MODULE_VERSION 119). Without
+> `rebuild:native`, you'll see `Kanban queue unavailable: NODE_MODULE_VERSION
+> mismatch` in the console and Kanban + SQLite memory will silently
+> degrade to JSON-only mode. The app still runs, but those subsystems
+> are off.
 
 `npm start` launches Electron against the source tree directly. The window
 opens, DevTools attaches detached, and a `[Horizon dev]` line in the
