@@ -80,7 +80,10 @@ const SPEC = {
   booleans: ['help', 'version', 'json', 'human', 'quiet', 'stream', 'verbose',
              'auto-approve', 'never-approve', 'reflect', 'semantic',
              'list', 'enable-tg', 'enable-discord', 'reveal', 'all',
-             'no-setup', 'no-art'],
+             'no-setup', 'no-art',
+             // Experiment — opt into the Ink-based TUI prototype at
+             // bin/tui-ink/. Falls back to readline TUI if Ink can't load.
+             'ink'],
   negatables: ['reflect', 'semantic'],
 };
 
