@@ -702,8 +702,28 @@ class GradientSpinner {
     } else {
       face = this.frames[this.i++ % this.frames.length];
     }
-    const color = supportsColor ? GRADIENT[this.i % GRADIENT.length] : '';
-    const line = `${color}${face}${RESET} ${this.text}`;
+    // Sprint-2.9 — gradient sweep across the full label, not just the
+    // spinner glyph. Each character of `this.text` gets a colour from
+    // GRADIENT[(i + charIdx) % len] so the rainbow flows left→right with
+    // every frame. Falls back to plain face+text when colour is off.
+    let line;
+    if (supportsColor) {
+      const headColor = GRADIENT[this.i % GRADIENT.length];
+      const txt = this.text || '';
+      let painted = '';
+      for (let k = 0; k < txt.length; k++) {
+        const ch = txt[k];
+        if (ch === ' ' || ch === '\t') {
+          painted += ch;
+        } else {
+          const c = GRADIENT[(this.i + k) % GRADIENT.length];
+          painted += `${c}${ch}`;
+        }
+      }
+      line = `${headColor}${face}${RESET} ${painted}${RESET}`;
+    } else {
+      line = `${face} ${this.text}`;
+    }
     // Erase previous line residue
     process.stderr.write(`\r\x1b[K${line}`);
     this.lastLen = line.length;
