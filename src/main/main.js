@@ -1315,10 +1315,19 @@ async function spawnSubagent(opts = {}) {
     broadcast({ ...step, runId: childRunId, parentRunId, isSubagent: true });
   };
 
-  // Lightweight controller — subagents are non-cancellable from UI v1; the
-  // overall timeout below is the only hard stop.
+  // Sprint-2.9 — subagents are now cancellable. Inspector's subagent
+  // tree adds a "stop" button on running cards which calls
+  // H.subagentAbort(childRunId) (ipc 'subagentAbort'). That handler
+  // toggles _aborted = true on the entry below; the controller observes
+  // it via isStopped(). Any in-flight tool call returns up the loop and
+  // the run records as cancelled.
+  const childAbortState = { aborted: false };
+  // Track in a module-level map so the IPC handler can find this entry
+  // by childRunId. _subagentAbortRegistry is created lazily.
+  if (!global._subagentAbortRegistry) global._subagentAbortRegistry = new Map();
+  global._subagentAbortRegistry.set(childRunId, childAbortState);
   const childController = {
-    isStopped: () => false,
+    isStopped: () => childAbortState.aborted,
     isPaused: () => false,
     beforeTool: async () => ({ decision: 'allow' }),
     observe: () => {},

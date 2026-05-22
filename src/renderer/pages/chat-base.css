@@ -1695,8 +1695,30 @@ button:where(:not([class])){
 .sub-card{padding:6px 0;border-bottom:1px solid var(--b1)}
 .sub-card:last-child{border-bottom:none}
 .sub-card-head{display:flex;justify-content:space-between;align-items:center;gap:6px}
-.sub-card-task{text-align:left;color:var(--tx);font-size:var(--text-sm);line-height:1.4}
+.sub-card-task{text-align:left;color:var(--tx);font-size:var(--text-sm);line-height:1.4;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sub-card-meta{font-size:var(--text-sm);color:var(--t3);margin-top:2px}
+/* Sprint-2.9 — subagent abort button + elapsed timer. Visible only on
+   .sub-card.sub-card-running entries. Calls window.subagentAbort(runId)
+   which IPCs main.js to flip the controller's isStopped flag. */
+.sub-card-elapsed{color:var(--t2);font-family:var(--mono);font-size:10.5px;letter-spacing:.02em}
+.sub-card-abort{
+  -webkit-app-region:no-drag;
+  padding:2px 8px;
+  font:600 10.5px/1 var(--font);
+  color:#fecaca;
+  background:rgba(248,113,113,.08);
+  border:1px solid rgba(248,113,113,.32);
+  border-radius:5px;
+  cursor:pointer;
+  text-transform:lowercase;
+  letter-spacing:.04em;
+  transition:background .12s,border-color .12s,color .12s,transform .08s;
+}
+.sub-card-abort:hover{background:rgba(248,113,113,.18);border-color:rgba(248,113,113,.55);color:#fee2e2}
+.sub-card-abort:active{transform:translateY(1px)}
+.sub-card-running .sub-card-status{animation:agent-pulse 1.4s ease-in-out infinite}
+[data-theme="light"] .sub-card-abort{color:#b91c1c;background:rgba(248,113,113,.10);border-color:rgba(220,38,38,.40)}
+[data-theme="light"] .sub-card-abort:hover{background:rgba(248,113,113,.18);border-color:rgba(185,28,28,.6)}
 .sub-card-meta code{font-size:var(--text-sm);background:rgba(255,255,255,.04);padding:1px 4px;border-radius:3px}
 .sub-card-status{font-size:var(--text-sm);font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
 .sub-status-running{color:var(--amb,#facc15)}

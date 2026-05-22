@@ -399,13 +399,33 @@ function refreshInspectorSubagents() {
         : s.status === 'error' && s.error
         ? `<div class="sub-card-err">${esc(String(s.error).slice(0,200))}</div>`
         : '';
+      // Sprint-2.9 — elapsed time for the sub-run. Audit found
+      // s.startedAt / s.endedAt were captured but never rendered.
+      // For done/error runs we show total duration. For running runs
+      // we show elapsed since spawn and add an Abort button (calls
+      // agentControl(runId, 'stop'); main-process side currently
+      // hardcodes isStopped:()=>false for subagents so this is the
+      // UI affordance — backend lift queued as a follow-up).
+      let elapsedHtml = '';
+      let abortHtml = '';
+      if (s.startedAt) {
+        const end = s.endedAt || Date.now();
+        const ms = end - s.startedAt;
+        const sec = Math.floor(ms / 1000);
+        const lbl = sec < 60 ? sec + 's' : Math.floor(sec/60) + 'm ' + (sec % 60) + 's';
+        elapsedHtml = ` · <span class="sub-card-elapsed">⏱ ${lbl}</span>`;
+      }
+      if (s.status === 'running' || (!s.status && !s.endedAt)) {
+        abortHtml = `<button class="sub-card-abort" data-run-id="${esc(s.runId)}" onclick="subagentAbort(this.dataset.runId)" title="Stop this subagent">stop</button>`;
+      }
       return `
-        <div class="sub-card">
+        <div class="sub-card${s.status === 'running' ? ' sub-card-running' : ''}">
           <div class="sub-card-head">
             <span class="sub-card-task">${esc(String(s.task).slice(0,80))}</span>
             <span class="sub-card-status ${statusClass}">${statusLabel}</span>
+            ${abortHtml}
           </div>
-          <div class="sub-card-meta">depth ${s.depth} · ${s.stepsCount || 0} step${s.stepsCount === 1 ? '' : 's'} · <code>${esc(s.runId.split('.').pop() || s.runId.slice(-8))}</code></div>
+          <div class="sub-card-meta">depth ${s.depth} · ${s.stepsCount || 0} step${s.stepsCount === 1 ? '' : 's'}${elapsedHtml} · <code>${esc(s.runId.split('.').pop() || s.runId.slice(-8))}</code></div>
           ${out}
         </div>
       `;
@@ -419,6 +439,24 @@ function refreshInspectorSubagents() {
   }).join('');
   host.innerHTML = html;
 }
+
+// Sprint-2.9 — handler invoked by Inspector subagent abort buttons. The
+// backend hardcode at main.js:1320 used to make this a no-op; that's now
+// lifted and the controller's isStopped() checks an entry in
+// global._subagentAbortRegistry keyed by childRunId.
+window.subagentAbort = async function (childRunId) {
+  if (!childRunId) return;
+  try {
+    const r = await window.H?.subagentAbort?.(childRunId);
+    if (r && r.ok === false) {
+      console.warn('subagentAbort failed:', r.error);
+    }
+  } catch (e) {
+    console.warn('subagentAbort threw:', e);
+  }
+  // Force a refresh so the user sees status change.
+  try { refreshInspectorSubagents(); } catch (_) {}
+};
 
 // Phase 26 — per-section error renderer. Each pane in the Learned
 // tab now runs in parallel via Promise.allSettled, and every pane

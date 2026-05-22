@@ -337,6 +337,19 @@ function register(deps) {
     return run.resolveStep(stepId, decision);
   });
 
+  // Sprint-2.9 — subagent abort. The renderer Inspector subagent tree
+  // exposes a "stop" button on running cards which calls this IPC.
+  // The matching entry is created in main.js spawnSubagent and removed
+  // when the run completes. Setting aborted=true makes the child loop's
+  // controller.isStopped() return true on the next iteration.
+  ipcMain.handle('subagentAbort', async (_, childRunId) => {
+    if (!global._subagentAbortRegistry) return { ok: false, error: 'no registry' };
+    const entry = global._subagentAbortRegistry.get(childRunId);
+    if (!entry) return { ok: false, error: 'No active subagent with that id' };
+    entry.aborted = true;
+    return { ok: true };
+  });
+
   ipcMain.handle('permissionAllowlistList', async () => ({
     ok: true,
     entries: getPermissionAllowlist(),
