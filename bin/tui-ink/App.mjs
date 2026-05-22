@@ -17,7 +17,7 @@
 //   • Agent loop with tool cards on a live step rail
 //   • Scrollback search
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Box, Text, Static, useApp, useInput } from 'ink';
 
 import Banner from './components/Banner.mjs';
@@ -26,6 +26,9 @@ import Composer from './components/Composer.mjs';
 import ChatLine from './components/ChatLine.mjs';
 import ToolCard from './components/ToolCard.mjs';
 import StepRail from './components/StepRail.mjs';
+import PlanActGate from './components/PlanActGate.mjs';
+import SearchOverlay from './components/SearchOverlay.mjs';
+import useMouse from './hooks/useMouse.mjs';
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -79,6 +82,22 @@ export default function App({ runtime, flags }) {
   // it's running. Promoted to a real ToolCard in the transcript when
   // the 'result' event fires.
   const [liveTool, setLiveTool] = useState(null);
+
+  // Sprint-2.13 — Plan/Act gate. When the agent's askPermission fires
+  // for a dangerous tool we stash the promise resolver here and render
+  // the PlanActGate panel above the composer. User keystrokes (Enter
+  // approves, Esc rejects) call the resolver.
+  const [pendingApproval, setPendingApproval] = useState(null);
+  const approvalResolverRef = useRef(null);
+
+  // Sprint-2.13 — scrollback search. Ctrl-R opens an overlay above the
+  // composer. While active: typing edits query, ↑↓ navigates filtered
+  // hits, Enter copies the matched line into the composer (so user can
+  // re-send / quote it), Esc cancels.
+  const [searchActive, setSearchActive] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHits, setSearchHits] = useState([]);
+  const [searchPos, setSearchPos] = useState(0);
 
   // Live session stats — accumulator for the StatusBar. We render these
   // through props so the bar's display ticks immediately as the cost
@@ -212,6 +231,19 @@ export default function App({ runtime, flags }) {
     try {
       const r = await runtime.runAgent(task, {
         history: historyRef.current,
+        // Sprint-2.13 — Plan/Act approval. Render PlanActGate panel and
+        // wait for the user's Enter/Y or Esc/N keystroke. The result of
+        // the promise is `true` (approve) or `false` (reject).
+        askPermission: ({ tool, args, reason }) => {
+          // Skip approval for safe tools — same allowlist as readline TUI.
+          const dangerous = /^(run_code|run_shell|run_python|run_powershell|shell_command|write_file|delete_file|move_file|conn_.*_send|conn_.*_post|conn_.*_create|mouse_click|keyboard_type|smart_click|type_text|press_key)$/i.test(tool || '');
+          if (!dangerous) return Promise.resolve(true);
+          return new Promise((resolve) => {
+            approvalResolverRef.current = resolve;
+            setPendingApproval({ tool, args, reason });
+            setBusyLabel('awaiting approval…');
+          });
+        },
         onStep: (event) => {
           if (!event) return;
           switch (event.type) {
@@ -324,18 +356,30 @@ export default function App({ runtime, flags }) {
         append({
           type: 'system',
           text: [
-            '/help            show this list',
-            '/quit            exit the TUI',
-            '/clear           clear scrollback',
-            '/reset           clear history (start fresh context)',
-            '/agent <task>    run the full agent loop with live step rail + tool cards',
-            '/theme <name>    switch theme (try /theme cyberpunk)',
-            '/theme --list    list all themes',
-            '/persona <id>    switch persona',
-            '/model <prov>    switch provider',
-            '/demo-tool       render a sample ToolCard',
+            'Commands',
+            '  /help            show this list',
+            '  /quit            exit the TUI',
+            '  /clear           clear scrollback',
+            '  /reset           clear history (start fresh context)',
+            '  /agent <task>    run the full agent loop with step rail + tool cards',
+            '  /theme <name>    switch theme (try /theme cyberpunk)',
+            '  /theme --list    list all themes',
+            '  /persona <id>    switch persona',
+            '  /model <prov>    switch provider',
+            '  /demo-tool       render a sample ToolCard',
             '',
-            'Any other input runs a chat turn with the active provider.',
+            'Keys',
+            '  Enter            send message',
+            '  Shift+Enter      newline (multi-line message)',
+            '  Ctrl+R           search scrollback (↑↓ navigate, Enter quote, Esc cancel)',
+            '  Ctrl+L           clear screen',
+            '  Ctrl+U           clear current line',
+            '  Ctrl+W           delete word backward',
+            '  Esc              interrupt running turn / dismiss overlay',
+            '  Y / N            approve / reject Plan-Act gate',
+            '  Mouse wheel      scroll search hits (when overlay active)',
+            '',
+            'Any non-slash input runs a chat turn with the active provider.',
           ].join('\n'),
         });
         break;
@@ -418,8 +462,109 @@ export default function App({ runtime, flags }) {
     await sendChat(value);
   }, [append, handleSlash, sendChat]);
 
+  // Sprint-2.13 — mouse support. Wheel up/down navigates the search
+  // overlay hits when it's active. In future iterations we can extend
+  // to click-to-focus, drag-to-select, etc. For now: wheel only.
+  useMouse(useCallback((ev) => {
+    if (!ev) return;
+    if (searchActive) {
+      if (ev.kind === 'scroll-up')   setSearchPos((p) => Math.max(0, p - 1));
+      if (ev.kind === 'scroll-down') setSearchPos((p) => Math.min(searchHits.length - 1, p + 1));
+    }
+  }, [searchActive, searchHits.length]));
+
+  // Compute hits for the search overlay — runs every render while
+  // searchActive is true. Cheap because messages is a flat array of
+  // ≤few-hundred items and we substring-match in lowercase.
+  // Sprint-2.13 — placed before useInput so the keydown handler has
+  // the latest searchHits in closure.
+  useEffect(() => {
+    if (!searchActive) return;
+    if (!searchQuery) { setSearchHits([]); setSearchPos(0); return; }
+    const lq = searchQuery.toLowerCase();
+    const hits = [];
+    for (const m of messages) {
+      const body = (m.text || '').toString();
+      if (body.toLowerCase().includes(lq)) {
+        const preview = body.replace(/\s+/g, ' ').slice(0, 80);
+        hits.push({ id: m.id, type: m.type, preview });
+      }
+    }
+    setSearchHits(hits);
+    setSearchPos((prev) => Math.max(0, Math.min(prev, hits.length - 1)));
+  }, [searchActive, searchQuery, messages]);
+
   // Global keys: Ctrl+L clear, Esc interrupts a busy turn.
   useInput((inputCh, key) => {
+    // Sprint-2.13 — search overlay takes precedence. Char input edits
+    // query; Up/Down navigates; Enter sends the matched preview to
+    // composer; Esc cancels.
+    if (searchActive) {
+      if (key.escape) {
+        setSearchActive(false);
+        setSearchQuery('');
+        setSearchHits([]);
+        setSearchPos(0);
+        return;
+      }
+      if (key.return) {
+        const hit = searchHits[searchPos];
+        if (hit) {
+          setInput(hit.preview);
+        }
+        setSearchActive(false);
+        setSearchQuery('');
+        return;
+      }
+      if (key.upArrow) {
+        setSearchPos((p) => Math.max(0, p - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setSearchPos((p) => Math.min(searchHits.length - 1, p + 1));
+        return;
+      }
+      if (key.backspace || key.delete) {
+        setSearchQuery((q) => q.slice(0, -1));
+        return;
+      }
+      if (inputCh && !key.ctrl && !key.meta) {
+        setSearchQuery((q) => q + inputCh);
+        return;
+      }
+      return;
+    }
+
+    // Sprint-2.13 — Ctrl-R opens the search overlay.
+    if (key.ctrl && (inputCh === 'r' || inputCh === 'R')) {
+      setSearchActive(true);
+      setSearchQuery('');
+      return;
+    }
+
+    // Sprint-2.13 — Plan/Act gate takes precedence over everything else.
+    // Enter or Y approves, Esc or N rejects. Resolves the stashed promise.
+    if (pendingApproval) {
+      if (key.return || inputCh === 'y' || inputCh === 'Y') {
+        const resolver = approvalResolverRef.current;
+        approvalResolverRef.current = null;
+        setPendingApproval(null);
+        setBusyLabel('');
+        if (resolver) resolver(true);
+        return;
+      }
+      if (key.escape || inputCh === 'n' || inputCh === 'N') {
+        const resolver = approvalResolverRef.current;
+        approvalResolverRef.current = null;
+        setPendingApproval(null);
+        setBusyLabel('');
+        append({ type: 'system', text: '⊘ rejected — agent run will abort' });
+        if (resolver) resolver(false);
+        return;
+      }
+      return;  // swallow other keys while gate is up
+    }
+
     if (key.ctrl && (inputCh === 'l' || inputCh === 'L')) {
       setMessages([]);
     }
@@ -482,6 +627,26 @@ export default function App({ runtime, flags }) {
           output: '⌁ running…',
         })
       : null,
+    // Sprint-2.13 — Plan/Act approval gate. Sits above the composer
+    // while pendingApproval is set. Enter/Y approves, Esc/N rejects.
+    pendingApproval
+      ? React.createElement(PlanActGate, {
+          key: 'plan-gate',
+          tool: pendingApproval.tool,
+          args: pendingApproval.args,
+          reason: pendingApproval.reason,
+        })
+      : null,
+    // Sprint-2.13 — scrollback search overlay. Sits above composer.
+    // While active, all keystrokes are eaten by the search handler.
+    searchActive
+      ? React.createElement(SearchOverlay, {
+          key: 'search',
+          query: searchQuery,
+          hits: searchHits,
+          pos: searchPos,
+        })
+      : null,
     // Sprint-2.11 — live streaming slot. Sits between Static and the
     // status bar; React rerenders it on every 80ms timer tick without
     // touching the immutable Static items above. Cleared when the
@@ -511,6 +676,10 @@ export default function App({ runtime, flags }) {
       onChange: setInput,
       onSubmit: handleSubmit,
       busy,
+      // Sprint-2.13 — disable composer input when an overlay (search or
+      // approval gate) is consuming keystrokes, otherwise both handlers
+      // fire and characters double up.
+      disabled: searchActive || !!pendingApproval,
     }),
   );
 }
