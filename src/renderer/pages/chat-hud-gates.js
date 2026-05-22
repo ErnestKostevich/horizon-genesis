@@ -74,23 +74,81 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // PR-Plan-Act — gate UI controllers + persisted toggle.
+//
+// Sprint-2.9: keyboard support (Enter=approve, Esc=reject), auto-focus
+// the Approve button when the gate appears, plus a tool-aware detail
+// line ("First tool: <code>") that always renders even when `reason`
+// is absent. Detail line is kept in sync with the markup contract:
+//
+//   <span id="plan-act-gate-detail">
+//     First tool: <code id="plan-act-gate-tool">tool</code>
+//   </span>
+//
+// Replacing detail.textContent would obliterate the <code> child, so
+// we instead replace only the trailing tool name and (optionally)
+// surface step.reason on a second line.
 var _planActActiveRunId = null;
+var _planActKeyHandler = null;
 function planActShowGate(step) {
   const gate = document.getElementById('step-rail-gate');
   if (!gate) return;
   _planActActiveRunId = step?.runId || null;
-  const tool = document.getElementById('plan-act-gate-tool');
-  if (tool) tool.textContent = String(step?.firstTool || 'unknown');
+  const toolEl = document.getElementById('plan-act-gate-tool');
+  if (toolEl) toolEl.textContent = String(step?.firstTool || 'unknown');
+  // If we have a richer reason, append it after the inline <code>.
   const detail = document.getElementById('plan-act-gate-detail');
-  if (detail && step?.reason) {
-    detail.textContent = String(step.reason).slice(0, 140);
+  if (detail) {
+    // Strip any prior reason suffix (text node we appended last time).
+    while (detail.lastChild && detail.lastChild.nodeType === 3 && detail.lastChild !== detail.childNodes[0]) {
+      // keep the leading "First tool: " text node, but drop any tail we added.
+      const txt = detail.lastChild.textContent || '';
+      if (txt.startsWith(' · ')) detail.removeChild(detail.lastChild);
+      else break;
+    }
+    if (step?.reason) {
+      const suffix = document.createTextNode(' · ' + String(step.reason).slice(0, 100));
+      detail.appendChild(suffix);
+    }
   }
   gate.classList.add('show');
+  // Auto-focus Approve for keyboard discoverability after the slide-in
+  // animation settles (220ms). The setTimeout dodges Electron eating the
+  // focus during the same task as the .show class addition.
+  setTimeout(() => {
+    const approveBtn = gate.querySelector('.srg-btn-approve');
+    try { approveBtn?.focus({ preventScroll: true }); } catch (_) { try { approveBtn?.focus(); } catch (__) {} }
+  }, 240);
+  // Bind Esc/Enter globally while the gate is visible.
+  if (_planActKeyHandler) document.removeEventListener('keydown', _planActKeyHandler, true);
+  _planActKeyHandler = (ev) => {
+    if (!document.getElementById('step-rail-gate')?.classList.contains('show')) return;
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      window.planActReject?.();
+    } else if (ev.key === 'Enter' && !ev.shiftKey) {
+      // Only treat Enter as approve when the composer doesn't have focus.
+      const active = document.activeElement;
+      const inComposer = active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.isContentEditable);
+      if (!inComposer) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        window.planActApprove?.();
+      }
+    }
+  };
+  document.addEventListener('keydown', _planActKeyHandler, true);
 }
 function planActHideGate() {
   document.getElementById('step-rail-gate')?.classList.remove('show');
   _planActActiveRunId = null;
+  if (_planActKeyHandler) {
+    document.removeEventListener('keydown', _planActKeyHandler, true);
+    _planActKeyHandler = null;
+  }
 }
+window.planActShowGate = planActShowGate;
+window.planActHideGate = planActHideGate;
 window.planActApprove = async function () {
   if (!_planActActiveRunId) { planActHideGate(); return; }
   try { await H.agentControl?.(_planActActiveRunId, 'approve-plan'); } catch (_) {}
