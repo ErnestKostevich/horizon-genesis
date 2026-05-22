@@ -48,6 +48,19 @@ const EASTER_EGGS = {
   'konami': 'konami',
   '↑↑↓↓←→←→ba': 'konami',
   '/art': '__gallery__',          // shorthand to dump the gallery
+  // Sprint-2.10 — easter eggs. Each maps to an ART key that renderArt
+  // already knows about. Lowercase, trim, drop punctuation handled at
+  // call site so "Hello, world!" → "hello world" still matches.
+  'hello world':   'achievement',
+  'привет мир':    'achievement',
+  '/hello':        'achievement',
+  '/celebrate':    'achievement',
+  'thanks':        'goalMet',     // ♥ done card — feels right for thanks
+  'спасибо':       'goalMet',
+  '/thanks':       'goalMet',
+  '/sunrise':      'morning',     // existing morning ART
+  '/sunset':       'evening',     // existing evening ART
+  '/night':        'night',       // existing night ART
 };
 
 /**
