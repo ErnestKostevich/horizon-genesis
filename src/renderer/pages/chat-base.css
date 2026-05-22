@@ -1756,6 +1756,75 @@ button:where(:not([class])){
 .settings-acct-title{font:700 14px/1.2 var(--font);color:var(--tx)}
 .settings-acct-sub{font:500 12px/1.5 var(--font);color:var(--t3);max-width:520px}
 .settings-acct-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+/* Sprint-2.14 — Voice & Wake "how does it work" explanation. Was a
+   wall-of-text info-box that read like a dev README. Now a clickable
+   <details> disclosure so the panel reads quickly. */
+.wake-howto{
+  background:rgba(255,255,255,.02);
+  border:1px solid var(--b1);
+  border-radius:10px;
+  padding:0;
+  overflow:hidden;
+}
+.wake-howto-summary{
+  cursor:pointer;list-style:none;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  font:600 12px/1 var(--font);
+  color:var(--t2);
+  user-select:none;
+}
+.wake-howto-summary::-webkit-details-marker{display:none}
+.wake-howto-summary-chev{display:inline-block;font-size:10px;color:var(--t3);transition:transform .15s}
+.wake-howto[open] .wake-howto-summary-chev{transform:rotate(180deg)}
+.wake-howto[open] .wake-howto-summary{border-bottom:1px solid var(--b1);background:rgba(255,255,255,.02)}
+.wake-howto:hover{border-color:rgba(124,109,242,.32)}
+.wake-howto-body{padding:12px 14px 14px;font-size:11.5px;line-height:1.55;color:var(--t2)}
+.wake-howto-body p{margin:0 0 8px}
+.wake-howto-body p:last-child{margin:0}
+.wake-howto-steps{margin:0 0 8px;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.wake-howto-warn{margin-top:10px!important;padding:8px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.22);border-radius:6px;color:var(--t2);font-size:11.5px}
+.wake-howto-warn a{color:var(--accent-cyan-500,#56d2ff);cursor:pointer;text-decoration:underline}
+/* Sprint-2.14 — Plugin Hub "Create" tab polish. Was bare labels +
+   textarea. Now a framed card with section header + 2-col grid for
+   metadata + monospace tools textarea + chip-style action helper. */
+.ph-create{
+  display:flex;flex-direction:column;gap:14px;
+  padding:18px;
+  background:rgba(255,255,255,.02);
+  border:1px solid var(--b1);
+  border-radius:12px;
+}
+.ph-create-h{display:flex;gap:12px;align-items:flex-start;padding-bottom:10px;border-bottom:1px solid var(--b1)}
+.ph-create-h .licon.lg{flex-shrink:0;width:24px;height:24px;color:var(--accent-cyan-500,#56d2ff)}
+.ph-create-title{font:700 14px/1.2 var(--font);color:var(--tx)}
+.ph-create-sub{font:500 11.5px/1.5 var(--font);color:var(--t3);margin-top:3px;max-width:540px}
+.ph-create-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ph-create-icon{grid-column:1/-1}
+.ph-create-icon input{max-width:120px}
+.ph-create-tools .wf-textarea{
+  font:12px/1.55 var(--mono);
+  min-height:140px;
+  background:rgba(0,0,0,.18);
+}
+.ph-create-hint{
+  margin-top:8px;
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  font:500 10.5px/1 var(--font);
+  color:var(--t3);
+}
+.ph-chip{
+  display:inline-block;
+  padding:3px 8px;
+  background:rgba(86,210,255,.08);
+  border:1px solid rgba(86,210,255,.22);
+  border-radius:4px;
+  font:600 10px/1 var(--mono);
+  color:var(--accent-cyan-500,#56d2ff);
+  cursor:default;
+}
+.ph-create-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+@media (max-width:760px){.ph-create-grid{grid-template-columns:1fr}}
 .tg-empty-spinner{
   width:14px;height:14px;
   border:2px solid rgba(124,109,242,.2);

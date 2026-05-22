@@ -82,18 +82,41 @@ async function renderHubBody() {
       body.innerHTML = `<div class="empty-state"><div class="es-icon"><svg class="licon lg"><use href="#i-x"/></svg></div><h3>Couldn't load plugins</h3><p>${(e.message || String(e)).replace(/[<>]/g,'')}</p><button class="sc-btn" onclick="renderHubBody()">Try again</button></div>`;
     }
   } else if (hubCurrentTab === 'create') {
+    // Sprint-2.14 — Plugin Hub create form polish. Was bare labels +
+    // raw textarea. Now framed in .ph-create card + section headers +
+    // monospace JSON textarea + helper row of available actions as
+    // copyable chips so the user knows what they can type.
     body.innerHTML = `
-      <div class="wf-create">
-        <h3 style="display:flex;align-items:center;gap:6px"><svg class="licon"><use href="#i-plus"/></svg> Create Custom Plugin</h3>
-        <div class="wf-field"><label>Plugin Name</label><input class="wf-input" id="cp-name" placeholder="My Awesome Plugin"/></div>
-        <div class="wf-field"><label>Description</label><input class="wf-input" id="cp-desc" placeholder="What does this plugin do?"/></div>
-        <div class="wf-field"><label>Icon (emoji)</label><input class="wf-input" id="cp-icon" placeholder="🧩" style="width:80px"/></div>
-        <div class="wf-field">
-          <label>Tools (JSON array)</label>
-          <textarea class="wf-textarea" id="cp-tools" style="min-height:120px" placeholder='[{"name":"my_tool","description":"Does something","action":"notify","args":{"message":"Hello from plugin!"}}]'></textarea>
+      <div class="ph-create">
+        <div class="ph-create-h">
+          <svg class="licon lg"><use href="#i-plus"/></svg>
+          <div>
+            <div class="ph-create-title">Create custom plugin</div>
+            <div class="ph-create-sub">Bundle a set of tools the agent can call. Stored in your local plugin folder; never uploaded unless you publish.</div>
+          </div>
         </div>
-        <button class="wf-ai-btn" onclick="createPluginFromForm()">Create Plugin</button>
-        <div style="font-size:10px;color:var(--t3);margin-top:8px">Tool actions: notify, open_url, run_code, speak, send_message, type_text, press_key, wait</div>
+        <div class="ph-create-grid">
+          <div class="wf-field"><label>Plugin name</label><input class="wf-input" id="cp-name" placeholder="My Awesome Plugin"/></div>
+          <div class="wf-field"><label>Description</label><input class="wf-input" id="cp-desc" placeholder="What does this plugin do?"/></div>
+          <div class="wf-field ph-create-icon"><label>Icon (single emoji or symbol)</label><input class="wf-input" id="cp-icon" placeholder="🧩"/></div>
+        </div>
+        <div class="wf-field ph-create-tools">
+          <label>Tools (JSON array)</label>
+          <textarea class="wf-textarea" id="cp-tools" placeholder='[{"name":"my_tool","description":"Does something","action":"notify","args":{"message":"Hello from plugin!"}}]'></textarea>
+          <div class="ph-create-hint">Available actions:
+            <span class="ph-chip">notify</span>
+            <span class="ph-chip">open_url</span>
+            <span class="ph-chip">run_code</span>
+            <span class="ph-chip">speak</span>
+            <span class="ph-chip">send_message</span>
+            <span class="ph-chip">type_text</span>
+            <span class="ph-chip">press_key</span>
+            <span class="ph-chip">wait</span>
+          </div>
+        </div>
+        <div class="ph-create-actions">
+          <button class="wf-ai-btn" onclick="createPluginFromForm()"><svg class="licon" style="vertical-align:-2px"><use href="#i-save"/></svg> Create plugin</button>
+        </div>
       </div>
     `;
   } else if (hubCurrentTab === 'import') {
