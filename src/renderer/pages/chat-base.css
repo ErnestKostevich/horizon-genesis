@@ -378,6 +378,7 @@ body.with-sidebar.chat-sidebar-collapsed > .inp-wrap,
 body.with-sidebar.chat-sidebar-collapsed > .wake-bar,
 body.with-sidebar.chat-sidebar-collapsed > .sb,
 body.with-sidebar.chat-sidebar-collapsed > .panel,
+body.with-sidebar.chat-sidebar-collapsed > .step-rail,
 body.with-sidebar.chat-sidebar-collapsed > #fractalBg {
   margin-left: 46px !important;
 }
@@ -1927,7 +1928,20 @@ body.with-sidebar > .modes,
 body.with-sidebar > .msgs,
 body.with-sidebar > .inp-wrap,
 body.with-sidebar > #fractalBg,
-body.with-sidebar > .chat-status-bar{margin-left:280px}
+body.with-sidebar > .chat-status-bar,
+body.with-sidebar > .step-rail{margin-left:280px}
+/* Sprint-2.9.2 — step-rail (the plan steps row at top of chat) was
+   missing from the with-sidebar margin set. User report: "Шаги агента
+   с верху... налезает окно чатов с лева и даже когда оно свернуто".
+   Without this rule the rail sat at viewport x=0 while chatside (fixed
+   at x=0, width=280) covered its left edge. Also reserve right side
+   when inspector is open so the rail doesn't slide under it. */
+body.with-sidebar.inspector-active > .step-rail {
+  margin-right: var(--inspector-space, 356px);
+}
+body.inspector-active:not(.with-sidebar) > .step-rail {
+  margin-right: var(--inspector-space, 356px);
+}
 body.surface-active.with-sidebar > .panel.show,
 body.surface-active.with-sidebar > .fpanel.show,
 body.surface-active.with-sidebar > #fractalBg{margin-left:0!important}
