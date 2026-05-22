@@ -1438,12 +1438,18 @@ textarea#inp{background:transparent!important}
     step-rail-gate-glow 2.6s ease-in-out 220ms infinite;
 }
 
-/* Sprint-2.9.1 — when the Plan/Act gate is up, hide the step-rail so
-   they don't compete for vertical strip below the title bar. The gate's
-   body line ("First tool: <code>…") already conveys what the plan is.
-   After approval/reject, the agent loop re-emits the plan event and the
-   rail returns. */
-.step-rail.plan-act-suppressed { display: none !important; }
+/* Sprint-2.9.1/.3 — when the Plan/Act gate is up, hide the step-rail
+   so they don't compete for vertical strip below the title bar. The
+   gate's body line ("First tool: <code>…") already conveys what the
+   plan is. After approval/reject the agent loop re-emits the plan
+   event and the rail returns.
+
+   Two CSS hooks — belt and suspenders. (1) catches the normal case;
+   (2) catches any re-render of the rail that might clobber class (1).
+   Both must stay or a re-render race re-shows the rail behind the gate. */
+.step-rail.plan-act-suppressed,
+body.plan-act-active .step-rail,
+body.plan-act-active #step-rail { display: none !important; }
 
 /* Icon column — tinted circular badge for the shield glyph. */
 .step-rail-gate-icon {
