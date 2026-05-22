@@ -204,9 +204,21 @@
     }, 300);
   }
 
+  // Sprint-2.9 — composer chip integration. The chip lives at
+  // #composer-canvas-chip with a <b id="composer-canvas-state"> for the
+  // current state. We also auto-open the panel when an agent writes,
+  // matching the audit's "Live Canvas chip + auto-pop on agent writes".
+  function _setChipState(text) {
+    const el = document.getElementById('composer-canvas-state');
+    if (el) el.textContent = text;
+    const chip = document.getElementById('composer-canvas-chip');
+    if (chip) chip.classList.toggle('on', text !== 'Off');
+  }
+
   async function openCanvas() {
     ensurePanel();
     panelEl.style.display = 'flex';
+    _setChipState('On');
     try {
       const snap = await window.H?.canvasGet?.();
       applySnapshot(snap);
@@ -225,6 +237,33 @@
 
   function closeCanvas() {
     if (panelEl) panelEl.style.display = 'none';
+    _setChipState('Off');
+  }
+
+  // Sprint-2.9 — global agent-write listener that pops the panel open
+  // even when it's been closed. Subscribes to canvasChanged before the
+  // user has called openCanvas() so the "agent wrote to canvas → show
+  // me what" surface is automatic. Updates the chip badge so users see
+  // a "•" pulse even while the panel is hidden.
+  function _installAgentAutoPop() {
+    if (_installAgentAutoPop._done) return;
+    if (!window.H?.onCanvasChanged) return;
+    _installAgentAutoPop._done = true;
+    window.H.onCanvasChanged((snap) => {
+      const last = snap?.editLogTail?.[snap.editLogTail.length - 1];
+      const fromAgent = last?.source === 'agent';
+      if (!fromAgent) return;
+      const panelOpen = !!panelEl && panelEl.style.display !== 'none';
+      if (!panelOpen) {
+        // Flash the chip to draw the eye, then auto-open.
+        const chip = document.getElementById('composer-canvas-chip');
+        if (chip) {
+          chip.classList.add('flash');
+          setTimeout(() => chip.classList.remove('flash'), 1400);
+        }
+        try { openCanvas(); } catch (_) {}
+      }
+    });
   }
 
   // Expose globals so slash command + IPC + window.* callers can reach it.
@@ -234,4 +273,11 @@
     if (!panelEl || panelEl.style.display === 'none') openCanvas();
     else closeCanvas();
   };
+
+  // Mount the auto-pop listener as soon as H is available. Defer to next
+  // tick in case chat-canvas.js loaded before preload exposed H.
+  if (typeof window !== 'undefined') {
+    setTimeout(_installAgentAutoPop, 0);
+    document.addEventListener('DOMContentLoaded', _installAgentAutoPop);
+  }
 })();

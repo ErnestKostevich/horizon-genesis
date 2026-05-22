@@ -1756,6 +1756,14 @@
     <button class="composer-chip" id="composer-screen-chip" onclick="toggleEye()" title="Toggle screen context (Vision)">
       <span>Screen</span><b id="composer-screen-state">Off</b>
     </button>
+    <!-- Sprint-2.9 — Live Canvas chip. The canvas surface (Phase 27) shipped
+         but was reachable only via /canvas slash command or window.openCanvas().
+         Now first-class alongside Model/Mode/Wake/Web/Screen so users actually
+         discover it. canvasToggle() opens/closes the panel; the chip's <b>
+         updates from a live event when the agent writes to it (auto-pop). -->
+    <button class="composer-chip" id="composer-canvas-chip" onclick="toggleCanvas()" title="Live Canvas — shared workspace the agent can write to">
+      <span>Canvas</span><b id="composer-canvas-state">Off</b>
+    </button>
     <button class="composer-chip" onclick="openCmdPalette()" title="Command palette · ⌘K">
       <span>Tools</span><b>⌘K</b>
     </button>
