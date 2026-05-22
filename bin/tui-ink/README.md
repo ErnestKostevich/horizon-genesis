@@ -1,13 +1,30 @@
-# Ink-based TUI prototype
+# Ink-based TUI (experimental, opt-in)
 
-This directory holds an experimental Ink (React-for-the-terminal) port of
-the readline-based TUI in `bin/horizon-tui.js`. It exists to answer one
-question: **should we replace the keypress-driven TUI with Ink, ship both,
-or shelf the idea?**
+Ink (React-for-the-terminal) port of `bin/horizon-tui.js`. Sprint-2.11
+promoted this from prototype to **functional opt-in alternative TUI**.
 
-It is NOT a drop-in replacement. The agent loop, slash command surface,
-scrollback search, mouse handling, and altscreen are stubbed. The
-skeleton proves the architecture works.
+## Status
+
+**Working:**
+- Real `runtime.runChatStream` integration with live token rendering
+  (debounced 80ms re-render so React doesn't saturate the event loop)
+- History-aware multi-turn conversation
+- Slash commands: `/help`, `/quit`, `/clear`, `/reset`, `/theme`,
+  `/persona`, `/model`, `/demo-tool`
+- Markdown rendering for assistant replies (code blocks, lists, links,
+  OSC-8 hyperlinks)
+- Esc-interrupt mid-stream — preserves partial reply with ⊘ marker
+- Premium status bar: live tokens / context-bar / cost / msgs / theme,
+  eighths-block precision (▏▎▍▌▋▊▉█)
+- Big multi-row HORIZON wordmark from `bannerBig()` on cols ≥ 70
+
+**Not yet:**
+- Agent loop with live tool cards on a step rail
+- Scrollback search (Ctrl-R)
+- Mouse handling (would need ink-mouse community pkg or stdin SGR parsing)
+
+The readline TUI in `bin/horizon-tui.js` remains the default; Ink is
+opt-in via `--ink` or `HORIZON_INK_TUI=1`.
 
 ## How to run
 

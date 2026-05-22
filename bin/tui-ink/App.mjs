@@ -56,6 +56,16 @@ export default function App({ runtime, flags }) {
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState('');
 
+  // Sprint-2.11 — live streaming buffer. While a token stream is in
+  // flight, the partial reply lives here. It renders ABOVE the Static
+  // transcript via a normal <ChatLine>, so React can redraw it on
+  // every token without re-mounting all finished messages. When the
+  // stream ends, the final text is appended to `messages` (which is
+  // Static-backed) and `liveAssistant` is cleared.
+  const [liveAssistant, setLiveAssistant] = useState(null);
+  const liveBufRef = useRef('');
+  const liveFlushTimerRef = useRef(null);
+
   // Live session stats — accumulator for the StatusBar. We render these
   // through props so the bar's display ticks immediately as the cost
   // tracker would lag a frame behind.
@@ -78,11 +88,68 @@ export default function App({ runtime, flags }) {
     setMessages((prev) => [...prev, { id: nextId(), ...msg }]);
   }, [nextId]);
 
-  // Real chat path — calls runtime.runChat with conversation history,
-  // appends the reply to transcript, updates session stats.
+  // Sprint-2.11 — streaming chat path. Uses runtime.runChatStream if
+  // available, falls back to runChat. Tokens accumulate into liveBufRef
+  // (no per-token re-render — debounced flush every ~80ms via the
+  // liveFlushTimerRef interval). When done, the buffer is appended to
+  // the Static transcript and the live area clears.
   const sendChat = useCallback(async (text) => {
     setBusy(true);
     setBusyLabel('thinking…');
+
+    const hasStream = typeof runtime?.runChatStream === 'function';
+    if (hasStream) {
+      // Reset live buffer + show empty live assistant slot.
+      liveBufRef.current = '';
+      const ts = _hhmm();
+      setLiveAssistant({ ts, text: '' });
+      // Debounced flush — copy buf into state every 80ms so React only
+      // re-renders ~12fps instead of once per token (which would
+      // saturate the event loop and cause flicker).
+      if (liveFlushTimerRef.current) clearInterval(liveFlushTimerRef.current);
+      liveFlushTimerRef.current = setInterval(() => {
+        setLiveAssistant({ ts, text: liveBufRef.current });
+      }, 80);
+      try {
+        const r = await runtime.runChatStream(text, {
+          history: historyRef.current,
+        }, (chunk) => {
+          liveBufRef.current += String(chunk || '');
+        });
+        // Final flush + promote to Static transcript.
+        if (liveFlushTimerRef.current) {
+          clearInterval(liveFlushTimerRef.current);
+          liveFlushTimerRef.current = null;
+        }
+        const finalText = r?.reply || liveBufRef.current;
+        setLiveAssistant(null);
+        if (r?.error) {
+          append({ type: 'system', text: '✗ ' + friendlyError(r.error) });
+        } else if (finalText) {
+          append({ type: 'assistant', text: finalText, ts });
+          historyRef.current.push({ role: 'user', content: text });
+          historyRef.current.push({ role: 'assistant', content: finalText });
+        }
+        if (r?.usage) {
+          const t = (r.usage.total || (r.usage.in || 0) + (r.usage.out || 0)) || 0;
+          setSessionTokens((prev) => prev + t);
+          if (typeof r.cost === 'number') setSessionCost((prev) => prev + r.cost);
+        }
+      } catch (e) {
+        if (liveFlushTimerRef.current) {
+          clearInterval(liveFlushTimerRef.current);
+          liveFlushTimerRef.current = null;
+        }
+        setLiveAssistant(null);
+        append({ type: 'system', text: '✗ ' + (e?.message || String(e)) });
+      } finally {
+        setBusy(false);
+        setBusyLabel('');
+      }
+      return;
+    }
+
+    // Fallback — single-shot runChat.
     try {
       const r = await runtime.runChat(text, {
         history: historyRef.current,
@@ -223,9 +290,21 @@ export default function App({ runtime, flags }) {
       setMessages([]);
     }
     if (key.escape && busy) {
+      // Sprint-2.11 — clean up streaming buffer + timer so we don't
+      // keep redrawing a half-message after the user aborted.
+      if (liveFlushTimerRef.current) {
+        clearInterval(liveFlushTimerRef.current);
+        liveFlushTimerRef.current = null;
+      }
+      if (liveAssistant && liveAssistant.text) {
+        // Promote what we have so far into the transcript so the user
+        // can read the partial reply they aborted on.
+        append({ type: 'assistant', text: liveAssistant.text + ' …⊘', ts: liveAssistant.ts });
+      }
+      setLiveAssistant(null);
       setBusy(false);
       setBusyLabel('');
-      append({ type: 'system', text: '(interrupted)' });
+      append({ type: 'system', text: '⟂ interrupted' });
     }
   });
 
@@ -246,6 +325,18 @@ export default function App({ runtime, flags }) {
           ? React.createElement(ToolCard, { key: item.id, name: item.text, ...item.meta })
           : React.createElement(ChatLine, { key: item.id, type: item.type, text: item.text, ts: item.ts }),
     ),
+    // Sprint-2.11 — live streaming slot. Sits between Static and the
+    // status bar; React rerenders it on every 80ms timer tick without
+    // touching the immutable Static items above. Cleared when the
+    // stream completes (assistant message is then promoted to Static).
+    liveAssistant
+      ? React.createElement(ChatLine, {
+          key: 'live',
+          type: 'assistant',
+          text: liveAssistant.text || ' ',
+          ts: liveAssistant.ts,
+        })
+      : null,
     React.createElement(StatusBar, {
       runtime,
       provider: activeProvider,
