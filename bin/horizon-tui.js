@@ -841,7 +841,33 @@ async function handleSlash(raw, state, runtime, engine) {
   const head = tokens[0];
   const rest = tokens.slice(1).map(t => t.replace(/^"|"$/g, ''));
 
-  if (head === '/quit' || head === '/exit') { engine.close(); process.exit(0); return; }
+  if (head === '/quit' || head === '/exit') {
+    // Sprint-2.10 — premium farewell. Renders a 3-line goodbye card with
+    // session stats (messages exchanged, tokens, cost) before exit.
+    try {
+      engine.close();
+      const stats = engine.sessionStats || {};
+      const lang = process.env.HORIZON_LANG || 'en';
+      const isRu = lang === 'ru';
+      const farewell = require('./lib/banner').panel({
+        title: isRu ? '⌁  до встречи' : '⌁  see you',
+        accent: 'cyan',
+        lines: [
+          ' ' + fmt.dim(isRu ? 'Сессия завершена' : 'Session closed'),
+          '',
+          ' ' + fmt.dim((isRu ? 'Сообщений' : 'Messages').padEnd(11)) + '  ' + fmt.cyan(String(stats.msgsSent || 0)),
+          ' ' + fmt.dim((isRu ? 'Токенов'   : 'Tokens'  ).padEnd(11)) + '  ' + fmt.cyan(String((stats.tokensIn || 0) + (stats.tokensOut || 0))),
+          ' ' + fmt.dim((isRu ? 'Стоимость' : 'Cost'    ).padEnd(11)) + '  ' + fmt.green('$' + (stats.costUsd || 0).toFixed(4)),
+          '',
+          ' ' + fmt.dim(isRu ? 'Возвращайся в любое время — `horizon` или `horizon-tui`' : 'Come back any time — `horizon` or `horizon-tui`'),
+        ],
+        width: 60,
+      });
+      process.stdout.write('\n' + farewell + '\n\n');
+    } catch (_) {}
+    process.exit(0);
+    return;
+  }
   if (head === '/help') {
     // Sprint 2.12 — Hermes-style modal overlay. Help renders in the
     // alternate screen buffer; transcript / scrollback are preserved.
