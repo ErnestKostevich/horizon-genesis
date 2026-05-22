@@ -28,10 +28,13 @@ export default function Banner({ runtime, provider, model, persona }) {
   const memCount = countSafe(() => runtime?.agentMemory?._data?.memories);
   const mcpCount = countSafe(() => runtime?.mcpRegistry?.list?.());
 
-  // Use the existing framed box — same visual as the readline TUI.
-  // bannerFramedBox() returns a multi-line string with embedded ANSI
-  // escape codes; Ink renders that verbatim.
-  const framed = banner.bannerFramedBox();
+  // Sprint-2.11 — use the BIG multi-row wordmark (6 rows of block
+  // letters with per-row gradient) for premium first-paint. Falls back
+  // gracefully to the small framed box if the terminal is too narrow.
+  const cols = process.stdout.columns || 80;
+  const framed = cols >= 70
+    ? banner.bannerBig()
+    : banner.bannerFramedBox();
   const greeting = banner.buildGreetingBase(new Date());
   const personaSuffix = personaGreetingSuffix(persona);
 

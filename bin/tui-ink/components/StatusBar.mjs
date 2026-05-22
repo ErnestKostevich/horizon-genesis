@@ -1,15 +1,15 @@
 // bin/tui-ink/components/StatusBar.mjs
 //
-// Two-row status bar matching the readline TUI's Hermes-style layout:
+// Sprint-2.11 — promoted to functional. Two-row bordered status bar
+// matching the readline TUI conventions exactly:
 //
-//   ┌────────────────────────────────────────────────────────────────────┐
-//   │ ● ready  ·  claude:sonnet-4-6  ·  jarvis  ·  ~/Genesis (main)        │
-//   │ 0 tokens  ·  ▱▱▱▱▱▱▱▱▱▱  ·  $0.00  ·  00:00  ·  idle                 │
-//   └────────────────────────────────────────────────────────────────────┘
+//   ╭────────────────────────────────────────────────────────────────╮
+//   │ ● ready  ⌁ claude:sonnet-4-6  jarvis  ~/Genesis (main)           │
+//   │   12K/200K  [█████▎░░░░] 6%  $0.04  · 12s  theme:cyberpunk      │
+//   ╰────────────────────────────────────────────────────────────────╯
 //
-// Implemented as a bordered <Box> with two horizontal rows. Values are
-// pulled live from runtime each render. Real port would tap costTracker
-// + agentLoop events to update tokens / progress / timer in real-time.
+// Eighths-block bar (▏▎▍▌▋▊▉█) so even <1% usage shows a sliver instead
+// of empty. Context window pulled from themes.ctxFor(model).
 
 import React from 'react';
 import { Box, Text } from 'ink';
@@ -19,61 +19,73 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const path = require('node:path');
 const fs = require('node:fs');
+const { ctxFor } = require('../../lib/themes.js');
 
 export default function StatusBar({
   runtime, provider, model, persona, themeName,
   busy, busyLabel, messageCount,
+  tokens, cost,
 }) {
   const cwd = runtime?.workspaceDir || process.cwd();
   const cwdShort = shortenCwd(cwd);
   const branch = gitBranch(cwd);
 
-  // Cost + tokens come from the cost tracker if available.
-  const cost = formatCost(safeGet(runtime, 'costTracker', 'totalUsd'));
-  const tokens = safeGet(runtime, 'costTracker', 'totalTokens') || 0;
+  // Tokens / cost come from accumulator props (App tracks them); if not
+  // supplied, fall back to costTracker totals.
+  const totalTokens = (typeof tokens === 'number')
+    ? tokens
+    : (safeGet(runtime, 'costTracker', 'totalTokens') || 0);
+  const totalCost = (typeof cost === 'number')
+    ? cost
+    : (safeGet(runtime, 'costTracker', 'totalUsd') || 0);
 
-  // Context window progress — approximation; real port reads ctxFor(model)
-  // from bin/lib/themes.js and divides current convo tokens.
-  const pct = Math.min(1, tokens / 200000);
-  const bar = renderBar(pct, 10);
+  // Context window — bar is "used / max" of THIS model.
+  const ctxMax = ctxFor(model) || 200000;
+  const pct = Math.max(0, Math.min(100, (totalTokens / ctxMax) * 100));
+  const barRendered = renderEighthsBar(pct, 10);
+  const barColor = pct >= 95 ? 'red' : pct >= 80 ? 'yellow' : pct >= 50 ? 'yellow' : 'green';
+  const pctLabel = pct >= 10 ? Math.round(pct) + '%' : pct.toFixed(1) + '%';
 
-  const stateLabel = busy
-    ? (busyLabel || 'working…')
-    : 'ready';
-  const stateDot = busy ? React.createElement(Spinner, { type: 'dots' }) : React.createElement(Text, { color: 'green' }, '●');
+  const stateLabel = busy ? (busyLabel || 'working…') : 'ready';
+  const stateColor = busy ? 'cyan' : 'green';
+  const stateDot = busy
+    ? React.createElement(Spinner, { type: 'dots' })
+    : React.createElement(Text, { color: 'green' }, '●');
 
-  // Row 1: state · provider:model · persona · ~/cwd (branch)
+  // Row 1: state · provider:model · persona · cwd (branch)
   const row1 = React.createElement(
     Box,
     { paddingX: 1 },
+    React.createElement(Text, { color: stateColor }, '▎ '),
     stateDot,
-    React.createElement(Text, null, ' ' + stateLabel),
+    React.createElement(Text, { color: stateColor }, ' ' + stateLabel),
     sep(),
-    React.createElement(Text, { color: 'cyan' }, `${provider}:${model}`),
+    React.createElement(Text, { color: 'cyan', bold: true }, '⌁ ' + provider + ':' + truncate(model, 24)),
     sep(),
-    React.createElement(Text, null, persona),
+    React.createElement(Text, { color: 'magenta' }, persona),
     sep(),
-    React.createElement(Text, { dimColor: true }, cwdShort + (branch ? `  (${branch})` : '')),
+    React.createElement(Text, { dimColor: true }, cwdShort + (branch ? '  (' + branch + ')' : '')),
   );
 
-  // Row 2: tokens · progress · cost · timer · msgs
+  // Row 2: tokens/max · [bar] pct% · $cost · msgs · theme
   const row2 = React.createElement(
     Box,
     { paddingX: 1 },
-    React.createElement(Text, { dimColor: true }, `${formatTokens(tokens)} tokens`),
+    React.createElement(Text, { dimColor: true }, '  '),
+    React.createElement(Text, { dimColor: true }, formatTokens(totalTokens) + '/' + formatTokens(ctxMax)),
     sep(),
-    React.createElement(Text, { color: 'magenta' }, bar),
+    React.createElement(Text, { color: barColor }, '[' + barRendered + '] ' + pctLabel),
     sep(),
-    React.createElement(Text, { dimColor: true }, cost),
+    React.createElement(Text, { color: 'green' }, formatCost(totalCost)),
     sep(),
-    React.createElement(Text, { dimColor: true }, `${messageCount} msgs`),
+    React.createElement(Text, { dimColor: true }, messageCount + ' msgs'),
     sep(),
-    React.createElement(Text, { dimColor: true }, `theme:${themeName}`),
+    React.createElement(Text, { dimColor: true }, 'theme:' + themeName),
   );
 
   return React.createElement(
     Box,
-    { flexDirection: 'column', borderStyle: 'round', borderColor: 'gray', marginTop: 1 },
+    { flexDirection: 'column', borderStyle: 'round', borderColor: 'gray' },
     row1,
     row2,
   );
@@ -89,26 +101,40 @@ function safeGet(runtime, name, key) {
     if (!v) return undefined;
     if (typeof v[key] === 'function') return v[key]();
     return v[key];
-  } catch (_) {
-    return undefined;
-  }
+  } catch (_) { return undefined; }
 }
 
 function formatTokens(n) {
   if (!n) return '0';
   if (n < 1000) return String(n);
-  if (n < 1000000) return (n / 1000).toFixed(1) + 'k';
-  return (n / 1000000).toFixed(2) + 'M';
+  if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return (n / 1_000_000).toFixed(2).replace(/\.00$/, '') + 'M';
 }
 
 function formatCost(usd) {
   const n = Number(usd || 0);
-  return '$' + n.toFixed(4);
+  if (n < 0.01) return '$' + n.toFixed(4);
+  return '$' + n.toFixed(2);
 }
 
-function renderBar(pct, width) {
-  const fill = Math.round(pct * width);
-  return '▰'.repeat(fill) + '▱'.repeat(width - fill);
+// Sprint-2.11 — eighths-block bar matching readline TUI. 8 sub-steps
+// per cell so small usage still registers as a visible sliver instead
+// of "no bar at all". Total visual width stays the same.
+const _BLOCKS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+function renderEighthsBar(pct, width) {
+  const sub = Math.max(0, Math.min(width * 8, Math.round((pct / 100) * width * 8)));
+  const fullCells = Math.floor(sub / 8);
+  const remainder = sub % 8;
+  const empty = width - fullCells - (remainder > 0 ? 1 : 0);
+  return '█'.repeat(fullCells)
+       + (remainder > 0 ? _BLOCKS[remainder] : '')
+       + '░'.repeat(Math.max(0, empty));
+}
+
+function truncate(s, n) {
+  s = String(s || '');
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1) + '…';
 }
 
 function shortenCwd(cwd) {
