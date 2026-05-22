@@ -82,6 +82,22 @@ export default function App({ runtime, flags }) {
   // it's running. Promoted to a real ToolCard in the transcript when
   // the 'result' event fires.
   const [liveTool, setLiveTool] = useState(null);
+  // Sprint-2.14 — ref-mirror for agentCurrentIdx. The onStep callback
+  // inside runAgentTask closes over the initial render's index value,
+  // so setAgentFailed(prev => prev.add(agentCurrentIdx)) used the
+  // stale -1 instead of the live index. Refs are stable so the
+  // callback reads the latest value via .current.
+  const currentIdxRef = useRef(-1);
+  useEffect(() => { currentIdxRef.current = agentCurrentIdx; }, [agentCurrentIdx]);
+  // Sprint-2.14 — tick state to force re-render every 500ms while
+  // liveTool is set, so the displayed duration counts up instead of
+  // freezing at the value it was when 'executing' fired.
+  const [liveToolTick, setLiveToolTick] = useState(0);
+  useEffect(() => {
+    if (!liveTool) return;
+    const id = setInterval(() => setLiveToolTick((t) => t + 1), 500);
+    return () => clearInterval(id);
+  }, [liveTool]);
 
   // Sprint-2.13 — Plan/Act gate. When the agent's askPermission fires
   // for a dangerous tool we stash the promise resolver here and render
@@ -286,7 +302,9 @@ export default function App({ runtime, flags }) {
                 },
               });
               if (!ok) {
-                setAgentFailed((prev) => new Set(prev).add(agentCurrentIdx));
+                // Sprint-2.14 — read live index via ref, not the closed-over
+                // agentCurrentIdx (which was -1 at runAgentTask creation).
+                setAgentFailed((prev) => new Set(prev).add(currentIdxRef.current));
               } else {
                 // Advance the plan index — agent emits steps in order.
                 setAgentCurrentIdx((prev) => prev + 1);
@@ -330,7 +348,9 @@ export default function App({ runtime, flags }) {
       setBusy(false);
       setBusyLabel('');
     }
-  }, [runtime, append, agentCurrentIdx]);
+  // Sprint-2.14 — agentCurrentIdx dep removed; reads go through
+  // currentIdxRef.current which doesn't need to be in the deps array.
+  }, [runtime, append]);
 
   // Slash command dispatch — mirrors the readline TUI surface.
   const handleSlash = useCallback(async (raw) => {
@@ -622,7 +642,13 @@ export default function App({ runtime, flags }) {
           key: 'live-tool',
           name: liveTool.tool,
           status: 'ok',
-          durationMs: Math.max(0, Date.now() - (liveTool.startedAt || Date.now())),
+          // Sprint-2.14 — liveToolTick is bumped every 500ms by a
+          // useEffect; touching it here means the duration value is
+          // recomputed on every tick, so the displayed timer counts
+          // up instead of freezing at the spawn-time value.
+          durationMs: liveToolTick === 0 || liveToolTick > 0
+            ? Math.max(0, Date.now() - (liveTool.startedAt || Date.now()))
+            : 0,
           args: liveTool.args,
           output: '⌁ running…',
         })

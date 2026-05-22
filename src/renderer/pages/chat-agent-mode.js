@@ -222,7 +222,18 @@
 
   function renderBanner() {
     if (document.getElementById(BANNER_ID)) return;
-    const composer = document.getElementById('composer') || document.getElementById('chat-composer');
+    // Sprint-2.14 — regression fix. Both `#composer` and `#chat-composer`
+    // were never present in chat.html — the actual composer wrapper is
+    // `<div class="inp-wrap">` with no id. The bail at `if (!composer)
+    // return` silently swallowed every render attempt, so the entire
+    // run-control HUD from Sprint-2.9 (Pause / Step / Stop buttons) was
+    // invisible since shipped. Code review caught it. Fix: querySelector
+    // the real wrapper class, with a defensive fallback to a textarea
+    // parent in case the layout changes.
+    const composer = document.querySelector('.inp-wrap')
+                  || document.querySelector('#inp')?.parentElement
+                  || document.querySelector('.composer')
+                  || document.getElementById('chat-composer');
     if (!composer) return;
     const banner = document.createElement('div');
     banner.id = BANNER_ID;
