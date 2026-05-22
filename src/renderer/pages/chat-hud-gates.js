@@ -113,8 +113,17 @@ function _planActPositionGate(gate) {
   if (tb) top = Math.max(top, tb.getBoundingClientRect().bottom);
   const wakeBar = document.querySelector('.wake-bar.show');
   if (wakeBar) top = Math.max(top, wakeBar.getBoundingClientRect().bottom);
-  // Sprint-2.9.1 — step-rail is hidden while gate is up (see show fn)
-  // so we don't probe it here, but leave a guard for future layouts.
+  // Sprint-2.9.3 — defensive: even though we hide step-rail in
+  // planActShowGate via .plan-act-suppressed, there's a race between
+  // the 'plan' event (which shows the rail) and the 'plan-pending'
+  // event (which suppresses it). On the very first frame the rail can
+  // still be visible behind the gate. So if its rect bottom is below
+  // our current top, push the gate further down to clear it.
+  const rail = document.querySelector('.step-rail.show:not(.plan-act-suppressed)');
+  if (rail) {
+    const r = rail.getBoundingClientRect();
+    if (r.height > 0) top = Math.max(top, r.bottom);
+  }
   // Add an 8px gap below the bottom-most fixed element.
   top = Math.max(60, Math.round(top + 8));
   gate.style.top = top + 'px';
@@ -139,9 +148,13 @@ function planActShowGate(step) {
   const gate = document.getElementById('step-rail-gate');
   if (!gate) return;
   _planActActiveRunId = step?.runId || null;
-  // Sprint-2.9.1 — hide the step-rail while the gate is up so they
-  // don't compete for the same vertical strip. The agent loop re-emits
-  // the plan event after approval which re-shows the rail.
+  // Sprint-2.9.1/.3 — hide the step-rail while the gate is up so they
+  // don't compete for the same vertical strip. Two mechanisms:
+  //   1. Class on the rail itself (.plan-act-suppressed).
+  //   2. Class on <body> (body.plan-act-active) — CSS uses this to
+  //      catch any future re-render of step-rail that might clobber
+  //      class (1). Belt + suspenders.
+  document.body.classList.add('plan-act-active');
   const rail = document.getElementById('step-rail');
   if (rail) rail.classList.add('plan-act-suppressed');
   _planActPositionGate(gate);
@@ -197,7 +210,8 @@ function planActShowGate(step) {
 function planActHideGate() {
   document.getElementById('step-rail-gate')?.classList.remove('show');
   _planActActiveRunId = null;
-  // Sprint-2.9.1 — unsuppress the step-rail (which was hidden in show).
+  // Sprint-2.9.1/.3 — unsuppress the step-rail (which was hidden in show).
+  document.body.classList.remove('plan-act-active');
   const rail = document.getElementById('step-rail');
   if (rail) rail.classList.remove('plan-act-suppressed');
   if (_planActKeyHandler) {
