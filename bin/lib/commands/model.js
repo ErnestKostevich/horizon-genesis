@@ -6,6 +6,7 @@
 //   horizon model --list       → print all known providers and their default model
 
 const { fmt } = require('../tty');
+const { panel, visibleLen } = require('../banner');
 const { DEFAULT_PROVIDER_MODELS } = require('../../../src/main/runtime/ai-providers');
 
 async function run({ runtime, args, flags }) {
@@ -51,12 +52,37 @@ async function run({ runtime, args, flags }) {
       process.stdout.write(JSON.stringify(list, null, 2) + '\n');
       return 0;
     }
-    process.stdout.write(fmt.bold('provider       default model                current               key\n'));
-    for (const it of list) {
-      process.stdout.write(
-        `  ${it.provider.padEnd(13)} ${it.defaultModel.padEnd(28)} ${fmt.cyan(it.currentModel.padEnd(20))}  ${it.keyConfigured}\n`
-      );
-    }
+    // Sprint-2.9 — wrap the listing in a panel with column header rule
+    // so it scans as one table card instead of bare padded text.
+    const provW = Math.max(8, ...list.map(it => visibleLen(it.provider)));
+    const defW  = Math.max(13, ...list.map(it => visibleLen(it.defaultModel)));
+    const curW  = Math.max(7, ...list.map(it => visibleLen(it.currentModel)));
+    const activeProvider = settingsStore.get('provider') || 'gemini';
+    const header = fmt.bold(
+      'provider'.padEnd(provW) + '  ' +
+      'default'.padEnd(defW) + '  ' +
+      'current'.padEnd(curW) + '  ' +
+      'key'
+    );
+    const rule = fmt.dim(
+      '─'.repeat(provW) + '  ' +
+      '─'.repeat(defW) + '  ' +
+      '─'.repeat(curW) + '  ' +
+      '───'
+    );
+    const rows = list.map(it => {
+      const dot = it.provider === activeProvider ? fmt.cyan('●') : ' ';
+      const provCol = (dot + ' ' + it.provider).padEnd(provW + 2);
+      const defCol  = it.defaultModel.padEnd(defW);
+      const curCol  = fmt.cyan(it.currentModel.padEnd(curW));
+      return provCol + defCol + '  ' + curCol + '  ' + it.keyConfigured;
+    });
+    process.stdout.write('\n' + panel({
+      title: 'Providers',
+      accent: 'cyan',
+      lines: [header, rule, ...rows],
+      width: Math.min(100, (process.stdout.columns || 80) - 4),
+    }) + '\n');
     return 0;
   }
 

@@ -882,7 +882,10 @@ function helpTable(groups, opts = {}) {
     const cmdW  = Math.max(...rows.map((r) => visibleLen(r[0] || '')));
     const argsW = Math.max(...rows.map((r) => visibleLen(r[1] || '')));
     out.push('');
+    // Sprint-2.9 — heading gets a subtle bottom rule so groups visibly
+    // separate from each other instead of just running into the next line.
     out.push(fmt.bold(heading));
+    out.push(fmt.dim('  ' + '─'.repeat(Math.min(60, Math.max(8, visibleLen(heading) + 4)))));
     for (const [cmd, args, desc] of rows) {
       const cmdCol  = padVisible(cmd  || '', cmdW);
       const argsCol = padVisible(args || '', argsW);
@@ -890,6 +893,62 @@ function helpTable(groups, opts = {}) {
     }
   }
   return out.join('\n') + '\n';
+}
+
+/**
+ * Sprint-2.9 — generic rounded panel for command output. Replaces the
+ * scattered hand-rolled boxes in agents/doctor/cost/insights with one
+ * reusable helper that matches menu.js / modalOverlay / tool-card styling.
+ *
+ * panel({
+ *   title: 'Horizon doctor',
+ *   accent: 'cyan',           // any chalk-ish key: cyan|green|red|magenta|yellow
+ *   lines: ['  ✓ provider OK', '  ✗ wake word missing'],
+ *   width: 60,                // optional, default = terminal min(cols-4, 72)
+ * }) => string with newlines
+ */
+function panel({ title, accent = 'cyan', lines = [], width } = {}) {
+  const cols = process.stdout.columns || 80;
+  const W = Math.max(20, Math.min(width || 72, cols - 4));
+  const accentFn = (fmt[accent] || fmt.cyan);
+  const out = [];
+  if (title) {
+    const titleStr = ' ' + title + ' ';
+    const dashes = Math.max(2, W - visibleLen(titleStr) - 2);
+    out.push(accentFn('╭─') + accentFn(titleStr) + accentFn('─'.repeat(dashes)));
+  } else {
+    out.push(accentFn('╭' + '─'.repeat(W - 1)));
+  }
+  for (const ln of lines) {
+    // Each body line gets a rail prefix; the line's own visible width is
+    // not enforced (caller controls truncation).
+    out.push(accentFn('│ ') + ln);
+  }
+  out.push(accentFn('╰' + '─'.repeat(W - 1)));
+  return out.join('\n');
+}
+
+/**
+ * Sprint-2.9 — single-line "error card" replacement for fmt.err()
+ * when a command catastrophically fails. Mirrors ART.error but takes a
+ * runtime message and optional hint. Each block is 3 lines so it scans
+ * as a unit, not as scattered red text.
+ *
+ * errorCard('No API key configured', 'Run: horizon setup');
+ */
+function errorCard(message, hint) {
+  const msgStr = String(message || 'something exploded').trim();
+  const hintStr = hint ? String(hint).trim() : '';
+  const inner = Math.max(visibleLen(msgStr), visibleLen(hintStr)) + 4;
+  const W = Math.min(72, Math.max(inner, 32));
+  const lines = [];
+  lines.push(fmt.red('  ╭─ ✗ ─') + fmt.red('─'.repeat(Math.max(0, W - 6))));
+  lines.push(fmt.red('  │ ') + fmt.bold(msgStr));
+  if (hintStr) {
+    lines.push(fmt.red('  │ ') + fmt.dim(hintStr));
+  }
+  lines.push(fmt.red('  ╰' + '─'.repeat(W)));
+  return lines.join('\n');
 }
 
 /**
@@ -952,4 +1011,4 @@ async function personaPickerInteractive(currentPersona) {
   });
 }
 
-module.exports = { bannerBig, bannerCompact, bannerFramedBox, renderCollapsibleSection, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, stripAnsi, visibleLen, renderArt, animateArt, ART, ART_FRAMES, artSuppressed, buildGreetingBase, timeOfDayArt, GREETINGS };
+module.exports = { bannerBig, bannerCompact, bannerFramedBox, renderCollapsibleSection, GradientSpinner, typeOut, welcomeReveal, personaPickerInteractive, helpTable, panel, errorCard, stripAnsi, visibleLen, renderArt, animateArt, ART, ART_FRAMES, artSuppressed, buildGreetingBase, timeOfDayArt, GREETINGS };
