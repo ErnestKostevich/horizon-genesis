@@ -197,6 +197,13 @@
     _runState.startedAt = Date.now();
     _runState.tools = 0;
     _runState.paused = false;
+    // Sprint-2.9.1 — when a run-start fires but the banner has never
+    // been rendered (cold-boot in agent mode bypassed setMode patch),
+    // render it now. Otherwise #agent-run-controls doesn't exist and
+    // the HUD never appears.
+    if (!document.getElementById(BANNER_ID)) {
+      try { renderBanner(); } catch (_) {}
+    }
     const row = document.getElementById('agent-run-controls');
     if (row) row.classList.add('active');
     _startElapsedTimer();
@@ -497,10 +504,28 @@
     window.setMode = patched;
   }
 
+  // Sprint-2.9.1 — on init, if the persisted mode is already 'agent'
+  // (cold start in agent mode), render the banner immediately even
+  // though setMode() was never called this session. Without this, the
+  // run-control HUD never appeared when the user opened the app already
+  // in agent mode — the banner is the parent of #agent-run-controls.
+  function _ensureBannerIfAgentMode() {
+    try {
+      const isAgent = (document.body && document.body.classList.contains('mode-agent')) ||
+                      (typeof window.currentMode === 'string' && window.currentMode === 'agent') ||
+                      (document.getElementById('composer-mode-chip')?.textContent || '').toLowerCase().includes('agent');
+      if (isAgent) renderBanner();
+    } catch (_) {}
+  }
+
   // Initialise on DOM ready
   function _init() {
     installModeHook();
+    _ensureBannerIfAgentMode();
     _installRunObserver();
+    // Re-check on H ready (preload may finish later than DOMContentLoaded).
+    setTimeout(_ensureBannerIfAgentMode, 200);
+    setTimeout(_ensureBannerIfAgentMode, 1000);
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _init);
