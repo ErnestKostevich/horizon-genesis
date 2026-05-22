@@ -932,3 +932,258 @@ body.settings-scroll .ps-toc {
   background: #10b981 !important;
   color: #fff !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Sprint-2.6 — Settings light-mode edge cases (deep audit).
+   ──────────────────────────────────────────────────────────────────────────
+   Findings from a section-by-section walk of every Settings pane:
+
+     a) .psview-h ("ACCOUNT", "MODELS", "PROFILE" eyebrow) hardcoded a
+        light-cyan (rgba(56,189,248,.9)) — ~2.4:1 on #fafafa = AA fail.
+
+     b) .ps-toc-link / .ps-toc-h / .ps-toc-link.on (sticky right-side TOC)
+        defined in chat-base.css with var(--t3) base + cyan accent for
+        .on — the cyan tint `var(--accent-cyan-500,#56d2ff)` resolves
+        to #56d2ff which is ~2.2:1 on a near-white TOC backdrop.
+
+     c) Personas editor (.pe-shell, .pe-list, .pe-item, .pe-prompt,
+        .pe-tool, .pe-mem, etc.) had ZERO light overrides — entire
+        Personas tab unreadable on white: prompt textarea text was
+        #dff7ff on white, tool chips were rgba(255,255,255,.03)
+        background = invisible. This was the biggest gap.
+
+     d) .pe-readonly-banner — amber on amber-tint, ~2.1:1 AA fail.
+
+   All fixes scoped to [data-theme="light"] only.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* (a) Section eyebrow heading — was cyan, pivot to dark purple. */
+[data-theme="light"] #panel .psview-h {
+  color: #4c40ad !important; /* 7.6:1 on #fafafa — AAA */
+}
+
+/* (b) Sticky right TOC sidebar entries. */
+[data-theme="light"] body.settings-scroll .ps-toc-h {
+  color: #52525b !important; /* 7.4:1 AAA */
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] body.settings-scroll .ps-toc-link {
+  color: #3f3f46 !important; /* 10.5:1 AAA */
+}
+[data-theme="light"] body.settings-scroll .ps-toc-link:hover {
+  background: rgba(124, 109, 242, 0.06) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] body.settings-scroll .ps-toc-link.on {
+  background: rgba(124, 109, 242, 0.10) !important;
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  color: #4c40ad !important; /* AAA on white */
+}
+[data-theme="light"] body.settings-scroll .ps-toc-link.on::before {
+  background: linear-gradient(180deg, #7c6df2, #a78bfa) !important;
+}
+
+/* (c) Personas editor — full light variant. */
+[data-theme="light"] .pe-shell {
+  background: linear-gradient(180deg, #ffffff, #fafafa) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .pe-list {
+  border-right-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .pe-list-h {
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .pe-list-h-t {
+  color: #52525b !important; /* AAA */
+}
+[data-theme="light"] .pe-list-add {
+  background: rgba(124, 109, 242, 0.10) !important;
+  border-color: rgba(124, 109, 242, 0.32) !important;
+  color: #4c40ad !important;
+}
+[data-theme="light"] .pe-list-add:hover {
+  background: linear-gradient(135deg, #7c6df2, #a78bfa) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+[data-theme="light"] .pe-item:hover {
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+[data-theme="light"] .pe-item.on {
+  background: linear-gradient(135deg,
+    rgba(124, 109, 242, 0.10),
+    rgba(167, 139, 250, 0.05)) !important;
+  border-color: rgba(124, 109, 242, 0.32) !important;
+}
+[data-theme="light"] .pe-item-icon {
+  background: rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .pe-item-name {
+  color: #18181b !important; /* 16:1 AAA */
+}
+[data-theme="light"] .pe-item-tag {
+  color: #71717a !important; /* 4.8:1 AA */
+}
+[data-theme="light"] .pe-item.on .pe-item-tag {
+  color: #4c40ad !important;
+}
+[data-theme="light"] .pe-detail-h-t {
+  color: #18181b !important;
+}
+[data-theme="light"] .pe-section-h {
+  color: #52525b !important; /* AAA */
+}
+[data-theme="light"] .pe-prompt {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #18181b !important; /* was #dff7ff — invisible on white */
+}
+[data-theme="light"] .pe-prompt:focus {
+  border-color: rgba(124, 109, 242, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(124, 109, 242, 0.12) !important;
+}
+[data-theme="light"] .pe-prompt:disabled {
+  color: #71717a !important;
+  background: #f4f4f5 !important;
+}
+[data-theme="light"] .pe-tool {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+  color: #3f3f46 !important;
+}
+[data-theme="light"] .pe-tool:hover {
+  border-color: rgba(124, 109, 242, 0.40) !important;
+  color: #4c40ad !important;
+  background: rgba(124, 109, 242, 0.04) !important;
+}
+[data-theme="light"] .pe-tool.on {
+  background: linear-gradient(135deg,
+    rgba(124, 109, 242, 0.14),
+    rgba(167, 139, 250, 0.08)) !important;
+  border-color: rgba(124, 109, 242, 0.45) !important;
+  color: #4c40ad !important; /* was #aef0ff — failed on white */
+}
+[data-theme="light"] .pe-tool.on.write {
+  background: linear-gradient(135deg,
+    rgba(180, 83, 9, 0.14),
+    rgba(217, 119, 6, 0.08)) !important;
+  border-color: rgba(180, 83, 9, 0.40) !important;
+  color: #92400e !important; /* AAA amber */
+}
+[data-theme="light"] .pe-mem {
+  background: rgba(0, 0, 0, 0.025) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .pe-mem-icon {
+  opacity: 0.85;
+}
+[data-theme="light"] .pe-mem-text {
+  color: #18181b !important;
+}
+[data-theme="light"] .pe-mem-x {
+  color: #52525b !important;
+}
+[data-theme="light"] .pe-mem-x:hover {
+  color: #b91c1c !important;
+  background: rgba(220, 38, 38, 0.08) !important;
+}
+[data-theme="light"] .pe-mem-input {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] .pe-mem-input:focus {
+  border-color: rgba(124, 109, 242, 0.45) !important;
+}
+[data-theme="light"] .pe-detail-empty {
+  color: #52525b !important; /* AAA */
+}
+
+/* (d) Read-only banner — amber on amber-tint flunked AA. */
+[data-theme="light"] .pe-readonly-banner {
+  background: rgba(180, 83, 9, 0.08) !important;
+  border-color: rgba(180, 83, 9, 0.32) !important;
+  color: #78350f !important; /* AAA amber on white */
+}
+
+/* ── Settings header search bar focus + clear button cleanup ───────────── */
+[data-theme="light"] .ps-search-icon {
+  color: #52525b !important; /* matches the new clear button color */
+}
+
+/* ── Models tab — provider model dropdowns (.ms-sel) inside Settings ───── */
+[data-theme="light"] #panel .ms-sel {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+  color: #18181b !important;
+}
+[data-theme="light"] #panel .ms-sel:hover,
+[data-theme="light"] #panel .ms-sel:focus {
+  border-color: rgba(124, 109, 242, 0.45) !important;
+}
+[data-theme="light"] #panel .ms-sel option {
+  background: #ffffff !important;
+  color: #18181b !important;
+}
+
+/* ── Reset section — danger button hover stays in light-red space ──────── */
+[data-theme="light"] #panel .dbtn {
+  background: rgba(220, 38, 38, 0.06) !important;
+  border-color: rgba(220, 38, 38, 0.28) !important;
+  color: #991b1b !important; /* 8.2:1 AAA */
+}
+[data-theme="light"] #panel .dbtn:hover {
+  background: rgba(220, 38, 38, 0.12) !important;
+  border-color: rgba(220, 38, 38, 0.45) !important;
+  color: #7f1d1d !important;
+}
+
+/* ── About / footer link rows ──────────────────────────────────────────── */
+[data-theme="light"] #panel .os-footer {
+  background: rgba(0, 0, 0, 0.02) !important;
+  border-top-color: rgba(0, 0, 0, 0.08) !important;
+  color: #3f3f46 !important; /* AAA */
+}
+[data-theme="light"] #panel .os-links a {
+  color: #4c40ad !important; /* purple, AAA */
+}
+[data-theme="light"] #panel .os-links a:hover {
+  color: #312e81 !important;
+  text-decoration: underline;
+}
+[data-theme="light"] #panel .os-ver {
+  color: #52525b !important; /* AAA */
+}
+
+/* ── Voice tab — wake-word calibration banner ──────────────────────────── */
+[data-theme="light"] #panel #wake-test-st {
+  color: #3f3f46 !important;
+}
+
+/* ── Connections — Tavily / GitHub / MCP server rows (inputs override
+   inherited from .pi block, but the dynamic mcp-servers list re-renders
+   into a .local-status which is already covered). Nothing extra here. */
+
+/* ── Macros tab — list rows rendered dynamically by chat-macros.js ────── */
+.macro-row {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--b1, rgba(255, 255, 255, 0.06));
+}
+[data-theme="light"] .macro-row {
+  background: rgba(0, 0, 0, 0.025) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+/* `.macro-delete-btn` — was `style="color:#f88"` (~3.0:1 on white). */
+.macro-delete-btn {
+  color: var(--red, #f87171);
+}
+[data-theme="light"] .macro-delete-btn {
+  color: #b91c1c !important; /* 6.6:1 AA on white */
+}
+[data-theme="light"] .macro-delete-btn:hover {
+  background: rgba(220, 38, 38, 0.08) !important;
+  border-color: rgba(220, 38, 38, 0.32) !important;
+  color: #991b1b !important; /* 8.2:1 AAA */
+}
