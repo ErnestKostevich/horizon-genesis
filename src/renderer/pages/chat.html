@@ -171,8 +171,8 @@
     <button class="cs-act on" data-shell-target="chat" onclick="showChatSurface()" title="Chat">
       <svg class="licon"><use href="#i-message"/></svg><span>Chat</span>
     </button>
-    <button class="cs-act cs-collapse" onclick="toggleChatSidebar()" title="Hide or show chat list">
-      <svg class="licon"><use href="#i-sidebar"/></svg><span>Collapse</span>
+    <button class="cs-act cs-collapse" id="cs-collapse-btn" onclick="toggleChatSidebar()" title="Hide or show chat list">
+      <svg class="licon"><use href="#i-sidebar"/></svg><span id="cs-collapse-label">Collapse</span>
     </button>
     <button class="cs-act" data-shell-target="agent" id="operator-mode-btn" onclick="toggleOperatorMode()" title="Operator Console">
       <svg class="licon"><use href="#i-terminal"/></svg><span>Agent</span>
@@ -787,12 +787,12 @@
           <option value="deepgram">Deepgram Nova-2 — external account</option>
         </select>
       </div>
-      <div class="pf"><label>TTS — Text-to-Speech (голос Horizon)</label>
+      <div class="pf"><label>TTS — Text-to-Speech (Horizon voice)</label>
         <select class="sel" id="pi-ttsprov" onchange="saveTTSProv()">
-          <option value="system">🆓 System TTS — Free, offline, works always</option>
-          <option value="elevenlabs">🎙 ElevenLabs — Ultra realistic (needs key)</option>
-          <option value="openai">🎙 OpenAI TTS — Very good (needs OpenAI key)</option>
-          <option value="kokoro">🆓 Kokoro — Free local AI TTS (no key needed)</option>
+          <option value="system">System TTS — free, offline, works always</option>
+          <option value="elevenlabs">ElevenLabs — ultra realistic (needs key)</option>
+          <option value="openai">OpenAI TTS — very good (needs OpenAI key)</option>
+          <option value="kokoro">Kokoro — free local AI TTS (no key needed)</option>
         </select>
       </div>
       <div id="el-section" style="display:none">
@@ -813,7 +813,7 @@
         </div>
       </div>
       <div id="kokoro-section" style="display:none">
-        <div style="font-size:10px;color:var(--t3);background:var(--bg3);border:1px solid var(--b1);border-radius:8px;padding:8px;margin-top:4px">🆓 Kokoro — бесплатный AI TTS, работает локально.<br>Загружается при первом использовании (~80MB).<br>Отличное качество без API ключей!</div>
+        <div style="font-size:10px;color:var(--t3);background:var(--bg3);border:1px solid var(--b1);border-radius:8px;padding:8px;margin-top:4px"><svg class="licon" style="vertical-align:-2px"><use href="#i-zap"/></svg> Kokoro — free AI TTS, runs locally.<br>Downloads on first use (~80MB).<br>Great quality, no API keys required.</div>
       </div>
       <div id="deepgram-section" style="display:none;margin-top:6px">
         <div class="pf"><label><span class="d2" id="pd-deepgram"></span>Deepgram Key<a onclick="H.openUrl('https://console.deepgram.com')">Get key ↗</a></label><div class="pr"><input class="pi" type="password" id="pi-deepgram" placeholder="deepgram key…"/><button class="psv" id="pb-deepgram" onclick="psvk('deepgram','pi-deepgram','pb-deepgram','pd-deepgram')">Save</button></div></div>
@@ -1240,12 +1240,15 @@
   <button class="chip on" id="tc-eye"  onclick="toggleEye()" title="Toggle screen vision"><svg class="licon" style="vertical-align:-2px"><use href="#i-eye"/></svg> PC</button>
   <button class="chip special" id="tc-wake" onclick="toggleWake()" title="Toggle wake word"><svg class="licon" style="vertical-align:-2px"><use href="#i-sunrise"/></svg> Wake</button>
   <div class="sp"></div>
+  <!-- Sprint-2.14 — emoji prefixes stripped. Mixed system emoji
+       glyphs read as inconsistent next to the SVG-based composer
+       icons. Plain text + the chip's accent colour does the job. -->
   <select class="chip" id="persona-select" onchange="setPersona(this.value)" style="background:var(--bg2);color:var(--acc);border-color:var(--b2);padding:3px 8px;font-size:10px;border-radius:25px;outline:none;cursor:pointer;font-family:var(--font);-webkit-app-region:no-drag">
-    <option value="jarvis">🤖 Jarvis</option>
-    <option value="friday">&#129302; Friday</option>
-    <option value="alfred">🎩 Alfred</option>
-    <option value="sage">🧙 Sage</option>
-    <option value="pixel">✨ Pixel</option>
+    <option value="jarvis">Jarvis</option>
+    <option value="friday">Friday</option>
+    <option value="alfred">Alfred</option>
+    <option value="sage">Sage</option>
+    <option value="pixel">Pixel</option>
   </select>
 </div>
 
@@ -1892,6 +1895,11 @@ function setChatSidebarCollapsed(on){
   chatSidebarCollapsed = Boolean(on);
   document.body.classList.toggle('chat-sidebar-collapsed', chatSidebarCollapsed);
   document.querySelector('.cs-collapse')?.setAttribute('title', chatSidebarCollapsed ? 'Show chat list' : 'Hide chat list');
+  // Sprint-2.14 — the label was hardcoded "Collapse" forever; polish
+  // audit flagged that it never said "Expand" when already collapsed.
+  // Swap the visible text + the title to match the action.
+  const lbl = document.getElementById('cs-collapse-label');
+  if (lbl) lbl.textContent = chatSidebarCollapsed ? 'Expand' : 'Collapse';
   Promise.resolve(window.H?.set?.('chatSidebarCollapsed', chatSidebarCollapsed)).catch(()=>{});
   try { layoutInspectorDock(); } catch(_) {}
 }

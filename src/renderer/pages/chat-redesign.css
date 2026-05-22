@@ -284,7 +284,11 @@ body {
   background-color: rgba(255, 255, 255, 0.05);
   color: #d6d8db;
 }
-.insp-tab.active::after {
+/* Sprint-2.14 — was `.insp-tab.active::after` but chat-inspector.js
+   toggles `.on` (not `.active`), so this cyan glide underline never
+   fired. Polish audit caught the dead animation; fix is a one-word
+   rename. */
+.insp-tab.on::after {
   content: '';
   position: absolute;
   bottom: -1px;
