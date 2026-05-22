@@ -9,6 +9,7 @@
 
 const { fmt, supportsColor, supportsTruecolor, rgb } = require('../tty');
 const { listThemes, getTheme } = require('../themes');
+const { panel } = require('../banner');
 
 // Sprint 2.13 — paint a string in a specific theme's accent colour
 // without flipping the global active theme. Used by the transition
@@ -36,24 +37,34 @@ function run({ runtime, args, flags }) {
       process.stdout.write(JSON.stringify({ active: current, themes: detailed }) + '\n');
       return 0;
     }
-    process.stdout.write(fmt.bold('Themes') + '\n');
-    // Column-align: name column is widest theme id, glyph column is widest banner+spinner.
+    // Sprint-2.10 — premium theme picker. Each theme renders as a row
+    // inside a framed panel with: active dot, theme name painted IN
+    // the theme's own accent colour, banner + spinner glyphs painted
+    // in the theme colour, then dim description. Lets the user "see"
+    // each palette before switching.
     const nameW = Math.max(...themes.map((id) => id.length));
     const glyphRaw = themes.map((id) => {
       const t = getTheme(id);
       return (t.banner || '') + ' ' + (t.spinnerFrames?.[0] || '');
     });
     const glyphW = Math.max(...glyphRaw.map((s) => s.length));
-    themes.forEach((id, i) => {
+    const lines = themes.map((id, i) => {
       const t = getTheme(id);
-      const active = id === current ? fmt.green(' ●') : '  ';
-      const namePad = id + ' '.repeat(Math.max(0, nameW - id.length));
+      const isActive = id === current;
+      const active = isActive ? fmt.green('●') : ' ';
+      const namePainted = _paintIn(id, id + ' '.repeat(Math.max(0, nameW - id.length)));
       const glyph = glyphRaw[i];
-      const glyphPad = glyph + ' '.repeat(Math.max(0, glyphW - glyph.length));
-      const desc = t.description ? fmt.dim('"' + t.description + '"') : '';
-      process.stdout.write(`${active}  ${fmt.cyan(namePad)}  ${fmt.dim(glyphPad)}  ${desc}\n`);
+      const glyphPainted = _paintIn(id, glyph + ' '.repeat(Math.max(0, glyphW - glyph.length)));
+      const desc = t.description ? fmt.dim(t.description) : '';
+      return ' ' + active + '  ' + namePainted + '  ' + glyphPainted + '  ' + desc;
     });
-    process.stdout.write('\n' + fmt.dim('  Switch with: horizon theme <name>') + '\n');
+    process.stdout.write('\n' + panel({
+      title: '✦  Themes',
+      accent: 'magenta',
+      lines,
+      width: Math.min(86, (process.stdout.columns || 86) - 2),
+    }) + '\n');
+    process.stdout.write('  ' + fmt.dim('Switch with: ') + fmt.cyan('horizon theme <name>') + '\n\n');
     return 0;
   }
 
