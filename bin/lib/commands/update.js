@@ -158,11 +158,18 @@ async function updateBundled(runtime, flags, latest) {
 
   const myPath = process.execPath; // current binary
   const tmp = myPath + '.new';
-  process.stdout.write(fmt.dim(`  downloading ${assetName} (${Math.round(asset.size / 1024 / 1024)} MB)…\n`));
+  // Sprint-2.10 — spinner during the multi-MB download. Previously the
+  // CLI printed "downloading…" and went silent for 10-30 seconds. Now
+  // a gradient spinner ticks while bytes arrive, and the final stop()
+  // converts the line to a ✓ green check.
+  const { GradientSpinner } = require('../banner');
+  const sizeMb = Math.round(asset.size / 1024 / 1024);
+  const dlSpinner = new GradientSpinner(`downloading ${assetName} (${sizeMb} MB)…`).start();
   try {
     await downloadTo(asset.url, tmp);
+    dlSpinner.succeed(`downloaded ${assetName} (${sizeMb} MB)`);
   } catch (e) {
-    process.stderr.write(fmt.err('download failed: ' + e.message) + '\n');
+    dlSpinner.fail('download failed: ' + e.message);
     return 1;
   }
 

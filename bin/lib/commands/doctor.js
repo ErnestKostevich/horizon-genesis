@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fmt } = require('../tty');
-const { renderArt } = require('../banner');
+const { renderArt, panel } = require('../banner');
 const { DEFAULT_PROVIDER_MODELS } = require('../../../src/main/runtime/ai-providers');
 
 // Sprint 2.13 — detect "fix-it suggestion" detail strings and render
@@ -229,30 +229,48 @@ async function run({ runtime, args, flags }) {
     return findings.some(f => f.state === 'fail') ? 1 : 0;
   }
 
-  process.stdout.write('\n' + fmt.bold('Horizon doctor') + '\n\n');
-  for (const f of findings) row(f.state, f.label, f.detail);
+  // Sprint-2.10 — wrap the doctor output in a premium panel. Each row
+  // is still rendered by row() into a small buffer; we collect lines
+  // and pass them as the panel body, then add a summary footer panel.
+  const findingsLines = [];
+  const origStdoutWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (s) => { findingsLines.push(String(s).replace(/\n$/, '')); return true; };
+  try {
+    for (const f of findings) row(f.state, f.label, f.detail);
+  } finally {
+    process.stdout.write = origStdoutWrite;
+  }
 
   const fails = findings.filter(f => f.state === 'fail').length;
   const warns = findings.filter(f => f.state === 'warn').length;
-  process.stdout.write('\n');
+  const summaryAccent = fails ? 'red' : warns ? 'yellow' : 'green';
+  const summaryIcon = fails ? '✗' : warns ? '⚠' : '✓';
+  let summary;
   if (fails) {
-    process.stdout.write(fmt.red(`  ${fails} failure${fails > 1 ? 's' : ''}`) +
-      (warns ? fmt.dim(`, ${warns} warning${warns > 1 ? 's' : ''}`) : '') + '\n');
+    summary = fmt.red(`${fails} failure${fails > 1 ? 's' : ''}`) +
+      (warns ? fmt.dim(`, ${warns} warning${warns > 1 ? 's' : ''}`) : '');
   } else if (warns) {
-    process.stdout.write(fmt.yellow(`  ${warns} warning${warns > 1 ? 's' : ''}`));
-    if (!fix && findings.some(f => f.fixFn)) {
-      process.stdout.write(fmt.dim('  · re-run with --fix to repair'));
-    }
-    process.stdout.write('\n');
+    summary = fmt.yellow(`${warns} warning${warns > 1 ? 's' : ''}`) +
+      (!fix && findings.some(f => f.fixFn) ? fmt.dim('  · re-run with --fix to repair') : '');
   } else {
-    process.stdout.write(fmt.green('  all checks passed') + '\n');
+    summary = fmt.green('all checks passed');
+  }
+
+  process.stdout.write('\n' + panel({
+    title: summaryIcon + '  Horizon doctor',
+    accent: summaryAccent,
+    lines: findingsLines,
+    width: 86,
+  }) + '\n');
+  process.stdout.write('  ' + summary + (fixed ? fmt.dim(`  ·  fixed ${fixed} item${fixed > 1 ? 's' : ''}`) : '') + '\n');
+
+  if (!fails && !warns) {
     const art = renderArt('doctorHealthy', {
       tag: `${findings.length} check${findings.length === 1 ? '' : 's'} passed`,
       flags,
     });
     if (art) process.stdout.write('\n' + art + '\n');
   }
-  if (fixed) process.stdout.write(fmt.dim(`  fixed ${fixed} item${fixed > 1 ? 's' : ''}`) + '\n');
   process.stdout.write('\n');
 
   return fails ? 1 : 0;
