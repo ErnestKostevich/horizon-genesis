@@ -324,9 +324,11 @@ window.peCreateCustom = async function () {
   const slug = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'persona';
   const id = 'custom_' + slug + '_' + Date.now().toString(36);
   try {
+    // Sprint-2.14.2 — `icon` field is dead since the hash-based color
+    // avatar took over in _peIconHtml(). Kept for backward compat with
+    // older persona JSONs but no longer set on new ones.
     await H.personaUpsert(id, {
       name,
-      icon: '🪪',
       color: '#56d2ff',
       prompt: {
         ru: 'Ты — ' + name + '. Опиши тут стиль и тон.',

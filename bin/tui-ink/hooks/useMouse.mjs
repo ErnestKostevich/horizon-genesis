@@ -32,11 +32,28 @@ const ENABLE  = '\x1b[?1000h\x1b[?1006h';
 const DISABLE = '\x1b[?1006l\x1b[?1000l';
 const SGR_RE  = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
 
+// Sprint-2.14.2 — register a process-level exit hook on first call.
+// Ink's normal unmount cleanup runs only when the React tree unmounts
+// gracefully. If the user hits Ctrl-C, the process crashes, or
+// useApp().exit() is bypassed, the terminal stays in SGR-1006 mouse
+// mode and the user's shell sees mouse escapes leaking into stdin
+// after we exit. This hook flips mouse mode off no matter how we die.
+let _exitHookInstalled = false;
+function _installExitHook() {
+  if (_exitHookInstalled) return;
+  _exitHookInstalled = true;
+  const off = () => { try { process.stdout.write(DISABLE); } catch (_) {} };
+  process.on('exit', off);
+  process.on('SIGINT', () => { off(); process.exit(130); });
+  process.on('SIGTERM', () => { off(); process.exit(143); });
+}
+
 export default function useMouse(onMouse) {
   useEffect(() => {
     if (!process.stdin.isTTY || typeof onMouse !== 'function') return;
     try {
       process.stdout.write(ENABLE);
+      _installExitHook();
     } catch (_) {
       return;
     }
