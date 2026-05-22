@@ -138,7 +138,7 @@ async function renderAcctBody() {
         <div id="auth-err" style="display:none" class="auth-err"></div>
         <button class="auth-web-btn" onclick="acctOpenWebAuth('signup')">Continue with Google / GitHub</button>
         <div class="auth-divider">or email</div>
-        <div class="auth-field"><label>Display name</label><input id="auth-name" placeholder="Ernest Kostevich" autocomplete="name"/></div>
+        <div class="auth-field"><label>Display name</label><input id="auth-name" placeholder="Your name" autocomplete="name"/></div>
         <div class="auth-field"><label>Email</label><input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email"/></div>
         <div class="auth-field"><label>Password</label><input id="auth-pw" type="password" placeholder="At least 8 characters" autocomplete="new-password"/></div>
         <button class="auth-submit" id="auth-submit" onclick="acctDoSignup()">Create account</button>

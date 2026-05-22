@@ -2452,23 +2452,34 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
   flex: 1;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
+  /* Sprint-2.14 — the inspector ships 7 tabs (Context / Tools / Skills /
+     Subagents / Learned / Cost / Log). The previous repeat(4, ...) made
+     them wrap to a second row, which the polish audit flagged as making
+     the right dock look "amateur". 7 columns + smaller font fits at the
+     default ~360px inspector width. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
 }
 .insp-tab {
   min-width: 0;
   height: 30px;
-  padding: 0 4px;
+  padding: 0 2px;
   background: none;
   border: 1px solid transparent;
   border-radius: 9px;
   color: var(--t2);
-  font: 800 var(--text-xs)/1 var(--mono);
-  letter-spacing: .9px;
+  /* Sprint-2.14 — slightly smaller font + tighter letter spacing so
+     7 tabs fit on one row. The full English label still wins over an
+     abbreviation truncation. */
+  font: 800 10px/1 var(--mono);
+  letter-spacing: .5px;
   text-transform: uppercase;
   cursor: pointer;
   transition: all .12s ease;
   -webkit-app-region: no-drag;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .insp-tab:hover { color: var(--tx); background: rgba(255,255,255,.03); }
 .insp-tab.on {
