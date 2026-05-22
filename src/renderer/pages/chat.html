@@ -282,8 +282,22 @@
         <div class="psview-h">Account</div>
         <div class="psview-sub">Sign-in state and identity badges. Sign in or out via the Account button on the title bar; this section reflects what the marketplace knows about you.</div>
         <div class="ps">
-          <div id="settings-account-card" class="info-box">
-            Open the Account menu in the title bar to sign in. After login your name, badges (Owner / Official / Pro / Verified) and license state appear here automatically.
+          <!-- Sprint-2.14 — polish audit flagged the previous single
+               info-box telling the user to "Open the Account menu in
+               the title bar" as feeling empty on cold launch. Now a
+               proper card with avatar + sign-in CTA + benefits list,
+               replaced by the live profile card after sign-in via JS
+               (chat-account.js setSettingsAccountCard). -->
+          <div id="settings-account-card" class="settings-acct-stub">
+            <div class="settings-acct-avatar"><svg class="licon lg"><use href="#i-user"/></svg></div>
+            <div class="settings-acct-body">
+              <div class="settings-acct-title">Not signed in</div>
+              <div class="settings-acct-sub">Sign in to unlock the marketplace, sync skills across devices, and earn badges (Owner / Official / Pro / Verified).</div>
+              <div class="settings-acct-actions">
+                <button class="hub-btn primary" onclick="openAccountModal && openAccountModal()">Sign in</button>
+                <button class="hub-btn" onclick="H.openUrl && H.openUrl('https://horizonai.dev/account')">Open web account ↗</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -953,7 +967,7 @@
         <div class="ps">
           <div class="psl">Reset</div>
           <button class="dbtn" onclick="clearHist()"><svg class="licon" style="vertical-align:-2px"><use href="#i-trash"/></svg> Clear chat history</button>
-          <button class="dbtn" onclick="clearKeys()">⚠️ Delete all API keys</button>
+          <button class="dbtn" onclick="clearKeys()"><svg class="licon" style="vertical-align:-2px"><use href="#i-lock"/></svg> Delete all API keys</button>
         </div>
         <div class="os-footer">
           <div class="os-footer-row">
@@ -1097,7 +1111,10 @@
   </div>
   <div class="tg-split">
     <aside class="tg-side" id="dc-chat-list">
-      <div class="tg-empty">Loading…</div>
+      <div class="tg-empty tg-empty-loading">
+        <span class="tg-empty-spinner"></span>
+        <span>Loading channels…</span>
+      </div>
     </aside>
     <main class="tg-thread" id="dc-thread">
       <div class="tg-empty" style="padding:40px 20px">
@@ -1121,7 +1138,10 @@
   </div>
   <div class="tg-split">
     <aside class="tg-side" id="tg-chat-list">
-      <div class="tg-empty">Loading…</div>
+      <div class="tg-empty tg-empty-loading">
+        <span class="tg-empty-spinner"></span>
+        <span>Loading chats…</span>
+      </div>
     </aside>
     <main class="tg-thread" id="tg-thread">
       <div class="tg-empty" style="padding:40px 20px">
