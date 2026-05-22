@@ -74,12 +74,21 @@ function summary(runtime, flags) {
       const key = d.toISOString().slice(0, 10);
       last7.push({ key, ...(s.byDay[key] || { calls: 0, tokens: 0, costUsd: 0 }) });
     }
+    // Sprint-2.10 — eighths-block bar chart. Each cell is 1/8 wide so
+    // small spends still register as a visible sliver instead of "no
+    // bar at all". Same total width on screen but smoother gradients.
     const maxCost = Math.max(0.0001, ...last7.map(d => d.costUsd));
+    const BLOCKS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+    const barWidth = 30;
     for (const d of last7) {
-      const w = Math.round((d.costUsd / maxCost) * 30);
-      const bar = w > 0 ? '█'.repeat(w) : fmt.dim('·');
+      const sub = Math.round((d.costUsd / maxCost) * barWidth * 8);
+      const full = Math.floor(sub / 8);
+      const rem = sub % 8;
+      let bar;
+      if (sub === 0) bar = fmt.dim('·' + ' '.repeat(barWidth - 1));
+      else bar = fmt.cyan('█'.repeat(full) + (rem > 0 ? BLOCKS[rem] : '')) + ' '.repeat(Math.max(0, barWidth - full - (rem > 0 ? 1 : 0)));
       process.stdout.write(
-        `  ${fmt.dim(d.key)}  ${fmt.cyan(bar.padEnd(30))} ${fmt.green('$' + d.costUsd.toFixed(4))} ${fmt.dim('· ' + d.calls + ' calls')}\n`
+        `  ${fmt.dim(d.key)}  ${bar} ${fmt.green('$' + d.costUsd.toFixed(4))} ${fmt.dim('· ' + d.calls + ' calls')}\n`
       );
     }
     process.stdout.write('\n');
