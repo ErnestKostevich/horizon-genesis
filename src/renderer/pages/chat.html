@@ -3593,10 +3593,26 @@ function renderAgentPanel(steps, answer, isStreaming = false) {
           escHtml((step.result.out || step.result.err || step.result.content || 'Done').slice(0, 500))
         }</div>`
       : '';
+    // Sprint-2.9 — render the tool's args as a collapsible JSON block.
+    // Previously step.args was dropped entirely, leaving the user unable
+    // to see what the agent was about to do. Now: a tiny "args" disclosure
+    // shows the canonical shape, and large args are JSON.stringify-pretty'd.
+    let argsHtml = '';
+    if (step.args && typeof step.args === 'object' && Object.keys(step.args).length) {
+      let argsTxt;
+      try { argsTxt = JSON.stringify(step.args, null, 2); }
+      catch (_) { argsTxt = String(step.args); }
+      // Truncate ≥600 chars so a multi-MB file_write payload doesn't
+      // explode the panel. The full payload is still in Inspector → Log.
+      const truncated = argsTxt.length > 600;
+      const shown = truncated ? argsTxt.slice(0, 600) + '\n…' : argsTxt;
+      argsHtml = `<details class="step-args"><summary class="step-args-summary">args</summary><pre class="step-args-pre">${escHtml(shown)}</pre>${truncated ? `<div class="step-args-truncated">+ ${argsTxt.length - 600} more chars · see Inspector → Log</div>` : ''}</details>`;
+    }
     return `<div class="agent-step">
       <div class="step-icon">${icon}</div>
       <div class="step-body">
         <div class="step-tool">${step.tool}${step.reason ? ` <span style="color:var(--t3);font-weight:400">— ${escHtml(step.reason)}</span>` : ''}</div>
+        ${argsHtml}
         ${resultHtml}
       </div>
     </div>`;
