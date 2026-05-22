@@ -794,13 +794,28 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
 }
 
 /* PR-Plan-Act — when a plan-pending step is broadcast, expand the
-   step-rail-gate (CSS scaffold from PR-U3) with a visible Approve /
-   Reject CTA above the messages. */
+   step-rail-gate with a visible Approve / Reject CTA.
+   Sprint-2.9: full premium refit — see authoritative rules further down
+   in this file (search "step-rail-gate {"). Only the .show toggle stays
+   here so any cascade order quirks still flip display:flex. */
 .step-rail-gate.show { display: flex !important; }
-.step-rail-gate-actions .btn { min-width: 88px; }
 @keyframes agent-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: .4; }
+}
+@keyframes step-rail-gate-in {
+  0%   { opacity: 0; transform: translate(-50%, -16px) scale(.98); }
+  100% { opacity: 1; transform: translate(-50%, 0)    scale(1); }
+}
+@keyframes step-rail-gate-glow {
+  0%, 100% { box-shadow:
+    0 18px 40px -12px rgba(0,0,0,.55),
+    0 0 0 1px rgba(86,210,255,.32),
+    0 0 22px -4px rgba(86,210,255,.18); }
+  50%      { box-shadow:
+    0 18px 40px -12px rgba(0,0,0,.55),
+    0 0 0 1px rgba(124,109,242,.42),
+    0 0 36px -2px rgba(124,109,242,.30); }
 }
 
 /* PR-U-MEGA — shell-clean overrides. Default ON via body class set at
@@ -1347,25 +1362,238 @@ textarea#inp{background:transparent!important}
 .cek-bubble-state-ok { color: var(--success-500, #34d399); font: 600 var(--text-sm, 12px)/1 var(--mono); }
 .cek-bubble-state-x  { color: var(--danger-500, #f87171); font: 600 var(--text-sm, 12px)/1 var(--mono); }
 
-/* Plan/Act gate — styles for the "Approve plan" overlay above the
-   step-rail when the agent has emitted a plan but no execution step
-   has fired yet. Wired by setStepRail()/_attachToolReport elsewhere. */
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint-2.9 — Plan/Act gate premium refit (authoritative rules)
+   ───────────────────────────────────────────────────────────────────────
+   Prior bug report (verbatim): "плывет окно с верху которое открывает в
+   агент мод типо аля план действий... кнопки налезают на друг друга или
+   урезаются куча проблем и вообще не красиво выглядит дешево и не
+   качественно".
+
+   Root cause:
+   1. Gate was a body-root block sitting between #operator-pane and the
+      inspector-pane in the DOM. With margin:0 auto it just appeared
+      wherever the natural flow placed it — hence "floats at the top".
+   2. .step-rail-gate-actions had gap:6px with min-width:88px buttons,
+      no flex-wrap → buttons clipped/overlapped on narrow widths.
+   3. Plain border + thin gradient + no shadow → cheap-looking.
+
+   Fix:
+   • position:fixed, top:60px (titlebar=52 + 8 gap), centered via
+     translateX(-50%). Always sits in the same spot, never "drifts".
+   • backdrop-filter blur + layered shadow + gradient border (via
+     border-image conic) for a premium glass-card feel.
+   • Flex-wrap actions so on narrow widths buttons stack, never clip.
+   • Slide-in + ambient glow animations for arrival emphasis.
+   • Body has icon column + heading + detail row that truncates cleanly.
+   ═══════════════════════════════════════════════════════════════════════ */
 .step-rail-gate {
   display: none;
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  margin: 0 auto;
-  max-width: 1080px;
-  background: linear-gradient(135deg, rgba(86,210,255,.10), rgba(124,109,242,.06));
-  border: 1px solid var(--accent-cyan-300, rgba(86,210,255,.32));
-  border-radius: var(--radius-lg, 12px);
-  font: 600 var(--text-sm, 12px)/1.4 var(--font);
-  color: var(--accent-cyan-500, #56d2ff);
+  gap: 14px;
+  width: min(720px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 12px 14px 12px 16px;
+  background:
+    linear-gradient(135deg, rgba(86,210,255,.14), rgba(124,109,242,.10) 60%, rgba(243,178,80,.06)),
+    rgba(12, 16, 24, .82);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  font: 600 var(--text-sm, 13px)/1.4 var(--font);
+  color: #eef2f8;
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow:
+    0 18px 40px -12px rgba(0,0,0,.55),
+    0 0 0 1px rgba(86,210,255,.32),
+    0 0 22px -4px rgba(86,210,255,.18);
 }
-.step-rail-gate.show { display: flex; }
-.step-rail-gate-body { flex: 1; min-width: 0; }
-.step-rail-gate-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.step-rail-gate.show {
+  display: flex;
+  animation:
+    step-rail-gate-in 220ms cubic-bezier(.22, 1.2, .36, 1),
+    step-rail-gate-glow 2.6s ease-in-out 220ms infinite;
+}
+
+/* Icon column — tinted circular badge for the shield glyph. */
+.step-rail-gate-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(86,210,255,.30), rgba(124,109,242,.18) 70%);
+  border: 1px solid rgba(86,210,255,.36);
+  color: #ade5ff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
+}
+.step-rail-gate-icon .licon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Body — title on top, detail/tool below. Stacks vertically so wide
+   detail strings never push the buttons off-screen. */
+.step-rail-gate-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.step-rail-gate-body strong {
+  font: 700 13px/1.2 var(--font);
+  color: #f3f7ff;
+  letter-spacing: .005em;
+}
+.step-rail-gate-detail {
+  font: 500 11.5px/1.4 var(--font);
+  color: rgba(217, 226, 240, .78);
+  opacity: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.step-rail-gate-detail code {
+  font: 600 11px/1 var(--mono);
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(86,210,255,.14);
+  color: #cdeaff;
+  border: 1px solid rgba(86,210,255,.22);
+  margin-left: 2px;
+}
+
+/* Actions — flex-wrap on; buttons grow on wide, drop to row 2 on narrow.
+   No more overlap, no more clipped labels. */
+.step-rail-gate-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.srg-btn {
+  -webkit-app-region: no-drag;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  font: 600 12.5px/1 var(--font);
+  letter-spacing: .005em;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease;
+}
+.srg-btn .licon { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.srg-btn:focus-visible {
+  outline: 2px solid rgba(86,210,255,.6);
+  outline-offset: 2px;
+}
+.srg-btn-reject {
+  background: rgba(255, 255, 255, .04);
+  border-color: rgba(255, 255, 255, .10);
+  color: rgba(232, 236, 244, .86);
+}
+.srg-btn-reject:hover {
+  background: rgba(248, 113, 113, .14);
+  border-color: rgba(248, 113, 113, .42);
+  color: #fecaca;
+}
+.srg-btn-reject:active { transform: translateY(1px); }
+.srg-btn-approve {
+  background: linear-gradient(135deg, #56d2ff 0%, #7c6df2 100%);
+  border-color: rgba(255,255,255,.18);
+  color: #0a0f1a;
+  box-shadow:
+    0 6px 16px -6px rgba(86,210,255,.55),
+    inset 0 1px 0 rgba(255,255,255,.40);
+}
+.srg-btn-approve:hover {
+  background: linear-gradient(135deg, #6cdcff 0%, #8b7df3 100%);
+  box-shadow:
+    0 8px 20px -6px rgba(124,109,242,.65),
+    inset 0 1px 0 rgba(255,255,255,.55);
+  transform: translateY(-1px);
+}
+.srg-btn-approve:active { transform: translateY(1px); }
+
+/* Light theme — softer card, keep accent saturation but adjust on white. */
+[data-theme="light"] .step-rail-gate {
+  background:
+    linear-gradient(135deg, rgba(86,135,210,.10), rgba(124,109,242,.08) 60%, rgba(243,178,80,.05)),
+    rgba(255,255,255,.92) !important;
+  color: #18181b !important;
+  border-color: rgba(86,135,210,.28) !important;
+  box-shadow:
+    0 18px 40px -16px rgba(31, 41, 76, .25),
+    0 0 0 1px rgba(86,135,210,.18),
+    0 0 22px -4px rgba(86,135,210,.10) !important;
+}
+[data-theme="light"] .step-rail-gate-body strong { color: #11151c !important; }
+[data-theme="light"] .step-rail-gate-detail { color: #4b5565 !important; }
+[data-theme="light"] .step-rail-gate-detail code {
+  background: rgba(86,135,210,.10) !important;
+  border-color: rgba(86,135,210,.22) !important;
+  color: #1e3a8a !important;
+}
+[data-theme="light"] .step-rail-gate-icon {
+  background: radial-gradient(circle at 30% 25%, rgba(86,135,210,.22), rgba(124,109,242,.12) 70%) !important;
+  border-color: rgba(86,135,210,.30) !important;
+  color: #2563eb !important;
+}
+[data-theme="light"] .srg-btn-reject {
+  background: rgba(0,0,0,.04) !important;
+  border-color: rgba(0,0,0,.10) !important;
+  color: #44404c !important;
+}
+[data-theme="light"] .srg-btn-reject:hover {
+  background: rgba(248,113,113,.10) !important;
+  border-color: rgba(220,38,38,.40) !important;
+  color: #b91c1c !important;
+}
+[data-theme="light"] .srg-btn-approve {
+  color: #fff !important;
+  box-shadow:
+    0 6px 14px -6px rgba(124,109,242,.55),
+    inset 0 1px 0 rgba(255,255,255,.32) !important;
+}
+
+/* Narrow viewport — let body shrink, action row fully wraps. */
+@media (max-width: 560px) {
+  .step-rail-gate {
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 10px;
+  }
+  .step-rail-gate-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .srg-btn { flex: 1 1 0; justify-content: center; }
+}
+
+/* Reduced motion — disable the glow loop and slide. */
+@media (prefers-reduced-motion: reduce) {
+  .step-rail-gate.show { animation: none; }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    Sprint-2.2 fix: LIGHT MODE overrides for shell-polish.
