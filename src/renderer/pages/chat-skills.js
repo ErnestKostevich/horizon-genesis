@@ -169,8 +169,9 @@ async function renderSkillsBody() {
         <div class="sk-editor-head">
           <div>
             <div class="sk-editor-title">${editing.isNew ? 'New skill' : `Editing <strong>${esc(editing.id)}</strong>`}</div>
-            <div style="font-size:10px;color:var(--t3);margin-top:2px">Save target:
-              <select id="sk-edit-scope" style="font-size:10px;background:var(--b1);color:var(--tx);border:1px solid var(--b2);border-radius:4px;padding:2px 4px">
+            <div class="sk-edit-scope-row">
+              <span class="sk-edit-scope-label">Save target:</span>
+              <select id="sk-edit-scope" class="sel sk-edit-scope">
                 <option value="user"${editing.scope === 'user' ? ' selected' : ''}>user (~/.horizon/skills)</option>
                 <option value="workspace"${editing.scope === 'workspace' ? ' selected' : ''}>workspace (.horizon/skills)</option>
               </select>

@@ -1663,6 +1663,31 @@ button:where(:not([class])){
 .sk-editor{display:flex;flex-direction:column;gap:8px}
 .sk-editor-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--b1)}
 .sk-editor-title{font-size:13px;font-weight:700;color:var(--tx)}
+/* Sprint-2.14 — Skills Hub editor "Save target" select. Was tiny
+   inline-styled font-size:10px no chevron, no hover. Promoted to a
+   proper .sel-style chip with focus ring + dropdown caret. */
+.sk-edit-scope-row{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;color:var(--t3)}
+.sk-edit-scope-label{font-weight:500}
+.sel.sk-edit-scope{
+  height:24px;padding:0 22px 0 8px;
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--b1);
+  border-radius:6px;
+  color:var(--tx);
+  font:500 11px/1 var(--font);
+  cursor:pointer;
+  outline:none;
+  appearance:none;
+  /* Custom chevron — inline SVG so the select looks consistent
+     across platforms (browser default chevrons render too small). */
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23808a99' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 6px center;
+  background-size:10px 10px;
+  transition:border-color .12s, background .12s;
+}
+.sel.sk-edit-scope:hover{border-color:rgba(124,109,242,.36);background:rgba(124,109,242,.06)}
+.sel.sk-edit-scope:focus{border-color:rgba(124,109,242,.55);box-shadow:0 0 0 2px rgba(124,109,242,.18)}
 .sk-editor-split{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px}
 @media (max-width:900px){.sk-editor-split{grid-template-columns:1fr}}
 .sk-editor-pane{display:flex;flex-direction:column;min-width:0}
@@ -1704,6 +1729,42 @@ button:where(:not([class])){
 .tg-composer textarea{flex:1;background:rgba(0,0,0,.18);border:1px solid var(--b1);border-radius:10px;padding:8px 12px;font:12px/1.5 var(--font);color:var(--tx);resize:none;outline:none;min-height:34px;max-height:120px}
 .tg-composer textarea:focus{border-color:rgba(124,109,242,.45)}
 .tg-empty{text-align:center;padding:30px 16px;color:var(--t3);font-size:var(--text-sm)}
+/* Sprint-2.14 — loading state for tg-side/dc-side. Replaces a bare
+   "Loading…" text with a spinner + label so empty panels feel "alive"
+   instead of broken. */
+.tg-empty-loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:24px 12px}
+/* Sprint-2.14 — Settings Account stub. Replaces the single info-box
+   that just told the user to look elsewhere. Now a proper card with
+   avatar + value-prop blurb + CTA buttons. After sign-in, JS swaps
+   the inner HTML with the live .acct-card. */
+.settings-acct-stub{
+  display:flex;gap:14px;align-items:flex-start;
+  padding:18px;
+  background:linear-gradient(135deg, rgba(86,210,255,.08), rgba(124,109,242,.06));
+  border:1px solid rgba(86,210,255,.22);
+  border-radius:12px;
+}
+.settings-acct-avatar{
+  width:48px;height:48px;flex-shrink:0;
+  border-radius:50%;
+  background:rgba(86,210,255,.14);
+  border:1px solid rgba(86,210,255,.32);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--accent-cyan-500,#56d2ff);
+}
+.settings-acct-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.settings-acct-title{font:700 14px/1.2 var(--font);color:var(--tx)}
+.settings-acct-sub{font:500 12px/1.5 var(--font);color:var(--t3);max-width:520px}
+.settings-acct-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.tg-empty-spinner{
+  width:14px;height:14px;
+  border:2px solid rgba(124,109,242,.2);
+  border-top-color:rgba(124,109,242,.85);
+  border-radius:50%;
+  display:inline-block;
+  animation:tg-empty-spin .8s linear infinite;
+}
+@keyframes tg-empty-spin { to { transform: rotate(360deg); } }
 .tg-empty strong{display:block;font-size:13px;color:var(--t2);margin-bottom:6px}
 .tg-empty p{font-size:var(--text-sm);line-height:1.6;margin-top:6px}
 
