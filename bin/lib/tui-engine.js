@@ -1978,6 +1978,18 @@ class TuiEngine {
     let hintHeight = 0;
     if (hintLine) { process.stdout.write(hintLine + '\n'); hintHeight++; }
 
+    // Sprint-2.9 — composer top rule. A single horizontal line above the
+    // prompt visually anchors the input as its own region (the rest of the
+    // TUI uses bordered cards everywhere, so a bare bottom prompt read
+    // out-of-family). When the composer has actual content the rule tints
+    // cyan as a soft focus hint; empty/placeholder state stays dim.
+    const _ruleHasContent = (this.lines.length > 1) || (this.lines[0] && this.lines[0].length > 0);
+    const ruleWidth = Math.max(20, Math.min(80, (process.stdout.columns || 80) - 4));
+    const ruleChar = '─'.repeat(ruleWidth);
+    const composerRule = _ruleHasContent ? fmt.cyan(ruleChar) : fmt.dim(ruleChar);
+    process.stdout.write(composerRule + '\n');
+    let composerRuleHeight = 1;
+
     // Composer — print each line. Sprint 2: if the composer is empty and
     // we're on the only line, render a dim placeholder after the prompt.
     // Sprint 2.1 — placeholder now uses a labeled-input look:
@@ -1999,7 +2011,7 @@ class TuiEngine {
       }
       if (i < lineCount - 1) process.stdout.write('\n');
     }
-    this._lastDrawHeight = menuHeight + statusHeight + hintHeight + lineCount;
+    this._lastDrawHeight = menuHeight + statusHeight + hintHeight + composerRuleHeight + lineCount;
 
     // Position cursor on (lineIdx, col)
     if (this.lineIdx < lineCount - 1) {
