@@ -97,7 +97,77 @@ function _pkgVersion() {
   return _cachedVersion;
 }
 
-function bannerBig()     { return _wordmark(); }
+// Sprint-2.10 — Premium multi-row ASCII wordmark for `bannerBig()`.
+// Six-row block lettering with per-row gradient (uses the active theme
+// accent → cyan → success palette). Falls back to a slim version when
+// the terminal is narrower than 70 cols, and to plain text when colour
+// is unavailable. Inspired by figlet's ANSI-shadow but hand-tuned for
+// width and Unicode rendering across platforms.
+const _WORDMARK_BIG_LINES = [
+  ' ██╗  ██╗ ██████╗ ██████╗ ██╗███████╗ ██████╗ ███╗   ██╗',
+  ' ██║  ██║██╔═══██╗██╔══██╗██║╚══███╔╝██╔═══██╗████╗  ██║',
+  ' ███████║██║   ██║██████╔╝██║  ███╔╝ ██║   ██║██╔██╗ ██║',
+  ' ██╔══██║██║   ██║██╔══██╗██║ ███╔╝  ██║   ██║██║╚██╗██║',
+  ' ██║  ██║╚██████╔╝██║  ██║██║███████╗╚██████╔╝██║ ╚████║',
+  ' ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝',
+];
+const _WORDMARK_SLIM_LINES = [
+  ' ╦ ╦ ╔═╗ ╦═╗ ╦ ╔═╗ ╔═╗ ╔╗╔',
+  ' ╠═╣ ║ ║ ╠╦╝ ║ ╔═╝ ║ ║ ║║║',
+  ' ╩ ╩ ╚═╝ ╩╚═ ╩ ╚═╝ ╚═╝ ╝╚╝',
+];
+
+// Per-row gradient — colours flow from accent → cyan → magenta and back.
+// Picked so even mono themes get a recognisable sweep, but a mono theme's
+// own palette only has ~2 distinct hues so we just blend them.
+function _gradientStops() {
+  const theme = _accentRgb();        // active accent
+  // Standard companion palette — these are the "secondary" colours used
+  // by every theme to give the wordmark depth. They're hand-picked to
+  // feel premium on dark and light backgrounds.
+  return [
+    theme,                            // accent (row 0)
+    [Math.min(255, theme[0] + 40), Math.min(255, theme[1] + 25), Math.min(255, theme[2] + 35)], // lighter (row 1)
+    [Math.min(255, theme[0] + 20), Math.max(0, theme[1] - 10), Math.min(255, theme[2] + 50)],   // shift toward magenta (row 2)
+    [Math.max(0, theme[0] - 30), Math.min(255, theme[1] + 40), Math.min(255, theme[2] + 20)],   // shift toward cyan (row 3)
+    [Math.max(0, theme[0] - 50), Math.min(255, theme[1] + 30), Math.min(255, theme[2] - 20)],   // deeper cyan (row 4)
+    [Math.max(0, theme[0] - 70), Math.max(0, theme[1] + 10), Math.max(0, theme[2] - 50)],       // darkest (row 5)
+  ];
+}
+
+function _bigWordmark() {
+  const cols = process.stdout.columns || 80;
+  const useSlim = cols < 70;
+  const rows = useSlim ? _WORDMARK_SLIM_LINES : _WORDMARK_BIG_LINES;
+  if (!supportsColor) return rows.join('\n');
+  if (!supportsTruecolor) {
+    // 256-color fallback — single accent colour for everything
+    const ACCENT = '\x1b[35m';
+    const RESET = '\x1b[0m';
+    return rows.map(r => ACCENT + r + RESET).join('\n');
+  }
+  const stops = _gradientStops();
+  const painted = rows.map((row, idx) => {
+    const stop = stops[idx] || stops[stops.length - 1];
+    const [r, g, b] = stop;
+    return rgb(r, g, b) + row + '\x1b[0m';
+  });
+  return painted.join('\n');
+}
+
+function bannerBig() {
+  // Big multi-row wordmark + version + tagline on separate dim line.
+  const big = _bigWordmark();
+  const v = _pkgVersion();
+  if (!supportsColor) {
+    return big + '\n  v' + v + '  ·  the agent that learns who you are';
+  }
+  const DIM = '\x1b[2m';
+  const RESET = '\x1b[0m';
+  const meta = '  ' + DIM + 'v' + v + '  ·  the agent that learns who you are' + RESET;
+  return big + '\n' + meta;
+}
+
 function bannerCompact() { return _wordmark(); }
 
 /**
@@ -783,36 +853,45 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
   process.stdout.write('\x1b[2J\x1b[H');
   if (!fast) process.stdout.write('\x1b[?25l');
 
-  // Welcome art — bigger framed wordmark rendered in the active accent
-  // colour. Fades in line-by-line for cinematic feel. Always opt-out via
-  // HORIZON_NO_ART=1 / --no-art / HORIZON_FAST=1.
-  const art = renderArt('welcome');
-  if (art) {
-    process.stdout.write('\n');
-    if (fast) {
-      process.stdout.write(art + '\n\n');
-    } else {
-      const artLines = art.split('\n');
-      for (const l of artLines) {
-        process.stdout.write(l + '\n');
-        await new Promise(r => setTimeout(r, 50));
-      }
-      process.stdout.write('\n');
-      // Hold the big art for a beat before the wordmark cascades in.
-      await new Promise(r => setTimeout(r, 600));
-      // "ready when you are" beneath the art.
-      process.stdout.write('  ' + fmt.dim('ready when you are') + '\n\n');
-      await new Promise(r => setTimeout(r, 400));
+  // Sprint-2.10 — premium reveal sequence. Three acts:
+  //   Act 1  initial subtle ▌ shimmer (top-left)
+  //   Act 2  big multi-row HORIZON wordmark fades in row-by-row with
+  //          a per-row gradient sweep (bannerBig already paints stops)
+  //   Act 3  metadata strip + ready-when-you-are pulse
+  //
+  // The old "welcome" ART card was a small 5-line decorative box —
+  // it's now redundant since the wordmark itself is the showstopper.
+
+  if (!fast) {
+    process.stdout.write('\n\n');
+    // Act 1 — single shimmer dot in the active accent. Tiny, premium.
+    const [r, g, b] = _accentRgb();
+    const ACCENT = supportsTruecolor ? rgb(r, g, b) : '\x1b[35m';
+    const RESET = '\x1b[0m';
+    for (const ch of ['⌁', '⌁ ⌁', '⌁ ⌁ ⌁']) {
+      process.stdout.write('\r  ' + ACCENT + ch + RESET);
+      await new Promise(rs => setTimeout(rs, 110));
     }
+    process.stdout.write('\r\x1b[K');  // clear shimmer line
+    await new Promise(rs => setTimeout(rs, 60));
   }
 
-  // Fix 2 — quick 1-second flash, not 4 seconds. 30ms/line instead of 90.
-  const lines = bannerBig().split('\n');
-  for (const line of lines) {
+  // Act 2 — big wordmark fades in row-by-row. bannerBig() already
+  // applies per-row gradient stops; the typewriter cadence makes it
+  // feel like the rows are "settling" into place.
+  const bigLines = bannerBig().split('\n');
+  for (const line of bigLines) {
     process.stdout.write(line + '\n');
-    if (!fast) await new Promise(r => setTimeout(r, 30));
+    if (!fast) await new Promise(r => setTimeout(r, 55));
   }
   process.stdout.write('\n');
+
+  if (!fast) {
+    // Act 3 — settle pause, then "ready when you are" pulse below.
+    await new Promise(r => setTimeout(r, 250));
+    process.stdout.write('  ' + fmt.dim('ready when you are') + '\n\n');
+    await new Promise(r => setTimeout(r, 200));
+  }
 
   const tagline = 'Personal AI agent — bring your own keys · your data stays local';
   if (fast) {
@@ -825,21 +904,50 @@ async function welcomeReveal({ provider, persona, lang } = {}) {
 
   if (!fast) await new Promise(r => setTimeout(r, 80));
 
-  const hints = [
-    [fmt.dim('Provider:'), fmt.cyan(provider || 'gemini'), '   ',
-     fmt.dim('Persona:'),  fmt.cyan(persona  || 'jarvis'), '   ',
-     fmt.dim('Lang:'),     fmt.cyan(lang     || 'en')].join(''),
-    '',
-    fmt.dim('  /help') + '   show every slash command',
-    fmt.dim('  /agent') + ' <task>     full agent loop with tools',
-    fmt.dim('  /chat')  + ' <message>  single-turn chat',
-    fmt.dim('  /quit')  + '   exit',
-    '',
-  ];
-  for (const h of hints) {
-    process.stdout.write('  ' + h + '\n');
-    if (!fast && h) await new Promise(r => setTimeout(r, 20));
+  // Sprint-2.10 — premium config panel + quick-start tiles. Replaces
+  // the flat 6-line list with a framed status card and a side-by-side
+  // command grid so the welcome reads as a premium "deck" not a dump.
+  const sessionPanel = panel({
+    title: 'Session',
+    accent: 'cyan',
+    lines: [
+      fmt.dim('Provider') + '  ' + fmt.cyan(provider || 'gemini'),
+      fmt.dim('Persona')  + '   ' + fmt.cyan(persona  || 'jarvis'),
+      fmt.dim('Lang')     + '      ' + fmt.cyan(lang     || 'en'),
+    ],
+    width: 42,
+  });
+  for (const ln of sessionPanel.split('\n')) {
+    process.stdout.write('  ' + ln + '\n');
+    if (!fast) await new Promise(r => setTimeout(r, 18));
   }
+  process.stdout.write('\n');
+
+  // Quick-start tiles — render as a 2-column grid of (cmd, desc) pairs.
+  const tiles = [
+    ['/help',  'every slash command'],
+    ['/agent', 'full agent loop'],
+    ['/chat',  'single-turn chat'],
+    ['/skill', 'skill helpers'],
+    ['/theme', 'cycle visual themes'],
+    ['/quit',  'goodbye'],
+  ];
+  const cmdW = Math.max(...tiles.map(([c]) => c.length));
+  process.stdout.write('  ' + fmt.bold('Quick start') + '\n');
+  for (let i = 0; i < tiles.length; i += 2) {
+    const [c1, d1] = tiles[i];
+    const t1 = '  ' + fmt.cyan(c1.padEnd(cmdW)) + '  ' + fmt.dim(d1);
+    if (i + 1 < tiles.length) {
+      const [c2, d2] = tiles[i + 1];
+      const pad = 24 - stripAnsi(t1).length;
+      const t2 = ' '.repeat(Math.max(2, pad)) + fmt.cyan(c2.padEnd(cmdW)) + '  ' + fmt.dim(d2);
+      process.stdout.write(t1 + t2 + '\n');
+    } else {
+      process.stdout.write(t1 + '\n');
+    }
+    if (!fast) await new Promise(r => setTimeout(r, 24));
+  }
+  process.stdout.write('\n');
 
   if (!fast) {
     process.stdout.write('\x1b[?25h');     // show cursor
