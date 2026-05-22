@@ -145,9 +145,17 @@ function shortenCwd(cwd) {
   return cwd.replace(/\\/g, '/');
 }
 
-let _branchCache;
+// Sprint-2.14.2 — cwd-keyed cache with a 10-second TTL. The old
+// process-global cache meant `git checkout` or shell `cd` during a TUI
+// session would still show the original branch forever. Now each
+// distinct cwd gets its own entry, and entries expire after 10s so a
+// branch switch shows up on the next status-bar refresh.
+const _branchCache = new Map();
 function gitBranch(cwd) {
-  if (_branchCache !== undefined) return _branchCache;
+  const now = Date.now();
+  const entry = _branchCache.get(cwd);
+  if (entry && (now - entry.t) < 10_000) return entry.v;
+  let branch = null;
   try {
     let dir = cwd;
     while (dir && dir !== path.dirname(dir)) {
@@ -155,12 +163,12 @@ function gitBranch(cwd) {
       if (fs.existsSync(head)) {
         const c = fs.readFileSync(head, 'utf8').trim();
         const m = c.match(/^ref:\s+refs\/heads\/(.+)$/);
-        _branchCache = m ? m[1] : c.slice(0, 7);
-        return _branchCache;
+        branch = m ? m[1] : c.slice(0, 7);
+        break;
       }
       dir = path.dirname(dir);
     }
   } catch (_) {}
-  _branchCache = null;
-  return null;
+  _branchCache.set(cwd, { v: branch, t: now });
+  return branch;
 }

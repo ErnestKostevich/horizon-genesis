@@ -670,7 +670,7 @@ async function refreshInspectorLearned(){
             </div>
             <div class="mem-bf-row">
               <span class="mem-bf-label">Address</span>
-              <input class="mem-bf-input" type="text" value="${esc(cs.preferredAddress || '')}" placeholder="e.g. Сэр / boss / first name" oninput="_inspUpdateStyle('preferredAddress', this.value)"/>
+              <input class="mem-bf-input" type="text" value="${esc(cs.preferredAddress || '')}" placeholder="e.g. sir / boss / first name" oninput="_inspUpdateStyle('preferredAddress', this.value)"/>
             </div>
           </div>
         `;
