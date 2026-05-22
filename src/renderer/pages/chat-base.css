@@ -1848,6 +1848,18 @@ button:where(:not([class])){
 .step-reason{color:var(--t3);font-size:var(--text-sm);margin-top:1px}
 .step-result{background:var(--bg4);border:1px solid var(--b1);border-radius:6px;padding:6px 8px;margin-top:4px;color:var(--t2);font-family:var(--mono);font-size:var(--text-sm);white-space:pre-wrap;max-height:100px;overflow-y:auto}
 .step-result.err{border-color:rgba(180,60,60,.3);color:#c06060}
+/* Sprint-2.9 — tool args collapsible. The step shows what the agent is
+   about to *do*; previously step.args was dropped from the panel which
+   meant the user had no idea (e.g.) which file the agent was about to
+   write. Now: a <details> disclosure with monospace JSON. */
+.step-args{margin-top:4px}
+.step-args-summary{cursor:pointer;font:600 11px/1 var(--mono);color:var(--t3);padding:2px 6px;border:1px solid var(--b1);border-radius:4px;display:inline-block;list-style:none;background:rgba(86,210,255,.04);transition:background .12s,color .12s,border-color .12s}
+.step-args-summary::-webkit-details-marker{display:none}
+.step-args-summary::before{content:"▸ ";font-size:9px;opacity:.7}
+.step-args[open] .step-args-summary::before{content:"▾ "}
+.step-args-summary:hover{background:rgba(86,210,255,.10);color:var(--accent-cyan-500,#56d2ff);border-color:rgba(86,210,255,.30)}
+.step-args-pre{margin:4px 0 0;padding:6px 8px;background:var(--bg4);border:1px solid var(--b1);border-radius:6px;font:11.5px/1.4 var(--mono);color:var(--t2);white-space:pre-wrap;word-break:break-word;max-height:160px;overflow-y:auto}
+.step-args-truncated{font:500 10.5px/1.4 var(--font);color:var(--t3);margin-top:3px;padding-left:6px;opacity:.7}
 .agent-answer{border-top:1px solid var(--b2);margin-top:7px;padding-top:7px;color:var(--t)}
 .step-spinner{display:inline-block;width:10px;height:10px;border:1.5px solid var(--acc3);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite;margin-right:5px}
 @keyframes spin{to{transform:rotate(360deg)}}

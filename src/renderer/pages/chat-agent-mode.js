@@ -154,39 +154,125 @@
     });
   }
 
+  // Sprint-2.9 — full run-control HUD. Two-row layout:
+  //   Row 1 (always visible in agent mode): persona badge + capability list + ? help
+  //   Row 2 (only when run active):         elapsed · tool counter · Pause · Skip · Stop
+  // Backed by:
+  //   - H.onAgentStep stream → tracks runId, elapsed, tool count
+  //   - H.agentControl(runId, 'pause'|'step'|'stop') → action buttons
+
+  // Module-scoped run state. Re-initialised every time a run-start fires.
+  const _runState = {
+    runId:     null,
+    startedAt: 0,
+    tools:     0,
+    paused:    false,
+    timerId:   null,
+  };
+
+  function _fmtElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return m + 'm ' + r.toString().padStart(2, '0') + 's';
+  }
+
+  function _startElapsedTimer() {
+    if (_runState.timerId) clearInterval(_runState.timerId);
+    _runState.timerId = setInterval(() => {
+      const el = document.getElementById('agent-run-elapsed');
+      if (!el || !_runState.runId) return;
+      el.textContent = _fmtElapsed(Date.now() - _runState.startedAt);
+    }, 250);
+  }
+
+  function _stopElapsedTimer() {
+    if (_runState.timerId) clearInterval(_runState.timerId);
+    _runState.timerId = null;
+  }
+
+  function _showRunRow(runId) {
+    _runState.runId = runId;
+    _runState.startedAt = Date.now();
+    _runState.tools = 0;
+    _runState.paused = false;
+    const row = document.getElementById('agent-run-controls');
+    if (row) row.classList.add('active');
+    _startElapsedTimer();
+  }
+  function _hideRunRow() {
+    _runState.runId = null;
+    _stopElapsedTimer();
+    const row = document.getElementById('agent-run-controls');
+    if (row) row.classList.remove('active');
+  }
+  function _bumpToolCount() {
+    _runState.tools++;
+    const el = document.getElementById('agent-run-tools');
+    if (el) el.textContent = String(_runState.tools) + (_runState.tools === 1 ? ' tool' : ' tools');
+  }
+  function _setPausedVisual(p) {
+    _runState.paused = !!p;
+    const banner = document.getElementById(BANNER_ID);
+    if (banner) banner.classList.toggle('paused', !!p);
+    const pauseBtn = document.getElementById('agent-run-pause');
+    if (pauseBtn) {
+      pauseBtn.title = p ? 'Resume run (R)' : 'Pause run (P)';
+      const lbl = pauseBtn.querySelector('span');
+      if (lbl) lbl.textContent = p ? 'Resume' : 'Pause';
+      const ico = pauseBtn.querySelector('use');
+      if (ico) ico.setAttribute('href', p ? '#i-play' : '#i-square');
+    }
+  }
+
+  async function _ctrl(action) {
+    if (!_runState.runId) return;
+    try { await H.agentControl?.(_runState.runId, action); } catch (_) {}
+  }
+
   function renderBanner() {
     if (document.getElementById(BANNER_ID)) return;
     const composer = document.getElementById('composer') || document.getElementById('chat-composer');
     if (!composer) return;
     const banner = document.createElement('div');
     banner.id = BANNER_ID;
-    banner.style.cssText = `
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 14px; margin: 0 0 6px;
-      background: linear-gradient(90deg,
-                  rgba(139,92,246,0.22), rgba(236,72,153,0.18));
-      border: 1px solid rgba(139,92,246,0.45);
-      border-radius: 10px;
-      font-size: 12px; font-weight: 600;
-      color: var(--tx, #18181b);
-      animation: agentBannerPulse 2.4s ease-in-out infinite;
-    `;
+    banner.className = 'agent-mode-banner';
     const lang = (typeof window !== 'undefined' && window.lang) || 'en';
     const isRu = lang === 'ru';
     banner.innerHTML = `
-      <svg class="licon" style="width:16px;height:16px"><use href="#i-zap"/></svg>
-      <span>${isRu ? 'АГЕНТ УПРАВЛЯЕТ ПК' : 'AGENT IN CONTROL'}</span>
-      <span style="opacity:.65;font-weight:400;font-size:11px;">
-        ${isRu ? 'экран · мышь · клавиатура · файлы · shell · сеть' : 'screen · mouse · keyboard · files · shell · network'}
-      </span>
-      <button id="agent-mode-info" style="
-        margin-left:auto; background:transparent; border:1px solid rgba(255,255,255,0.18);
-        color:inherit; padding:3px 9px; border-radius:6px; font-size:11px; cursor:pointer;
-      ">?</button>
+      <div class="agent-banner-top">
+        <span class="agent-badge">
+          <svg class="licon" style="width:14px;height:14px"><use href="#i-zap"/></svg>
+          <span>${isRu ? 'АГЕНТ' : 'AGENT'}</span>
+        </span>
+        <span class="agent-banner-caps">${isRu ? 'экран · мышь · клавиатура · файлы · shell · сеть' : 'screen · mouse · keyboard · files · shell · network'}</span>
+        <button id="agent-mode-info" class="agent-help-btn" title="${isRu ? 'Что входит в режим Агента' : 'Capabilities reference'}">?</button>
+      </div>
+      <div class="agent-run-controls" id="agent-run-controls" aria-live="polite">
+        <span class="agent-run-dot" aria-hidden="true"></span>
+        <span class="agent-run-status">${isRu ? 'выполняется' : 'running'}</span>
+        <span class="agent-run-elapsed" id="agent-run-elapsed">0s</span>
+        <span class="agent-run-sep">·</span>
+        <span class="agent-run-tools" id="agent-run-tools">0 tools</span>
+        <span class="agent-run-spacer"></span>
+        <button id="agent-run-pause" class="agent-run-btn" title="${isRu ? 'Пауза (P)' : 'Pause run (P)'}">
+          <svg class="licon" width="11" height="11" aria-hidden="true"><use href="#i-square"/></svg>
+          <span>${isRu ? 'Пауза' : 'Pause'}</span>
+        </button>
+        <button id="agent-run-skip" class="agent-run-btn" title="${isRu ? 'Шаг вперёд (S)' : 'Step forward (S)'}">
+          <svg class="licon" width="11" height="11" aria-hidden="true"><use href="#i-arrow-up"/></svg>
+          <span>${isRu ? 'Шаг' : 'Step'}</span>
+        </button>
+        <button id="agent-run-stop" class="agent-run-btn agent-run-stop" title="${isRu ? 'Остановить (Esc)' : 'Stop run (Esc)'}">
+          <svg class="licon" width="11" height="11" aria-hidden="true"><use href="#i-x"/></svg>
+          <span>${isRu ? 'Стоп' : 'Stop'}</span>
+        </button>
+      </div>
     `;
     composer.parentNode?.insertBefore(banner, composer);
 
-    // Inject pulse keyframes (once)
+    // Inject CSS once per session — keyframes + control row.
     if (!document.getElementById('agent-banner-keyframes')) {
       const style = document.createElement('style');
       style.id = 'agent-banner-keyframes';
@@ -195,13 +281,130 @@
           0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.36); }
           50%     { box-shadow: 0 0 0 6px rgba(139,92,246,0.00); }
         }
+        @keyframes agentRunDotPulse {
+          0%,100% { opacity: 1; box-shadow: 0 0 6px rgba(248,113,113,0.7); }
+          50%     { opacity: .55; box-shadow: 0 0 0 rgba(248,113,113,0); }
+        }
+        .agent-mode-banner {
+          display: flex; flex-direction: column; gap: 6px;
+          padding: 8px 12px 8px 14px; margin: 0 0 6px;
+          background: linear-gradient(90deg, rgba(139,92,246,.22), rgba(236,72,153,.18));
+          border: 1px solid rgba(139,92,246,.45);
+          border-radius: 10px;
+          color: var(--tx, #18181b);
+          animation: agentBannerPulse 2.4s ease-in-out infinite;
+        }
+        .agent-mode-banner.paused {
+          border-color: rgba(245,158,11,.55);
+          background: linear-gradient(90deg, rgba(245,158,11,.20), rgba(244,114,182,.12));
+        }
+        .agent-banner-top {
+          display: flex; align-items: center; gap: 10px;
+          font-size: 12px; font-weight: 600;
+        }
+        .agent-badge {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 2px 7px; border-radius: 5px;
+          background: rgba(255,255,255,.10);
+          border: 1px solid rgba(255,255,255,.16);
+          font-weight: 700; letter-spacing: .04em; font-size: 10.5px;
+        }
+        .agent-banner-caps {
+          font-weight: 400; font-size: 11px; opacity: .72;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          flex: 1; min-width: 0;
+        }
+        .agent-help-btn {
+          background: transparent;
+          border: 1px solid rgba(255,255,255,.18);
+          color: inherit;
+          padding: 2px 8px; border-radius: 6px;
+          font-size: 11px; cursor: pointer;
+          -webkit-app-region: no-drag;
+        }
+        .agent-help-btn:hover { background: rgba(255,255,255,.08); }
+        /* Run controls row — collapsed by default, expands on .active */
+        .agent-run-controls {
+          display: none; align-items: center; gap: 8px;
+          padding-top: 6px;
+          border-top: 1px solid rgba(255,255,255,.10);
+          font-size: 11.5px;
+        }
+        .agent-run-controls.active { display: flex; }
+        .agent-run-dot {
+          width: 8px; height: 8px; border-radius: 50%;
+          background: #f87171;
+          animation: agentRunDotPulse 1.2s ease-in-out infinite;
+        }
+        .paused .agent-run-dot { background: #f59e0b; animation: none; opacity: .8; }
+        .agent-run-status {
+          font-weight: 600; letter-spacing: .02em;
+          color: rgba(255,255,255,.92);
+        }
+        .agent-run-elapsed {
+          font: 600 11px/1 var(--mono, ui-monospace, monospace);
+          color: rgba(255,255,255,.96);
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(255,255,255,.08);
+          border: 1px solid rgba(255,255,255,.12);
+          min-width: 36px; text-align: center;
+        }
+        .agent-run-sep { opacity: .55; }
+        .agent-run-tools {
+          font: 500 11px/1.2 var(--font);
+          opacity: .85;
+        }
+        .agent-run-spacer { flex: 1; }
+        .agent-run-btn {
+          -webkit-app-region: no-drag;
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 3px 8px;
+          font: 600 11px/1 var(--font);
+          color: rgba(255,255,255,.92);
+          background: rgba(255,255,255,.06);
+          border: 1px solid rgba(255,255,255,.14);
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background .12s, border-color .12s, transform .08s;
+        }
+        .agent-run-btn:hover {
+          background: rgba(255,255,255,.14);
+          border-color: rgba(255,255,255,.30);
+        }
+        .agent-run-btn:active { transform: translateY(1px); }
+        .agent-run-btn .licon { fill: none; stroke: currentColor; stroke-width: 2; }
+        .agent-run-stop { color: #fecaca; border-color: rgba(248,113,113,.4); }
+        .agent-run-stop:hover { background: rgba(248,113,113,.18); border-color: rgba(248,113,113,.7); color: #fecaca; }
+        /* Light theme overrides */
+        [data-theme="light"] .agent-mode-banner {
+          background: linear-gradient(90deg, rgba(139,92,246,.16), rgba(236,72,153,.12)) !important;
+          color: #1f1d4a !important;
+          border-color: rgba(139,92,246,.38) !important;
+        }
+        [data-theme="light"] .agent-banner-caps { opacity: .80; }
+        [data-theme="light"] .agent-run-controls { border-top-color: rgba(0,0,0,.10); }
+        [data-theme="light"] .agent-run-status { color: #1f1d4a; }
+        [data-theme="light"] .agent-run-elapsed {
+          color: #18181b; background: rgba(255,255,255,.65);
+          border-color: rgba(0,0,0,.10);
+        }
+        [data-theme="light"] .agent-run-btn {
+          color: #1f1d4a; background: rgba(255,255,255,.55);
+          border-color: rgba(0,0,0,.12);
+        }
+        [data-theme="light"] .agent-run-btn:hover {
+          background: rgba(255,255,255,.85); border-color: rgba(0,0,0,.22);
+        }
+        [data-theme="light"] .agent-run-stop {
+          color: #b91c1c; border-color: rgba(248,113,113,.5);
+        }
       `;
       document.head.appendChild(style);
     }
 
     banner.querySelector('#agent-mode-info').addEventListener('click', (e) => {
       e.preventDefault();
-      // Re-show consent modal as a reference card; consent already given.
       const overlay = buildConsentModal();
       overlay.querySelector('#agent-consent-confirm').textContent =
         ((typeof window !== 'undefined' && window.lang) === 'ru') ? 'Понятно' : 'Got it';
@@ -209,11 +412,68 @@
       document.body.appendChild(overlay);
       overlay.querySelector('#agent-consent-confirm').addEventListener('click', () => overlay.remove());
     });
+
+    banner.querySelector('#agent-run-pause').addEventListener('click', async () => {
+      const action = _runState.paused ? 'resume' : 'pause';
+      _setPausedVisual(!_runState.paused);
+      await _ctrl(action);
+    });
+    banner.querySelector('#agent-run-skip').addEventListener('click', async () => {
+      await _ctrl('step');
+    });
+    banner.querySelector('#agent-run-stop').addEventListener('click', async () => {
+      await _ctrl('stop');
+      _hideRunRow();
+    });
+
+    // Keyboard shortcuts active only while the run row is visible.
+    if (!banner.__runKeysBound) {
+      banner.__runKeysBound = true;
+      document.addEventListener('keydown', (ev) => {
+        const row = document.getElementById('agent-run-controls');
+        if (!row || !row.classList.contains('active')) return;
+        const active = document.activeElement;
+        const inComposer = active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.isContentEditable);
+        if (inComposer) return;
+        if (ev.key === 'p' || ev.key === 'P') {
+          ev.preventDefault();
+          banner.querySelector('#agent-run-pause')?.click();
+        } else if (ev.key === 's' || ev.key === 'S') {
+          ev.preventDefault();
+          banner.querySelector('#agent-run-skip')?.click();
+        } else if (ev.key === 'Escape') {
+          ev.preventDefault();
+          banner.querySelector('#agent-run-stop')?.click();
+        }
+      }, true);
+    }
   }
 
   function removeBanner() {
+    _hideRunRow();
     const b = document.getElementById(BANNER_ID);
     if (b) b.remove();
+  }
+
+  // Subscribe to the agent-step stream once renderBanner has been called.
+  // This way idle agent-mode shows just the top row; the run-controls row
+  // fades in only when an actual run starts.
+  function _installRunObserver() {
+    if (typeof H?.onAgentStep !== 'function' || _installRunObserver._done) return;
+    _installRunObserver._done = true;
+    H.onAgentStep((step) => {
+      try {
+        if (!step) return;
+        if (step.type === 'run-start') _showRunRow(step.runId || step.id || null);
+        else if (step.type === 'executing') _bumpToolCount();
+        else if (step.type === 'control') {
+          if (step.action === 'pause') _setPausedVisual(true);
+          else if (step.action === 'resume') _setPausedVisual(false);
+        } else if (step.type === 'run-end' || step.type === 'plan-rejected') {
+          _hideRunRow();
+        }
+      } catch (_) {}
+    });
   }
 
   // Hook setMode() — patch global to layer consent + banner on top.
@@ -238,9 +498,13 @@
   }
 
   // Initialise on DOM ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installModeHook);
-  } else {
+  function _init() {
     installModeHook();
+    _installRunObserver();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _init);
+  } else {
+    _init();
   }
 })();
