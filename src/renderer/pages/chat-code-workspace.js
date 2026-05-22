@@ -459,7 +459,7 @@ async function submitCmdKBar() {
   // Show "thinking" state on the bar — disable input, swap placeholder.
   if (input) {
     input.disabled = true;
-    input.placeholder = '⏳ Thinking…';
+    input.placeholder = 'Thinking…';
   }
   const opRunId = (typeof opStartRun === 'function') ? opStartRun('ai.cmdk', `${prompt.slice(0, 60)} → ${fileLabel}`) : null;
 

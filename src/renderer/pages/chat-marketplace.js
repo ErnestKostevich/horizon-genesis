@@ -293,7 +293,7 @@ async function renderStoreBody() {
         </div>
         <button class="publish-cta-btn" onclick="H.openUrl('${url}/publish')">Open publisher</button>
       </div>
-      <div class="empty-state"><div class="es-icon">&#9889;</div><h3>Why not in the app?</h3>
+      <div class="empty-state"><div class="es-icon"><svg class="licon lg"><use href="#i-zap"/></svg></div><h3>Why not in the app?</h3>
       <p>Publishing needs: account identity, human moderation, screenshots, pricing review. That's a web surface - the desktop app only runs plugins.</p>
       <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">
         <button class="sc-btn primary" onclick="H.openUrl('${url}/publish')">Publish a plugin</button>
@@ -409,7 +409,7 @@ async function renderStoreWorkflows(body) {
     <div style="font:600 9px/1 var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--t3);margin:18px 0 10px">YOUR WORKFLOWS — ${items.length}</div>
     ${items.length ? rows : `
       <div class="empty-state" style="padding:24px 16px">
-        <div class="es-icon">&#9889;</div>
+        <div class="es-icon"><svg class="licon lg"><use href="#i-zap"/></svg></div>
         <h3>No local workflows yet</h3>
         <p>Create one or install one from the marketplace below.</p>
         <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">

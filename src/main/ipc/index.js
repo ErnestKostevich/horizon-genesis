@@ -15,6 +15,7 @@ const mcp        = require('./mcp');
 const skills     = require('./skills');
 const workflows  = require('./workflows');
 const agents     = require('./agents');
+const dashboard  = require('./dashboard');
 
 function registerAll(deps) {
   // Order mirrors the original file so the Pro-guard wrapping and any
@@ -31,6 +32,10 @@ function registerAll(deps) {
   skills.register(deps);
   workflows.register(deps);
   agents.register(deps);
+  // Hermes-style desktop dashboard — read-only aggregation over the
+  // above. Register last so every lazy module getter it relies on
+  // (chatStore, kanbanQueue, etc.) is already in `deps`.
+  dashboard.register(deps);
 }
 
 module.exports = { registerAll };

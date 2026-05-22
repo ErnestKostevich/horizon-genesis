@@ -514,7 +514,7 @@ async function renderWfBody() {
       const scheduled = all.filter(w => w.trigger && w.trigger !== 'manual');
       const el = document.getElementById('scheduled-list');
       if (!scheduled.length) {
-        el.innerHTML = `<div class="empty-state"><div class="es-icon">⏰</div><h3>No scheduled workflows</h3><p>Create a workflow with a daily time or interval trigger to run it automatically.</p></div>`;
+        el.innerHTML = `<div class="empty-state"><div class="es-icon"><svg class="licon lg"><use href="#i-clock"/></svg></div><h3>No scheduled workflows</h3><p>Create a workflow with a daily time or interval trigger to run it automatically.</p></div>`;
       } else {
         el.innerHTML = scheduled.map(w => `
           <div class="wf-card">

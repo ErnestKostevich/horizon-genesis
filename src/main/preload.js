@@ -434,6 +434,17 @@ contextBridge.exposeInMainWorld('H', {
     status: ()  => ipcRenderer.invoke('mobile:status'),
   },
 
+  // ── DASHBOARD (Hermes-style desktop home screen) ─────────────────────────────
+  // Read-only aggregation over chatStore + memoryDb + skillsManager +
+  // connectionsManager + kanbanQueue + agent-runs jsonl. The renderer
+  // calls these four channels on dashboard open and on a 5s refresh.
+  dashboard: {
+    summary:      ()             => ipcRenderer.invoke('dashboard:summary'),
+    recentChats:  (limit = 5)    => ipcRenderer.invoke('dashboard:recentChats', limit),
+    activeTasks:  (limit = 6)    => ipcRenderer.invoke('dashboard:activeTasks', limit),
+    activityFeed: (limit = 10)   => ipcRenderer.invoke('dashboard:activityFeed', limit),
+  },
+
   // ── LICENSE / PRO ─────────────────────────────────────────────────────────────
   licenseState:            ()              => ipcRenderer.invoke('licenseState'),
   licenseRefresh:          ()              => ipcRenderer.invoke('licenseRefresh'),
