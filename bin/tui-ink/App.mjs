@@ -25,6 +25,7 @@ import StatusBar from './components/StatusBar.mjs';
 import Composer from './components/Composer.mjs';
 import ChatLine from './components/ChatLine.mjs';
 import ToolCard from './components/ToolCard.mjs';
+import StepRail from './components/StepRail.mjs';
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -65,6 +66,19 @@ export default function App({ runtime, flags }) {
   const [liveAssistant, setLiveAssistant] = useState(null);
   const liveBufRef = useRef('');
   const liveFlushTimerRef = useRef(null);
+
+  // Sprint-2.12 — agent mode state. When the user runs /agent <task>,
+  // we keep the plan + current step + failed indices live so the
+  // StepRail can pulse the active chip. The rail clears when the
+  // agent run ends; failed tools stay in the transcript as ToolCards.
+  const [agentPlan, setAgentPlan] = useState([]);
+  const [agentCurrentIdx, setAgentCurrentIdx] = useState(-1);
+  const [agentFailed, setAgentFailed] = useState(() => new Set());
+  const [agentMode, setAgentMode] = useState(false);
+  // Active-tool placeholder card — shows the tool name + spinner while
+  // it's running. Promoted to a real ToolCard in the transcript when
+  // the 'result' event fires.
+  const [liveTool, setLiveTool] = useState(null);
 
   // Live session stats — accumulator for the StatusBar. We render these
   // through props so the bar's display ticks immediately as the cost
@@ -175,6 +189,117 @@ export default function App({ runtime, flags }) {
     }
   }, [runtime, append]);
 
+  // Sprint-2.12 — agent loop path. Calls runtime.runAgent with an
+  // onStep handler that updates StepRail / live tool card / transcript
+  // in real time. The plan event seeds the rail; each executing event
+  // bumps the current index and shows a live spinner card; result
+  // promotes that card into the Static transcript with status colour;
+  // reflection appends a verdict line; the final answer is appended
+  // as a normal assistant line.
+  const runAgentTask = useCallback(async (task) => {
+    if (typeof runtime?.runAgent !== 'function') {
+      append({ type: 'system', text: '✗ runAgent is not available in this runtime build.' });
+      return;
+    }
+    setBusy(true);
+    setBusyLabel('planning…');
+    setAgentMode(true);
+    setAgentPlan([]);
+    setAgentCurrentIdx(-1);
+    setAgentFailed(new Set());
+    const toolStartsRef = { current: new Map() };  // tool name → startedAt ms
+
+    try {
+      const r = await runtime.runAgent(task, {
+        history: historyRef.current,
+        onStep: (event) => {
+          if (!event) return;
+          switch (event.type) {
+            case 'plan': {
+              if (event.plan?.steps) {
+                setAgentPlan(event.plan.steps);
+                setAgentCurrentIdx(0);
+                setBusyLabel('executing step 1…');
+              }
+              break;
+            }
+            case 'executing': {
+              const tool = String(event.tool || 'tool');
+              toolStartsRef.current.set(tool, Date.now());
+              setLiveTool({
+                tool,
+                args: event.args,
+                reason: event.reason,
+                startedAt: Date.now(),
+              });
+              setBusyLabel(`${tool}…`);
+              break;
+            }
+            case 'result': {
+              const tool = String(event.tool || 'tool');
+              const startedAt = toolStartsRef.current.get(tool) || Date.now();
+              const durationMs = Math.max(0, Date.now() - startedAt);
+              setLiveTool(null);
+              const ok = event.ok !== false;
+              const out = String(event.result?.out || event.result?.err || event.result?.content || '').trim();
+              // Promote to Static transcript as a real ToolCard.
+              append({
+                type: 'tool',
+                text: tool,
+                meta: {
+                  status: ok ? 'ok' : 'err',
+                  durationMs,
+                  args: event.args,
+                  output: out,
+                },
+              });
+              if (!ok) {
+                setAgentFailed((prev) => new Set(prev).add(agentCurrentIdx));
+              } else {
+                // Advance the plan index — agent emits steps in order.
+                setAgentCurrentIdx((prev) => prev + 1);
+              }
+              break;
+            }
+            case 'reflection': {
+              const verdict = event.goalMet === 'yes' ? '✓ goal met'
+                : event.goalMet === 'partial' ? '⊘ partial'
+                : '✗ not met';
+              const conf = event.confidence != null
+                ? `  · confidence ${event.confidence}`
+                : '';
+              append({ type: 'system', text: verdict + conf });
+              break;
+            }
+            default: break;
+          }
+        },
+      });
+      if (r?.error) {
+        append({ type: 'system', text: '✗ ' + friendlyError(r.error) });
+      } else if (r?.answer) {
+        const ts = _hhmm();
+        append({ type: 'assistant', text: r.answer, ts });
+        historyRef.current.push({ role: 'user', content: task });
+        historyRef.current.push({ role: 'assistant', content: r.answer });
+      }
+      if (r?.usage) {
+        const t = (r.usage.total || (r.usage.in || 0) + (r.usage.out || 0)) || 0;
+        setSessionTokens((prev) => prev + t);
+        if (typeof r?.cost === 'number') setSessionCost((prev) => prev + r.cost);
+      }
+    } catch (e) {
+      append({ type: 'system', text: '✗ ' + (e?.message || String(e)) });
+    } finally {
+      setAgentMode(false);
+      setAgentPlan([]);
+      setAgentCurrentIdx(-1);
+      setLiveTool(null);
+      setBusy(false);
+      setBusyLabel('');
+    }
+  }, [runtime, append, agentCurrentIdx]);
+
   // Slash command dispatch — mirrors the readline TUI surface.
   const handleSlash = useCallback(async (raw) => {
     const [cmd, ...rest] = raw.trim().split(/\s+/);
@@ -203,17 +328,26 @@ export default function App({ runtime, flags }) {
             '/quit            exit the TUI',
             '/clear           clear scrollback',
             '/reset           clear history (start fresh context)',
+            '/agent <task>    run the full agent loop with live step rail + tool cards',
             '/theme <name>    switch theme (try /theme cyberpunk)',
             '/theme --list    list all themes',
             '/persona <id>    switch persona',
             '/model <prov>    switch provider',
-            '/skill <args>    skill helpers (passes through to CLI)',
             '/demo-tool       render a sample ToolCard',
             '',
             'Any other input runs a chat turn with the active provider.',
           ].join('\n'),
         });
         break;
+      case '/agent': {
+        if (!argText) {
+          append({ type: 'system', text: 'Usage: /agent <task description>' });
+        } else {
+          // Don't await — let agent run in background, slash dispatch returns.
+          runAgentTask(argText).catch(() => {});
+        }
+        break;
+      }
       case '/theme': {
         const themes = listThemes();
         if (argText === '--list' || argText === 'list' || !argText) {
@@ -268,7 +402,7 @@ export default function App({ runtime, flags }) {
       default:
         append({ type: 'system', text: `✗ unknown slash command: ${cmd}. Try /help` });
     }
-  }, [append, exit, nextId, runtime, activeTheme, activePersona, activeProvider, model]);
+  }, [append, exit, nextId, runtime, activeTheme, activePersona, activeProvider, model, runAgentTask]);
 
   const handleSubmit = useCallback(async (raw) => {
     const value = String(raw || '').trim();
@@ -325,6 +459,29 @@ export default function App({ runtime, flags }) {
           ? React.createElement(ToolCard, { key: item.id, name: item.text, ...item.meta })
           : React.createElement(ChatLine, { key: item.id, type: item.type, text: item.text, ts: item.ts }),
     ),
+    // Sprint-2.12 — live step rail (visible only while an agent run is
+    // active and a plan has been emitted). Pulses the current step.
+    agentMode && agentPlan.length > 0
+      ? React.createElement(StepRail, {
+          key: 'rail',
+          steps: agentPlan,
+          currentIdx: agentCurrentIdx,
+          failedSet: agentFailed,
+        })
+      : null,
+    // Sprint-2.12 — in-flight tool card. Replaces a Static ToolCard
+    // entry briefly: appears when 'executing' fires, disappears when
+    // 'result' lands (the result then promotes to a Static ToolCard).
+    liveTool
+      ? React.createElement(ToolCard, {
+          key: 'live-tool',
+          name: liveTool.tool,
+          status: 'ok',
+          durationMs: Math.max(0, Date.now() - (liveTool.startedAt || Date.now())),
+          args: liveTool.args,
+          output: '⌁ running…',
+        })
+      : null,
     // Sprint-2.11 — live streaming slot. Sits between Static and the
     // status bar; React rerenders it on every 80ms timer tick without
     // touching the immutable Static items above. Cleared when the
