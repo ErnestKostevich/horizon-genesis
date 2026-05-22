@@ -431,6 +431,10 @@ body.os-win .panel .pbody-tabbed { padding-right: 12px; }
 .chip.on{border-color:rgba(124,109,242,.55);color:var(--acc);background:var(--acc3)}
 .chip.special{border-color:rgba(124,109,242,.25);color:rgba(124,109,242,.6)}
 .chip.special.on{border-color:var(--acc);color:var(--acc);background:rgba(124,109,242,.15);box-shadow:0 0 12px rgba(124,109,242,.12)}
+/* Sprint-2.14 — hide the 13-chip provider row; the composer Model chip
+   + popover replaces it. Inline chips stay in the DOM so JS that flips
+   .chip.on on the active provider still has targets to update. */
+.sb-provider-row { display: none; }
 
 /* ═══ MODES ═══ */
 .modes{-webkit-app-region:no-drag;display:flex;gap:2px;padding:6px 12px;border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;position:relative;z-index:7}
@@ -1346,6 +1350,21 @@ button:where(:not([class])){
 .pe-item:hover { background:rgba(255,255,255,.03); }
 .pe-item.on { background:linear-gradient(135deg, rgba(124,109,242,.14), rgba(86,210,255,.06)); border-color:rgba(124,109,242,.3); }
 .pe-item-icon { width:30px; height:30px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; background:rgba(255,255,255,.04); border:1px solid var(--b1); }
+/* Sprint-2.14 — colored single-letter avatar for personas. Replaces
+   raw emoji glyphs (🤖/🎩/🧙) that rendered differently per OS.
+   Hash-based hue per persona id; inline `style="background/border/color"`
+   from chat-personas.js paints the actual stops. */
+.pe-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 13px/1 var(--font);
+  letter-spacing: 0;
+  flex-shrink: 0;
+  transition: transform .12s ease;
+}
+.pe-item:hover .pe-avatar { transform: scale(1.06); }
+.pe-detail-h-t .pe-avatar { width: 36px; height: 36px; font-size: 15px; }
 .pe-item-name { flex:1; font:600 12.5px/1.2 var(--font); color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pe-item-tag  { font:600 var(--text-xs)/1 var(--mono); letter-spacing:1.2px; color:var(--t3); text-transform:uppercase; }
 .pe-item.on .pe-item-tag { color:#56d2ff; }

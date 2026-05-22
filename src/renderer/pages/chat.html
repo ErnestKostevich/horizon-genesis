@@ -1217,24 +1217,35 @@
   <div class="wb-lvl"><div class="wb-bar" id="wb-bar"></div></div>
 </div>
 
-<!-- ═══════════ PROVIDER BAR ═══════════ -->
+<!-- ═══════════ PROVIDER BAR ═══════════
+     Sprint-2.14 — the 13 inline provider chips were a 2010-browser-tabs
+     row that duplicated the composer Model chip + Model picker popover.
+     Polish audit recommended hiding them behind a popover; the composer
+     Model chip already IS that popover, so the row is fully redundant.
+
+     The chips are kept in DOM (some JS still queries #pc-* ids for the
+     "active provider" highlight) but wrapped in .sb-provider-row which
+     is display:none. Removing them entirely would require touching
+     setProv/setProvider in 5+ files. CSS hide is the surgical fix. -->
 <div class="sb">
   <span class="pulse" id="pulse"></span>
-  <span class="stl" id="stl">Готов</span>
+  <span class="stl" id="stl">Ready</span>
   <div class="sp"></div>
-  <button class="chip" id="pc-gemini"   onclick="setProv('gemini')">Gemini</button>
-  <button class="chip" id="pc-ollama"   onclick="setProv('ollama')">Ollama</button>
-  <button class="chip" id="pc-lmstudio" onclick="setProv('lmstudio')">LM Studio</button>
-  <button class="chip" id="pc-groq"     onclick="setProv('groq')">Groq</button>
-  <button class="chip" id="pc-deepseek" onclick="setProv('deepseek')">DeepSeek</button>
-  <button class="chip" id="pc-mistral"  onclick="setProv('mistral')">Mistral</button>
-  <button class="chip" id="pc-qwen"     onclick="setProv('qwen')">Qwen</button>
-  <button class="chip" id="pc-grok"     onclick="setProv('grok')">Grok</button>
-  <button class="chip" id="pc-claude"   onclick="setProv('claude')">Claude</button>
-  <button class="chip" id="pc-openai"   onclick="setProv('openai')">OpenAI</button>
-  <button class="chip" id="pc-perplexity" onclick="setProv('perplexity')">Perplexity</button>
-  <button class="chip" id="pc-cohere"  onclick="setProv('cohere')">Cohere</button>
-  <button class="chip" id="pc-openrouter" onclick="setProv('openrouter')" title="One key, 200+ models">OpenRouter</button>
+  <div class="sb-provider-row">
+    <button class="chip" id="pc-gemini"   onclick="setProv('gemini')">Gemini</button>
+    <button class="chip" id="pc-ollama"   onclick="setProv('ollama')">Ollama</button>
+    <button class="chip" id="pc-lmstudio" onclick="setProv('lmstudio')">LM Studio</button>
+    <button class="chip" id="pc-groq"     onclick="setProv('groq')">Groq</button>
+    <button class="chip" id="pc-deepseek" onclick="setProv('deepseek')">DeepSeek</button>
+    <button class="chip" id="pc-mistral"  onclick="setProv('mistral')">Mistral</button>
+    <button class="chip" id="pc-qwen"     onclick="setProv('qwen')">Qwen</button>
+    <button class="chip" id="pc-grok"     onclick="setProv('grok')">Grok</button>
+    <button class="chip" id="pc-claude"   onclick="setProv('claude')">Claude</button>
+    <button class="chip" id="pc-openai"   onclick="setProv('openai')">OpenAI</button>
+    <button class="chip" id="pc-perplexity" onclick="setProv('perplexity')">Perplexity</button>
+    <button class="chip" id="pc-cohere"  onclick="setProv('cohere')">Cohere</button>
+    <button class="chip" id="pc-openrouter" onclick="setProv('openrouter')" title="One key, 200+ models">OpenRouter</button>
+  </div>
   <div class="sp"></div>
   <button class="chip" id="tc-search" onclick="toggleSearch()" aria-label="Toggle web search" title="Toggle web search"><svg class="licon"><use href="#i-search"/></svg></button>
   <button class="chip on" id="tc-eye"  onclick="toggleEye()" title="Toggle screen vision"><svg class="licon" style="vertical-align:-2px"><use href="#i-eye"/></svg> PC</button>

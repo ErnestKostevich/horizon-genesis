@@ -95,11 +95,30 @@ function _renderPeList() {
     const active = id && id === currentPersona;
     return `
     <div class="pe-item ${id === _peActiveId ? 'on' : ''} ${active ? 'active' : ''}" onclick="peSelect('${jsId}')">
-      <div class="pe-item-icon">${p.icon || 'P'}</div>
+      <div class="pe-item-icon">${_peIconHtml(p)}</div>
       <div class="pe-item-name">${(p.name || id || 'Untitled').replace(/[<>]/g, '')}</div>
       <span class="pe-item-tag">${active ? 'ACTIVE' : (p.builtin ? 'BUILTIN' : 'CUSTOM')}</span>
     </div>
   `}).join('');
+}
+
+// Sprint-2.14 — render a consistent avatar for each persona instead of
+// the raw `${p.icon}` emoji, which produced different glyphs per OS and
+// looked broken next to the SVG-based UI. Strategy:
+//   • Built-in personas → mapped to a single-letter colored circle
+//     keyed off persona id (deterministic colour per name).
+//   • Custom personas → first letter of name in the same style.
+// Falls back to "P" if persona has no name.
+function _peIconHtml(p) {
+  const name = String(p?.name || p?.id || 'P');
+  const letter = (name.trim()[0] || 'P').toUpperCase();
+  // Hash the id into one of 6 accent hues for visual variety.
+  const HUES = ['#7c6df2', '#56d2ff', '#f3b250', '#34d399', '#f87171', '#e879f9'];
+  const key = String(p?.id || name);
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  const color = HUES[h % HUES.length];
+  return `<span class="pe-avatar" style="background:${color}1f;border:1px solid ${color}88;color:${color};">${letter}</span>`;
 }
 
 async function _renderPeBody() {
@@ -127,7 +146,7 @@ async function _renderPeBody() {
   detail.innerHTML = `
     <div class="pe-detail-h">
       <div class="pe-detail-h-t">
-        <span style="font-size:22px">${full.icon || '🪪'}</span>
+        ${_peIconHtml({ id: _peActiveId, name: full.name })}
         <span>${(full.name || _peActiveId).replace(/[<>]/g,'')}</span>
         <span class="pe-item-tag" style="margin-left:8px">${full.builtin ? 'BUILT-IN' : 'CUSTOM'}</span>
       </div>
