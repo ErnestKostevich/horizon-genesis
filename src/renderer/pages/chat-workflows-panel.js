@@ -623,20 +623,99 @@ function removeWfDraftStep(i) {
   renderWfDraftSteps();
 }
 
+// Sprint-2.14 — AI-preview workflow without persisting. Calls H.ai
+// with the same prompt shape as createWorkflowFromText, parses the
+// JSON reply, returns {name, trigger, steps} or null. Used by the
+// new "Generate → review → Create" flow so the user sees the steps
+// before they're saved.
+async function _aiPreviewWorkflow(description) {
+  if (typeof H?.ai !== 'function') return null;
+  const providerForWorkflow = (typeof prov !== 'undefined' && prov) ? prov : 'gemini';
+  const prompt = `Create an executable Horizon workflow from this user request:
+
+${description}
+
+Return ONLY valid JSON with this exact shape:
+{"name":"Short workflow name","trigger":"manual","steps":[{"action":"open_url","args":{"url":"https://example.com"}}]}
+
+Allowed actions only: open_url, open_app, close_app, shell, type_text, press_key, run_code, wait, notify, speak, send_message, screenshot, clipboard_read, clipboard_write.
+
+Use trigger "manual" unless the user clearly asked for a schedule.`;
+
+  try {
+    const aiOpts = (typeof aiOptsForProvider === 'function') ? aiOptsForProvider(providerForWorkflow) : {};
+    const completion = await H.ai([{ role: 'user', content: prompt }], providerForWorkflow, null, aiOpts);
+    if (!completion || completion.error || !completion.reply) return null;
+    const raw = String(completion.reply || '')
+      .replace(new RegExp('^\\s*\\x60{3}(?:json)?\\s*', 'i'), '')
+      .replace(new RegExp('\\s*\\x60{3}\\s*$', 'i'), '')
+      .trim();
+    const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
+    if (!jsonText) return null;
+    const parsed = JSON.parse(jsonText);
+    if (!parsed || !Array.isArray(parsed.steps)) return null;
+    return {
+      name: String(parsed.name || 'AI workflow').slice(0, 80),
+      trigger: String(parsed.trigger || 'manual'),
+      steps: parsed.steps,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 async function createWfFromAI() {
   const desc = document.getElementById('wf-desc-input').value.trim();
   if (!desc) { H.notify('Workflows', 'Please describe the workflow'); return; }
   const descEl = document.getElementById('wf-desc-input');
   const btn = document.getElementById('wf-generate-btn');
   descEl.disabled = true;
-  if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
-  const wf = await createWorkflowFromText(desc);
-  if (wf) {
-    wfTab('list');
-  } else {
-    descEl.disabled = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="licon" style="vertical-align:-2px"><use href="#i-bot"/></svg> Generate with AI'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+
+  // Sprint-2.14 — preview-before-save. Was: AI generates → workflow
+  // immediately persists → tab jumps to list, user never sees the
+  // steps before they're saved (audit's "type a prompt and pray"
+  // complaint). Now: AI generates, we populate the existing form
+  // fields + wfDraftSteps, and the user clicks the existing "Create
+  // Workflow" button to actually save.
+  const spec = await _aiPreviewWorkflow(desc);
+  descEl.disabled = false;
+  if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="licon" style="vertical-align:-2px"><use href="#i-bot"/></svg> Generate with AI'; }
+
+  if (!spec) {
+    H.notify?.('Workflows', 'AI failed to generate a workflow — try the no-code builder below.');
+    return;
   }
+
+  // Fill the form with the generated spec so user can review + edit.
+  document.getElementById('wf-name-input').value = spec.name;
+  const triggerSel = document.getElementById('wf-trigger-input');
+  if (triggerSel) {
+    if (spec.trigger.startsWith('schedule:') || spec.trigger.startsWith('cron:')) {
+      triggerSel.value = 'schedule';
+      const cronField = document.getElementById('wf-cron-field');
+      const cronInput = document.getElementById('wf-cron-input');
+      if (cronField) cronField.style.display = 'block';
+      if (cronInput) {
+        const time = spec.trigger.replace(/^(schedule|cron):/, '');
+        cronInput.value = time;
+      }
+    } else {
+      triggerSel.value = spec.trigger || 'manual';
+    }
+  }
+  wfDraftSteps = [...spec.steps];
+  renderWfDraftSteps();
+  document.getElementById('wf-steps-input').value = JSON.stringify(spec.steps, null, 2);
+
+  // Visual confirmation — flash the step builder list + show a banner.
+  const list = document.getElementById('wf-step-builder-list');
+  if (list) {
+    list.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    list.classList.add('wf-preview-flash');
+    setTimeout(() => list.classList.remove('wf-preview-flash'), 1400);
+  }
+  H.notify?.('Workflows', `Generated ${spec.steps.length} step${spec.steps.length === 1 ? '' : 's'}. Review below and click Create Workflow.`);
 }
 
 async function createWfManual() {
