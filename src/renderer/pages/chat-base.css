@@ -379,6 +379,7 @@ body.with-sidebar.chat-sidebar-collapsed > .wake-bar,
 body.with-sidebar.chat-sidebar-collapsed > .sb,
 body.with-sidebar.chat-sidebar-collapsed > .panel,
 body.with-sidebar.chat-sidebar-collapsed > .step-rail,
+body.with-sidebar.chat-sidebar-collapsed > .agent-mode-banner,
 body.with-sidebar.chat-sidebar-collapsed > #fractalBg {
   margin-left: 46px !important;
 }
@@ -2187,17 +2188,27 @@ body.with-sidebar > .msgs,
 body.with-sidebar > .inp-wrap,
 body.with-sidebar > #fractalBg,
 body.with-sidebar > .chat-status-bar,
-body.with-sidebar > .step-rail{margin-left:280px}
+body.with-sidebar > .step-rail,
+body.with-sidebar > .agent-mode-banner{margin-left:280px}
+/* Sprint-2.14.3 — agent-mode-banner is inserted by chat-agent-mode.js
+   as a sibling of .inp-wrap (not a child), so it lives at body-root
+   like step-rail did. Without an explicit margin-left, the chatside
+   (fixed at x=0, width 280) covers its left edge. User report:
+   "новая полоска с предупреждением агент мода с лева на ее налезает
+   окно чатов даже в свернутом виде" — exact same pattern as the
+   step-rail bug from Sprint 2.9.2. */
 /* Sprint-2.9.2 — step-rail (the plan steps row at top of chat) was
    missing from the with-sidebar margin set. User report: "Шаги агента
    с верху... налезает окно чатов с лева и даже когда оно свернуто".
    Without this rule the rail sat at viewport x=0 while chatside (fixed
    at x=0, width=280) covered its left edge. Also reserve right side
    when inspector is open so the rail doesn't slide under it. */
-body.with-sidebar.inspector-active > .step-rail {
+body.with-sidebar.inspector-active > .step-rail,
+body.with-sidebar.inspector-active > .agent-mode-banner {
   margin-right: var(--inspector-space, 356px);
 }
-body.inspector-active:not(.with-sidebar) > .step-rail {
+body.inspector-active:not(.with-sidebar) > .step-rail,
+body.inspector-active:not(.with-sidebar) > .agent-mode-banner {
   margin-right: var(--inspector-space, 356px);
 }
 body.surface-active.with-sidebar > .panel.show,
