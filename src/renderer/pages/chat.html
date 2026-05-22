@@ -874,17 +874,24 @@
         </div>
       </div>
 
-      <div class="info-box" style="margin-top:10px">
-        <strong>⚠️ Why Web Speech API isn't used:</strong><br>
-        Google blocks it inside Electron — throws "network error". Known bug since 2020.<br><br>
-        <strong>✅ How Horizon v5 works:</strong><br>
-        1. Hit <strong>🌅 Wake</strong> → Horizon starts listening (every 2 s)<br>
-        2. Say <strong>"Horizon"</strong> (or "Горизонт" / "Хорайзон" if you prefer Russian)<br>
-        3. Horizon transcribes via <strong>Groq Whisper</strong> (free!)<br>
-        4. Recognises the wake word → answers → <strong>types your next utterance live</strong><br>
-        5. Speak the command → it sends automatically<br><br>
-        <strong style="color:var(--red)">Needs a Groq key</strong> for wake word + voice. Free at console.groq.com
-      </div>
+      <!-- Sprint-2.14 — was a wall-of-text dev README mid-settings.
+           Replaced with a collapsible <details> block so the panel
+           reads quickly + the explanation is one click away. -->
+      <details class="wake-howto" style="margin-top:10px">
+        <summary class="wake-howto-summary">How does the wake word work? <span class="wake-howto-summary-chev">▾</span></summary>
+        <div class="wake-howto-body">
+          <p><strong>Why not the browser's built-in speech recognition?</strong><br/>
+          Google blocks the Web Speech API inside Electron — known bug since 2020 — so Horizon ships its own pipeline.</p>
+          <ol class="wake-howto-steps">
+            <li>Toggle <strong>Wake</strong> on the composer — Horizon starts listening (re-checked every ~2 s).</li>
+            <li>Say <strong>"Horizon"</strong> (also <em>"Горизонт"</em> or <em>"Хорайзон"</em>).</li>
+            <li>Audio is transcribed through <strong>Groq Whisper</strong> (free tier covers normal use).</li>
+            <li>On match, Horizon answers, then starts <strong>live-typing your next utterance</strong>.</li>
+            <li>Speak your command — it auto-sends when you pause.</li>
+          </ol>
+          <p class="wake-howto-warn"><strong>Needs a Groq key</strong> for wake + voice. Free at <a onclick="H.openUrl && H.openUrl('https://console.groq.com')">console.groq.com</a>.</p>
+        </div>
+      </details>
         </div>
       </section>
 
