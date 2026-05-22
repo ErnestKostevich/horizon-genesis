@@ -653,6 +653,20 @@ body:not(.with-sidebar) .chat-status-bar{display:flex!important}
   position:relative;
 }
 .composer-chip.strong b{color:#8eeaff;font-weight:600}
+/* Sprint-2.9 — canvas chip auto-pop flash. When the agent writes to
+   Live Canvas while the panel is closed, the chip pulses for 1.4s as
+   a "look, I changed something" signal before the panel opens itself. */
+@keyframes composer-chip-flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(86,210,255,.0); }
+  20%      { box-shadow: 0 0 0 4px rgba(86,210,255,.40); transform: scale(1.03); }
+  60%      { box-shadow: 0 0 0 6px rgba(86,210,255,.0);  transform: scale(1.0); }
+}
+.composer-chip.flash {
+  animation: composer-chip-flash 1.4s ease-out;
+  border-color: rgba(86,210,255,.55) !important;
+  background: rgba(86,210,255,.14) !important;
+}
+.composer-chip#composer-canvas-chip.on b { color: #8eeaff; }
 
 /* Sprint 4 — Task 3: persona pill in composer toolbar.
    Visually parallel to .composer-chip.strong (the Model chip) but with a
