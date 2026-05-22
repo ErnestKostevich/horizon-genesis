@@ -1934,26 +1934,48 @@ class TuiEngine {
       return;
     }
 
-    // Fix 6 — floating autocomplete menu above composer
+    // Sprint-2.10 — premium floating autocomplete menu. Was a stack of
+    // raw lines that read like log spew. Now: rounded box with title
+    // and footer hint, highlighted row uses accent bg, descriptions
+    // are dim. Adapts to terminal width via a calculated inner width.
     let menuHeight = 0;
     if (this._completionHits && this._completionHits.length > 1) {
       const hits = this._completionHits.slice(0, 6);
+      const cols = process.stdout.columns || 80;
+      // Inner width — wide enough for "name + 2 + desc" of longest hit.
+      const longestDesc = Math.max(0, ...hits.map(h => (SLASH_DESCRIPTIONS[h] || '').length));
+      const innerW = Math.min(cols - 4, Math.max(40, 18 + longestDesc + 4));
+      const horiz = '─'.repeat(innerW);
+      // Top border
+      process.stdout.write(fmt.dim(' ╭' + horiz + '╮') + '\n');
+      menuHeight++;
       for (let i = 0; i < hits.length; i++) {
         const h = hits[i];
         const desc = SLASH_DESCRIPTIONS[h] || '';
         const padded = h.padEnd(16);
-        let line;
+        let inner;
         if (i === this._completionIdx) {
-          // Highlighted row — bright text on dim bg
-          line = '\x1b[48;5;235m\x1b[97m  ' + padded + '  ' + (desc ? '\x1b[2m' + desc + '\x1b[22m' : '') + '\x1b[0m';
+          // Highlighted row — accent bg, bright text
+          const innerText = ' ' + padded + '  ' + (desc || '');
+          const padRight = ' '.repeat(Math.max(0, innerW - innerText.length - 1));
+          inner = '\x1b[48;5;235m\x1b[97m' + innerText + padRight + ' \x1b[0m';
         } else {
-          line = '  ' + fmt.cyan(padded) + '  ' + (desc ? fmt.dim(desc) : '');
+          const cyanName = fmt.cyan(padded);
+          const dimDesc = desc ? fmt.dim(desc) : '';
+          const visible = ' ' + padded + '  ' + (desc || '');
+          const padRight = ' '.repeat(Math.max(0, innerW - visible.length - 1));
+          inner = ' ' + cyanName + '  ' + dimDesc + padRight + ' ';
         }
-        process.stdout.write(line + '\n');
+        process.stdout.write(fmt.dim(' │') + inner + fmt.dim('│') + '\n');
         menuHeight++;
       }
-      // Footer hint
-      process.stdout.write(fmt.dim('  Tab=next · Enter=accept · Esc=cancel') + '\n');
+      // Footer hint inside the box
+      const hint = ' Tab=next · Enter=accept · Esc=cancel';
+      const hintPad = ' '.repeat(Math.max(0, innerW - hint.length - 1));
+      process.stdout.write(fmt.dim(' │' + fmt.dim(hint) + hintPad + ' ' + '│') + '\n');
+      menuHeight++;
+      // Bottom border
+      process.stdout.write(fmt.dim(' ╰' + horiz + '╯') + '\n');
       menuHeight++;
     }
 
