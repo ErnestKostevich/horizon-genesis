@@ -10,7 +10,18 @@
 
 const { fmt, friendlyError } = require('../tty');
 const { renderMarkdown } = require('../markdown');
-const { GradientSpinner } = require('../banner');
+const { GradientSpinner, errorCard } = require('../banner');
+
+// Sprint-2.9 — split friendlyError output into headline + hint so the
+// error card layout reads as a captioned card (line 1 bold message,
+// line 2 dim "try this" hint). friendlyError already returns a 2-line
+// string with the hint after "\n  Tip:" — we just parse that here.
+function _splitFriendly(raw) {
+  const text = friendlyError(raw);
+  const [headline, ...rest] = String(text).split('\n');
+  const hint = rest.join(' ').replace(/^\s*Tip:\s*/i, '').trim();
+  return { headline: headline.trim(), hint };
+}
 
 async function run({ runtime, args, flags }) {
   const message = args.join(' ').trim();
@@ -58,7 +69,7 @@ async function run({ runtime, args, flags }) {
     if (firstToken) {
       // Provider didn't stream — fall back to one-shot
       spinner.stop();
-      if (r.error) { process.stderr.write(fmt.err(friendlyError(r.error)) + '\n'); return 1; }
+      if (r.error) { const e = _splitFriendly(r.error); process.stderr.write('\n' + errorCard(e.headline, e.hint) + '\n\n'); return 1; }
       // Some providers (cohere) return non-streamed reply this way
       if (r.reply) {
         process.stdout.write(wantMarkdown ? renderMarkdown(r.reply) : r.reply);
@@ -80,7 +91,8 @@ async function run({ runtime, args, flags }) {
   // Buffered (piped / non-TTY / explicit --no-stream)
   const r = await runtime.runChat(message, opts);
   if (r.error) {
-    process.stderr.write(fmt.err(friendlyError(r.error)) + '\n');
+    const e = _splitFriendly(r.error);
+    process.stderr.write('\n' + errorCard(e.headline, e.hint) + '\n\n');
     return 1;
   }
   if (flags.quiet) {
