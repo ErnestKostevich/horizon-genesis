@@ -28,8 +28,12 @@
       list.innerHTML = '';
       for (const m of macros) {
         const row = document.createElement('div');
-        row.className = 'trow';
-        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.02);margin-bottom:6px';
+        // Sprint-2.6 — `trow` already has dark+light themed paint via
+        // apex-theme.css; the old inline `background:rgba(255,255,255,.02)`
+        // disappeared on the light substrate. Use the new `.macro-row`
+        // class for theme-aware paint instead.
+        row.className = 'trow macro-row';
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:6px';
         const last = m.lastPlayedAt ? new Date(m.lastPlayedAt).toLocaleString() : '—';
         row.innerHTML = `
           <div style="flex:1;min-width:0">
@@ -38,7 +42,7 @@
           </div>
           <button class="psv" data-act="play" data-name="${escapeAttr(m.name)}">Play</button>
           <button class="psv" data-act="show" data-name="${escapeAttr(m.name)}">Show</button>
-          <button class="psv" data-act="delete" data-name="${escapeAttr(m.name)}" style="color:#f88">Delete</button>
+          <button class="psv macro-delete-btn" data-act="delete" data-name="${escapeAttr(m.name)}">Delete</button>
         `;
         list.appendChild(row);
       }
