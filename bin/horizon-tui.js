@@ -457,6 +457,12 @@ class StepRail {
       const innerWidth = Math.min(cols - 4, 100); // leave 2-char gutter + closing safety
       const argsRendered = fmtArgsInline(args);
       const headerRaw = ` ${cat} ${tool} `;
+      // Sprint-2.9 — status-tinted rail. Green = ok, red = error, amber =
+      // permission-denied. Borders previously dim-grey regardless of
+      // outcome — now scan immediately by colour.
+      const rail = isDenied ? fmt.yellow
+                  : ok ? fmt.green
+                  : fmt.red;
       // Title row: ╭─ <tool> ─...─  <status> <duration>
       const trailingStatus = (duration ? fmt.cyan('⏱ ' + fmtDuration(duration)) : '');
       const statusTail = ' ' + glyph + (trailingStatus ? ' ' + trailingStatus : '');
@@ -465,9 +471,9 @@ class StepRail {
       const titleSuffixVis = visibleLen(statusTail);
       const dashCount = Math.max(2, innerWidth - titlePrefixVis - titleSuffixVis);
       const topLine = '  '
-        + fmt.dim('╭─')
+        + rail('╭─')
         + fmt.cyan(headerRaw)
-        + fmt.dim('─'.repeat(dashCount))
+        + rail('─'.repeat(dashCount))
         + statusTail;
       this.engine.print(topLine);
 
@@ -498,10 +504,10 @@ class StepRail {
           // continuation rows are indented by the label's visible width.
           const lbl = (i === 0 ? fmt.dim(label) : ' '.repeat(visibleLen(label)));
           const body = i === 0 ? shown[i] : fmt.dim(shown[i]);
-          this.engine.print('  ' + fmt.dim('│  ') + lbl + ' ' + body);
+          this.engine.print('  ' + rail('│  ') + lbl + ' ' + body);
         }
         if (truncated > 0) {
-          this.engine.print('  ' + fmt.dim('│  ') + ' '.repeat(visibleLen(label) + 1)
+          this.engine.print('  ' + rail('│  ') + ' '.repeat(visibleLen(label) + 1)
             + fmt.dim(`(+ ${truncated} more lines)`));
         }
       };
@@ -516,7 +522,7 @@ class StepRail {
         renderRow('err: ', fmt.red(err));
       }
 
-      this.engine.print('  ' + fmt.dim('╰' + '─'.repeat(innerWidth - 1)));
+      this.engine.print('  ' + rail('╰' + '─'.repeat(innerWidth - 1)));
     }
     this.spinner = this._newSpinner('⌁ thinking…', 'thinking');
   }
@@ -633,17 +639,24 @@ async function main({ flags } = {}) {
       if (!line) return;
       // Echo user line into transcript. Sprint 2.1 — captioned echo:
       //   ▌ you · 14:32
-      //   | <message>
+      //   ▏ <message>
       // Uses an accent-coloured left-half-block bullet and a dim grey
       // timestamp so the eye can quickly find turn boundaries.
+      // Sprint-2.9 — a thin hairline rule above each user turn so the
+      // transcript reads as "turn / turn / turn" instead of a continuous
+      // wall of text. Pipe `|` (1995-era) is replaced with the lighter
+      // `▏` left one-eighth block which feels closer to a margin guide.
+      const _termWidth = process.stdout.columns || 80;
+      const _sepWidth = Math.max(20, Math.min(60, _termWidth - 4));
+      engine.print(fmt.dim('─'.repeat(_sepWidth)));
       const _now = new Date();
       const _ts = String(_now.getHours()).padStart(2, '0') + ':'
                 + String(_now.getMinutes()).padStart(2, '0');
       engine.print(fmt.cyan('▌ ') + fmt.bold('you') + ' ' + fmt.dim('· ' + _ts));
-      // Each content line gets a dim "| " gutter so multi-line input
+      // Each content line gets a slim accent gutter so multi-line input
       // visibly stays grouped under the caption.
       for (const _ln of line.split('\n')) {
-        engine.print(fmt.dim('| ') + _ln);
+        engine.print(fmt.cyan('▏ ') + _ln);
       }
       try {
         // Sprint 2.3 — Easter eggs run before the slash dispatcher so they
