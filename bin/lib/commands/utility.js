@@ -16,6 +16,20 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { fmt, promptYesNo } = require('../tty');
+const { panel } = require('../banner');
+
+// Eighths-block bar palette. Same one as cost.js / insights.js — keeps
+// every bar chart across the CLI visually consistent.
+const _BLOCKS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+function _eighthsBar(value, max, width, color = fmt.cyan) {
+  if (max <= 0) return fmt.dim('·' + ' '.repeat(width - 1));
+  const sub = Math.round((value / max) * width * 8);
+  if (sub === 0) return fmt.dim('·' + ' '.repeat(width - 1));
+  const full = Math.floor(sub / 8);
+  const rem = sub % 8;
+  return color('█'.repeat(full) + (rem > 0 ? _BLOCKS[rem] : ''))
+       + ' '.repeat(Math.max(0, width - full - (rem > 0 ? 1 : 0)));
+}
 
 // ── helpers ────────────────────────────────────────────────────────────
 function notesPath(userDataDir) { return path.join(userDataDir, 'notes.jsonl'); }
@@ -103,11 +117,12 @@ const HANDLERS = {
           return;
         }
         const remaining = total - elapsed;
-        const pctW = Math.floor((elapsed / total) * 30);
-        const bar = '█'.repeat(pctW) + fmt.dim('·'.repeat(30 - pctW));
+        // Eighths-block timer bar — every second moves a sub-cell so the
+        // progress feels smooth even on short timers.
+        const bar = _eighthsBar(elapsed, total, 30, fmt.cyan);
         const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
         const ss = String(remaining % 60).padStart(2, '0');
-        process.stdout.write(`\r\x1b[K  ${fmt.cyan(bar)}  ${fmt.bold(mm + ':' + ss)} ${fmt.dim('remaining')}`);
+        process.stdout.write(`\r\x1b[K  ${bar}  ${fmt.bold(mm + ':' + ss)} ${fmt.dim('remaining')}`);
       }, 1000);
     });
   },
@@ -131,17 +146,32 @@ const HANDLERS = {
       topModels: cost ? Object.entries(cost.byModel || {}).sort((a,b)=>b[1].tokens-a[1].tokens).slice(0,3) : [],
     };
     if (flags.json) { process.stdout.write(JSON.stringify(data, null, 2) + '\n'); return 0; }
-    process.stdout.write('\n' + fmt.bold('Horizon stats') + ` · ${days}d\n\n`);
-    process.stdout.write(`  ${fmt.green(data.memory.memories + '')} memories · ${fmt.green(data.memory.facts + '')} facts · ${fmt.green(data.memory.conversations + '')} conversations\n`);
-    process.stdout.write(`  ${fmt.cyan(data.skills + '')} skills · ${fmt.cyan(data.enabledCrons + '')} cron entries enabled\n`);
-    process.stdout.write(`  ${fmt.cyan(data.cost.calls + '')} AI calls · ${fmt.cyan((data.cost.tokens || 0).toLocaleString())} tokens · ${fmt.green('$' + (data.cost.costUsd || 0).toFixed(4))}\n`);
+    // Sprint-2.15 — panel-framed stats + eighths-block model chart.
+    process.stdout.write('\n  ' + fmt.bold('Horizon stats') + fmt.dim(` · ${days}d`) + '\n\n');
+    process.stdout.write(panel({
+      title: 'Snapshot',
+      accent: 'cyan',
+      width: 72,
+      lines: [
+        fmt.dim('memory     ') + ' ' + fmt.green(data.memory.memories + '') + fmt.dim(' memories · ') + fmt.green(data.memory.facts + '') + fmt.dim(' facts · ') + fmt.green(data.memory.conversations + '') + fmt.dim(' conversations'),
+        fmt.dim('skills     ') + ' ' + fmt.cyan(data.skills + '') + fmt.dim(' loaded · ') + fmt.cyan(data.enabledCrons + '') + fmt.dim(' cron entries enabled'),
+        fmt.dim('cost       ') + ' ' + fmt.cyan(data.cost.calls + '') + fmt.dim(' calls · ') + fmt.cyan((data.cost.tokens || 0).toLocaleString()) + fmt.dim(' tokens · ') + fmt.green('$' + (data.cost.costUsd || 0).toFixed(4)),
+      ],
+    }) + '\n\n');
     if (data.topModels.length) {
-      process.stdout.write('\n  ' + fmt.bold('Top models') + '\n');
-      for (const [m, v] of data.topModels) {
-        process.stdout.write(`    ${fmt.cyan(m.padEnd(40))} ${fmt.dim(v.calls + ' calls · ' + v.tokens.toLocaleString() + ' tokens')}\n`);
-      }
+      const maxTokens = Math.max(1, ...data.topModels.map(([, v]) => v.tokens));
+      const modelLines = data.topModels.map(([m, v]) =>
+        fmt.cyan(m.padEnd(36)) + ' ' +
+        _eighthsBar(v.tokens, maxTokens, 18) + ' ' +
+        fmt.dim(v.calls + ' calls · ') + fmt.green(v.tokens.toLocaleString() + ' tokens')
+      );
+      process.stdout.write(panel({
+        title: 'Top models',
+        accent: 'magenta',
+        width: 90,
+        lines: modelLines,
+      }) + '\n\n');
     }
-    process.stdout.write('\n');
     return 0;
   },
 

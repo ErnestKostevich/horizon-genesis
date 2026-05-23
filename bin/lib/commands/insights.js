@@ -9,6 +9,20 @@
 //   - run success rate (goal-met vs partial)
 
 const { fmt } = require('../tty');
+const { panel } = require('../banner');
+
+// Eighths-block palette for sub-cell-precision bar charts. Matches the
+// cost-summary chart so the two commands feel like one visual system.
+const BLOCKS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+function eighthsBar(value, max, width, color = fmt.cyan) {
+  if (max <= 0) return fmt.dim('·' + ' '.repeat(width - 1));
+  const sub = Math.round((value / max) * width * 8);
+  if (sub === 0) return fmt.dim('·' + ' '.repeat(width - 1));
+  const full = Math.floor(sub / 8);
+  const rem = sub % 8;
+  return color('█'.repeat(full) + (rem > 0 ? BLOCKS[rem] : ''))
+       + ' '.repeat(Math.max(0, width - full - (rem > 0 ? 1 : 0)));
+}
 
 async function run({ runtime, args, flags }) {
   const days = Number(flags.days || 30);
@@ -23,46 +37,84 @@ async function run({ runtime, args, flags }) {
     return 0;
   }
 
-  process.stdout.write('\n' + fmt.bold(`Insights · last ${days} days`) + '\n\n');
+  process.stdout.write('\n  ' + fmt.bold(`Insights · last ${days} days`) + '\n\n');
   if (!entries.length) {
     process.stdout.write(fmt.dim('  no activity in this window — run `horizon chat "hi"` and try again') + '\n\n');
     return 0;
   }
 
-  // By model (heaviest usage)
+  // Sprint-2.15 — eighths-block charts + panel framing. Each section is
+  // now its own rounded panel so the dashboard reads like one cohesive
+  // surface; bar charts use the 1/8-precision blocks from cost.js so
+  // small values still show a visible sliver instead of "no bar at all".
+
+  // ── Top models by token spend (with eighths bar) ─────────────────────
   const models = topN(byField(entries, 'model'), 8);
-  process.stdout.write(fmt.bold('Top models by token spend') + '\n');
-  for (const [k, v] of models) {
-    process.stdout.write(`  ${fmt.cyan(k.padEnd(36))} ${fmt.dim(v.calls + ' calls')} ${fmt.green(v.tokens.toLocaleString().padStart(12) + ' tokens')}\n`);
-  }
+  const maxModelTokens = Math.max(1, ...models.map(([, v]) => v.tokens));
+  const modelLines = models.map(([k, v]) =>
+    fmt.cyan(k.padEnd(36)) + ' ' +
+    eighthsBar(v.tokens, maxModelTokens, 18) + ' ' +
+    fmt.green(v.tokens.toLocaleString().padStart(10)) + ' ' +
+    fmt.dim('· ' + v.calls + ' calls')
+  );
+  process.stdout.write(panel({
+    title: 'Top models by token spend',
+    accent: 'cyan',
+    width: 90,
+    lines: modelLines,
+  }) + '\n\n');
 
-  // By source (cli vs cli-stream vs cron vs ...)
-  process.stdout.write('\n' + fmt.bold('Where calls came from') + '\n');
+  // ── Where calls came from ────────────────────────────────────────────
   const sources = byField(entries, 'source');
-  for (const [k, v] of Object.entries(sources).sort((a, b) => b[1].calls - a[1].calls)) {
-    process.stdout.write(`  ${fmt.cyan(k.padEnd(20))} ${fmt.dim(String(v.calls).padStart(5) + ' calls')}\n`);
-  }
+  const sourceRows = Object.entries(sources).sort((a, b) => b[1].calls - a[1].calls);
+  const maxSrcCalls = Math.max(1, ...sourceRows.map(([, v]) => v.calls));
+  const sourceLines = sourceRows.map(([k, v]) =>
+    fmt.cyan(k.padEnd(20)) + ' ' +
+    eighthsBar(v.calls, maxSrcCalls, 18) + ' ' +
+    fmt.dim(String(v.calls).padStart(5) + ' calls')
+  );
+  process.stdout.write(panel({
+    title: 'Where calls came from',
+    accent: 'magenta',
+    width: 72,
+    lines: sourceLines,
+  }) + '\n\n');
 
-  // Hour-of-day heatmap
-  process.stdout.write('\n' + fmt.bold('Hour-of-day heatmap (UTC)') + '\n');
+  // ── Hour-of-day heatmap (UTC, eighths-precision) ─────────────────────
   const hours = byHour(entries);
-  const max = Math.max(1, ...hours);
+  const maxHour = Math.max(1, ...hours);
+  const hourLines = [];
   for (let h = 0; h < 24; h++) {
-    const w = Math.round((hours[h] / max) * 30);
-    const bar = w > 0 ? '█'.repeat(w) : fmt.dim('·');
-    process.stdout.write(`  ${String(h).padStart(2, '0')}:00  ${fmt.cyan(bar.padEnd(30))} ${fmt.dim(hours[h] + ' calls')}\n`);
+    hourLines.push(
+      fmt.dim(String(h).padStart(2, '0') + ':00') + '  ' +
+      eighthsBar(hours[h], maxHour, 30) + ' ' +
+      fmt.dim(String(hours[h]).padStart(4) + ' calls')
+    );
   }
+  process.stdout.write(panel({
+    title: 'Hour-of-day heatmap (UTC)',
+    accent: 'green',
+    width: 72,
+    lines: hourLines,
+  }) + '\n\n');
 
-  // Persona breakdown (read from memory.profile, not log — log doesn't tag persona)
+  // ── Persona memory entries (read from memory.profile) ─────────────────
   const personaCounts = personaUsage(runtime);
   if (personaCounts && Object.keys(personaCounts).length) {
-    process.stdout.write('\n' + fmt.bold('Persona memory entries') + '\n');
-    for (const [k, v] of Object.entries(personaCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)) {
-      process.stdout.write(`  ${fmt.cyan(k.padEnd(14))} ${fmt.dim(v + ' notes')}\n`);
-    }
+    const personaRows = Object.entries(personaCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const maxNotes = Math.max(1, ...personaRows.map(([, v]) => v));
+    const personaLines = personaRows.map(([k, v]) =>
+      fmt.cyan(k.padEnd(14)) + ' ' +
+      eighthsBar(v, maxNotes, 18) + ' ' +
+      fmt.dim(String(v).padStart(4) + ' notes')
+    );
+    process.stdout.write(panel({
+      title: 'Persona memory entries',
+      accent: 'yellow',
+      width: 72,
+      lines: personaLines,
+    }) + '\n\n');
   }
-
-  process.stdout.write('\n');
   return 0;
 }
 
