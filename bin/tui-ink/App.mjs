@@ -99,6 +99,18 @@ export default function App({ runtime, flags }) {
     return () => clearInterval(id);
   }, [liveTool]);
 
+  // Sprint-2.15 — slow breathe tick (every 700ms) used by the StepRail
+  // to softly dim/un-dim *pending* step chips while the agent runs.
+  // Done = static bright green ✓. Current = Spinner (already animated).
+  // Pending was the visual dead spot — now it gently breathes so the
+  // whole rail feels alive while there's still work to do.
+  const [pendingBreathe, setPendingBreathe] = useState(0);
+  useEffect(() => {
+    if (!agentMode || !agentPlan.length) return;
+    const id = setInterval(() => setPendingBreathe((t) => t + 1), 700);
+    return () => clearInterval(id);
+  }, [agentMode, agentPlan.length]);
+
   // Sprint-2.13 — Plan/Act gate. When the agent's askPermission fires
   // for a dangerous tool we stash the promise resolver here and render
   // the PlanActGate panel above the composer. User keystrokes (Enter
@@ -632,6 +644,7 @@ export default function App({ runtime, flags }) {
           steps: agentPlan,
           currentIdx: agentCurrentIdx,
           failedSet: agentFailed,
+          pendingBreathe,
         })
       : null,
     // Sprint-2.12 — in-flight tool card. Replaces a Static ToolCard

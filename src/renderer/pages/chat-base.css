@@ -2931,6 +2931,40 @@ body.code-mode-active.inspector-active .inp-wrap { margin-right: 0; }
   0%, 100% { box-shadow: 0 0 14px rgba(243,178,80,.25); }
   50%      { box-shadow: 0 0 22px rgba(243,178,80,.45); }
 }
+/* Sprint-2.15 — pending step state. Previously upcoming steps shared
+   the bare `.step` look which read as "already settled / neutral" and
+   was hard to tell apart from `.step.done` at a glance. Pending now:
+     - dashed border (visual cue: "not yet")
+     - lower opacity so done > now > pending reads as a brightness ladder
+     - very slow soft pulse on opacity so the rail feels alive while
+       the agent works toward these steps (no glow — that's reserved
+       for the *current* step)
+   The animation is deliberately understated (4s, ±10%) so it doesn't
+   compete with .step.now's amber halo. */
+.step.pending {
+  color: var(--t3);
+  border-style: dashed;
+  border-color: rgba(255,255,255,.12);
+  opacity: .65;
+  animation: stepPendingBreathe 4s ease-in-out infinite;
+}
+.step.pending .num {
+  background: rgba(255,255,255,.04);
+  color: var(--t3);
+  opacity: .8;
+}
+@keyframes stepPendingBreathe {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: .80; }
+}
+[data-theme="light"] .step.pending {
+  border-color: rgba(15,23,42,.18);
+  color: rgba(15,23,42,.55);
+}
+[data-theme="light"] .step.pending .num {
+  background: rgba(15,23,42,.06);
+  color: rgba(15,23,42,.55);
+}
 .step-arrow { color: var(--t4, #555); font-size: 10px; flex-shrink: 0; }
 
 /* ═══ OPERATOR MODE ═══
