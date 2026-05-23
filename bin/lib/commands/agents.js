@@ -17,6 +17,7 @@
 // no kanban queue (HORIZON_KANBAN=off or better-sqlite3 missing).
 
 const { fmt, isTTY } = require('../tty');
+const { panel } = require('../banner');
 
 async function run({ runtime, args, flags }) {
   const sub = args[0] || 'board';
@@ -85,43 +86,66 @@ function board(queue, flags) {
     return 0;
   }
 
+  // Sprint-2.15 — panel-framed three-column kanban. Replaces the
+  // hand-rolled box-drawing frame with the shared `panel()` helper so the
+  // board picks up the accent colour and rounded corners used elsewhere.
+  // The inner column structure stays — panel() just wraps it.
   const colW = 22;
-  const out = [];
   const colour = isTTY ? fmt : { cyan: x=>x, green: x=>x, red: x=>x, yellow: x=>x, dim: x=>x, bold: x=>x };
 
-  out.push('');
-  out.push(colour.bold('╭─ Horizon Kanban ─────────────────────────────────────────────────────╮'));
+  const lines = [];
+  // Header row — column titles + counts
   const head =
-    pad(`QUEUED (${s.queued})`,  colW) + '│ ' +
-    pad(`RUNNING (${s.running})`, colW) + '│ ' +
-    pad(`DONE (${s.done})`,       colW);
-  out.push('│ ' + head + ' │');
-  out.push('│ ' + pad('─'.repeat(colW-1), colW) + '│ ' + pad('─'.repeat(colW-1), colW) + '│ ' + pad('─'.repeat(colW-1), colW) + ' │');
+    pad(colour.bold(`QUEUED (${s.queued})`),  colW + ansiPad(`QUEUED (${s.queued})`)) + colour.dim('│ ') +
+    pad(colour.bold(`RUNNING (${s.running})`), colW + ansiPad(`RUNNING (${s.running})`)) + colour.dim('│ ') +
+    pad(colour.bold(`DONE (${s.done})`),       colW + ansiPad(`DONE (${s.done})`));
+  lines.push(head);
+  // Divider row — dim rule per column
+  lines.push(colour.dim('─'.repeat(colW-1)) + ' ' + colour.dim('│ ') + colour.dim('─'.repeat(colW-1)) + ' ' + colour.dim('│ ') + colour.dim('─'.repeat(colW-1)));
 
-  const rows = Math.max(queued.length, running.length, done.length, 1);
-  for (let i = 0; i < rows; i++) {
+  const rowCount = Math.max(queued.length, running.length, done.length, 1);
+  for (let i = 0; i < rowCount; i++) {
     const q = queued[i];
     const r = running[i];
     const d = done[i];
     // line 1 — title + priority/age glyph
-    const ql = q ? colour.cyan('▎ ') + truncate(q.title, colW - 3) : pad('', colW);
-    const rl = r ? colour.yellow('▌ ') + truncate(r.title, colW - 3) : pad('', colW);
-    const dl = d ? colour.green('✓ ')  + truncate(d.title, colW - 3) : pad('', colW);
-    out.push('│ ' + pad(ql, colW) + '│ ' + pad(rl, colW) + '│ ' + pad(dl, colW) + ' │');
+    const ql = q ? colour.cyan('▎ ') + truncate(q.title, colW - 3) : '';
+    const rl = r ? colour.yellow('▌ ') + truncate(r.title, colW - 3) : '';
+    const dl = d ? colour.green('✓ ')  + truncate(d.title, colW - 3) : '';
+    lines.push(
+      pad(ql, colW + ansiPad(ql)) + colour.dim('│ ') +
+      pad(rl, colW + ansiPad(rl)) + colour.dim('│ ') +
+      pad(dl, colW + ansiPad(dl))
+    );
     // line 2 — sub-detail
-    const ql2 = q ? colour.dim('  prio ' + q.priority) : pad('', colW);
-    const rl2 = r ? colour.dim('  ' + fmtRunning(r)) : pad('', colW);
-    const dl2 = d ? colour.dim('  ' + fmtAge(d.completedAt)) : pad('', colW);
-    out.push('│ ' + pad(ql2, colW) + '│ ' + pad(rl2, colW) + '│ ' + pad(dl2, colW) + ' │');
+    const ql2 = q ? colour.dim('  prio ' + q.priority) : '';
+    const rl2 = r ? colour.dim('  ' + fmtRunning(r)) : '';
+    const dl2 = d ? colour.dim('  ' + fmtAge(d.completedAt)) : '';
+    lines.push(
+      pad(ql2, colW + ansiPad(ql2)) + colour.dim('│ ') +
+      pad(rl2, colW + ansiPad(rl2)) + colour.dim('│ ') +
+      pad(dl2, colW + ansiPad(dl2))
+    );
   }
-  out.push(colour.bold('╰──────────────────────────────────────────────────────────────────────╯'));
+
+  process.stdout.write('\n' + panel({
+    title: `Horizon Kanban · ${s.total} total`,
+    accent: 'cyan',
+    width: 78,
+    lines,
+  }) + '\n');
   if (failed.length) {
-    out.push('');
-    out.push(colour.red(`  ! ${failed.length} failed/abandoned task(s) — \`horizon agents list --status failed\``));
+    process.stdout.write('\n  ' + colour.red(`! ${failed.length} failed/abandoned task(s) — \`horizon agents list --status failed\``) + '\n');
   }
-  out.push('');
-  process.stdout.write(out.join('\n') + '\n');
+  process.stdout.write('\n');
   return 0;
+}
+
+// Strip ANSI codes for accurate column-width padding (panel rendering
+// places visible columns but pad() naïvely counts ANSI bytes too).
+function ansiPad(s) {
+  const visible = String(s).replace(/\x1b\[[0-9;]*m/g, '');
+  return String(s).length - visible.length;
 }
 
 // ── list ───────────────────────────────────────────────────────────────
@@ -137,8 +161,9 @@ function list(queue, flags) {
     process.stdout.write(fmt.dim('\n  no tasks' + (status ? ` (status=${status})` : '') + '\n\n'));
     return 0;
   }
-  process.stdout.write('\n' + fmt.bold('Kanban tasks') + '\n\n');
-  for (const t of tasks) {
+  // Sprint-2.15 — panel-wrapped list. Each task is one panel line so the
+  // accent rail visually groups them, matching the board's framing.
+  const lines = tasks.map((t) => {
     const colourFn = t.status === 'done' ? fmt.green
                   : t.status === 'failed' ? fmt.red
                   : t.status === 'running' ? fmt.yellow
@@ -149,9 +174,14 @@ function list(queue, flags) {
     const meta = t.status === 'running'
       ? fmt.dim(' ' + fmtRunning(t))
       : t.completedAt ? fmt.dim(' ' + fmtAge(t.completedAt)) : '';
-    process.stdout.write(`  ${fmt.cyan(t.id)} ${statusBadge} ${truncate(t.title, 50)}${meta}\n`);
-  }
-  process.stdout.write('\n');
+    return `${fmt.cyan(t.id)} ${statusBadge} ${truncate(t.title, 50)}${meta}`;
+  });
+  process.stdout.write('\n' + panel({
+    title: 'Kanban tasks' + (status ? ' · ' + status : ''),
+    accent: 'cyan',
+    width: 78,
+    lines,
+  }) + '\n\n');
   return 0;
 }
 
@@ -218,11 +248,27 @@ function purge(queue, flags) {
 function stats(queue, flags) {
   const s = queue.stats();
   if (flags.json) { process.stdout.write(JSON.stringify(s, null, 2) + '\n'); return 0; }
-  process.stdout.write('\n' + fmt.bold('Kanban stats') + '\n\n');
-  for (const k of ['queued','running','done','failed','abandoned','cancelled']) {
-    process.stdout.write(`  ${fmt.dim(k.padEnd(11))} ${s[k]}\n`);
-  }
-  process.stdout.write(`  ${fmt.dim('total      ')} ${s.total}\n\n`);
+  // Sprint-2.15 — panel-framed stats, one row per status with the count
+  // dim-padded for clean vertical alignment.
+  const colourFor = {
+    queued: fmt.cyan,
+    running: fmt.yellow,
+    done: fmt.green,
+    failed: fmt.red,
+    abandoned: fmt.red,
+    cancelled: fmt.dim,
+  };
+  const lines = ['queued','running','done','failed','abandoned','cancelled'].map((k) => {
+    const cf = colourFor[k] || fmt.dim;
+    return fmt.dim(k.padEnd(11)) + ' ' + cf(String(s[k]));
+  });
+  lines.push(fmt.dim('total      ') + ' ' + fmt.bold(String(s.total)));
+  process.stdout.write('\n' + panel({
+    title: 'Kanban stats',
+    accent: 'cyan',
+    width: 48,
+    lines,
+  }) + '\n\n');
   return 0;
 }
 
