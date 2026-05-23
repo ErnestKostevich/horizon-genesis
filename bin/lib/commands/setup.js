@@ -16,7 +16,25 @@
 
 const readline = require('readline');
 const { fmt } = require('../tty');
-const { bannerCompact, GradientSpinner, renderArt } = require('../banner');
+const { bannerCompact, GradientSpinner, renderArt, panel, bannerBig } = require('../banner');
+
+// Sprint-2.15 — section header with progress chip ("Step N/5"), title
+// + dim subtitle, and a dim accent rule underneath. Replaces the bare
+// `  1. Pick an AI provider` line with something that feels like a
+// real wizard step. Total steps is passed in so the header reads
+// "Step 1/5", "Step 2/5", etc.
+const TOTAL_STEPS = 5;
+function _stepHeader(n, title, subtitle) {
+  const chip = fmt.cyan('●') + fmt.dim(` Step ${n}/${TOTAL_STEPS}`);
+  // Progress bar — 28 cells, current step gets filled gradient.
+  const cells = 28;
+  const filled = Math.round((n / TOTAL_STEPS) * cells);
+  const bar = fmt.cyan('█'.repeat(filled)) + fmt.dim('░'.repeat(Math.max(0, cells - filled)));
+  process.stdout.write('\n  ' + chip + '   [' + bar + ']\n');
+  process.stdout.write('  ' + fmt.bold(title) + '\n');
+  if (subtitle) process.stdout.write('  ' + fmt.dim(subtitle) + '\n');
+  process.stdout.write('  ' + fmt.dim('─'.repeat(48)) + '\n\n');
+}
 
 // Provider catalog — order = recommended first. Cost notes are
 // approximate as of mid-2026; users override anytime via `horizon model`.
@@ -90,8 +108,7 @@ async function run({ runtime, args, flags }) {
 
   try {
     // ── 1. Provider ────────────────────────────────────────────────────
-    process.stdout.write(fmt.bold('  1. Pick an AI provider') + '\n');
-    process.stdout.write(fmt.dim('     (you can switch anytime with `horizon model <id>`)') + '\n\n');
+    _stepHeader(1, 'Pick an AI provider', 'You can switch anytime with `horizon model <id>`');
     PROVIDERS.forEach((p, i) => {
       const has = p.key && keysStore.get(p.key) ? fmt.green('✓ already set') : '';
       process.stdout.write(
@@ -110,21 +127,20 @@ async function run({ runtime, args, flags }) {
     if (provider.key) {
       const existing = keysStore.get(provider.key);
       if (existing) {
-        const keep = await ask(rl, fmt.cyan(`  2. Use existing ${provider.label} key? (Y/n): `));
+        _stepHeader(2, 'Use existing API key?', `${provider.label} key is already set`);
+        const keep = await ask(rl, fmt.cyan('     keep it? (Y/n): '));
         if (!/^[nNнН]/.test(keep)) {
           process.stdout.write(fmt.ok('     → kept existing key') + '\n\n');
         } else {
           await collectKey(rl, keysStore, provider);
         }
       } else {
-        process.stdout.write(fmt.bold('  2. API key') + '\n');
-        process.stdout.write(fmt.dim(`     ${provider.signup}`) + '\n\n');
+        _stepHeader(2, 'API key', `Get a key at: ${provider.signup}`);
         await collectKey(rl, keysStore, provider);
       }
     } else {
       // Local provider
-      process.stdout.write(fmt.bold('  2. Local provider config') + '\n');
-      process.stdout.write(fmt.dim(`     ${provider.signup}`) + '\n');
+      _stepHeader(2, 'Local provider config', provider.signup);
       const urlKey = provider.id === 'ollama' ? 'ollamaUrl' : 'lmStudioUrl';
       const modelKey = provider.id === 'ollama' ? 'ollamaModel' : 'lmStudioModel';
       const defUrl = provider.id === 'ollama' ? 'http://127.0.0.1:11434' : 'http://127.0.0.1:1234';
@@ -137,8 +153,7 @@ async function run({ runtime, args, flags }) {
     }
 
     // ── 3. Persona ────────────────────────────────────────────────────
-    process.stdout.write(fmt.bold('  3. Pick a persona') + '\n');
-    process.stdout.write(fmt.dim('     (you can switch anytime with `horizon persona <id>`)') + '\n\n');
+    _stepHeader(3, 'Pick a persona', 'You can switch anytime with `horizon persona <id>`');
     PERSONAS.forEach((p, i) => {
       process.stdout.write(`     ${fmt.cyan((i + 1) + ')')} ${fmt.bold(p.id.padEnd(8))} ${fmt.dim(p.tagline)}\n`);
     });
@@ -150,7 +165,7 @@ async function run({ runtime, args, flags }) {
     process.stdout.write(fmt.ok(`     → ${persona.id}`) + '\n\n');
 
     // ── 4. Language ────────────────────────────────────────────────────
-    process.stdout.write(fmt.bold('  4. Language') + '\n\n');
+    _stepHeader(4, 'Language', 'Replies will be in this language by default');
     process.stdout.write(`     ${fmt.cyan('1)')} English\n`);
     process.stdout.write(`     ${fmt.cyan('2)')} Русский\n\n`);
     const langChoice = await ask(rl, fmt.cyan('     choice [1]: '));
@@ -159,7 +174,7 @@ async function run({ runtime, args, flags }) {
     process.stdout.write(fmt.ok(`     → ${lang === 'ru' ? 'Русский' : 'English'}`) + '\n\n');
 
     // ── 5. Username (optional) ────────────────────────────────────────
-    process.stdout.write(fmt.bold('  5. Your name') + ' ' + fmt.dim('(for personalisation, optional)') + '\n\n');
+    _stepHeader(5, 'Your name', 'Used for personalisation (optional)');
     const currentName = settingsStore.get('userName') || '';
     const name = await ask(rl, fmt.cyan(`     name [${currentName || 'user'}]: `));
     if (name) settingsStore.set('userName', name);
@@ -167,15 +182,32 @@ async function run({ runtime, args, flags }) {
 
     rl.close();
 
-    process.stdout.write(fmt.green('  ✓ Setup complete!') + '\n\n');
-    summary(runtime);
-
-    process.stdout.write('\n  ' + fmt.bold('Try:') + '\n');
-    process.stdout.write(`    ${fmt.cyan('horizon chat "hello"')}            ${fmt.dim('— quick chat')}\n`);
-    process.stdout.write(`    ${fmt.cyan('horizon')}                          ${fmt.dim('— interactive TUI')}\n`);
-    process.stdout.write(`    ${fmt.cyan('horizon agent "task"')}             ${fmt.dim('— full agent loop')}\n`);
-    process.stdout.write(`    ${fmt.cyan('horizon cost')}                     ${fmt.dim('— see spend')}\n`);
-    process.stdout.write('\n');
+    // Sprint-2.15 — celebration card on completion. Was a bare "✓ Setup
+    // complete!" line. Now a real panel summarising what was set and
+    // a "Try" section as a side panel of next-step commands.
+    process.stdout.write('\n' + panel({
+      title: '✓  Setup complete',
+      accent: 'green',
+      lines: [
+        ' ' + fmt.dim('Provider'.padEnd(11)) + fmt.cyan(provider.label),
+        ' ' + fmt.dim('Persona '.padEnd(11)) + fmt.cyan(persona.id),
+        ' ' + fmt.dim('Language'.padEnd(11)) + fmt.cyan(lang === 'ru' ? 'Русский' : 'English'),
+        ' ' + fmt.dim('Name    '.padEnd(11)) + fmt.cyan(settingsStore.get('userName') || 'user'),
+      ],
+      width: 56,
+    }) + '\n');
+    process.stdout.write('\n' + panel({
+      title: '⌁  Try',
+      accent: 'cyan',
+      lines: [
+        ' ' + fmt.cyan('horizon chat "hello"'.padEnd(28))    + fmt.dim('quick chat'),
+        ' ' + fmt.cyan('horizon'.padEnd(28))                  + fmt.dim('interactive TUI'),
+        ' ' + fmt.cyan('horizon agent "task"'.padEnd(28))    + fmt.dim('full agent loop'),
+        ' ' + fmt.cyan('horizon cost'.padEnd(28))             + fmt.dim('see spend'),
+        ' ' + fmt.cyan('horizon theme --list'.padEnd(28))    + fmt.dim('13 visual themes'),
+      ],
+      width: 56,
+    }) + '\n\n');
     return 0;
   } catch (e) {
     rl.close();
