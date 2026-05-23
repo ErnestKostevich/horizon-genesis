@@ -12,6 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fmt } = require('../tty');
+const { panel } = require('../banner');
 
 async function run({ runtime, args, flags }) {
   const out = {
@@ -84,30 +85,66 @@ async function run({ runtime, args, flags }) {
 
   if (flags.json) { process.stdout.write(JSON.stringify(out, null, 2) + '\n'); return 0; }
 
-  process.stdout.write('\n' + fmt.bold('Horizon status') + '\n\n');
-  process.stdout.write(`  version    ${fmt.cyan('v' + out.version)} ${fmt.dim('· Node ' + out.nodeVersion + ' ' + out.platform + '/' + out.arch)}\n`);
-  process.stdout.write(`  provider   ${fmt.cyan(out.provider)} ${fmt.dim('· persona=' + out.persona)}\n`);
-  process.stdout.write(`  memory     ${fmt.green(out.memory.memories + ' memories')} ${fmt.dim('· ' + out.memory.facts + ' facts · ' + out.memory.conversations + ' conversations')}\n`);
-  process.stdout.write(`  skills     ${out.skills}\n`);
-  process.stdout.write(`  cron       ${out.cronEntries} entries\n`);
+  // Sprint-2.15 — panel-framed dashboard. Two stacked panels: Runtime
+  // (version/provider/persona/storage) and Subsystems (memory/skills/cron/
+  // executor/embeddings/disk). --deep adds a third panel with the probes.
+  const kv = (k, v, w = 11) => fmt.dim(String(k).padEnd(w)) + ' ' + v;
+  const log = (s) => process.stdout.write(s + '\n');
+
+  log('');
+  log('  ' + fmt.bold('Horizon status'));
+  log('');
+
+  // Panel 1 — runtime identity
+  log(panel({
+    title: 'Runtime',
+    accent: 'cyan',
+    width: 72,
+    lines: [
+      kv('version',  fmt.cyan('v' + out.version) + ' ' + fmt.dim('· Node ' + out.nodeVersion + ' ' + out.platform + '/' + out.arch)),
+      kv('provider', fmt.cyan(out.provider) + ' ' + fmt.dim('· persona=' + out.persona)),
+      kv('workspace', fmt.dim(out.workspace)),
+      kv('userData',  fmt.dim(out.userDataDir)),
+      out.diskFreeBytes
+        ? kv('disk free', fmt.dim(Math.round(out.diskFreeBytes / 1024 / 1024 / 1024) + ' GB'))
+        : null,
+    ].filter(Boolean),
+  }));
+  log('');
+
+  // Panel 2 — subsystems
+  const subLines = [
+    kv('memory',     fmt.green(out.memory.memories + ' memories') + ' ' + fmt.dim('· ' + out.memory.facts + ' facts · ' + out.memory.conversations + ' conversations')),
+    kv('skills',     fmt.cyan(String(out.skills))),
+    kv('cron',       String(out.cronEntries) + ' ' + fmt.dim('entries')),
+  ];
   if (out.executor) {
-    process.stdout.write(`  executor   ${fmt.cyan(out.executor.mode)} ${fmt.dim('· docker=' + (out.executor.dockerAvailable ? '✓' : '·') + ' ssh=' + (out.executor.sshConfigured ? '✓' : '·'))}\n`);
+    subLines.push(kv('executor', fmt.cyan(out.executor.mode) + ' ' + fmt.dim('· docker=' + (out.executor.dockerAvailable ? '✓' : '·') + ' ssh=' + (out.executor.sshConfigured ? '✓' : '·'))));
   }
   if (out.embeddings) {
-    process.stdout.write(`  embeddings ${out.embeddings.available ? fmt.green('ready') : fmt.dim('off')} ${fmt.dim('· ' + (out.embeddings.indexed || 0) + ' indexed')}\n`);
+    subLines.push(kv('embeddings', (out.embeddings.available ? fmt.green('ready') : fmt.dim('off')) + ' ' + fmt.dim('· ' + (out.embeddings.indexed || 0) + ' indexed')));
   }
-  process.stdout.write(`  workspace  ${fmt.dim(out.workspace)}\n`);
-  process.stdout.write(`  userData   ${fmt.dim(out.userDataDir)}\n`);
-  if (out.diskFreeBytes) {
-    process.stdout.write(`  disk free  ${fmt.dim(Math.round(out.diskFreeBytes / 1024 / 1024 / 1024) + ' GB')}\n`);
-  }
+  log(panel({
+    title: 'Subsystems',
+    accent: 'green',
+    width: 72,
+    lines: subLines,
+  }));
+  log('');
+
   if (flags.deep && out.probes) {
-    process.stdout.write('\n  ' + fmt.bold('Probes') + '\n');
+    const probeLines = [];
     for (const [k, v] of Object.entries(out.probes)) {
-      process.stdout.write(`  ${fmt.dim(k.padEnd(20))} ${v === null ? fmt.red('timeout') : fmt.green(v + 'ms')}\n`);
+      probeLines.push(kv(k, v === null ? fmt.red('timeout') : fmt.green(v + 'ms'), 20));
     }
+    log(panel({
+      title: 'Probes',
+      accent: 'magenta',
+      width: 72,
+      lines: probeLines,
+    }));
+    log('');
   }
-  process.stdout.write('\n');
   return 0;
 }
 

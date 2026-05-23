@@ -7,6 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const { fmt } = require('../tty');
+const { panel } = require('../banner');
 
 function run({ runtime, flags }) {
   const pkg = require(path.join(__dirname, '..', '..', '..', 'package.json'));
@@ -55,43 +56,78 @@ function run({ runtime, flags }) {
     return 0;
   }
 
-  // Human pretty-print
-  const log = (...a) => console.log(...a);
-  log(fmt.bold('Horizon AI'), fmt.dim('v' + pkg.version), fmt.dim('· ' + pkg.license));
-  log(fmt.dim(`Node ${process.version} on ${process.platform}/${process.arch}`));
-  log('');
-  log(fmt.bold('Paths'));
-  log('  userData ', fmt.dim(userDataDir));
-  log('  workspace', fmt.dim(runtime.workspaceDir));
-  log('');
-  log(fmt.bold('Active'));
-  log('  provider', fmt.cyan(summary.activeProvider),
-      fmt.dim('(' + summary.activeModel + ')'));
-  log('  persona ', fmt.cyan(summary.activePersona));
-  log('  lang    ', fmt.cyan(summary.lang));
-  log('');
-  log(fmt.bold('Memory'));
-  log(`  ${summary.memory.memories} memories  ·  ${summary.memory.facts} facts  ·  ${summary.memory.conversations} conversations`);
-  if (summary.embeddings.available) {
-    log(`  ${fmt.green('embeddings ready')}  ${fmt.dim(summary.embeddings.provider + ', ' + summary.embeddings.indexed + ' indexed')}`);
-  } else {
-    log('  ' + fmt.dim('embeddings: no key (keyword + FTS fallback)'));
+  // Sprint-2.15 — panel-framed pretty-print. Replaces the scattered bold
+  // headers + indented lists with 3 stacked rounded panels (Active /
+  // Memory & skills / API keys + Executor) so the output reads as a
+  // dashboard rather than a flat dump. Same data, premium framing.
+  const log = (s) => process.stdout.write(s + '\n');
+  const stripV = (s) => String(s || '').replace(/\x1b\[[0-9;]*m/g, '');
+  // Two-column "key  value" formatter used inside panels. Keys are padded
+  // to a fixed width so values line up vertically across rows regardless
+  // of label length.
+  function kv(key, value, keyW = 10) {
+    return fmt.dim(String(key).padEnd(keyW)) + ' ' + value;
   }
+
   log('');
-  log(fmt.bold('Skills'), fmt.dim(`(${summary.skills} loaded)`));
+  log('  ' + fmt.bold('Horizon AI') + ' ' + fmt.dim('v' + pkg.version) + ' ' + fmt.dim('· ' + pkg.license));
+  log('  ' + fmt.dim(`Node ${process.version} on ${process.platform}/${process.arch}`));
   log('');
+
+  // Panel 1 — Active runtime + paths
+  log(panel({
+    title: 'Active',
+    accent: 'cyan',
+    width: 72,
+    lines: [
+      kv('provider',  fmt.cyan(summary.activeProvider) + ' ' + fmt.dim('(' + summary.activeModel + ')')),
+      kv('persona',   fmt.cyan(summary.activePersona)),
+      kv('lang',      fmt.cyan(summary.lang)),
+      '',
+      kv('userData',  fmt.dim(userDataDir)),
+      kv('workspace', fmt.dim(runtime.workspaceDir)),
+    ],
+  }));
+  log('');
+
+  // Panel 2 — Memory & skills (one card, related data). Key width bumped
+  // to 13 so "conversations" doesn't overrun and break vertical alignment.
+  const embLine = summary.embeddings.available
+    ? fmt.green('ready') + ' ' + fmt.dim('· ' + summary.embeddings.provider + ', ' + summary.embeddings.indexed + ' indexed')
+    : fmt.dim('off · keyword + FTS fallback');
+  log(panel({
+    title: 'Memory & skills',
+    accent: 'green',
+    width: 72,
+    lines: [
+      kv('memories',      String(summary.memory.memories), 13),
+      kv('facts',         String(summary.memory.facts), 13),
+      kv('conversations', String(summary.memory.conversations), 13),
+      kv('embeddings',    embLine, 13),
+      kv('skills',        fmt.cyan(String(summary.skills)) + ' ' + fmt.dim('loaded'), 13),
+    ],
+  }));
+  log('');
+
+  // Panel 3 — Executor + API keys (system-side health)
+  const keyLines = [];
   if (summary.executor) {
-    log(fmt.bold('Executor'),
-        fmt.cyan(summary.executor.mode),
-        summary.executor.dockerAvailable ? fmt.green('docker ✓') : fmt.dim('docker ✗'));
-    log('');
+    const dockerBadge = summary.executor.dockerAvailable ? fmt.green('docker ✓') : fmt.dim('docker ✗');
+    keyLines.push(kv('executor', fmt.cyan(summary.executor.mode) + ' ' + dockerBadge));
+    keyLines.push('');
   }
-  log(fmt.bold('API keys'));
   const present = providers.filter(p => keyState[p]);
   const missing = providers.filter(p => !keyState[p]);
-  if (present.length) log('  ' + fmt.green('configured: ') + present.join(', '));
-  if (missing.length) log('  ' + fmt.dim('missing:    ' + missing.join(', ')));
-  log('  ' + fmt.dim('local:      ollama, lmstudio, localai (no key needed)'));
+  if (present.length) keyLines.push(kv('keys', fmt.green('✓ ') + present.join(', ')));
+  if (missing.length) keyLines.push(kv('missing', fmt.dim(missing.join(', '))));
+  keyLines.push(kv('local', fmt.dim('ollama, lmstudio, localai (no key)')));
+  log(panel({
+    title: 'Executor & API keys',
+    accent: 'magenta',
+    width: 72,
+    lines: keyLines,
+  }));
+  log('');
   return 0;
 }
 
