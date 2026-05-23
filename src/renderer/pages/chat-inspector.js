@@ -357,8 +357,11 @@ function renderStepRail(){
   }
   rail.classList.add('show');
   const cur = stepRailState.currentIdx;
+  // Sprint-2.15 — pending steps now get an explicit `pending` class so
+  // CSS can paint them distinctly (dashed border + slow pulse) instead
+  // of inheriting the bare `.step` look that read as "neutral / done".
   const html = steps.map((s, i) => {
-    const status = (i < cur) ? 'done' : (i === cur ? 'now' : '');
+    const status = (i < cur) ? 'done' : (i === cur ? 'now' : 'pending');
     const num = (i < cur) ? '✓' : String(i + 1);
     return `<div class="step ${status}"><span class="num">${num}</span><span>${esc(s)}</span></div>`;
   }).join('<span class="step-arrow">→</span>');
