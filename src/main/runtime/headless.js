@@ -490,7 +490,12 @@ function createHorizonRuntime(opts = {}) {
     let skillsBlock = '';
     try {
       if (skillsManager) {
-        const r = skillsManager.getSkillsBlock(task, { lang });
+        // WS3 — embedding-blended skill match when available; falls back to
+        // bag-of-words offline (the common CLI case with no embedding key).
+        const embSvc = agentMemory && agentMemory.embeddings ? agentMemory.embeddings : null;
+        const r = embSvc && typeof skillsManager.getSkillsBlockAsync === 'function'
+          ? await skillsManager.getSkillsBlockAsync(task, { lang, embeddingService: embSvc })
+          : skillsManager.getSkillsBlock(task, { lang });
         skillsBlock = r?.block || '';
       }
     } catch (_) {}

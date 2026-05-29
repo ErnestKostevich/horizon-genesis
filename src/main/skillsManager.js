@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseSkillMd, buildSkillMd, NAME_RE } = require('./skillsParser');
-const { selectRelevantSkills } = require('./skillsRelevance');
+const { selectRelevantSkills, selectRelevantSkillsAsync } = require('./skillsRelevance');
 
 const MAX_BODY_INJECT_BYTES = 8_000;
 const MAX_TOTAL_INJECT_BYTES = 12_000;
@@ -469,25 +469,51 @@ class SkillsManager {
    *   selected — chosen entries [{ id, score, breakdown, scope, forced }]
    *   scored — full ranked list (used by the inspector)
    */
+  // Shape the active skills into the {…, frontmatter} records that the
+  // relevance scorer expects. Shared by the sync + async block builders.
+  _relevanceInput() {
+    return this.list().filter(s => s.active).map(s => ({
+      ...s,
+      frontmatter: {
+        name: s.name,
+        description: s.description,
+        tags: s.tags,
+        aliases: s.aliases,
+        triggers: s.triggers,
+        examples: s.examples,
+      },
+    }));
+  }
+
   getSkillsBlock(query, opts = {}) {
     this.refreshIfStale();
-    const skills = this.list().filter(s => s.active); // only highest-scope variant participates
     const { selected, scored } = selectRelevantSkills(
-      skills.map(s => ({
-        ...s,
-        frontmatter: {
-          name: s.name,
-          description: s.description,
-          tags: s.tags,
-          aliases: s.aliases,
-          triggers: s.triggers,
-          examples: s.examples,
-        },
-      })),
+      this._relevanceInput(),
       query,
       { ...opts, usageStats: this.usageStats }
     );
+    return this._renderSkillsBlock(selected, scored);
+  }
 
+  /**
+   * WS3 — embedding-aware variant. When opts.embeddingService is available it
+   * blends a semantic score on top of bag-of-words (paraphrases like
+   * "refactor React hooks" ≈ "convert class to functional" now match). Falls
+   * back to the exact sync behaviour when no/offline embeddings.
+   */
+  async getSkillsBlockAsync(query, opts = {}) {
+    this.refreshIfStale();
+    const { selected, scored } = await selectRelevantSkillsAsync(
+      this._relevanceInput(),
+      query,
+      { ...opts, usageStats: this.usageStats }
+    );
+    return this._renderSkillsBlock(selected, scored);
+  }
+
+  // Render the chosen skills into the "## Skills loaded" block (shared by
+  // both selection paths). Pure formatting — no scoring.
+  _renderSkillsBlock(selected, scored) {
     const parts = [];
     let totalBytes = 0;
     for (const entry of selected) {
