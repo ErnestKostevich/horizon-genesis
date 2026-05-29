@@ -814,6 +814,11 @@ function register(deps) {
             agentMemory.remember(`Result: ${result.answer.slice(0, 200)}`, 'agent_result', 6);
           }
         }
+        // WS2 — memory feedback loop: reward the recalled memories that
+        // actually surfaced in the answer so they rank higher next time.
+        if (typeof agentMemory.markMemoriesUsed === 'function' && result?.ok && result?.answer) {
+          try { agentMemory.markMemoriesUsed(sysInfo.memory?.relevant || [], result.answer); } catch (_) {}
+        }
       } catch (e) {
         console.warn('Memory learning failed:', e.message);
       }

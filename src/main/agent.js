@@ -351,6 +351,9 @@ class AgentMemory {
       if (m && !m.key && m.content) {
         m.key = this._memoryKey(this._normalizeText(m.content), m.category || 'general');
       }
+      // WS2 — lazy-migrate the usefulness fields onto pre-existing records.
+      if (m && typeof m.usefulness !== 'number') m.usefulness = 0;
+      if (m && typeof m.usefulCount !== 'number') m.usefulCount = 0;
     }
     this._data.facts = this._data.facts && typeof this._data.facts === 'object' ? this._data.facts : {};
     this._data.meals = Array.isArray(this._data.meals) ? this._data.meals : [];
@@ -512,6 +515,12 @@ class AgentMemory {
       lastSource: tag,
       personaId: persona || null,
       personas: persona ? [persona] : [],
+      // WS2 — memory feedback loop. usefulness accrues each time this memory
+      // was injected into a turn AND visibly used in the answer; it feeds a
+      // small recall-ranking bonus so memories that actually help surface
+      // sooner. usefulCount is the raw hit count for the inspector.
+      usefulness: 0,
+      usefulCount: 0,
     };
     this._data.memories.push(item);
     // Limit to last 2000 memories
@@ -729,6 +738,59 @@ class AgentMemory {
   }
 
   /**
+   * WS2 — memory feedback loop. Given the memories that were injected into a
+   * turn and the agent's final answer, detect which memories were actually
+   * "used" (their distinctive content tokens resurface in the answer, or the
+   * answer references the memory key) and reward them: usefulness += 1,
+   * usefulCount += 1, importance nudged up (capped), lastSeen refreshed.
+   *
+   * Purely additive — until a memory is rewarded its usefulness stays 0 and
+   * recall behaves exactly as before. Returns the number of memories bumped.
+   *
+   * Detection is deliberately conservative (token overlap, no model call) so
+   * it works offline and can't run away: a memory is counted as used only if
+   * a meaningful share of its words appear in the answer, not on one common
+   * word collision.
+   */
+  markMemoriesUsed(injectedMemories, finalAnswer) {
+    if (!Array.isArray(injectedMemories) || !injectedMemories.length) return 0;
+    const answer = String(finalAnswer || '').toLowerCase();
+    if (answer.length < 2) return 0;
+    const answerWords = new Set(answer.split(/[^\p{L}\p{N}_-]+/u).filter(w => w.length > 2));
+    let bumped = 0;
+
+    for (const inj of injectedMemories) {
+      const key = inj && (inj.key || inj.id);
+      if (!key) continue;
+      // Resolve to the live record so we mutate the canonical object.
+      const rec = this._data.memories.find(m => m.key === key || m.id === inj.id);
+      if (!rec) continue;
+
+      const contentWords = [...new Set(
+        String(rec.content || '').toLowerCase().split(/[^\p{L}\p{N}_-]+/u).filter(w => w.length > 2)
+      )];
+      if (!contentWords.length) continue;
+      const overlap = contentWords.reduce((acc, w) => acc + (answerWords.has(w) ? 1 : 0), 0);
+      const ratio = overlap / contentWords.length;
+      const keyReferenced = answer.includes(String(rec.key || '').toLowerCase()) && String(rec.key || '').length > 4;
+
+      // Used if: a strong share of the memory's words resurface, OR several
+      // words do in absolute terms, OR the answer names the key directly.
+      const used = (ratio >= 0.4 && overlap >= 2) || overlap >= 3 || keyReferenced;
+      if (!used) continue;
+
+      rec.usefulness = (typeof rec.usefulness === 'number' ? rec.usefulness : 0) + 1;
+      rec.usefulCount = (typeof rec.usefulCount === 'number' ? rec.usefulCount : 0) + 1;
+      rec.importance = Math.min(10, (rec.importance || 5) + 0.5);
+      rec.lastSeen = Date.now();
+      bumped++;
+    }
+
+    if (bumped) this._save();
+    return bumped;
+  }
+
+  /**
    * Synchronous keyword recall — kept as the safe fallback path. Used when
    * the EmbeddingService is unavailable, when query length is too short to
    * embed meaningfully, or when the model side calls recall synchronously.
@@ -813,11 +875,16 @@ class AgentMemory {
     const semWeight = typeof opts.semanticWeight === 'number' ? opts.semanticWeight : 0.55;
     const kwWeight  = typeof opts.kwWeight === 'number' ? opts.kwWeight : 0.30;
     const ftsWeight = typeof opts.ftsWeight === 'number' ? opts.ftsWeight : 0.15;
+    // WS2 — usefulness bonus: memories proven helpful in past turns get a
+    // small additive lift. Until any memory is rewarded (all usefulness=0)
+    // this term is 0 and ranking is identical to before.
+    const usefulnessWeight = typeof opts.usefulnessWeight === 'number' ? opts.usefulnessWeight : 0.15;
     const activePersona = String(opts.activePersona || this._activePersonaId || '');
     const personaBoost = typeof opts.personaBoost === 'number' ? opts.personaBoost : 1.2;
 
     const kw = this._keywordScore(q);
     const kwMax = Math.max(1, ...kw.map(m => m.kwScore || 0));
+    const useMax = Math.max(1, ...kw.map(m => m.usefulness || 0));
     // FTS scores keyed by memory key (FTS adds memories with their key
     // directly). Normalise so the blend weight is meaningful.
     const ftsResults = this.ftsSearch(q, 200);
@@ -832,7 +899,8 @@ class AgentMemory {
       const sem = vec ? Math.max(0, require('./embeddings').cosine(queryVec, vec)) : 0;
       const kwNorm = (m.kwScore || 0) / kwMax;
       const ftsNorm = ftsByKey.get(m.key) || 0;
-      let score = (semWeight * sem) + (kwWeight * kwNorm) + (ftsWeight * ftsNorm);
+      const useNorm = (m.usefulness || 0) / useMax;
+      let score = (semWeight * sem) + (kwWeight * kwNorm) + (ftsWeight * ftsNorm) + (usefulnessWeight * useNorm);
       const personaMatch = activePersona && (m.personaId === activePersona || (Array.isArray(m.personas) && m.personas.includes(activePersona)));
       if (personaMatch) score *= personaBoost;
       return {
@@ -840,6 +908,7 @@ class AgentMemory {
         semantic: Number(sem.toFixed(4)),
         kw: Number(kwNorm.toFixed(4)),
         fts: Number(ftsNorm.toFixed(4)),
+        usefulness: m.usefulness || 0,
         personaMatch: !!personaMatch,
         score: Number(score.toFixed(4)),
       };
