@@ -498,6 +498,56 @@ async function executeAgentToolStep(parsed, ctx) {
   return { step, resultSummary };
 }
 
+// ── Reflection (extracted for reuse + headless) ───────────────────────────
+// One short follow-up call: ask the model to self-check whether the user's
+// goal was actually met, list gaps, rate confidence. Returns a normalised
+// {goalMet, summary, gaps, confidence} or null on any failure. Decoupled
+// from onStep so it fires in headless/CLI runs too (WS1).
+async function runReflection({ aiFn, userMessage, finalAnswer, systemPrompt, lang }) {
+  try {
+    const reflectionPrompt = lang === 'ru'
+      ? 'Сделай короткую самопроверку (под 100 слов) для предыдущего ответа. Верни ТОЛЬКО валидный JSON: {"goal_met":"yes"|"partial"|"no","summary":"...","gaps":["..."],"confidence":0-1}. Не добавляй текст вне JSON.'
+      : 'Run a short self-check (under 100 words) on the previous answer. Return ONLY valid JSON: {"goal_met":"yes"|"partial"|"no","summary":"...","gaps":["..."],"confidence":0-1}. No text outside JSON.';
+    const reflectMessages = [
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: String(finalAnswer).slice(0, 4000) },
+      { role: 'user', content: reflectionPrompt },
+    ];
+    const reflectRes = await Promise.race([
+      aiFn(reflectMessages, systemPrompt, { tools: [], nativeTools: false, step: 'reflect' }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('reflect timeout')), 15000))
+    ]).catch(e => ({ error: e.message }));
+    if (reflectRes && !reflectRes.error && reflectRes.reply) {
+      let parsed = null;
+      try { parsed = JSON.parse(reflectRes.reply.trim()); }
+      catch (_) {
+        const m = reflectRes.reply.match(/\{[\s\S]*?"goal_met"[\s\S]*?\}/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch (_) {} }
+      }
+      if (parsed && typeof parsed === 'object') {
+        return {
+          goalMet: String(parsed.goal_met || 'unknown').toLowerCase(),
+          summary: String(parsed.summary || '').slice(0, 400),
+          gaps: Array.isArray(parsed.gaps) ? parsed.gaps.slice(0, 5).map(g => String(g).slice(0, 160)) : [],
+          confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : null,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('[agent] reflection failed:', e?.message || e);
+  }
+  return null;
+}
+
+// Build the synthetic user turn that feeds reflection gaps back into the loop
+// for a corrective continuation (WS1).
+function buildCorrectivePrompt(gapText, lang) {
+  const gaps = String(gapText || '').trim() || (lang === 'ru' ? 'ответ неполный' : 'the answer is incomplete');
+  return lang === 'ru'
+    ? `Самопроверка показала, что цель ещё не достигнута. Устрани эти пробелы и доведи задачу до конца: ${gaps}. Используй инструменты при необходимости, затем верни финальный ответ (done JSON).`
+    : `Your self-check found the goal is not fully met. Close these gaps and finish the task: ${gaps}. Use tools if needed, then return the final answer (done JSON).`;
+}
+
 async function runAgentLoop(userMessage, opts = {}) {
   const {
     aiFn,           // async (messages, systemPrompt, agentMeta) => { reply, toolCalls, error }
@@ -572,7 +622,25 @@ async function runAgentLoop(userMessage, opts = {}) {
     planIdx = Math.min(planIdx + 1, totalPlanSteps);
   }
 
-  for (let i = 0; i < maxSteps; i++) {
+  // ── Reflection + corrective-loop config (WS1) ─────────────────────────
+  // reflectEnabled: run the self-check at all. correctEnabled: act on it by
+  // continuing the loop to close gaps. stepCounter is shared across rounds so
+  // the maxSteps budget bounds TOTAL work, not per-round; maxRounds caps how
+  // many corrective continuations we attempt. Defaults keep simple turns fast
+  // and identical to v0.0.1 (reflection only acts when confidence is low).
+  const reflectEnabled = opts.reflect ?? (nativeTools || maxSteps > 1);
+  const correctEnabled = opts.correct ?? reflectEnabled;
+  const maxRounds = Math.max(0, opts.maxCorrectiveRounds ?? 2);
+  let stepCounter = 0;
+  let reflection = null;
+  let correctiveRounds = 0;
+
+  for (let round = 0; round <= maxRounds; round++) {
+   // Re-enterable step loop: continues from the shared stepCounter/messages
+   // so a corrective round resumes seamlessly with the remaining budget.
+   while (stepCounter < maxSteps) {
+    stepCounter++;
+    const i = stepCounter - 1;
     if (control?.isStopped?.()) {
       return { ok: false, stopped: true, error: 'Stopped by operator', steps };
     }
@@ -581,8 +649,8 @@ async function runAgentLoop(userMessage, opts = {}) {
       await Promise.resolve(onStep({
         type: 'thinking',
         runId,
-        step: i + 1,
-        phase: i === 0 ? 'deliberate' : 'observe',
+        step: stepCounter,
+        phase: stepCounter === 1 ? 'deliberate' : 'observe',
         message: lang === 'ru' ? 'Разбираю цель и выбираю следующий шаг' : 'Deliberating and choosing the next step'
       }));
     }
@@ -591,11 +659,11 @@ async function runAgentLoop(userMessage, opts = {}) {
     let aiResult;
     try {
       aiResult = await Promise.race([
-        aiFn(messages, systemPrompt, { tools: selectedTools, nativeTools, step: i + 1 }),
+        aiFn(messages, systemPrompt, { tools: selectedTools, nativeTools, step: stepCounter }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('AI response timeout')), timeout))
       ]);
     } catch (e) {
-      return { ok: false, error: `Step ${i+1} timeout: ${e.message}`, steps };
+      return { ok: false, error: `Step ${stepCounter} timeout: ${e.message}`, steps };
     }
 
     if (aiResult.error) {
@@ -738,72 +806,64 @@ async function runAgentLoop(userMessage, opts = {}) {
       finalAnswer = aiResult.reply;
       break;
     }
+   }
+   // ── end re-enterable step loop ───────────────────────────────────────
+
+   if (!finalAnswer && steps.length > 0) {
+     // AI didn't give explicit final answer — summarize
+     const lastResult = steps[steps.length - 1];
+     finalAnswer = lastResult.result?.ok
+       ? (lastResult.result.out || `Completed ${steps.length} actions`)
+       : `Last action failed: ${lastResult.result?.err}`;
+   }
+   if (!finalAnswer) {
+     finalAnswer = lang === 'ru' ? 'Задача выполнена.' : 'Task completed.';
+   }
+
+   // ── REFLECTION + CORRECTIVE CONTINUATION (WS1) ───────────────────────
+   // Self-check whether the goal was met. Unlike v0.0.1 — where this was
+   // telemetry-only and never fired headless — a low-confidence "not met"
+   // verdict now feeds its gaps back as a synthetic user turn and the loop
+   // continues to close them (bounded by the shared maxSteps budget and
+   // maxRounds). Well-answered turns reflect once and exit, unchanged.
+   if (!reflectEnabled || !finalAnswer) break;
+   reflection = await runReflection({ aiFn, userMessage, finalAnswer, systemPrompt, lang });
+   if (reflection) {
+     const payload = { type: 'reflection', runId, correctiveRound: round, ...reflection };
+     if (onStep) { try { await Promise.resolve(onStep(payload)); } catch (_) {} }
+     try { agentEvents.emit('reflection', payload); } catch (_) {}
+   }
+
+   const needsCorrection = reflection
+     && reflection.goalMet !== 'yes'
+     && (reflection.confidence == null || reflection.confidence < 0.6);
+   if (!correctEnabled || !needsCorrection || round >= maxRounds || stepCounter >= maxSteps) break;
+
+   // Set up a corrective round: feed gaps back, reset the terminal answer and
+   // anti-loop counters so the agent gets a clean shot, then re-enter the
+   // step loop with the remaining shared budget.
+   correctiveRounds = round + 1;
+   const gapText = (reflection.gaps && reflection.gaps.length)
+     ? reflection.gaps.join('; ')
+     : (reflection.summary || '');
+   messages.push({ role: 'user', content: buildCorrectivePrompt(gapText, lang) });
+   if (onStep) {
+     try { await Promise.resolve(onStep({ type: 'corrective', runId, round: correctiveRounds, gaps: reflection.gaps || [] })); } catch (_) {}
+   }
+   try { agentEvents.emit('corrective', { runId, round: correctiveRounds, gaps: reflection.gaps || [] }); } catch (_) {}
+   finalAnswer = null;
+   lastToolName = null;
+   sameToolCount = 0;
+   modelPlanSeen = false;
   }
 
-  if (!finalAnswer && steps.length > 0) {
-    // AI didn't give explicit final answer — summarize
-    const lastResult = steps[steps.length - 1];
-    finalAnswer = lastResult.result?.ok
-      ? (lastResult.result.out || `Completed ${steps.length} actions`)
-      : `Last action failed: ${lastResult.result?.err}`;
-  }
-
-  if (!finalAnswer) {
-    finalAnswer = lang === 'ru' ? 'Задача выполнена.' : 'Task completed.';
-  }
-
-  // ── REFLECTION EPILOGUE ─────────────────────────────────────────────────
-  // One short follow-up call: ask the model to self-check whether the user's
-  // goal was actually met, list any gaps, and rate confidence. Opt-in via
-  // opts.reflect (default true for native tools, false otherwise — keeps
-  // simple JSON-mode chats fast). Failures are non-fatal: if the call errors
-  // or times out we just skip reflection.
-  const reflectEnabled = opts.reflect ?? (nativeTools || maxSteps > 1);
-  if (reflectEnabled && finalAnswer && onStep) {
-    try {
-      const reflectionPrompt = lang === 'ru'
-        ? 'Сделай короткую самопроверку (под 100 слов) для предыдущего ответа. Верни ТОЛЬКО валидный JSON: {"goal_met":"yes"|"partial"|"no","summary":"...","gaps":["..."],"confidence":0-1}. Не добавляй текст вне JSON.'
-        : 'Run a short self-check (under 100 words) on the previous answer. Return ONLY valid JSON: {"goal_met":"yes"|"partial"|"no","summary":"...","gaps":["..."],"confidence":0-1}. No text outside JSON.';
-      const reflectMessages = [
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: finalAnswer.slice(0, 4000) },
-        { role: 'user', content: reflectionPrompt },
-      ];
-      const reflectRes = await Promise.race([
-        aiFn(reflectMessages, systemPrompt, { tools: [], nativeTools: false, step: 'reflect' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('reflect timeout')), 15000))
-      ]).catch(e => ({ error: e.message }));
-      if (reflectRes && !reflectRes.error && reflectRes.reply) {
-        let parsed = null;
-        try { parsed = JSON.parse(reflectRes.reply.trim()); }
-        catch (_) {
-          const m = reflectRes.reply.match(/\{[\s\S]*?"goal_met"[\s\S]*?\}/);
-          if (m) { try { parsed = JSON.parse(m[0]); } catch (_) {} }
-        }
-        if (parsed && typeof parsed === 'object') {
-          const payload = {
-            type: 'reflection',
-            runId,
-            goalMet: String(parsed.goal_met || 'unknown').toLowerCase(),
-            summary: String(parsed.summary || '').slice(0, 400),
-            gaps: Array.isArray(parsed.gaps) ? parsed.gaps.slice(0, 5).map(g => String(g).slice(0, 160)) : [],
-            confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : null,
-          };
-          try { await Promise.resolve(onStep(payload)); } catch (_) {}
-          try { agentEvents.emit('reflection', payload); } catch (_) {}
-        }
-      }
-    } catch (e) {
-      // swallow — reflection is best-effort
-      console.warn('[agent] reflection failed:', e?.message || e);
-    }
-  }
-
-  return { ok: true, answer: finalAnswer, steps };
+  return { ok: true, answer: finalAnswer, steps, reflection, correctiveRounds };
 }
 
 module.exports = {
   runAgentLoop,
+  runReflection,
+  buildCorrectivePrompt,
   buildAgentSystemPrompt,
   parseAgentResponse,
   selectToolsForQuery,

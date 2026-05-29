@@ -104,6 +104,29 @@ module.exports = [
   },
 
   {
+    // WS1 — the loop must ACT on a low-confidence "not met" verdict: feed the
+    // gap back, take another shot, and converge. Without the corrective loop
+    // this task would end after the first (incomplete) answer.
+    name: 'corrective-loop-closes-gap',
+    message: 'List the three primary colors.',
+    script: [
+      { type: 'done', text: 'Red and blue.' },
+      { type: 'done', text: 'Red, blue, and yellow — the three primary colors.' },
+    ],
+    reflections: [
+      { goal_met: 'no', summary: 'only listed two', gaps: ['missing the third color'], confidence: 0.3 },
+      { goal_met: 'yes', summary: 'all three listed', gaps: [], confidence: 0.95 },
+    ],
+    expect: {
+      noError: true,
+      correctiveRounds: 1,
+      goalMet: 'yes',
+      answerIncludes: 'yellow',
+      minReflections: 2,
+    },
+  },
+
+  {
     name: 'budget-respected-no-overrun',
     message: 'Do a small two-step task.',
     script: [

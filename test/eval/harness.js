@@ -103,6 +103,7 @@ async function runEval(task) {
     steps: result.steps || [],
     toolsCalled: (result.steps || []).map((s) => s.tool),
     reflections,
+    correctiveRounds: result.correctiveRounds || 0,
     events,
     aiCalls: aiFn.calls,
     error: result.error || null,
@@ -150,6 +151,11 @@ function scoreTask(task, result) {
     const last = result.reflections[result.reflections.length - 1];
     if (!last || last.goalMet !== e.goalMet) {
       failures.push(`final reflection goalMet: expected "${e.goalMet}", got "${last ? last.goalMet : 'none'}"`);
+    }
+  }
+  if (typeof e.correctiveRounds === 'number') {
+    if (result.correctiveRounds !== e.correctiveRounds) {
+      failures.push(`correctiveRounds: expected ${e.correctiveRounds}, got ${result.correctiveRounds}`);
     }
   }
   // No-loop guard: a tool repeated 3+ times in a row is the loop's own
