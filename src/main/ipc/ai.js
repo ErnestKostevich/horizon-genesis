@@ -747,9 +747,15 @@ function register(deps) {
       let skillsSelected = null;
       if (skillsManager) {
         try {
-          const res = skillsManager.getSkillsBlock(userMessage, {
+          // WS3 — prefer the embedding-blended selection when a memory
+          // embedding service is wired; it falls back to bag-of-words offline.
+          const skillOpts = {
             forcedIds: Array.isArray(opts.forcedSkillIds) ? opts.forcedSkillIds : [],
-          });
+            embeddingService: agentMemory && agentMemory.embeddings ? agentMemory.embeddings : null,
+          };
+          const res = skillOpts.embeddingService && typeof skillsManager.getSkillsBlockAsync === 'function'
+            ? await skillsManager.getSkillsBlockAsync(userMessage, skillOpts)
+            : skillsManager.getSkillsBlock(userMessage, skillOpts);
           skillsBlock = res.block || '';
           skillsSelected = {
             selected: (res.selected || []).map(s => ({ id: s.id, score: s.score, breakdown: s.breakdown, scope: s.scope, forced: s.forced, truncated: s.truncated, bytes: s.bytes })),

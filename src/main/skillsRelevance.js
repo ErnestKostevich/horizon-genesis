@@ -145,24 +145,34 @@ function selectRelevantSkills(skills, query, opts = {}) {
 
   const scoped = enabled.map(skill => {
     const { score, breakdown } = scoreSkill(skill, queryTokens, opts);
-    const fm = skill.frontmatter || {};
-    const forcedNames = [
-      skill.id,
-      fm.name,
-      ...(Array.isArray(fm.aliases) ? fm.aliases : []),
-    ].filter(Boolean).map(String);
-    return {
-      id: skill.id,
-      scope: skill.scope || 'user',
-      score,
-      breakdown,
-      forced: forcedNames.some(n => forced.has(n)),
-      skill,
-    };
+    return _scopedEntry(skill, score, breakdown, forced);
   });
 
-  // Sort: forced first (forced always in), then by score desc, then by scope
-  // priority (workspace > user > builtin > marketplace), then alphabetical.
+  return _finalizeSelection(scoped, maxSkills, threshold);
+}
+
+// Build one scored entry in the shape both the sync and async paths return.
+function _scopedEntry(skill, score, breakdown, forcedSet) {
+  const fm = skill.frontmatter || {};
+  const forcedNames = [
+    skill.id,
+    fm.name,
+    ...(Array.isArray(fm.aliases) ? fm.aliases : []),
+  ].filter(Boolean).map(String);
+  return {
+    id: skill.id,
+    scope: skill.scope || 'user',
+    score: Number(score.toFixed(4)),
+    breakdown,
+    forced: forcedNames.some(n => forcedSet.has(n)),
+    skill,
+  };
+}
+
+// Sort (forced first → score desc → scope priority → id) and pick up to
+// maxSkills entries that clear the threshold (forced always included).
+// Shared by the sync and embedding-blended paths so ranking is identical.
+function _finalizeSelection(scoped, maxSkills, threshold) {
   const scopeRank = { workspace: 0, user: 1, builtin: 2, marketplace: 3 };
   scoped.sort((a, b) => {
     if (a.forced !== b.forced) return a.forced ? -1 : 1;
@@ -172,22 +182,79 @@ function selectRelevantSkills(skills, query, opts = {}) {
     if (sa !== sb) return sa - sb;
     return String(a.id).localeCompare(String(b.id));
   });
-
   const selected = [];
   for (const entry of scoped) {
     if (selected.length >= maxSkills) break;
-    if (entry.forced || entry.score >= threshold) {
-      selected.push(entry);
-    }
+    if (entry.forced || entry.score >= threshold) selected.push(entry);
   }
-
   return { selected, scored: scoped };
 }
+
+// ── Semantic blend (WS3) ───────────────────────────────────────────────────
+// Optional embedding layer on TOP of bag-of-words. Caches each skill's vector
+// keyed by id + version so it re-embeds only when SKILL.md changes. The blend
+// is ADDITIVE (bag + 0.4·cosine), not a replacement: semantics can only LIFT a
+// skill, never push a proven keyword match below the calibrated threshold —
+// so the embeddings-on path can't regress the embeddings-off path. Falls back
+// to pure bag-of-words whenever the service is missing/offline.
+const _skillVecCache = new Map(); // `${id}:${version}` -> Float32Array | null
+
+function _skillText(skill) {
+  const fm = skill?.frontmatter || {};
+  return [
+    fm.name, fm.description,
+    (fm.tags || []).join(' '),
+    (fm.aliases || []).join(' '),
+    (fm.triggers || []).join(' '),
+    (fm.examples || []).join(' '),
+  ].filter(Boolean).join('. ').slice(0, 1000);
+}
+
+async function selectRelevantSkillsAsync(skills, query, opts = {}) {
+  const svc = opts.embeddingService;
+  // No service / offline / empty query → byte-identical to the sync path.
+  if (!svc || typeof svc.isAvailable !== 'function' || !svc.isAvailable() || !String(query || '').trim()) {
+    return selectRelevantSkills(skills, query, opts);
+  }
+  const { cosine } = require('./embeddings');
+  let queryVec = null;
+  try { queryVec = await svc.embed(String(query)); } catch (_) {}
+  if (!queryVec) return selectRelevantSkills(skills, query, opts);  // embed failed → fall back
+
+  const enabled = (skills || []).filter(s => s && s.enabled !== false);
+  const forced = new Set((opts.forcedIds || []).map(String));
+  const maxSkills = Math.max(1, Math.min(8, opts.maxSkills || DEFAULT_MAX_SKILLS));
+  const threshold = typeof opts.threshold === 'number' ? opts.threshold : DEFAULT_THRESHOLD;
+  const queryTokens = tokenize(query);
+  const semWeight = typeof opts.semanticWeight === 'number' ? opts.semanticWeight : 0.4;
+
+  const scoped = [];
+  for (const skill of enabled) {
+    const { score: bagScore, breakdown } = scoreSkill(skill, queryTokens, opts);
+    const cacheKey = `${skill.id}:${skill.version || skill.frontmatter?.version || '0'}`;
+    let vec = _skillVecCache.get(cacheKey);
+    if (vec === undefined) {
+      try { vec = await svc.embed(_skillText(skill)); } catch (_) { vec = null; }
+      _skillVecCache.set(cacheKey, vec || null);
+    }
+    const sem = vec ? Math.max(0, cosine(queryVec, vec)) : 0;
+    const blended = bagScore + semWeight * sem;
+    const entry = _scopedEntry(skill, blended, { ...breakdown, semantic: Number(sem.toFixed(4)) }, forced);
+    scoped.push(entry);
+  }
+
+  return _finalizeSelection(scoped, maxSkills, threshold);
+}
+
+// Test helper — drop cached skill vectors (e.g. between unit tests).
+function _clearSkillVectorCache() { _skillVecCache.clear(); }
 
 module.exports = {
   tokenize,
   scoreSkill,
   selectRelevantSkills,
+  selectRelevantSkillsAsync,
+  _clearSkillVectorCache,
   STOPWORDS,
   WEIGHTS,
   DEFAULT_THRESHOLD,
