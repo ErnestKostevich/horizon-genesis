@@ -128,11 +128,15 @@ iwr https://raw.githubusercontent.com/ErnestKostevich/horizon-genesis/main/scrip
   Z.AI/GLM, Nebius, OpenRouter aggregator, Azure OpenAI, custom
   OpenAI-compatible endpoint, LiteLLM-style prefix routing, plus local
   Ollama / LM Studio / LocalAI.
-- **9-layer memory** — facts, episodic memories, conversations, semantic
+- **13-layer memory** — facts, episodic memories, conversations, semantic
   recall (256-dim embeddings), FTS index (in-memory + SQLite FTS5 mirror),
   user profile (Big-Five model), persona memory, per-workspace
-  `.horizon/memory.json`, and a Honcho-style **dialectic model**
-  (multi-level theory-of-mind diff log). SQLite is the source of truth;
+  `.horizon/memory.json`, a Honcho-style **dialectic model**
+  (multi-level theory-of-mind diff log), insights/consolidation
+  (episodic clusters compressed into higher-order memories), entity/relationship
+  graph (contradiction-aware knowledge graph), working-memory scratchpad
+  (per-task notepad across reflection rounds), and pinned core
+  (always-injected curated memories). SQLite is the source of truth;
   JSON is export-only.
 - **30 built-in skills** in `builtin-skills/` (commit-message, code-review,
   pr-description, refactor-react, security-scan, web-research, slack-summary,
@@ -214,7 +218,7 @@ Horizon and Hermes solve overlapping problems with different bets.
 | Computer use with OCR + multi-monitor + recordable macros | A 691-skill community marketplace |
 | 5 personas + per-persona memory + voice | A single self-improving `SOUL.md` |
 | Crypto-payout marketplace (70/30 to authors) | Free open hub |
-| 9-layer memory (incl. dialectic ToM diff log) | SQLite FTS5 with massive scale ceiling |
+| 13-layer memory (incl. dialectic ToM diff log, consolidation insights, entity graph, working memory, pinned core) | SQLite FTS5 with massive scale ceiling |
 | 25 direct AI providers + OpenRouter (300+) | LiteLLM wrapper across ~200 |
 | 8 CLI themes, vm-sandboxed plugins | Larger community + curated catalog |
 
@@ -247,7 +251,7 @@ support, macro recorder) while keeping the moat that's unique to Horizon
 | BYOK encrypted storage    | ✅ AES-256-GCM | ✅ | ✅ |
 | Local-first (Ollama)      | ✅ | ✅ | ✅ |
 | **Memory storage**        | **SQLite primary** + FTS5 + embeddings (JSON export-only) | SQLite + FTS5 | JSON |
-| 9-layer memory model      | ✅ | 🔸 4 types | 🔸 |
+| 13-layer memory model     | ✅ | 🔸 4 types | 🔸 |
 | Dialectic / theory-of-mind | ✅ Honcho-style diff log | ❌ | ❌ |
 | Workspace-bound memory    | ✅ `.horizon/memory.json` | ❌ | ❌ |
 | Semantic recall           | ✅ 256-dim | ✅ | 🔸 |
@@ -291,7 +295,7 @@ graph TB
 
     subgraph "Headless runtime (shared)"
         Agent["Agent loop<br/>plan → act → reflect"]
-        Memory["9-layer memory (SQLite)<br/>facts · episodic · semantic · FTS<br/>profile · persona · workspace · dialectic"]
+        Memory["13-layer memory (SQLite)<br/>facts · episodic · semantic · FTS<br/>profile · persona · workspace · dialectic<br/>insights · entity graph · scratchpad · pinned core"]
         Skills["Skills manager<br/>workspace / user / builtin"]
         Executor["Executor<br/>host · docker · ssh · modal · daytona · singularity"]
         AI["AI client<br/>25 providers + auto routing"]
@@ -342,7 +346,7 @@ shell, expose to mobile via `horizon serve`.
 
 ## Memory model
 
-9 layers of context across short-, mid-, and long-term. **SQLite is the
+13 layers of context across short-, mid-, and long-term. **SQLite is the
 source of truth** — `memory.sqlite` stores everything, the legacy
 `horizon_memory.json` exists as an export-only sidecar (`HORIZON_MEMORY_BACKEND=json`
 flips it back for migrations):
@@ -451,7 +455,8 @@ gets an isolated `ctx = { settings, fetch, logger, storage }`
 Sprint 1-7 shipped in v0.0.1:
 
 - [x] Electron desktop app (Windows / macOS / Linux installers)
-- [x] 9-layer memory (SQLite-first) + semantic recall + dialectic ToM
+- [x] 13-layer memory (SQLite-first) + semantic recall + dialectic ToM
+  - v0.0.3 added: insights/consolidation, entity/relationship graph, working-memory scratchpad, pinned core
 - [x] 30 first-party skills + 3 scopes + Anthropic-compatible SKILL.md
 - [x] 5 first-party workflows (briefing, code-review-on-pr, retro, inbox-zero, deploy-guardian)
 - [x] Plugin SDK + vm sandbox + NOWPayments crypto-only marketplace
