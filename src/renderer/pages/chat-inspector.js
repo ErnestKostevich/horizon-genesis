@@ -578,6 +578,7 @@ async function refreshInspectorLearned(){
         ${snap.stats.lastTurnAt ? `<div class="insp-row"><span class="k">Last turn</span><span class="v">${esc(new Date(snap.stats.lastTurnAt).toLocaleString())}</span></div>` : ''}
         <div class="insp-row"><span class="k">Pinned</span><span class="v">${snap.stats.pinned || 0}</span></div>
         <div class="insp-row"><span class="k">Profile confidence</span><span class="v">${Math.round((snap.stats.profileConfidence || 0) * 100)}%</span></div>
+        ${snap.stats.graph ? `<div class="insp-row"><span class="k">Entity graph</span><span class="v">${snap.stats.graph.entities} entities · ${snap.stats.graph.relations} relations</span></div>` : ''}
         ${ftsRow}
         ${embedRow}
       `;
