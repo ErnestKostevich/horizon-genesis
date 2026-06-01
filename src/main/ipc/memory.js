@@ -329,6 +329,12 @@ function register(deps) {
           learnedItems: stats.learnedItems || 0,
           lastLearnedAt: stats.lastLearnedAt || null,
           conversations: agentMemory._data?.conversations?.length || 0,
+          // v0.0.3 — surface stats that were written but never read back, plus
+          // the pinned count + profile confidence, so the Inspector is honest.
+          turns: stats.turns || 0,
+          lastTurnAt: stats.lastTurnAt || null,
+          pinned: (agentMemory._data?.memories || []).filter(m => m && m.pinned).length,
+          profileConfidence: (userProfile && typeof userProfile.confidence === 'number') ? userProfile.confidence : 0,
         },
       };
     } catch (e) {
@@ -348,6 +354,24 @@ function register(deps) {
     const agentMemory = getAgentMemory();
     if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
     return { ok: agentMemory.forgetMemory(String(idOrKey || '')) };
+  });
+
+  // v0.0.3 — pinned core memory layer (13): pin/unpin so a memory is always
+  // injected into the agent prompt (bypasses recall threshold/top-K).
+  ipcMain.handle('memPinMemory', (_, idOrKey) => {
+    loadAgentModules();
+    const agentMemory = getAgentMemory();
+    if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+    if (typeof agentMemory.pinMemory !== 'function') return { ok: false, error: 'pin not supported' };
+    return agentMemory.pinMemory(String(idOrKey || ''));
+  });
+
+  ipcMain.handle('memUnpinMemory', (_, idOrKey) => {
+    loadAgentModules();
+    const agentMemory = getAgentMemory();
+    if (!agentMemory) return { ok: false, error: 'agent memory not loaded' };
+    if (typeof agentMemory.unpinMemory !== 'function') return { ok: false, error: 'unpin not supported' };
+    return agentMemory.unpinMemory(String(idOrKey || ''));
   });
 
   ipcMain.handle('memEditFact', (_, key, value) => {

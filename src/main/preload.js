@@ -165,6 +165,9 @@ contextBridge.exposeInMainWorld('H', {
   memSnapshot: (opts)          => ipcRenderer.invoke('memSnapshot', opts),
   memForgetFact: (key)         => ipcRenderer.invoke('memForgetFact', key),
   memForgetMemory: (idOrKey)   => ipcRenderer.invoke('memForgetMemory', idOrKey),
+  // v0.0.3 — pinned core memory layer (13).
+  memPinMemory: (idOrKey)      => ipcRenderer.invoke('memPinMemory', idOrKey),
+  memUnpinMemory: (idOrKey)    => ipcRenderer.invoke('memUnpinMemory', idOrKey),
   memEditFact: (key, value)    => ipcRenderer.invoke('memEditFact', key, value),
   memEditMemory: (idOrKey, p)  => ipcRenderer.invoke('memEditMemory', idOrKey, p),
   memGetUserProfile: ()        => ipcRenderer.invoke('memGetUserProfile'),
@@ -201,6 +204,13 @@ contextBridge.exposeInMainWorld('H', {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on('memory:embeddingProgress', handler);
     return () => ipcRenderer.removeListener('memory:embeddingProgress', handler);
+  },
+  // v0.0.3 — live memory-reviewer pass broadcasts. The renderer never listened
+  // before, so background decay/dedupe/forget passes were invisible.
+  onMemoryReviewerPass: (cb) => {
+    const handler = (_, payload) => cb(payload);
+    ipcRenderer.on('memory:reviewerPass', handler);
+    return () => ipcRenderer.removeListener('memory:reviewerPass', handler);
   },
 
   // Sprint 7C — durable Kanban queue.

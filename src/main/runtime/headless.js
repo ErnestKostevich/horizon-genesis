@@ -549,9 +549,22 @@ function createHorizonRuntime(opts = {}) {
     // Step rail — forward to caller and append to agentMemory if asked.
     const history = Array.isArray(opts.history) ? opts.history : [];
 
+    // v0.0.3 — build the shared memory context (recall + facts + profile +
+    // pinned + dialectic) the SAME way Electron's ipc/ai.js does, via
+    // AgentMemory.buildAgentContext. Without this the CLI agent was memory-blind:
+    // it wrote memory every turn but never read it back into the prompt.
+    let ctxBlock = { memory: undefined, dialecticInjection: '' };
+    try {
+      if (agentMemory && typeof agentMemory.buildAgentContext === 'function') {
+        const personaForMemory = opts.persona || settingsStore.get('persona') || 'jarvis';
+        ctxBlock = await agentMemory.buildAgentContext(task, { activePersona: personaForMemory });
+      }
+    } catch (_) {}
+
     const result = await agentLoopModule.runAgentLoop(task, {
       aiFn,
-      sysInfo: { provider, model: opts.model, workspaceDir },
+      sysInfo: { provider, model: opts.model, workspaceDir, memory: ctxBlock.memory },
+      dialecticInjection: ctxBlock.dialecticInjection,
       lang,
       userName: settingsStore.get('userName') || 'user',
       history,
@@ -583,6 +596,15 @@ function createHorizonRuntime(opts = {}) {
         source: 'cli', provider, model: opts.model || aiClient.selectModel(provider),
         persona: opts.persona || settingsStore.get('persona'),
       });
+    } catch (_) {}
+
+    // v0.0.3 — reward memories that actually surfaced in the answer (WS2
+    // feedback loop). This ran only in Electron before; the CLI now closes the
+    // same loop, so usefulness ranking works for CLI-only users too.
+    try {
+      if (result?.ok && result?.answer && typeof agentMemory.markMemoriesUsed === 'function') {
+        agentMemory.markMemoriesUsed(ctxBlock.memory?.relevant || [], result.answer);
+      }
     } catch (_) {}
 
     return result;

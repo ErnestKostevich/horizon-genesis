@@ -130,6 +130,12 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
   const userProfileBlock = (typeof memory.userProfileBlock === 'string' && memory.userProfileBlock.trim())
     ? memory.userProfileBlock
     : '';
+  // v0.0.3 — dialectic (theory-of-mind) injection, pre-rendered by
+  // AgentMemory.buildAgentContext. Routed through the SAME prompt builder for
+  // BOTH surfaces so agent mode (not just plain chat) sees the user model.
+  const dialecticBlock = (typeof options.dialecticInjection === 'string' && options.dialecticInjection.trim())
+    ? options.dialecticInjection.trim()
+    : '';
   const githubBlock = (sysInfo?.github_repos || []).slice(0, 10).map(r => `- ${r.fullName} (${r.defaultBranch || 'main'}): ${r.description || r.url}`).join('\n');
   const connectionsBlock = (sysInfo?.connections || []).slice(0, 12).map(c => `- ${c.name || c.id}: ${c.toolCount || 0} tools`).join('\n');
 
@@ -218,6 +224,7 @@ ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}` : ''}
 ${projectRulesBlock || ''}${workspaceMemoryBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
+${dialecticBlock ? `\n${dialecticBlock}\n` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 ${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}
 ${deliberationProtocol(ru, true)}
@@ -237,6 +244,7 @@ ${sysInfo?.location ? `Местоположение: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Персона / стиль\n${personaBlock}\n` : ''}
 ${projectRulesBlock || ''}${workspaceMemoryBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Контекст памяти\n${memoryBlock}\n` : ''}
+${dialecticBlock ? `\n${dialecticBlock}\n` : ''}
 ${githubBlock ? `\n## Подключенные GitHub-репозитории\n${githubBlock}\n` : ''}
 ${connectionsBlock ? `\n## Активные подключения\n${connectionsBlock}\n` : ''}
 ${deliberationProtocol(true, false)}
@@ -276,6 +284,7 @@ ${sysInfo?.location ? `Location: ${sysInfo.location}` : ''}
 ${personaBlock ? `\n## Persona / style\n${personaBlock}\n` : ''}
 ${projectRulesBlock || ''}${workspaceMemoryBlock || ''}${skillsBlock || ''}${userProfileBlock || ''}
 ${memoryBlock ? `\n## Memory context\n${memoryBlock}` : ''}
+${dialecticBlock ? `\n${dialecticBlock}\n` : ''}
 ${githubBlock ? `\n## Attached GitHub repositories\n${githubBlock}` : ''}
 ${connectionsBlock ? `\n## Active connections\n${connectionsBlock}` : ''}
 ${deliberationProtocol(false, false)}
@@ -568,13 +577,14 @@ async function runAgentLoop(userMessage, opts = {}) {
     personaPrompt = null, // pre-resolved persona text (cheaper for hot paths)
     allowedToolGroups = null,
     skillsBlock = '',    // pre-rendered "## Skills loaded for this turn" body (caller resolves via skillsManager.getSkillsBlock)
-    skillsSelected = null // optional metadata about which skills loaded — emitted to inspector listeners
+    skillsSelected = null, // optional metadata about which skills loaded — emitted to inspector listeners
+    dialecticInjection = '' // v0.0.3 — pre-rendered dialectic (theory-of-mind) block from AgentMemory.buildAgentContext
   } = opts;
 
   // Select relevant tools for this query
   const selectedTools = filterToolsForPersona([...selectToolsForQuery(userMessage), ...extraTools], allowedToolGroups)
     .filter((tool, index, arr) => tool?.name && arr.findIndex(t => t?.name === tool.name) === index);
-  const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools, personaId, personaPrompt, skillsBlock });
+  const systemPrompt = buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools, { nativeTools, personaId, personaPrompt, skillsBlock, dialecticInjection });
 
   if (skillsSelected) {
     try { agentEvents.emit('skills:selected', { runId, ...skillsSelected }); } catch (_) {}

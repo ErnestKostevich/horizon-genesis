@@ -61,7 +61,7 @@ function loadSqlite() {
   }
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -82,7 +82,10 @@ CREATE TABLE IF NOT EXISTS memories (
   last_seen   INTEGER,
   seen        INTEGER DEFAULT 1,
   source      TEXT,
-  persona_id  TEXT
+  persona_id  TEXT,
+  usefulness   INTEGER DEFAULT 0,
+  useful_count INTEGER DEFAULT 0,
+  pinned       INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_memories_category   ON memories(category);
 CREATE INDEX IF NOT EXISTS idx_memories_persona    ON memories(persona_id);
@@ -179,11 +182,26 @@ class MemoryDb {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     this.db = new Sqlite(this.dbPath);
     this.db.exec(SCHEMA_SQL);
-    const cur = this.db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version');
-    if (!cur) {
-      this.db.prepare('INSERT INTO meta(key,value) VALUES(?,?)').run('schema_version', String(SCHEMA_VERSION));
-    }
+    // v0.0.3 — idempotent column migration for DBs created under schema v1.
+    // ALTER ADD COLUMN does not rewrite the table; PRAGMA-guarded so it's a
+    // no-op once applied. Self-heals half-migrated DBs.
+    this._ensureColumns();
+    this.db.prepare('INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)').run('schema_version', String(SCHEMA_VERSION));
     return this;
+  }
+
+  /** v0.0.3 — add columns introduced after schema v1 if missing. Guarded by
+   *  PRAGMA table_info, so safe to run on every open(). */
+  _ensureColumns() {
+    let cols = [];
+    try { cols = this.db.prepare('PRAGMA table_info(memories)').all().map(c => c.name); }
+    catch (_) { return; }
+    const add = (name, ddl) => {
+      if (!cols.includes(name)) { try { this.db.exec(`ALTER TABLE memories ADD COLUMN ${ddl}`); } catch (_) {} }
+    };
+    add('usefulness',   'usefulness INTEGER DEFAULT 0');
+    add('useful_count', 'useful_count INTEGER DEFAULT 0');
+    add('pinned',       'pinned INTEGER DEFAULT 0');
   }
 
   close() {
@@ -191,25 +209,33 @@ class MemoryDb {
   }
 
   // ── memories ────────────────────────────────────────────────────────
-  addMemory({ id, content, category, importance, source, personaId, createdAt }) {
+  addMemory({ id, content, category, importance, source, personaId, createdAt, usefulness, usefulCount, pinned }) {
     if (!id || !content) return null;
     const now = Date.now();
+    const uful = Number.isFinite(usefulness) ? usefulness : 0;
+    const ucnt = Number.isFinite(usefulCount) ? usefulCount : 0;
+    const pin = pinned ? 1 : 0;
     const row = this.db.prepare('SELECT seen FROM memories WHERE id = ?').get(id);
     if (row) {
+      // MAX() semantics so a plain re-remember never clobbers an accrued
+      // usefulness score or an explicit pin (unpin goes through _setPinned).
       this.db.prepare(`
         UPDATE memories
            SET content = ?, importance = MAX(importance, ?),
                last_seen = ?, seen = seen + 1,
                source = COALESCE(?, source),
-               persona_id = COALESCE(?, persona_id)
+               persona_id = COALESCE(?, persona_id),
+               usefulness = MAX(usefulness, ?),
+               useful_count = MAX(useful_count, ?),
+               pinned = MAX(pinned, ?)
          WHERE id = ?
-      `).run(content, importance || 5, now, source || null, personaId || null, id);
+      `).run(content, importance || 5, now, source || null, personaId || null, uful, ucnt, pin, id);
       return { id, updated: true };
     }
     this.db.prepare(`
-      INSERT INTO memories(id, content, category, importance, created_at, last_seen, seen, source, persona_id)
-      VALUES(?, ?, ?, ?, ?, ?, 1, ?, ?)
-    `).run(id, content, category || 'general', importance || 5, createdAt || now, now, source || null, personaId || null);
+      INSERT INTO memories(id, content, category, importance, created_at, last_seen, seen, source, persona_id, usefulness, useful_count, pinned)
+      VALUES(?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+    `).run(id, content, category || 'general', importance || 5, createdAt || now, now, source || null, personaId || null, uful, ucnt, pin);
     return { id, inserted: true };
   }
 
@@ -351,6 +377,9 @@ class MemoryDb {
           source: m.source || m.lastSource,
           personaId: m.personaId,
           createdAt: m.firstSeen || m.lastSeen || Date.now(),
+          usefulness: m.usefulness,
+          usefulCount: m.usefulCount,
+          pinned: m.pinned,
         });
       }
       for (const [k, v] of Object.entries(d.facts || {})) {
@@ -397,7 +426,8 @@ class MemoryDb {
    */
   toJsonObject() {
     const memories = this.db.prepare(`
-      SELECT id, content, category, importance, created_at, last_seen, seen, source, persona_id
+      SELECT id, content, category, importance, created_at, last_seen, seen, source, persona_id,
+             usefulness, useful_count, pinned
         FROM memories
        ORDER BY created_at ASC
     `).all().map(r => ({
@@ -414,6 +444,9 @@ class MemoryDb {
       lastSource: r.source || 'sqlite',
       personaId: r.persona_id || null,
       personas: r.persona_id ? [r.persona_id] : [],
+      usefulness: r.usefulness || 0,
+      usefulCount: r.useful_count || 0,
+      pinned: !!r.pinned,
     }));
 
     const factRows = this.db.prepare('SELECT key, value, updated_at, source FROM facts ORDER BY key ASC').all();
