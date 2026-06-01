@@ -238,7 +238,7 @@ function createHorizonRuntime(opts = {}) {
   let memoryReviewer = null;
   try {
     const { MemoryReviewer } = require('../memoryReviewer');
-    memoryReviewer = new MemoryReviewer(agentMemory);
+    memoryReviewer = new MemoryReviewer(agentMemory, { settingsStore, keysStore });
     memoryReviewer.start();
     log('memory reviewer scheduled (first pass in ~1h, then every 12h)');
   } catch (e) {

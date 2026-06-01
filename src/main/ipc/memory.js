@@ -182,6 +182,17 @@ function register(deps) {
     } catch (e) { return { ok: false, error: e.message }; }
   });
 
+  // v0.0.3 — insights / consolidation layer (10): synthesize higher-order
+  // "insight" memories from clusters of recent episodes. Offline-safe.
+  ipcMain.handle('memConsolidateNow', async () => {
+    const memoryReviewer = getMemoryReviewer();
+    if (!memoryReviewer || typeof memoryReviewer.consolidateNow !== 'function') {
+      return { ok: false, error: 'consolidation not available' };
+    }
+    try { return await memoryReviewer.consolidateNow(); }
+    catch (e) { return { ok: false, error: e.message }; }
+  });
+
   ipcMain.handle('memoryDbStatus', () => {
     const paths = _memSqlitePaths();
     if (!paths) return { ok: false, error: 'userData path unavailable' };

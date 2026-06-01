@@ -1062,6 +1062,39 @@ window._inspMemoryReviewerRunNow = async function(btn) {
   }
 };
 
+// v0.0.3 — insights / consolidation layer (10): synthesize higher-order insight
+// memories from clusters of recent episodes. On-demand (token cost) and
+// offline-safe (no chat key → skipped). Insights appear in the memories list
+// tagged [insight].
+window._inspMemoryConsolidateNow = async function(btn) {
+  if (btn instanceof HTMLElement) {
+    btn.disabled = true;
+    btn.dataset._origText = btn.textContent;
+    btn.textContent = 'Consolidating…';
+  }
+  try {
+    addMsg?.('bot', '🧠 Consolidating recent memories into higher-order insights…');
+    const r = await H.memConsolidateNow?.();
+    if (!r) { addMsg?.('bot', '⚠️ Consolidation IPC unavailable.'); return; }
+    if (!r.ok) { addMsg?.('bot', `❌ Consolidation failed: ${esc(r.error || 'unknown error')}`); return; }
+    if (r.skipped === 'offline') {
+      addMsg?.('bot', 'ℹ️ Skipped — no chat-model key configured. Add a provider key to synthesize insights.');
+    } else if (r.skipped) {
+      addMsg?.('bot', `ℹ️ Skipped — ${r.skipped} (need ≥3 related recent memories to form a cluster).`);
+    } else {
+      addMsg?.('bot', `✓ Created **${r.created}** insight${r.created === 1 ? '' : 's'} from ${r.clusters} cluster${r.clusters === 1 ? '' : 's'}.`);
+    }
+    if (inspectorTab === 'learned') refreshInspectorLearned();
+  } catch (e) {
+    addMsg?.('bot', `❌ Consolidation exception: ${esc(e.message)}`);
+  } finally {
+    if (btn instanceof HTMLElement) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._origText || 'Consolidate';
+    }
+  }
+};
+
 // Sprint 7B — SQLite is the primary memory store. JSON becomes an
 // export format only. The migration that copies legacy memory.json
 // into memory.sqlite happens automatically on boot; these buttons let

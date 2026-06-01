@@ -194,6 +194,8 @@ contextBridge.exposeInMainWorld('H', {
   // PHASE 28.3 — agent-curated memory reviewer (Hermes-style nudges).
   memoryReviewerStatus: ()     => ipcRenderer.invoke('memoryReviewerStatus'),
   memoryReviewerRunNow: ()     => ipcRenderer.invoke('memoryReviewerRunNow'),
+  // v0.0.3 — insights / consolidation layer (10).
+  memConsolidateNow: ()        => ipcRenderer.invoke('memConsolidateNow'),
   // PHASE 28.4 — Dialectic user model (9th memory layer, Honcho-style).
   dialecticSummary: ()         => ipcRenderer.invoke('dialecticSummary'),
   dialecticRecent: (opts)      => ipcRenderer.invoke('dialecticRecent', opts),

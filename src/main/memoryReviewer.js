@@ -51,6 +51,13 @@ class MemoryReviewer {
     this.lastRunAt = null;
     this.lastRunStats = null;
     this.onChange = typeof opts.onChange === 'function' ? opts.onChange : () => {};
+    // v0.0.3 — deps for the consolidation/insights job (layer 10). The provider
+    // call needs settings+keys; OFF in the periodic pass unless explicitly on.
+    this.settingsStore = opts.settingsStore || null;
+    this.keysStore = opts.keysStore || null;
+    this.consolidateOnReview = opts.consolidateOnReview === true;
+    this.lastConsolidateAt = null;
+    this.lastConsolidateStats = null;
   }
 
   /** Start the periodic loop. First pass runs after firstRunDelay. */
@@ -69,6 +76,26 @@ class MemoryReviewer {
   /** One pass — exposed for tests + manual "Review now" button. */
   async reviewNow() {
     return this._runOnce();
+  }
+
+  /** v0.0.3 — run a consolidation/insights pass (layer 10): cluster recent
+   *  episodes and synthesize higher-order "insight" memories. Offline-safe
+   *  (returns { created: 0, skipped: 'offline' } with no chat key). */
+  async consolidateNow(opts = {}) {
+    try {
+      const { consolidate } = require('./memoryConsolidator');
+      const r = await consolidate(this.mem, {
+        settingsStore: this.settingsStore,
+        keysStore: this.keysStore,
+        synthFn: opts.synthFn,
+      }, opts);
+      this.lastConsolidateAt = Date.now();
+      this.lastConsolidateStats = r;
+      try { this.onChange({ consolidate: r, created: r.created || 0, ranAt: this.lastConsolidateAt }); } catch (_) {}
+      return r;
+    } catch (e) {
+      return { ok: false, error: e.message, created: 0 };
+    }
   }
 
   _runOnce() {
@@ -168,6 +195,9 @@ class MemoryReviewer {
     this.lastRunAt = now;
     try { this.onChange(stats); } catch (_) {}
     console.log(`[memory-reviewer] pass: ${decayed} decayed, ${merged} merged, ${forgotten} forgotten (of ${memories.length})`);
+    // v0.0.3 — optional 4th job: consolidation/insights. OFF by default to avoid
+    // surprise token spend; fire-and-forget so the sync pass stays fast.
+    if (this.consolidateOnReview) { this.consolidateNow().catch(() => {}); }
     return { ok: true, ...stats };
   }
 
@@ -177,6 +207,8 @@ class MemoryReviewer {
       intervalMs: this.intervalMs,
       lastRunAt: this.lastRunAt,
       lastRunStats: this.lastRunStats,
+      lastConsolidateAt: this.lastConsolidateAt,
+      lastConsolidateStats: this.lastConsolidateStats,
     };
   }
 }
