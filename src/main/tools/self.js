@@ -55,7 +55,12 @@ register({
         provider,
         activePersona: { id: personaId, name: personaName },
         executor: exec,
-        memory: { backend: 'JSON + SQLite + FTS5 + embeddings', layers: 9, ...stats },
+        memory: {
+          backend: 'JSON + SQLite + FTS5 + embeddings + entity-graph',
+          layers: (_agent().MEMORY_LAYERS || []).length || 13,
+          layerNames: _agent().MEMORY_LAYERS || [],
+          ...stats,
+        },
         channelsLive: channels,
         author: pkg.author?.name || 'Ernest Kostevich',
         license: pkg.license || 'BUSL-1.1',

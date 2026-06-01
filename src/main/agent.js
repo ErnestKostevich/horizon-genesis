@@ -160,6 +160,24 @@ const MEMORY_SOURCES = Object.freeze({
   IMPORT: 'import',             // bulk import / migration
 });
 
+// v0.0.3 — the canonical memory layers Horizon ships. self_describe, the docs,
+// and the site read this so the advertised layer count never drifts from reality.
+const MEMORY_LAYERS = Object.freeze([
+  'facts',          // 1  key→value semantic facts
+  'episodic',       // 2  timestamped event memories
+  'conversations',  // 3  full turn transcripts
+  'embeddings',     // 4  semantic vector index
+  'userProfile',    // 5  Big Five + communication style
+  'fts',            // 6  full-text (FTS5/BM25)
+  'persona',        // 7  persona-bound memory
+  'workspace',      // 8  .horizon/memory.json conventions
+  'dialectic',      // 9  theory-of-mind user model
+  'insights',       // 10 consolidated episodic→semantic insights
+  'entityGraph',    // 11 entity + relationship graph
+  'scratchpad',     // 12 per-task working memory
+  'pinned',         // 13 user-pinned always-injected core
+]);
+
 // Lazy-loaded FTS index (PHASE 6/8). Pure-JS inverted index, no native
 // deps. Built in-memory on AgentMemory.init() from existing memories +
 // conversations; kept incremental thereafter.
@@ -1968,6 +1986,7 @@ module.exports = {
   AgentMemory,
   ChatStore,
   MEMORY_SOURCES,
+  MEMORY_LAYERS,
   DEFAULT_USER_PROFILE,
   dispatchTool,
   setMemoryInstance,
