@@ -1,6 +1,6 @@
 {
   "name": "horizon-ai",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Horizon Genesis - desktop AI agent with personas, plugins, workflows, and computer use. Local-first, bring-your-own-keys.",
   "author": {
     "name": "Ernest Kostevich",

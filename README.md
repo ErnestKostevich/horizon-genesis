@@ -83,7 +83,7 @@ iwr https://github.com/ErnestKostevich/horizon-genesis/releases/latest/download/
 <summary><strong>Desktop app downloads (Windows / macOS / Linux)</strong></summary>
 
 Grab the official installer from
-[release v0.0.2](https://github.com/ErnestKostevich/horizon-genesis/releases/tag/v0.0.2)
+[release v0.0.3](https://github.com/ErnestKostevich/horizon-genesis/releases/tag/v0.0.3)
 (or [latest](https://github.com/ErnestKostevich/horizon-genesis/releases/latest)):
 
 | Platform | File |
@@ -436,7 +436,17 @@ gets an isolated `ctx = { settings, fetch, logger, storage }`
 
 ## Roadmap
 
-**v0.0.2 — the agent that finishes the job** (current):
+**v0.0.3 — super-charged memory** (current):
+
+- [x] **13-layer memory** — added insights/consolidation (episodic→semantic), an
+  entity/relationship graph with contradiction handling, a per-task working-memory
+  scratchpad, and a user-pinned always-injected core.
+- [x] **Same memory in CLI and desktop** — one shared `buildAgentContext()` builder;
+  the CLI agent now actually reads memory back into its prompt (it never did before).
+- [x] **Durable feedback loop** — `usefulness` / `pinned` now persist in SQLite
+  (schema 1→2), so what the agent learned survives restarts.
+
+**v0.0.2 — the agent that finishes the job**:
 
 - [x] **Self-correcting loop** — reflection no longer just self-grades and
   walks away. A low-confidence "goal not met" verdict feeds its gaps back
@@ -474,7 +484,7 @@ Sprint 1-7 shipped in v0.0.1:
 - [x] TUI v2 — multi-line composer, in-chat search, scrollback, mouse
 - [x] Vision-on-turn-1 — auto-screenshot when task mentions the screen
 - [x] Agent Mode boost — visible "AGENT IN CONTROL" banner + consent gate
-- [x] 178/178 unit tests + 36/36 integration tests (v0.0.2 adds 18 unit + an eval harness — `npm run eval`)
+- [x] Full unit + integration test suite (v0.0.2 added an eval harness — `npm run eval`; v0.0.3 adds 25 memory-layer tests)
 - [x] `main.js` split from 6,751 lines → 3,042 lines (extracted into `src/main/ipc/*.js` + `src/main/tools/*.js`)
 - [ ] MCP servers spawnable from CLI (config exists, process spawn next)
 - [ ] Plugin SDK v2 with Rust/WASM support

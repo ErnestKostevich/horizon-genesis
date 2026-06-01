@@ -1,6 +1,6 @@
 {
   "name": "@horizonai/cli",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Horizon AI - the personal AI agent that runs on your machine. CLI distribution (local-first, bring-your-own-keys, 25 providers + 300+ models).",
   "main": "index.js",
   "bin": {
