@@ -92,6 +92,8 @@ const PATHS = [
   { src: 'src/main/memoryFts.js',              dst: 'src/main/memoryFts.js' },
   { src: 'src/main/memoryDb.js',               dst: 'src/main/memoryDb.js' },
   { src: 'src/main/memoryReviewer.js',         dst: 'src/main/memoryReviewer.js' },
+  { src: 'src/main/memoryConsolidator.js',     dst: 'src/main/memoryConsolidator.js' },
+  { src: 'src/main/scratchpad.js',             dst: 'src/main/scratchpad.js' },
   { src: 'src/main/dialecticModel.js',         dst: 'src/main/dialecticModel.js' },
   { src: 'src/main/workspaceMemory.js',        dst: 'src/main/workspaceMemory.js' },
   { src: 'src/main/workspaceIndexer.js',       dst: 'src/main/workspaceIndexer.js' },
