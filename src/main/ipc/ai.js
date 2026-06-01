@@ -414,23 +414,29 @@ function register(deps) {
     let sysInfo = null;
     try { sysInfo = await agentTools.getDetailedSysInfo(); } catch(e) {}
     sysInfo = sysInfo || {};
+    let dialecticInjection = '';
     if (agentMemory) {
       try {
         const personaForMemory = opts.personaId || settingsStore.get('persona') || 'jarvis';
-        if (typeof agentMemory.setActivePersona === 'function') {
-          agentMemory.setActivePersona(personaForMemory);
+        if (typeof agentMemory.buildAgentContext === 'function') {
+          // v0.0.3 — single shared builder (recall + facts + profile + pinned +
+          // dialectic). The CLI path (headless.js) calls the exact same method,
+          // so the two surfaces can never drift apart again.
+          const ctxBlock = await agentMemory.buildAgentContext(userMessage, { activePersona: personaForMemory });
+          sysInfo.memory = ctxBlock.memory;
+          dialecticInjection = ctxBlock.dialecticInjection || '';
+        } else {
+          if (typeof agentMemory.setActivePersona === 'function') agentMemory.setActivePersona(personaForMemory);
+          const relevant = (typeof agentMemory.semanticRecall === 'function')
+            ? await agentMemory.semanticRecall(userMessage, 8, { activePersona: personaForMemory }).catch(() => agentMemory.recall(userMessage, 8))
+            : agentMemory.recall(userMessage, 8);
+          sysInfo.memory = {
+            facts: agentMemory.getAllFacts(),
+            relevant,
+            recentConversations: agentMemory.searchConversations(userMessage, 5),
+            userProfileBlock: typeof agentMemory.buildUserProfileBlock === 'function' ? agentMemory.buildUserProfileBlock() : '',
+          };
         }
-        const relevant = (typeof agentMemory.semanticRecall === 'function')
-          ? await agentMemory.semanticRecall(userMessage, 8, { activePersona: personaForMemory }).catch(() => agentMemory.recall(userMessage, 8))
-          : agentMemory.recall(userMessage, 8);
-        sysInfo.memory = {
-          facts: agentMemory.getAllFacts(),
-          relevant,
-          recentConversations: agentMemory.searchConversations(userMessage, 5),
-          userProfileBlock: typeof agentMemory.buildUserProfileBlock === 'function'
-            ? agentMemory.buildUserProfileBlock()
-            : '',
-        };
       } catch (_) {}
     }
     try {
@@ -787,7 +793,8 @@ function register(deps) {
         allowedToolGroups,
         dispatchToolFn,
         skillsBlock,
-        skillsSelected
+        skillsSelected,
+        dialecticInjection
       });
     } catch (e) {
       result = { ok: false, error: e.message, steps: runRecord.steps };

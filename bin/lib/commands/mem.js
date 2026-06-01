@@ -12,6 +12,9 @@
 //   horizon mem migrate                    — (legacy) JSON memory → SQLite mirror
 //   horizon mem sqlite-status              — show row counts in the SQLite store
 //   horizon mem review                     — agent-curated pass (decay/dedupe/forget)
+//   horizon mem pin <id|key>               — pin a memory (always injected into the agent)
+//   horizon mem unpin <id|key>             — unpin a memory
+//   horizon mem list [--pinned]            — list memories (or only the pinned ones)
 
 const { fmt } = require('../tty');
 
@@ -27,10 +30,13 @@ async function run({ runtime, args, flags }) {
   if (sub === 'migrate') return migrate(runtime, flags);
   if (sub === 'sqlite-status') return sqliteStatus(runtime, flags);
   if (sub === 'review')  return review(runtime, flags);
+  if (sub === 'pin')     return pin(runtime, rest, flags, true);
+  if (sub === 'unpin')   return pin(runtime, rest, flags, false);
+  if (sub === 'list')    return list(runtime, flags);
   if (sub === 'stats' || !sub) return stats(runtime, flags);
 
   process.stderr.write(fmt.err(`Unknown mem subcommand: ${sub}`) + '\n');
-  process.stderr.write('Try: search | dump | profile | forget | stats | export | import | migrate | sqlite-status | review\n');
+  process.stderr.write('Try: search | list | pin | unpin | dump | profile | forget | stats | export | import | migrate | sqlite-status | review\n');
   return 2;
 }
 
@@ -58,6 +64,40 @@ async function review(runtime, flags) {
   process.stdout.write(`  merged     ${result.merged}\n`);
   process.stdout.write(`  forgotten  ${result.forgotten}\n`);
   process.stdout.write(`  survivors  ${result.survivors}\n`);
+  return 0;
+}
+
+// v0.0.3 — pinned core memory layer (13).
+async function pin(runtime, rest, flags, on) {
+  const id = (rest[0] || flags.memory || flags.id || '').toString().trim();
+  if (!id) {
+    process.stderr.write(fmt.err(`Need a memory id/key: horizon mem ${on ? 'pin' : 'unpin'} <id|key>`) + '\n');
+    return 2;
+  }
+  const fn = on ? runtime.agentMemory.pinMemory : runtime.agentMemory.unpinMemory;
+  if (typeof fn !== 'function') {
+    process.stderr.write(fmt.err('pin/unpin not supported by this build') + '\n');
+    return 2;
+  }
+  const r = fn.call(runtime.agentMemory, id);
+  if (flags.json) { process.stdout.write(JSON.stringify(r) + '\n'); return r.ok ? 0 : 1; }
+  if (!r.ok) { process.stderr.write(fmt.err(r.error || 'memory not found') + '\n'); return 1; }
+  process.stdout.write(fmt.ok(`${r.pinned ? 'pinned' : 'unpinned'} ${r.key}`) + '\n');
+  return 0;
+}
+
+function list(runtime, flags) {
+  const mems = (runtime.agentMemory._data?.memories || []);
+  const rows = flags.pinned ? mems.filter(m => m && m.pinned) : mems;
+  if (flags.json) { process.stdout.write(JSON.stringify(rows, null, 2) + '\n'); return 0; }
+  if (!rows.length) { process.stdout.write(fmt.dim(flags.pinned ? 'no pinned memories\n' : 'no memories\n')); return 0; }
+  process.stdout.write(fmt.bold(flags.pinned ? `Pinned memories (${rows.length})` : `Memories (${rows.length})`) + '\n');
+  for (const m of rows.slice(0, Number(flags.limit || 50))) {
+    const p = m.pinned ? '📌 ' : '';
+    const use = m.usefulness ? fmt.dim(`★${m.usefulness} `) : '';
+    const cat = fmt.dim(`[${m.category || 'general'}] `);
+    process.stdout.write(`${p}${use}${cat}${(m.content || '').slice(0, 120)} ${fmt.dim(m.key || '')}\n`);
+  }
   return 0;
 }
 

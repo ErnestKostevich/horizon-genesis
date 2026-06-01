@@ -268,7 +268,7 @@ test('Sprint 7B: fresh start — empty DB has zero rows and clean stats', { skip
     assert.equal(stats.memories, 0);
     assert.equal(stats.facts, 0);
     assert.equal(stats.conversations, 0);
-    assert.equal(stats.schema, 1);
+    assert.equal(stats.schema, 2); // v0.0.3 — bumped for usefulness/useful_count/pinned columns
     // After open(), the file should exist on disk
     assert.equal(fs.existsSync(file), true);
   } finally {

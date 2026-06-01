@@ -573,7 +573,11 @@ async function refreshInspectorLearned(){
         <div class="insp-row"><span class="k">Memories</span><span class="v">${snap.stats.totalMemories}</span></div>
         <div class="insp-row"><span class="k">Conversations</span><span class="v">${snap.stats.conversations}</span></div>
         <div class="insp-row"><span class="k">Auto-learned</span><span class="v">${snap.stats.learnedItems}</span></div>
+        ${snap.stats.turns ? `<div class="insp-row"><span class="k">Turns</span><span class="v">${snap.stats.turns}</span></div>` : ''}
         ${snap.stats.lastLearnedAt ? `<div class="insp-row"><span class="k">Last learned</span><span class="v">${esc(new Date(snap.stats.lastLearnedAt).toLocaleString())}</span></div>` : ''}
+        ${snap.stats.lastTurnAt ? `<div class="insp-row"><span class="k">Last turn</span><span class="v">${esc(new Date(snap.stats.lastTurnAt).toLocaleString())}</span></div>` : ''}
+        <div class="insp-row"><span class="k">Pinned</span><span class="v">${snap.stats.pinned || 0}</span></div>
+        <div class="insp-row"><span class="k">Profile confidence</span><span class="v">${Math.round((snap.stats.profileConfidence || 0) * 100)}%</span></div>
         ${ftsRow}
         ${embedRow}
       `;
@@ -613,12 +617,13 @@ async function refreshInspectorLearned(){
           return `
           <div class="mem-row mem-mem" data-id="${esc(String(m.id))}" data-key="${esc(m.key || '')}">
             <div class="mem-row-head">
-              <span class="mem-row-cat">${esc(m.category || 'general')}${m.importance ? ` · imp ${m.importance}` : ''}${m.seen > 1 ? ` · seen ${m.seen}` : ''}</span>
+              <span class="mem-row-cat">${esc(m.category || 'general')}${m.importance ? ` · imp ${m.importance}` : ''}${m.seen > 1 ? ` · seen ${m.seen}` : ''}${m.usefulness ? ` · ★${m.usefulness}` : ''}${m.pinned ? ' · 📌' : ''}</span>
               <span class="mem-row-source mem-src-${esc(m.lastSource || m.source || 'unknown')}" title="provenance">${esc(m.lastSource || m.source || '?')}</span>
             </div>
             <div class="mem-row-body">${esc((m.content || '').toString().slice(0, 300))}</div>
             ${personaBadges ? `<div class="mem-personas">${personaBadges}</div>` : ''}
             <div class="mem-row-actions">
+              <button class="mem-btn" onclick="_inspTogglePin('${esc(m.key || String(m.id))}', ${m.pinned ? 'true' : 'false'}, this)" title="${m.pinned ? 'Unpin — stop always-injecting' : 'Pin — always inject into the agent prompt'}" aria-label="Toggle pin">${m.pinned ? '📌' : '📍'}</button>
               <button class="mem-btn" onclick="_inspEditMemory('${esc(String(m.id))}', this)" title="Edit content" aria-label="Edit content"><svg class="licon"><use href="#i-edit"/></svg></button>
               <button class="mem-btn mem-btn-danger" onclick="_inspForgetMemory('${esc(String(m.id))}', this)" title="Forget this memory" aria-label="Forget this memory"><svg class="licon"><use href="#i-x"/></svg></button>
             </div>
@@ -819,6 +824,21 @@ window._inspForgetMemory = async function _inspForgetMemory(idOrKey) {
     const r = await H.memForgetMemory?.(idOrKey);
     if (r?.ok && inspectorTab === 'learned') refreshInspectorLearned();
     else if (!r?.ok) H.notify?.('Memory', r?.error || 'Could not forget memory');
+  } catch (e) { H.notify?.('Memory', e.message); }
+};
+
+// v0.0.3 — pinned core memory layer (13). Toggle a memory so it is always
+// injected into the agent prompt (bypasses the recall threshold / top-K).
+window._inspTogglePin = async function _inspTogglePin(idOrKey, isPinned, btnEl) {
+  if (!idOrKey) return;
+  try {
+    const r = isPinned ? await H.memUnpinMemory?.(idOrKey) : await H.memPinMemory?.(idOrKey);
+    if (r?.ok) {
+      if (inspectorTab === 'learned') refreshInspectorLearned();
+      H.notify?.('Memory', r.pinned ? 'Pinned — always injected into the agent' : 'Unpinned');
+    } else if (r?.error) {
+      H.notify?.('Memory', r.error);
+    }
   } catch (e) { H.notify?.('Memory', e.message); }
 };
 
@@ -1147,6 +1167,17 @@ try {
     // Only refresh if the Learned tab is visible; otherwise the next
     // tab-open will pull fresh state via memEmbedStatus.
     if (inspectorActive && inspectorTab === 'learned') refreshInspectorLearned();
+  });
+} catch (_) {}
+try {
+  // v0.0.3 — live memory-reviewer pass (decay/dedupe/forget/consolidate). The
+  // renderer never subscribed before, so background passes were invisible.
+  H.onMemoryReviewerPass?.((stats) => {
+    if (inspectorActive && inspectorTab === 'learned') refreshInspectorLearned();
+    try {
+      const touched = (stats && (stats.forgotten || stats.merged || stats.decayed || stats.created)) || 0;
+      if (touched) H.notify?.('Memory', `Reviewer: ${stats.decayed||0} decayed · ${stats.merged||0} merged · ${stats.forgotten||0} forgotten${stats.created?` · ${stats.created} insights`:''}`);
+    } catch (_) {}
   });
 } catch (_) {}
 try {

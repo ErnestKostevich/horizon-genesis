@@ -243,7 +243,8 @@ class AgentMemory {
     // we keep whatever init() loaded for those (or the defaults).
     try {
       const memRows = db.db.prepare(`
-        SELECT id, content, category, importance, created_at, last_seen, seen, source, persona_id
+        SELECT id, content, category, importance, created_at, last_seen, seen, source, persona_id,
+               usefulness, useful_count, pinned
           FROM memories ORDER BY created_at ASC
       `).all();
       this._data.memories = memRows.map(r => ({
@@ -259,6 +260,11 @@ class AgentMemory {
         lastSource: r.source || 'sqlite',
         personaId: r.persona_id || null,
         personas: r.persona_id ? [r.persona_id] : [],
+        // v0.0.3 — persist the WS2 feedback loop + pinned flag across restarts
+        // (these used to reset to 0/false on every SQLite-primary cold boot).
+        usefulness: r.usefulness || 0,
+        usefulCount: r.useful_count || 0,
+        pinned: !!r.pinned,
       }));
 
       const factRows = db.db.prepare('SELECT key, value, updated_at, source FROM facts').all();
@@ -354,6 +360,8 @@ class AgentMemory {
       // WS2 — lazy-migrate the usefulness fields onto pre-existing records.
       if (m && typeof m.usefulness !== 'number') m.usefulness = 0;
       if (m && typeof m.usefulCount !== 'number') m.usefulCount = 0;
+      // v0.0.3 — pinned core (layer 13): always injected, bypasses recall threshold.
+      if (m && typeof m.pinned !== 'boolean') m.pinned = false;
     }
     this._data.facts = this._data.facts && typeof this._data.facts === 'object' ? this._data.facts : {};
     this._data.meals = Array.isArray(this._data.meals) ? this._data.meals : [];
@@ -521,6 +529,8 @@ class AgentMemory {
       // sooner. usefulCount is the raw hit count for the inspector.
       usefulness: 0,
       usefulCount: 0,
+      // v0.0.3 — pinned core (layer 13). Toggled via pinMemory()/unpinMemory().
+      pinned: false,
     };
     this._data.memories.push(item);
     // Limit to last 2000 memories
@@ -549,6 +559,9 @@ class AgentMemory {
           source: item.source,
           personaId: item.personaId,
           createdAt: item.created,
+          usefulness: item.usefulness,
+          usefulCount: item.usefulCount,
+          pinned: item.pinned,
         });
       } catch (e) { console.warn('[memory] SQLite addMemory mirror failed:', e.message); }
     }
@@ -783,6 +796,16 @@ class AgentMemory {
       rec.usefulCount = (typeof rec.usefulCount === 'number' ? rec.usefulCount : 0) + 1;
       rec.importance = Math.min(10, (rec.importance || 5) + 0.5);
       rec.lastSeen = Date.now();
+      // v0.0.3 — persist the bump to SQLite. The slim _save() omits memories
+      // when SQLite is primary, so without this the feedback loop evaporated
+      // on every cold boot. Best-effort mirror keeps usefulness durable.
+      if (this.memoryDb && this.memoryDb.db) {
+        try {
+          this.memoryDb.db.prepare(
+            'UPDATE memories SET usefulness=?, useful_count=?, importance=?, last_seen=? WHERE id=?'
+          ).run(rec.usefulness, rec.usefulCount, rec.importance, rec.lastSeen, rec.key);
+        } catch (_) {}
+      }
       bumped++;
     }
 
@@ -919,6 +942,74 @@ class AgentMemory {
       .sort((a, b) => (b.score - a.score) || (b.importance - a.importance) || (b.created - a.created))
       .slice(0, lim);
   }
+
+  /**
+   * v0.0.3 — single shared builder for the agent system-prompt memory context.
+   * BOTH surfaces (Electron ipc/ai.js agentRun + CLI headless.js runAgent) call
+   * this, so they can never drift apart again. Returns the `sysInfo.memory` block
+   * (exact shape buildAgentSystemPrompt consumes) plus the dialectic injection
+   * string. Pure read except setActivePersona; fully offline-safe — semanticRecall
+   * falls back to recall(), injection()/userProfileBlock return ''.
+   */
+  async buildAgentContext(userMessage, opts = {}) {
+    this._ensureShape();
+    const activePersona = String(opts.activePersona || this._activePersonaId || '');
+    if (activePersona) this.setActivePersona(activePersona);
+    const recallLimit = typeof opts.recallLimit === 'number' ? opts.recallLimit : 8;
+    let relevant = [];
+    if (recallLimit > 0) {
+      try {
+        relevant = (typeof this.semanticRecall === 'function')
+          ? await this.semanticRecall(userMessage, recallLimit, { activePersona, ...(opts.weights || {}) })
+              .catch(() => this.recall(userMessage, recallLimit))
+          : this.recall(userMessage, recallLimit);
+      } catch (_) { relevant = this.recall(userMessage, recallLimit); }
+    }
+    relevant = Array.isArray(relevant) ? relevant : [];
+    // Layer 13 — pinned core memories ALWAYS present (bypass recall threshold and
+    // top-K), prepended, deduped against recall, capped so the prompt stays lean.
+    const pinned = (this._data.memories || [])
+      .filter(m => m && m.pinned)
+      .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+      .slice(0, 10);
+    const seen = new Set(relevant.map(m => m.key));
+    const merged = [
+      ...pinned.filter(m => !seen.has(m.key)).map(m => ({ ...m, _pinned: true })),
+      ...relevant,
+    ];
+    const memory = {
+      facts: this.getAllFacts(),
+      relevant: merged,
+      recentConversations: this.searchConversations(userMessage, typeof opts.convLimit === 'number' ? opts.convLimit : 5),
+      userProfileBlock: typeof this.buildUserProfileBlock === 'function' ? this.buildUserProfileBlock() : '',
+      pinnedCount: pinned.length,
+    };
+    let dialecticInjection = '';
+    try {
+      if (this.dialectic && typeof this.dialectic.injection === 'function') {
+        dialecticInjection = this.dialectic.injection(typeof opts.dialecticK === 'number' ? opts.dialecticK : 6) || '';
+      }
+    } catch (_) {}
+    return { memory, dialecticInjection };
+  }
+
+  /** v0.0.3 — pin/unpin a memory so it is always injected into the agent prompt
+   *  (layer 13). Mirrors the flag to SQLite so it survives restarts. */
+  _setPinned(idOrKey, pinned) {
+    this._ensureShape();
+    const rec = this._data.memories.find(
+      m => m.key === idOrKey || m.id === idOrKey || String(m.id) === String(idOrKey)
+    );
+    if (!rec) return { ok: false, error: 'memory not found' };
+    rec.pinned = !!pinned;
+    this._save();
+    if (this.memoryDb && this.memoryDb.db) {
+      try { this.memoryDb.db.prepare('UPDATE memories SET pinned=? WHERE id=?').run(rec.pinned ? 1 : 0, rec.key); } catch (_) {}
+    }
+    return { ok: true, key: rec.key, pinned: rec.pinned };
+  }
+  pinMemory(idOrKey) { return this._setPinned(idOrKey, true); }
+  unpinMemory(idOrKey) { return this._setPinned(idOrKey, false); }
 
   ftsStats() {
     return this.fts.stats();
