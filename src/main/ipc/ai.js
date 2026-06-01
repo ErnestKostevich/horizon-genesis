@@ -832,6 +832,13 @@ function register(deps) {
         if (typeof agentMemory.markMemoriesUsed === 'function' && result?.ok && result?.answer) {
           try { agentMemory.markMemoriesUsed(sysInfo.memory?.relevant || [], result.answer); } catch (_) {}
         }
+        // v0.0.3 — working-memory scratchpad (layer 12): promote (opt-in) then
+        // clear so it never leaks across runs.
+        try {
+          const scratch = require('../scratchpad');
+          if (settingsStore.get('memory.promoteScratch') === true) scratch.promote(runId, agentMemory);
+          scratch.clear(runId);
+        } catch (_) {}
       } catch (e) {
         console.warn('Memory learning failed:', e.message);
       }
