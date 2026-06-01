@@ -189,7 +189,20 @@ async function search(runtime, rest, flags) {
   for (const m of results) {
     const score = typeof m.score === 'number' ? fmt.dim(`(${m.score.toFixed(2)}) `) : '';
     const ts = m.timestamp ? fmt.dim(new Date(m.timestamp).toLocaleString() + ' · ') : '';
-    process.stdout.write(`${score}${ts}${m.content || m.text || JSON.stringify(m)}\n`);
+    const pin = m.pinned ? '📌 ' : '';
+    process.stdout.write(`${pin}${score}${ts}${m.content || m.text || JSON.stringify(m)}\n`);
+    // v0.0.3 — explainable recall (C3): show the per-signal breakdown.
+    if (flags.explain && (typeof m.semantic === 'number' || typeof m.kw === 'number')) {
+      const parts = [
+        `sem ${(m.semantic || 0).toFixed(2)}`,
+        `kw ${(m.kw || 0).toFixed(2)}`,
+        `fts ${(m.fts || 0).toFixed(2)}`,
+        `use ${m.usefulness || 0}`,
+        m.personaMatch ? 'persona×1.2' : null,
+        m._pinned ? 'pinned' : null,
+      ].filter(Boolean).join(' · ');
+      process.stdout.write('    ' + fmt.dim(parts) + '\n');
+    }
   }
   return 0;
 }
