@@ -7,6 +7,42 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-06-01
+
+Super-charged memory. The agent's memory grows from 9 to **13 layers**, and — just
+as importantly — every layer now works identically in BOTH the desktop app and the
+CLI. (The CLI agent used to write memory every turn but never read it back into its
+prompt.)
+
+### Added — 4 new memory layers
+- **Insights / consolidation (layer 10)** — clusters recent episodic memories and
+  synthesizes higher-order "insight" memories (episodic→semantic reflection).
+  `horizon mem consolidate` + an Inspector "Consolidate" button. Offline-safe.
+- **Entity / relationship graph (layer 11)** — a lightweight knowledge graph of
+  entities + typed relations extracted from turns, surfaced back into the agent
+  prompt when a query names a known entity. Contradiction-aware confidence decay.
+  `horizon mem graph [entity]` + an Inspector graph stat.
+- **Working memory / scratchpad (layer 12)** — `scratch_write` / `scratch_read` /
+  `scratch_list` tools give the agent a per-task notepad that survives reflection
+  rounds; opt-in promotion to long-term memory at task end.
+- **Pinned core (layer 13)** — pin facts/memories so they are ALWAYS injected into
+  the prompt (bypassing the recall threshold). `horizon mem pin/unpin/list --pinned`
+  + Inspector pin buttons.
+
+### Fixed — memory parity + integrity
+- **The CLI agent was memory-blind** — it never injected recalled memories, facts,
+  the user profile, or dialectic into its prompt. Both surfaces now build context
+  through one shared `AgentMemory.buildAgentContext()`, so they can't drift apart.
+- **usefulness / pinned now persist in SQLite** (schema 1→2, guarded migration).
+  The v0.0.2 memory-feedback loop used to reset to zero on every restart.
+- **Dialectic (theory-of-mind) is now injected in agent mode**, not just plain chat.
+- The Inspector surfaces usefulness ★, pinned 📌, profile confidence, turn count,
+  and live memory-reviewer passes.
+
+### Changed
+- `self_describe` and the docs report the honest **13-layer** count from a single
+  source of truth (`MEMORY_LAYERS`).
+
 ## [0.0.1] - 2026-05-20
 
 First public release. This is the foundation — Horizon AI is a desktop
