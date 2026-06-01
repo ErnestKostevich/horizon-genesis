@@ -12,7 +12,7 @@ Horizon is **at or above** Hermes on these axes:
 - mobile companion (PWA with QR-pair, lives in `mobile/`)
 - computer use depth (vision + click + keyboard + wake word + **OCR + multi-display + macro recorder** — Sprint 7 closed the cua-driver gap)
 - personas (5 built-in + per-persona memory + per-persona voice)
-- memory architecture (**9 layers** incl. Honcho-style dialectic ToM diff log)
+- memory architecture (**13 layers** incl. Honcho-style dialectic ToM diff log, consolidation insights, entity/relationship graph, working-memory scratchpad, and pinned core)
 - monetised marketplace with crypto payouts to authors (USDT TRC20/BSC/TON/SOL, 70/30)
 - 8 CLI themes (default / mono / light / kawaii / matrix / retro-amber / vapor / mocha)
 - vm-sandboxed plugin SDK (community plugins safe-by-default)
@@ -101,7 +101,7 @@ get the full agent loop on mobile.
 |---|---|---|
 | Storage | **SQLite + FTS5 (primary)** + JSON export + embeddings sidecar | SQLite + FTS5 |
 | Scale ceiling | millions (Sprint 7B flipped to SQLite-first) | millions |
-| **9 distinct memory layers** | ✓ facts/memories/conversations/embeddings/FTS/profile/persona/workspace/**dialectic** | ~4 layers |
+| **13 distinct memory layers** | ✓ facts/memories/conversations/embeddings/FTS/profile/persona/workspace/dialectic/**insights/consolidation**/entity graph/scratchpad/pinned core | ~4 layers |
 | Dialectic / theory-of-mind diff log | ✓ Honcho-style multi-level (0=user, 1=user→agent, 2=recursive); multi-tenant | ✗ |
 | Semantic recall (256-dim embeddings) | ✓ OpenAI 3-small or Gemini | ✓ |
 | Workspace-bound memory | ✓ `.horizon/memory.json` (commit in git) | ✗ |
@@ -114,6 +114,46 @@ get the full agent loop on mobile.
 scale.** Sprint 7B flipped JSON-first → SQLite-first; JSON is export-only.
 Plus the dialectic model (Honcho-style multi-level ToM diff log) is unique
 to Horizon — Hermes has no equivalent.
+
+---
+
+## Memory — Horizon vs Hermes vs OpenClaw
+
+This table covers v0.0.3 Horizon. Hermes data is from a post-Sprint 7 source
+audit; OpenClaw data is from public ClawHub docs and the SOUL.md convention
+described in their repo. Where behaviour was not directly verifiable,
+"unknown" or a 🔸 note is used — this is a working-code audit, not a
+marketing page.
+
+| Capability | Horizon (v0.0.3) | Hermes | OpenClaw |
+|---|---|---|---|
+| **Storage layers / layer count** | **13 layers** (SQLite primary + FTS5 + embeddings) | ~4 layers (SQLite + FTS5, no published layer taxonomy) | 🔸 file-based: SOUL.md + workspace files; layer count unknown |
+| **Hybrid recall** (semantic + keyword + FTS + usefulness) | ✅ weighted blend of all four signals | 🔸 semantic + FTS; usefulness signal unknown | 🔸 semantic recall via embeddings; FTS/keyword blend unknown |
+| **Usefulness feedback loop** (memory learns what helped) | ✅ usefulness score updated per-retrieval | ❌ not observed in source | ❌ not observed in public docs |
+| **Episodic → semantic consolidation** (insights) | ✅ clusters of related episodic memories compressed into higher-order insight records | ❌ no equivalent | ❌ no equivalent |
+| **Entity/relationship graph** (contradiction-aware) | ✅ typed entity+relation graph; contradiction detection on insert; pulled into context when entity is named | ❌ | ❌ |
+| **Working-memory scratchpad** (per-task notepad) | ✅ ephemeral notepad scoped to current task; persists across reflection rounds | ❌ | unknown |
+| **Pinned / curated core** (always-injected) | ✅ user-pinned memories guaranteed in every context window | ❌ | 🔸 SOUL.md is always-injected but not user-curated at memory level |
+| **Theory-of-mind dialectic user model** | ✅ Honcho-style multi-level diff log (0=user, 1=user→agent, 2=recursive); multi-tenant | ✅ Honcho-style personality + dialectic system (different implementation) | ❌ |
+| **Persona-bound memory** | ✅ memories tagged by active persona; isolated per persona | ❌ no persona concept | ❌ |
+| **User profile (Big Five + communication style)** | ✅ auto-updated from conversation | 🔸 personality model exists; update mechanism unknown | ❌ |
+| **Workspace-bound memory** | ✅ `.horizon/memory.json` (committable to git) | ❌ | ✅ SOUL.md + workspace files (similar intent, file-based) |
+| **Explainable recall** (why a memory surfaced) | 🔸 scored output shows weights; no dedicated explain UI yet | unknown | unknown |
+
+**Notes:**
+- Hermes has a genuine dialectic/personality system (Honcho-style); the
+  implementations differ but the concept is comparable. Their layer count is
+  not publicly documented as a taxonomy — "~4 layers" reflects what was
+  observable in source (facts, episodic, FTS, embeddings).
+- OpenClaw's SOUL.md is a compelling always-injected persona file, but it is
+  static author-written content, not a dynamically updated memory layer.
+  OpenClaw's memory model is simpler by design; this is not a weakness if the
+  use-case doesn't require deep memory.
+- Horizon's consolidation, entity graph, and working-memory scratchpad
+  (layers 10–12 of 13) are v0.0.3 additions — they are in the committed
+  codebase but have not been stress-tested at scale.
+
+---
 
 ### AI providers
 
