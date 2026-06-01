@@ -1592,6 +1592,10 @@ async function browserSearch(query, engine = 'google') {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const TOOL_DEFINITIONS = [
+  // v0.0.3 — working-memory scratchpad (layer 12): per-task notes that survive reflection rounds.
+  { name: 'scratch_write', desc: 'Save a key/value note for THIS task run (working memory). Survives reflection rounds; cleared at task end.', params: { key: 'string', value: 'string' } },
+  { name: 'scratch_read', desc: 'Read a scratchpad note for THIS task run by key, or omit key to read all.', params: { key: 'string' } },
+  { name: 'scratch_list', desc: 'List the keys stored in THIS task run\'s scratchpad.', params: {} },
   { name: 'run_code', desc: 'Run code on PC. language: python/powershell/javascript/shell/cmd', params: { code: 'string', language: 'string' } },
   { name: 'run_powershell', desc: 'Run PowerShell script on Windows', params: { code: 'string' } },
   { name: 'mouse_click', desc: 'Click mouse at screen coordinates', params: { x: 'number', y: 'number', button: 'left|right', double: 'boolean' } },

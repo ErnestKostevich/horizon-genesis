@@ -18,5 +18,6 @@ require('./skills');
 require('./subagent');
 require('./canvas');
 require('./self');
+require('./scratch');
 
 module.exports = require('./registry');

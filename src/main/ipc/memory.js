@@ -193,6 +193,12 @@ function register(deps) {
     catch (e) { return { ok: false, error: e.message }; }
   });
 
+  // v0.0.3 — working-memory scratchpad (layer 12): read a run's live notes.
+  ipcMain.handle('memScratchSnapshot', (_, runId) => {
+    try { return { ok: true, ...require('../scratchpad').snapshot(runId) }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  });
+
   ipcMain.handle('memoryDbStatus', () => {
     const paths = _memSqlitePaths();
     if (!paths) return { ok: false, error: 'userData path unavailable' };

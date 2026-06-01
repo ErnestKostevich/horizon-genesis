@@ -481,6 +481,9 @@ function createHorizonRuntime(opts = {}) {
     }
     const provider = opts.provider || settingsStore.get('provider') || 'gemini';
     const lang = opts.lang || settingsStore.get('lang') || 'en';
+    // v0.0.3 — stable runId so the working-memory scratchpad (layer 12) keys
+    // tool writes to THIS run across reflection rounds, then promote/clear it.
+    const runId = opts.runId || 'cli-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
     // Build per-call wrappers ───────────────────────────────────────────
     const aiFn = aiClient.asAgentAiFn({ provider, model: opts.model, onNotice: opts.onNotice });
@@ -520,6 +523,7 @@ function createHorizonRuntime(opts = {}) {
     const dispatchToolFn = async (name, args) => {
       const ctx = {
         sender: null, // no Electron sender; permission resolved by askPermission
+        runId, // v0.0.3 — scratchpad (layer 12) keys writes by run
         executor,
         browserManager: null,
         agentMemory,
@@ -563,6 +567,7 @@ function createHorizonRuntime(opts = {}) {
 
     const result = await agentLoopModule.runAgentLoop(task, {
       aiFn,
+      runId,
       sysInfo: { provider, model: opts.model, workspaceDir, memory: ctxBlock.memory },
       dialecticInjection: ctxBlock.dialecticInjection,
       lang,
@@ -605,6 +610,18 @@ function createHorizonRuntime(opts = {}) {
       if (result?.ok && result?.answer && typeof agentMemory.markMemoriesUsed === 'function') {
         agentMemory.markMemoriesUsed(ctxBlock.memory?.relevant || [], result.answer);
       }
+    } catch (_) {}
+
+    // v0.0.3 — working-memory scratchpad (layer 12): optionally dump it, then
+    // promote (opt-in) or clear it so it never leaks across runs.
+    try {
+      const scratch = require('../scratchpad');
+      if (opts.showScratch) {
+        const snap = scratch.snapshot(runId);
+        if (snap.keys) process.stderr.write('[scratchpad] ' + JSON.stringify(snap.entries) + '\n');
+      }
+      if (settingsStore.get('memory.promoteScratch') === true) scratch.promote(runId, agentMemory);
+      scratch.clear(runId);
     } catch (_) {}
 
     return result;

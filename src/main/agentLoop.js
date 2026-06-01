@@ -36,12 +36,14 @@ function toolAllowedByPersona(toolName, allowedGroups) {
       'read_file', 'list_dir', 'search_files', 'get_system_info',
       'get_running_apps', 'get_facts', 'recall', 'get_nutrition',
       // PHASE 28.5 — Self-knowledge tools are read-only introspection.
-      'self_describe', 'self_list_capabilities', 'self_read_skill', 'self_read_persona'
+      'self_describe', 'self_list_capabilities', 'self_read_skill', 'self_read_persona',
+      // v0.0.3 — working-memory scratchpad reads (layer 12).
+      'scratch_read', 'scratch_list'
     ],
     // PHASE 28.5 — `self_improve_skill` mutates a SKILL.md on disk so
     // it lives with the other fs.write tools. Permission is gated via
     // the same allowedTools mechanism every persona uses.
-    'fs.write': ['write_file', 'remember', 'set_fact', 'log_meal', 'self_improve_skill'],
+    'fs.write': ['write_file', 'remember', 'set_fact', 'log_meal', 'self_improve_skill', 'scratch_write'],
     shell: ['run_code', 'run_powershell', 'run_shell', 'shell_command', 'skill_run_helper'],
     'web.fetch': ['browser_open', 'open_site', 'get_location', 'get_weather', 'wikipedia'],
     'web.search': ['browser_search', 'web_search', 'wikipedia'],
@@ -326,7 +328,12 @@ function selectToolsForQuery(query) {
   
   // Always include these
   selected.add('get_system_info');
-  
+  // v0.0.3 — working-memory scratchpad (layer 12): always available so the agent
+  // can stash intermediate results across reflection/corrective rounds.
+  selected.add('scratch_write');
+  selected.add('scratch_read');
+  selected.add('scratch_list');
+
   // File operations
   if (/file|файл|read|write|записать|прочитать|document|документ/i.test(q)) {
     selected.add('read_file');
