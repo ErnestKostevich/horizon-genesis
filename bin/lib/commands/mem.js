@@ -12,6 +12,7 @@
 //   horizon mem migrate                    — (legacy) JSON memory → SQLite mirror
 //   horizon mem sqlite-status              — show row counts in the SQLite store
 //   horizon mem review                     — agent-curated pass (decay/dedupe/forget)
+//   horizon mem consolidate                — synthesize insights from recent memories (layer 10)
 //   horizon mem pin <id|key>               — pin a memory (always injected into the agent)
 //   horizon mem unpin <id|key>             — unpin a memory
 //   horizon mem list [--pinned]            — list memories (or only the pinned ones)
@@ -30,13 +31,14 @@ async function run({ runtime, args, flags }) {
   if (sub === 'migrate') return migrate(runtime, flags);
   if (sub === 'sqlite-status') return sqliteStatus(runtime, flags);
   if (sub === 'review')  return review(runtime, flags);
+  if (sub === 'consolidate') return consolidate(runtime, flags);
   if (sub === 'pin')     return pin(runtime, rest, flags, true);
   if (sub === 'unpin')   return pin(runtime, rest, flags, false);
   if (sub === 'list')    return list(runtime, flags);
   if (sub === 'stats' || !sub) return stats(runtime, flags);
 
   process.stderr.write(fmt.err(`Unknown mem subcommand: ${sub}`) + '\n');
-  process.stderr.write('Try: search | list | pin | unpin | dump | profile | forget | stats | export | import | migrate | sqlite-status | review\n');
+  process.stderr.write('Try: search | list | pin | unpin | consolidate | dump | profile | forget | stats | export | import | migrate | sqlite-status | review\n');
   return 2;
 }
 
@@ -64,6 +66,34 @@ async function review(runtime, flags) {
   process.stdout.write(`  merged     ${result.merged}\n`);
   process.stdout.write(`  forgotten  ${result.forgotten}\n`);
   process.stdout.write(`  survivors  ${result.survivors}\n`);
+  return 0;
+}
+
+// v0.0.3 — insights / consolidation layer (10): cluster recent memories and
+// synthesize higher-order insights. Offline-safe (skips when no chat key).
+async function consolidate(runtime, flags) {
+  let MemoryReviewer;
+  try { ({ MemoryReviewer } = require('../../../src/main/memoryReviewer')); }
+  catch (e) {
+    process.stderr.write(fmt.err('consolidation unavailable: ' + e.message) + '\n');
+    return 2;
+  }
+  const rev = new MemoryReviewer(runtime.agentMemory, {
+    settingsStore: runtime.settingsStore,
+    keysStore: runtime.keysStore,
+  });
+  process.stdout.write(fmt.dim('Consolidating recent memories into insights…\n'));
+  const r = await rev.consolidateNow({
+    maxMemories: Number(flags.max || 120),
+    minClusterSize: Number(flags['min-cluster'] || 3),
+  });
+  if (flags.json) { process.stdout.write(JSON.stringify(r, null, 2) + '\n'); return r.ok ? 0 : 1; }
+  if (!r.ok) { process.stderr.write(fmt.err('Consolidation failed: ' + (r.error || 'unknown')) + '\n'); return 1; }
+  if (r.skipped) {
+    process.stdout.write(fmt.dim(`Skipped — ${r.skipped} (clusters: ${r.clusters || 0})\n`));
+    return 0;
+  }
+  process.stdout.write(fmt.ok(`Created ${r.created} insight${r.created === 1 ? '' : 's'} from ${r.clusters} cluster${r.clusters === 1 ? '' : 's'}`) + '\n');
   return 0;
 }
 

@@ -1986,6 +1986,8 @@ function loadAgentModules() {
         try {
           const { MemoryReviewer } = require('./memoryReviewer');
           memoryReviewer = new MemoryReviewer(agentMemory, {
+            settingsStore,
+            keysStore,
             onChange: (stats) => {
               try {
                 const wins = BrowserWindow.getAllWindows();
