@@ -198,6 +198,8 @@ contextBridge.exposeInMainWorld('H', {
   memConsolidateNow: ()        => ipcRenderer.invoke('memConsolidateNow'),
   // v0.0.3 — working-memory scratchpad (layer 12).
   memScratchSnapshot: (runId)  => ipcRenderer.invoke('memScratchSnapshot', runId),
+  // v0.0.3 — entity / relationship graph (layer 11).
+  memGraphGet: (name)          => ipcRenderer.invoke('memGraphGet', name),
   // PHASE 28.4 — Dialectic user model (9th memory layer, Honcho-style).
   dialecticSummary: ()         => ipcRenderer.invoke('dialecticSummary'),
   dialecticRecent: (opts)      => ipcRenderer.invoke('dialecticRecent', opts),

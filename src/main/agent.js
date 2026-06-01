@@ -984,6 +984,25 @@ class AgentMemory {
       userProfileBlock: typeof this.buildUserProfileBlock === 'function' ? this.buildUserProfileBlock() : '',
       pinnedCount: pinned.length,
     };
+    // Layer 11 — entity graph: surface relations for entities named in the query.
+    try {
+      if (this.memoryDb && this.memoryDb.db && typeof this.memoryDb.relationsFor === 'function') {
+        const tokens = String(userMessage || '').split(/[^\p{L}\p{N}_-]+/u).filter(w => w.length > 2).slice(0, 12);
+        const graph = [];
+        const seenEnt = new Set();
+        for (const tok of tokens) {
+          for (const e of (this.memoryDb.entitiesByName(tok) || []).slice(0, 2)) {
+            if (seenEnt.has(e.id)) continue;
+            seenEnt.add(e.id);
+            for (const r of (this.memoryDb.relationsFor(e.name) || []).slice(0, 3)) {
+              graph.push(`${r.src} ${r.rel} ${r.dst}`);
+            }
+          }
+          if (graph.length >= 8) break;
+        }
+        memory.graph = [...new Set(graph)].slice(0, 8);
+      }
+    } catch (_) {}
     let dialecticInjection = '';
     try {
       if (this.dialectic && typeof this.dialectic.injection === 'function') {
@@ -1024,6 +1043,38 @@ class AgentMemory {
   getRecent(limit) {
     this._ensureShape();
     return [...this._data.memories].reverse().slice(0, limit || 20);
+  }
+
+  /** v0.0.3 — heuristic entity/relationship extraction (layer 11). Pulls proper
+   *  nouns + profile facts into the SQLite graph. Bounded + offline-safe; a no-op
+   *  in JSON-primary mode (no SQLite). An LLM extractor can replace it later. */
+  _extractGraphHeuristic(user, assistant) {
+    if (!this.memoryDb || !this.memoryDb.db) return;
+    const STOP = new Set(['The','This','That','These','Those','You','Your','Yes','No','Okay','Here','There','What','When','Where','Why','How','And','But','For','With','From','Horizon','I','It','We','They','He','She','If','So','Then','Now','Today']);
+    const text = `${user || ''} ${assistant || ''}`;
+    const found = [];
+    const seen = new Set();
+    const re = /\b[A-Z][a-zA-Z][a-zA-Z0-9.+-]{1,30}\b/g;
+    let m;
+    while ((m = re.exec(text)) !== null && found.length < 6) {
+      const w = m[0];
+      if (STOP.has(w) || seen.has(w.toLowerCase())) continue;
+      seen.add(w.toLowerCase());
+      found.push(w);
+    }
+    for (const e of found) this.memoryDb.upsertEntity(e, null, 'heuristic');
+    // Bounded pairwise co-occurrence edges (each entity → its next 2 neighbours).
+    for (let i = 0; i < found.length; i++) {
+      for (let j = i + 1; j < Math.min(found.length, i + 3); j++) {
+        this.memoryDb.addRelation(found[i], 'related_to', found[j], { confidence: 0.4, evidence: 'co-occurrence' });
+      }
+    }
+    // Structured edges from known profile facts.
+    const name = typeof this.getFact === 'function' ? this.getFact('user.name') : null;
+    const project = typeof this.getFact === 'function' ? this.getFact('project.name') : null;
+    if (name) this.memoryDb.upsertEntity(name, 'person', 'fact');
+    if (project) this.memoryDb.upsertEntity(project, 'project', 'fact');
+    if (name && project) this.memoryDb.addRelation(name, 'works_on', project, { confidence: 0.8, evidence: 'profile' });
   }
 
   learnFromTurn(userMessage, assistantReply, meta = {}) {
@@ -1094,6 +1145,10 @@ class AgentMemory {
       runId: meta.runId,
       learned: learned.length
     });
+
+    // v0.0.3 — entity / relationship graph (layer 11). Heuristic by default
+    // (offline-safe); a no-op in JSON-primary mode.
+    try { this._extractGraphHeuristic(user, assistant || ''); } catch (_) {}
 
     const stats = this._data.learning.stats;
     stats.turns = (stats.turns || 0) + 1;

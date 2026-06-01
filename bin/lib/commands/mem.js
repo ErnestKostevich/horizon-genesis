@@ -13,6 +13,7 @@
 //   horizon mem sqlite-status              — show row counts in the SQLite store
 //   horizon mem review                     — agent-curated pass (decay/dedupe/forget)
 //   horizon mem consolidate                — synthesize insights from recent memories (layer 10)
+//   horizon mem graph [entity]             — entity/relationship graph (layer 11)
 //   horizon mem pin <id|key>               — pin a memory (always injected into the agent)
 //   horizon mem unpin <id|key>             — unpin a memory
 //   horizon mem list [--pinned]            — list memories (or only the pinned ones)
@@ -32,13 +33,14 @@ async function run({ runtime, args, flags }) {
   if (sub === 'sqlite-status') return sqliteStatus(runtime, flags);
   if (sub === 'review')  return review(runtime, flags);
   if (sub === 'consolidate') return consolidate(runtime, flags);
+  if (sub === 'graph')   return graph(runtime, rest, flags);
   if (sub === 'pin')     return pin(runtime, rest, flags, true);
   if (sub === 'unpin')   return pin(runtime, rest, flags, false);
   if (sub === 'list')    return list(runtime, flags);
   if (sub === 'stats' || !sub) return stats(runtime, flags);
 
   process.stderr.write(fmt.err(`Unknown mem subcommand: ${sub}`) + '\n');
-  process.stderr.write('Try: search | list | pin | unpin | consolidate | dump | profile | forget | stats | export | import | migrate | sqlite-status | review\n');
+  process.stderr.write('Try: search | list | graph | pin | unpin | consolidate | dump | profile | forget | stats | export | import | migrate | sqlite-status | review\n');
   return 2;
 }
 
@@ -94,6 +96,38 @@ async function consolidate(runtime, flags) {
     return 0;
   }
   process.stdout.write(fmt.ok(`Created ${r.created} insight${r.created === 1 ? '' : 's'} from ${r.clusters} cluster${r.clusters === 1 ? '' : 's'}`) + '\n');
+  return 0;
+}
+
+// v0.0.3 — entity / relationship graph layer (11).
+function graph(runtime, rest, flags) {
+  const db = runtime.agentMemory && runtime.agentMemory.memoryDb;
+  if (!db || !db.db || typeof db.graphStats !== 'function') {
+    process.stderr.write(fmt.err('graph requires the SQLite backend (HORIZON_MEMORY_BACKEND must not be json)') + '\n');
+    return 2;
+  }
+  const entity = rest.join(' ').trim();
+  if (entity) {
+    const ents = db.entitiesByName(entity);
+    const rels = db.relationsFor(entity);
+    if (flags.json) { process.stdout.write(JSON.stringify({ entities: ents, relations: rels }, null, 2) + '\n'); return 0; }
+    if (!ents.length && !rels.length) { process.stdout.write(fmt.dim(`no entity matching "${entity}"\n`)); return 0; }
+    if (ents.length) {
+      process.stdout.write(fmt.bold(`Entities matching "${entity}"`) + '\n');
+      for (const e of ents) process.stdout.write(`  ${e.name}${e.type ? fmt.dim(' (' + e.type + ')') : ''} ${fmt.dim('×' + e.mentions)}\n`);
+    }
+    if (rels.length) {
+      process.stdout.write(fmt.bold('Relations') + '\n');
+      for (const r of rels) process.stdout.write(`  ${r.src} ${fmt.dim(r.rel)} ${r.dst} ${fmt.dim('(' + (r.confidence || 0).toFixed(2) + ')')}\n`);
+    }
+    return 0;
+  }
+  const stats = db.graphStats();
+  if (flags.json) { process.stdout.write(JSON.stringify(stats, null, 2) + '\n'); return 0; }
+  process.stdout.write(fmt.bold('Entity graph') + '\n');
+  process.stdout.write(`  entities   ${stats.entities}\n`);
+  process.stdout.write(`  relations  ${stats.relations}\n`);
+  process.stdout.write(fmt.dim('Tip: horizon mem graph <name> to inspect one entity.\n'));
   return 0;
 }
 

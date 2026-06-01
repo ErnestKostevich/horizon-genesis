@@ -199,6 +199,18 @@ function register(deps) {
     catch (e) { return { ok: false, error: e.message }; }
   });
 
+  // v0.0.3 — entity / relationship graph (layer 11).
+  ipcMain.handle('memGraphGet', (_, name) => {
+    loadAgentModules();
+    const agentMemory = getAgentMemory();
+    const db = agentMemory && agentMemory.memoryDb;
+    if (!db || !db.db || typeof db.graphStats !== 'function') return { ok: false, error: 'graph unavailable (JSON backend)' };
+    try {
+      if (name) return { ok: true, entities: db.entitiesByName(name), relations: db.relationsFor(name) };
+      return { ok: true, ...db.graphStats() };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+
   ipcMain.handle('memoryDbStatus', () => {
     const paths = _memSqlitePaths();
     if (!paths) return { ok: false, error: 'userData path unavailable' };
@@ -352,6 +364,7 @@ function register(deps) {
           lastTurnAt: stats.lastTurnAt || null,
           pinned: (agentMemory._data?.memories || []).filter(m => m && m.pinned).length,
           profileConfidence: (userProfile && typeof userProfile.confidence === 'number') ? userProfile.confidence : 0,
+          graph: (agentMemory.memoryDb && agentMemory.memoryDb.db && typeof agentMemory.memoryDb.graphStats === 'function') ? agentMemory.memoryDb.graphStats() : null,
         },
       };
     } catch (e) {

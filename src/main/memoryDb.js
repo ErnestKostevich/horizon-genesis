@@ -109,6 +109,31 @@ CREATE TABLE IF NOT EXISTS conversations (
 CREATE INDEX IF NOT EXISTS idx_conv_created_at ON conversations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conv_persona    ON conversations(persona_id);
 
+-- v0.0.3 — entity / relationship graph (memory layer 11). Lightweight knowledge
+-- graph extracted from turns; recall pulls connected facts/memories when a query
+-- mentions a known entity. IF NOT EXISTS so it auto-creates on open().
+CREATE TABLE IF NOT EXISTS entities (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  type        TEXT,
+  mentions    INTEGER DEFAULT 1,
+  first_seen  INTEGER,
+  last_seen   INTEGER,
+  source      TEXT
+);
+CREATE TABLE IF NOT EXISTS relations (
+  id          TEXT PRIMARY KEY,
+  src         TEXT NOT NULL,
+  rel         TEXT NOT NULL,
+  dst         TEXT NOT NULL,
+  confidence  REAL DEFAULT 0.6,
+  evidence    TEXT,
+  created_at  INTEGER,
+  updated_at  INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_rel_src ON relations(src);
+CREATE INDEX IF NOT EXISTS idx_rel_dst ON relations(dst);
+
 -- FTS5 virtual tables. Using "content=" external-content mode so the
 -- FTS rows stay in lockstep with the base tables and we don't double
 -- the storage. tokenize=porter unicode61 handles English + Cyrillic.
@@ -294,6 +319,65 @@ class MemoryDb {
     return this.db.prepare(`
       SELECT * FROM conversations ORDER BY created_at DESC LIMIT ?
     `).all(limit);
+  }
+
+  // ── entity / relationship graph (v0.0.3, layer 11) ──────────────────
+  upsertEntity(name, type, source) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const id = 'e:' + clean.toLowerCase().slice(0, 120);
+    const now = Date.now();
+    const row = this.db.prepare('SELECT id FROM entities WHERE id = ?').get(id);
+    if (row) {
+      this.db.prepare('UPDATE entities SET mentions = mentions + 1, last_seen = ?, type = COALESCE(type, ?) WHERE id = ?')
+        .run(now, type || null, id);
+      return { id, name: clean, updated: true };
+    }
+    this.db.prepare('INSERT INTO entities(id, name, type, mentions, first_seen, last_seen, source) VALUES(?, ?, ?, 1, ?, ?, ?)')
+      .run(id, clean, type || null, now, now, source || null);
+    return { id, name: clean, inserted: true };
+  }
+
+  addRelation(src, rel, dst, opts = {}) {
+    const s = String(src || '').trim().toLowerCase();
+    const d = String(dst || '').trim().toLowerCase();
+    const r = String(rel || 'related_to').trim().toLowerCase();
+    if (!s || !d || s === d) return null;
+    const id = `r:${s}|${r}|${d}`.slice(0, 240);
+    const now = Date.now();
+    const existing = this.db.prepare('SELECT id FROM relations WHERE id = ?').get(id);
+    if (existing) {
+      this.db.prepare('UPDATE relations SET confidence = MIN(1.0, confidence + 0.1), updated_at = ?, evidence = COALESCE(?, evidence) WHERE id = ?')
+        .run(now, opts.evidence || null, id);
+      return { id, updated: true };
+    }
+    // Contradiction handling: same src+rel pointing at a DIFFERENT dst — keep
+    // both but decay the older edge's confidence so the newest belief wins.
+    try {
+      this.db.prepare('UPDATE relations SET confidence = confidence * 0.8, updated_at = ? WHERE src = ? AND rel = ? AND dst <> ?')
+        .run(now, s, r, d);
+    } catch (_) {}
+    this.db.prepare('INSERT INTO relations(id, src, rel, dst, confidence, evidence, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, s, r, d, typeof opts.confidence === 'number' ? opts.confidence : 0.6, opts.evidence || null, now, now);
+    return { id, inserted: true };
+  }
+
+  entitiesByName(name) {
+    const clean = String(name || '').trim().toLowerCase();
+    if (!clean) return [];
+    return this.db.prepare('SELECT * FROM entities WHERE LOWER(name) LIKE ? ORDER BY mentions DESC LIMIT 20').all('%' + clean + '%');
+  }
+
+  relationsFor(name) {
+    const clean = String(name || '').trim().toLowerCase();
+    if (!clean) return [];
+    return this.db.prepare('SELECT * FROM relations WHERE src = ? OR dst = ? ORDER BY confidence DESC LIMIT 50').all(clean, clean);
+  }
+
+  graphStats() {
+    const e = this.db.prepare('SELECT COUNT(*) AS n FROM entities').get().n;
+    const r = this.db.prepare('SELECT COUNT(*) AS n FROM relations').get().n;
+    return { entities: e, relations: r };
   }
 
   // ── FTS5 search ─────────────────────────────────────────────────────

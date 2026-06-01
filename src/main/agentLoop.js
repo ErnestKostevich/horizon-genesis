@@ -124,7 +124,9 @@ function buildAgentSystemPrompt(lang, userName, sysInfo, selectedTools = null, o
   const memory = sysInfo?.memory || {};
   const memoryFacts = Object.entries(memory.facts || {}).slice(0, 20).map(([k, v]) => `- ${k}: ${v}`).join('\n');
   const memoryRelevant = (memory.relevant || []).slice(0, 8).map(m => `- ${m.content}`).join('\n');
-  const memoryBlock = [memoryFacts && `Known user facts:\n${memoryFacts}`, memoryRelevant && `Relevant memories:\n${memoryRelevant}`].filter(Boolean).join('\n');
+  // v0.0.3 — entity graph (layer 11): relations for entities named in the query.
+  const memoryGraph = (memory.graph || []).slice(0, 8).map(g => `- ${g}`).join('\n');
+  const memoryBlock = [memoryFacts && `Known user facts:\n${memoryFacts}`, memoryRelevant && `Relevant memories:\n${memoryRelevant}`, memoryGraph && `Related entities (knowledge graph):\n${memoryGraph}`].filter(Boolean).join('\n');
   // User profile block (Big Five + communication style) — pre-rendered by
   // AgentMemory.buildUserProfileBlock based on confidence > 0.2. Injected
   // separately from memoryBlock so the prompt structure stays readable
